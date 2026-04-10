@@ -19,6 +19,11 @@ TECHNICAL_ORDER = [
     "technical/08-meta-systems.md",
     "technical/09-integration.md",
     "technical/10-configuration.md",
+    "technical/11-memory-fragments.md",
+    "technical/12-intent-mechanics.md",
+    "technical/13-entity-dynamics.md",
+    "technical/14-biome-transition.md",
+    "technical/15-world-pipeline.md",
 ]
 
 DESIGN_ORDER = [
@@ -30,6 +35,11 @@ DESIGN_ORDER = [
     "design/06-progression.md",
     "design/07-ux.md",
     "design/08-tables.md",
+    "design/09-memory-fragments.md",
+    "design/10-intent-evolution.md",
+    "design/11-entity-dynamics.md",
+    "design/12-biome-change.md",
+    "design/13-world-pipeline.md",
 ]
 
 CROSS_REF_PATTERN = re.compile(r'\[([^\]>]+)\]\(([^)]+)\)')
