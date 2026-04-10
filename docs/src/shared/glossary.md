@@ -1,30 +1,51 @@
-﻿# Glossary
+﻿# Глоссарий
 
-## distortion
+### Базовые понятия (Basic Concepts)
 
-Level of result distortion. Range [0,1].
+- **Вектор (Vector)** – унифицированное представление состояния, состоит из осей (axes) и мета-параметров (meta).
+- **Оси (Axes)** – непрерывные параметры в диапазоне [-1,1]: `body`, `mind`, `spirit`, `nature`. Определяют направленность эффекта.
+- **Мета-параметры (Meta)** – скалярные параметры в диапазоне [0,1]: `potency` (сила), `purity` (однородность), `stability` (устойчивость), `resonance` (согласованность), `corruption` (отклонение), `distortion` (искажение, вычисляется).
+- **Модификаторы (Modifiers)** – внешние параметры (`clarity`, `pressure`, `corruption_memory`), не входящие в Vector. Используются в Morok и Conflict Resolution.
+- **Distortion (λ)** – уровень искажения, вычисляется в Morok, сохраняется в Result Vector и Resource.
 
-See technical/03-process-system.md
+### Pipeline
 
-## intent
+- **Unified Pipeline** – единый линейный поток: Sources → Input Assembly → GameplayParams → Process System → Result Vector → Resource → Perception → UI.
+- **GameplayParams** – промежуточная структура (axes, meta без distortion, modifiers, context).
+- **Process System** – слой всех преобразований параметров (11 этапов).
+- **Result Vector** – внутренний результат Process System (axes, meta с distortion).
+- **Resource** – иммутабельный финальный результат.
+- **Нелинейность λ** – допустимое нелинейное преобразование при вычислении коэффициента искажения, не нарушающее инвариант единственности Morok.
+- **Непрерывные модификаторы осей** – влияние знаков и соотношений осей на мета-параметры, выраженное гладкими функциями без ветвлений.
 
-Player's goal before brewing:
-- healing
-- cleansing
-- growth
-- protection
-- harm
-- ritual
-- sacrifice
+### Искажение (Distortion Mechanics)
 
-## Morok
+- **Morok** – единственный механизм нелинейного искажения; вычисляет λ и преобразует Δ.
+- **Zaryana** – функция ограничения состояния на этапе Identity Constraints (интерполяция с ψ).
 
-Non-linear distortion mechanism. Applies to Delta.
+### Контекст (Context)
 
-See technical/03-process-system.md
+- **Контекст (Context)** – внешние условия (Time, World, Ecosystem, окружение), влияющие через коэффициенты `k_axis`, `k_meta`.
+- **Адаптеры** – преобразуют контекст в коэффициенты (Time Adapter, World Adapter, Ecosystem Adapter).
+- **Вода-основа (Water Base)** – расходный контекстный модификатор, не являющийся ингредиентом. Собирается, хранится и расходуется в алхимии. Влияет на зелье аддитивными сдвигами осей и мета-параметров.
+- **Источник воды (Water Source)** – тип воды (родник, река, болото, дождевая, роса, живая, мёртвая, обычная), определяющий набор модификаторов.
+- **Обычная вода (Default Water)** – бесконечный базовый источник воды с нулевыми модификаторами, используется, если игрок не выбрал другой или выбранный отсутствует.
+- **Живая вода (Living Water)** – освящённая вода, даёт положительные бонусы к чистоте, силе и духовности (с trade-off: снижение стабильности или повышение давления).
+- **Мёртвая вода (Dead Water)** – вода из-под кургана, даёт отрицательные сдвиги и высокую коррупцию (с trade-off: повышение давления).
 
-## Zaryana
+### Входные данные (Input)
 
-State structuring stage.
+- **BehaviorTag** – атомарное описание свойства (например, `healing`, `night`).
+- **Axis Mapping** – преобразование BehaviorTag в вектор приращений осей.
 
-See technical/03-process-system.md
+### Выходные данные (Output)
+
+- **Perception** – интерпретация Resource для игрока.
+- **UI** – визуализация Perception.
+
+### Мета-системы (Meta Systems)
+
+- **Memory** – хранит `clarity`, `corruption_memory`, `last_distortion`.
+- **Pressure** – параметр давления (влияет на λ и stability).
+- **Knowledge** – система знаний игрока (влияет на Perception).
+- **Progression** – система прогрессии (открытие возможностей).
