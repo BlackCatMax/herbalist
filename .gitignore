@@ -1,0 +1,39 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Generated docs
+docs/build/
+
+# OS
+Thumbs.db
+desktop.ini
+
+# UE5
+Intermediate/
+Binaries/
+Saved/
+DerivedDataCache/
+Build/
