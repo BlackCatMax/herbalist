@@ -42,17 +42,23 @@ DESIGN_ORDER = [
     "design/13-world-pipeline.md",
 ]
 
-CROSS_REF_PATTERN = re.compile(r'\[([^\]>]+)\]\(([^)]+)\)')
 
 def get_version():
     try:
         import subprocess
-        result = subprocess.run(["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True, cwd=ROOT)
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT
+        )
         if result.returncode == 0:
             return result.stdout.strip()
-    except:
+    except Exception:
         pass
+
     return datetime.now().strftime("%Y.%m.%d")
+
 
 def build_document(order, output_name, version):
     output_lines = [
@@ -64,48 +70,55 @@ def build_document(order, output_name, version):
         "---",
         ""
     ]
+
     for rel_path in order:
         src_path = SRC_DIR / rel_path
+
         if not src_path.exists():
-            print(f"  Warning: {src_path} not found")
+            print(f"  ⚠ Missing: {src_path}")
             continue
+
         content = src_path.read_text(encoding="utf-8")
+
         output_lines.append(f"\n<!-- {rel_path} -->\n")
         output_lines.append(content)
+
     BUILD_DIR.mkdir(exist_ok=True)
+
     output_path = BUILD_DIR / f"{output_name}.md"
     output_path.write_text("\n".join(output_lines), encoding="utf-8")
+
     return output_path
 
-def build_glossary(version):
-    src_path = SRC_DIR / "shared" / "glossary.md"
-    if not src_path.exists():
-        return None
-    content = src_path.read_text(encoding="utf-8")
-    output_lines = ["# Glossary", "", f"> Version: {version}", "", "---", "", content]
-    output_path = BUILD_DIR / "glossary.md"
-    output_path.write_text("\n".join(output_lines), encoding="utf-8")
-    return output_path
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--clean", action="store_true")
     args = parser.parse_args()
+
     print("\nBuilding documentation...\n")
+
     if args.clean and BUILD_DIR.exists():
         import shutil
         shutil.rmtree(BUILD_DIR)
         print("  Cleaned build/")
+
     version = get_version()
     print(f"  Version: {version}\n")
+
+    # Build technical
     tech_path = build_document(TECHNICAL_ORDER, "technical", version)
     print(f"  OK {tech_path}")
+
+    # Build design
     design_path = build_document(DESIGN_ORDER, "design", version)
     print(f"  OK {design_path}")
-    glossary_path = build_glossary(version)
-    if glossary_path:
-        print(f"  OK {glossary_path}")
+
+    # Explicitly skip glossary
+    print("  Skipped glossary (manual source of truth)")
+
     print("\nDone!")
+
 
 if __name__ == "__main__":
     main()

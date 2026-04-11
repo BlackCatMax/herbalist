@@ -7,9 +7,10 @@
 Формально:
 
 1. Приращение Δ формируется на основе текущих осей, potency и исторического искажения (Bootstrap).
-2. Morok нелинейно искажает Δ (но не само состояние). Перед искажением Δ нормализуется в [-1, 1].
+2. Morok нелинейно искажает Δ (но не само состояние).
 3. Искажённое приращение Δ_morok добавляется к текущему состоянию.
-4. Stability управляет коллапсом: при падении ниже порога состояние плавно деградирует (Collapse).
+4. Stability управляет коллапсом: при падении ниже порога состояние плавно деградирует.
+	Collapse является частью этапа Conflict Resolution и не выделяется в отдельный этап пайплайна.
 5. Zaryana не уничтожает, а структурирует результат через интерполяцию между искажённым состоянием и его структурированной формой ψ(S).
 6. Memory System сохраняет last_distortion, замыкая петлю обратной связи для будущих итераций.
 
@@ -177,19 +178,15 @@ Bootstrap создаёт положительную обратную связь:
 ## Water Application (формализация)
 
 После применения контекста добавляются модификаторы выбранной воды.
-Для осей:
 
-```
+Для осей:
 for each ax in {body, mind, spirit, nature}:
     axes[ax] = axes[ax] + Δax
-```
 
 Для meta:
-
-```
 for each m in {potency, purity, stability, corruption}:
     meta[m] = meta[m] + Δm
-```
+
 
 ### Ограничения Water Application
 
@@ -206,46 +203,36 @@ for each m in {potency, purity, stability, corruption}:
 
 ### Мера отрицательности
 
-```
 sign_mix = (
     max(0, -body) +
     max(0, -mind) +
     max(0, -spirit) +
     max(0, -nature)
 ) / 4
-```
 
 ### Поправки от отрицательности
 
-```
 corruption = corruption + K_SIGN_CORRUPTION × sign_mix
 purity     = purity     - K_SIGN_PURITY × sign_mix
-```
 
 ### Гармония
 
-```
 harmony = 1 - sign_mix
 
 potency   = potency   + K_SIGN_POTENCY × harmony
 stability = stability + K_SIGN_STABILITY × harmony
-```
 
 ### Конфликты осей
 
 **Тело ↔ дух:**
 
-```
 conflict_bs = (max(0, -body × spirit)) ^ CONFLICT_POWER
 corruption  = corruption + K_CONFLICT_CORRUPTION × conflict_bs
-```
 
 **Разум ↔ природа:**
 
-```
 conflict_mn = (max(0, -mind × nature)) ^ CONFLICT_POWER
 stability   = stability - K_CONFLICT_STABILITY × conflict_mn
-```
 
 ### Свойства этапа
 
@@ -298,54 +285,40 @@ Interaction Rules — это детерминированный набор пр�
 ## Фиксированный порядок правил
 
 1. Усиление от резонанса
-```
 for each axis in axes:
     axis = axis × (1 + K_RES_GAIN × resonance)
-```
+
 2. Синергия
-```
 for each axis in axes:
     axis = axis × (1 + K_SYNERGY_GAIN × resonance)
-```
+
 3. Разложение через коррупцию
-```
 for each axis in axes:
     axis = axis × (1 - corruption × sign(axis))
-```
+
 4. Эффективная коррупция (вычисление)
-```
 effective_corruption = corruption × (1 - purity)
-```
 Не изменяет состояние напрямую, используется концептуально и может применяться в расширениях.
 
 5. Резонанс через выравнивание
-```
 alignment = (body + mind + spirit + nature) / 4
-
 for each axis in axes:
     axis = axis × (1 + resonance × alignment)
-```
+
 6. Антагонизм силы и стабильности (одновременное обновление)
-```
 old_pot = potency
 old_stab = stability
-
 stability = old_stab - K_POTENCY_TO_STABILITY × old_pot
 potency   = old_pot - K_STABILITY_TO_POTENCY × (1 - old_stab)
-```
+
 7. Связь коррупции и чистоты (одновременное обновление)
-```
 old_corr = corruption
 old_pur  = purity
-
 purity     = old_pur  - old_corr
 corruption = old_corr - K_PURITY_TO_CORRUPTION × old_pur
-```
-8. Диссонанс осей
 
-```
+8. Диссонанс осей
 resonance = resonance - K_AXIS_DIVERGENCE × abs(body - nature)
-```
 
 ## Свойства вычислений
 
@@ -529,35 +502,26 @@ nature = lerp(nature, avg_axis, stability_eff)
 - значения могут выходить за диапазоны
 - meta-параметры (кроме использования stability) не изменяются
 
-### Collapse (схлопывание)
+### Collapse (встроенный механизм)
+
+Collapse является внутренней частью этапа Conflict Resolution.
 
 Если стабильность низкая, система деградирует плавно.
 
-**Параметр:**
+Параметр:
 ε = COLLAPSE_THRESHOLD
 
-**Фактор схлопывания:**
+Фактор схлопывания:
 t = clamp(stability / ε, 0, 1)
-collapse_factor = t × t × (3 - 2 × t) # smoothstep
 
-**Применение:**
-for each axis in axes:
-axis = axis × collapse_factor
+Применение:
+axes = axes × t
 
-for each m in {potency, purity, stability, resonance, corruption}:
-meta[m] = meta[m] × collapse_factor
-
-**Особенности:**
-
-- `distortion` не изменяется
-- при `stability ≥ ε` → `collapse_factor = 1`
-- при `stability → 0` → состояние стремится к нулю
-
-### Свойства Collapse
-
-- непрерывный переход (без резкого порога)
-- моделирует деградацию системы
-- сохраняет пропорции параметров
+Свойства:
+- выполняется внутри Conflict Resolution
+- не является отдельным этапом pipeline
+- не нарушает непрерывность
+- использует только текущие значения состояния
 
 ### Инварианты этапа
 
@@ -573,16 +537,17 @@ meta[m] = meta[m] × collapse_factor
 
 **Zaryana** — этап структурирования состояния, ограничивающий допустимую форму результата без уничтожения искажения.
 
-## Общая идея
+**Общая идея**
 
 Zaryana выполняет интерполяцию между:
 - текущим состоянием `S` (после Collapse)
 - структурированной формой `ψ(S)`
 
-## Коэффициент структурирования
+- Коэффициент структурирования
+
 `Z = (1 - distortion) × (1 - K_ZARYANA_CORR × |corruption - 0.5|)`
 
-## Структурирующая функция ψ(S)
+- Структурирующая функция ψ(S)
 
 Применяется покомпонентно к каждому параметру:
 
@@ -594,14 +559,14 @@ Zaryana выполняет интерполяцию между:
   - всем meta, кроме distortion
 - `sign(0) = 0`
 
-## Интерполяция
+- Интерполяция
 
 `S_final = lerp(S, ψ(S), Z)`
 
 где:
 `lerp(a, b, t) = a + (b - a) × t`
 
-## Работа с distortion
+- Работа с distortion
 
 - `distortion` не изменяется
 - `distortion = λ` переносится напрямую в результат

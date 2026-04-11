@@ -12,7 +12,11 @@
 
 - **Unified Pipeline** – единый линейный поток: Sources → Input Assembly → GameplayParams → Process System → Result Vector → Resource → Perception → UI.
 - **GameplayParams** – промежуточная структура (axes, meta без distortion, modifiers, context).
-- **Process System** – слой всех преобразований параметров (11 этапов).
+- **Process System** – слой всех преобразований параметров (11 этапов):	Sequential Aggregation (fold) → Δ Calculation → Morok → Conflict Resolution (включая Collapse) → Identity Constraints (Zaryana) → Final Clamp.
+	*Conflict Resolution (включая Collapse) – этап, в котором:*
+		*- сглаживаются оси*
+		*- применяется механизм Collapse при низкой stability*
+		*Collapse не является отдельным этапом pipeline.*
 - **Result Vector** – внутренний результат Process System (axes, meta с distortion).
 - **Resource** – иммутабельный финальный результат.
 - **Нелинейность λ** – допустимое нелинейное преобразование при вычислении коэффициента искажения, не нарушающее инвариант единственности Morok.

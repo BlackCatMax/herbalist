@@ -39,17 +39,14 @@ def game_cycle(player, world, inputs, intent, water, order_specified, ordered_in
     lam = morok(state, player.memory, world)
     state = apply_morok(state, delta, lam)
     
-    2.4 Conflict Resolution
-    resolve_conflicts(state, pressure)
+    2.4 Conflict Resolution (включая Collapse)
+	resolve_conflicts(state, pressure)
     
-    2.5 Collapse
-    apply_collapse(state)
-    
-    2.6 Zaryana
+    2.5 Zaryana
     z = zaryana(state, intent, lam)
     state = apply_zaryana(state, z)
     
-    2.7 Final Clamp
+    2.6 Final Clamp
     state = final_clamp(state)
     
     result = Result(state.axes, state.meta, lam)
@@ -91,7 +88,7 @@ def game_cycle(player, world, inputs, intent, water, order_specified, ordered_in
 	
 ## 15.2 Схема
 
-INPUT → ASSEMBLY → (fold / commutative) → Δ → MOROK → CONFLICT → COLLAPSE → ZARYANA → CLAMP → RESULT → WORLD EVOLUTION → BIOME CHANGE → ENTITY UPDATE → MEMORY UPDATE → (loop)
+INPUT → ASSEMBLY → (fold / commutative) → Δ → MOROK → CONFLICT (включая COLLAPSE) → ZARYANA → CLAMP → RESULT ...
 
 ## 15.3 Инварианты
 

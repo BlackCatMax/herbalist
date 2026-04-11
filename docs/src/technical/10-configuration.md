@@ -252,7 +252,6 @@
 | K_PROCESS_INTENSITY | 0.5      | Влияние интенсивности |
 
 | K_PRESSURE_BASE | 0.1 | Базовое давление |
-| K_PRESSURE_INTENSITY | 0.5 | Давление от intensity |
 | K_PRESSURE_COUNT | 0.3 | Давление от количества |
 
 | N_max | 10 | Нормировка количества |
@@ -277,8 +276,6 @@
 | WATER_BASE_CAPACITY     | 3        | Начальная ёмкость |
 | WATER_MAX_CAPACITY      | 20       | Максимум          |
 | WATER_COLLECTION_AMOUNT | 1        | Сбор за действие  |
-| WATER_LIVING_STABILITY_PENALTY | -0.15 | Штраф живой воды |
-| WATER_DEAD_PRESSURE_BONUS | 0.2 | Бонус давления |
 
 ---
 
