@@ -2,7 +2,7 @@
 
 ## 4.1 Источники (Sources)
 
-Sources — любые объекты, передающие параметры в систему.
+**Sources** — любые объекты, передающие параметры в систему.
 
 **Типы источников:**
 - ингредиенты (Resources)
@@ -49,35 +49,35 @@ Entities:
 ### Структура Entity
 
 Entity = {
-    # Идентификация
+    - Идентификация
     id: str,
     name: str,                      # локализованное имя (интерпретация)
     
-    # Базовые параметры
-    tags: List[BehaviorTag],        # поведенческие теги
+    - Базовые параметры
+    tags: List`[BehaviorTag]`,        # поведенческие теги
     archetype: Archetype,           # HOST, RESTLESS, PHENOMENON, ANCESTOR
-    intensity: float,               # ∈ [0, 1] — сила присутствия
+    intensity: float,               # ∈ `[0, 1]` — сила присутствия
     
-    # Пространственная привязка
-    biome_affinity: float,          # ∈ [0, 1] — привязанность к биому
+    - Пространственная привязка
+    biome_affinity: float,          # ∈ `[0, 1]` — привязанность к биому
     location_bound: bool,           # привязана к конкретному месту?
     
-    # Временная привязка
+    - Временная привязка
     seasonal_profile: SeasonalProfile,
     daily_profile: DailyProfile,
     
-    # Поведенческая
-    base_attitude: float,           # ∈ [-1, 1] — базовая враждебность
-    attitude: float,                # ∈ [-1, 1] — текущее отношение к игроку
-    respect_sensitivity: float,     # ∈ [0, 1] — чувствительность к уважению
+    - Поведенческая
+    base_attitude: float,           # ∈ `[-1, 1]` — базовая враждебность
+    attitude: float,                # ∈ `[-1, 1]` — текущее отношение к игроку
+    respect_sensitivity: float,     # ∈ `[0, 1]` — чувствительность к уважению
     
-    # Защита/умиротворение
-    pacification_items: List[ItemType],
-    pacification_rituals: List[RitualType],
+    - Защита/умиротворение
+    pacification_items: List`[ItemType]`,
+    pacification_rituals: List`[RitualType]`,
     
-    # Жизненный цикл
-    growth: float,                  # ∈ [0, 1]
-    decay: float                    # ∈ [0, 1]
+    - Жизненный цикл
+    growth: float,                  # ∈ `[0, 1]`
+    decay: float                    # ∈ `[0, 1]`
 }
 
 ### Архетипы сущностей (Entity Archetypes)
@@ -94,27 +94,27 @@ Entity = {
 **Формула присутствия (универсальная):**
 
 def calculate_presence(entity, world_state, season, time_of_day, player):
-    # 1. Биомный фактор
-    biome_factor = base_presence[entity.type][biome]
+    1. Биомный фактор
+    biome_factor = base_presence`[entity.type]``[biome]`
     
-    # 2. Фактор состояния мира
-    toxicity_factor = (1 - world_state.toxicity) ** TOXICITY_SENSITIVITY[entity.archetype]
-    fertility_factor = world_state.fertility ** FERTILITY_SENSITIVITY[entity.archetype]
+    2. Фактор состояния мира
+    toxicity_factor = (1 - world_state.toxicity) ** TOXICITY_SENSITIVITY`[entity.archetype]`
+    fertility_factor = world_state.fertility ** FERTILITY_SENSITIVITY`[entity.archetype]`
     disturbance_factor = (1 - world_state.disturbance) ** DISTURBANCE_SENSITIVITY
     
-    # 3. Временной фактор
+    3. Временной фактор
     temporal_factor = get_temporal_multiplier(entity, season, time_of_day)
     
-    # 4. Поведенческий фактор (только для HOST и ANCESTOR)
-    if entity.archetype in [HOST, ANCESTOR]:
+    4. Поведенческий фактор (только для HOST и ANCESTOR)
+    if entity.archetype in `[HOST, ANCESTOR]`:
         behavioral_factor = 1 + player.respect_score * entity.respect_sensitivity
     else:
         behavioral_factor = 1.0
     
-    # 5. Фактор защиты (снижает влияние)
+    5. Фактор защиты (снижает влияние)
     protection_factor = 1 - get_protection_power(player, entity.pacification_items)
     
-    # Итоговая сила присутствия
+    6. Итоговая сила присутствия
     presence = (biome_factor * toxicity_factor * fertility_factor 
                 * temporal_factor * behavioral_factor * protection_factor)
     
@@ -132,16 +132,16 @@ def calculate_presence(entity, world_state, season, time_of_day, player):
 | ANCESTOR | 0.5 | Слабая чувствительность |
 
 def update_entity_state(entity, world_state):
-    # Рост зависит от плодородия
+    - Рост зависит от плодородия
     entity.growth = clamp(entity.growth + world_state.fertility * K_GROWTH_BASE, 0, 1)
     
-    # Увядание зависит от токсичности
+    - Увядание зависит от токсичности
     entity.decay = clamp(entity.decay + world_state.toxicity * K_DECAY_BASE, 0, 1)
     
-    # Интенсивность определяется балансом роста и увядания
+    - Интенсивность определяется балансом роста и увядания
     entity.intensity = entity.growth * (1 - entity.decay)
     
-    # Производные теги
+    - Производные теги
     if entity.growth > K_GROWTH_THRESHOLD:
         entity.tags.add("mature")
     elif entity.growth < K_GROWTH_WEAK:
@@ -167,19 +167,33 @@ def update_entity_state(entity, world_state):
 
 **Формула получения сущностей в локации:**
 
-def get_entities_in_location(location, world_state, season, time_of_day, player):
-    entities = []
+Состояние сущностей сохраняется между вызовами (например, в глобальном состоянии локации)
+**current_entities** - словарь {entity_id: Entity} из предыдущего шага
+
+def get_entities_in_location(location, world_state, season, time_of_day, player, current_entities):
+    new_entities = []
     
     for entity_type in location.biome.possible_entities:
         presence = calculate_presence(entity_type, world_state, season, time_of_day, player)
         
-        if presence > PRESENCE_THRESHOLD:  # 0.1
-            entity = create_entity(entity_type)
-            entity.intensity = presence
-            entity.attitude = calculate_attitude(entity, world_state, player)
-            entities.append(entity)
+        *Гистерезис: проверяем, была ли сущность уже в локации*
+        if entity_type.id in current_entities:
+            *Сущность уже присутствует – используем порог исчезновения*
+            if presence >= PRESENCE_DISAPPEAR:
+                entity = current_entities[entity_type.id]
+                entity.intensity = presence
+                entity.attitude = calculate_attitude(entity, world_state, player)
+                new_entities.append(entity)
+            *иначе сущность исчезает (не добавляем)*
+        else:
+            *Сущности нет – используем порог появления*
+            if presence >= PRESENCE_THRESHOLD:
+                entity = create_entity(entity_type)
+                entity.intensity = presence
+                entity.attitude = calculate_attitude(entity, world_state, player)
+                new_entities.append(entity)
     
-    return entities
+    return new_entities
 	
 **Базовое распределение по биомам (веса присутствия):**
 
@@ -198,11 +212,11 @@ def get_entities_in_location(location, world_state, season, time_of_day, player)
 | Навья | RESTLESS | 0.2 | 0.3 | 0.2 | 0.2 | 0.1 | 0.1 |
 | Берегиня | PHENOMENON | 0.3 | 0.5 | 0.0 | 0.2 | 0.0 | 0.0 |
 
-**Примечание:** Значения в таблице — базовые веса. Итоговое присутствие рассчитывается по формуле из раздела 4.2.3.
+**Примечание:** Значения в таблице — базовые веса. Итоговое присутствие рассчитывается по формуле присутствия, приведённой в разделе *Архетипы сущностей (Entity Archetypes)*
 
 def apply_entity_influence(resource, entities_in_location):
     for entity in entities_in_location:
-        # Вес влияния ограничен
+        Вес влияния ограничен
         influence = entity.intensity * K_ENTITY_INFLUENCE
         influence = clamp(influence, 0, K_ENTITY_INFLUENCE_MAX)
         
@@ -240,16 +254,16 @@ def apply_entity_world_influence(world_state, entities_in_location):
     for entity in entities_in_location:
         for tag in entity.tags:
             if tag in WORLD_EFFECT_MAP:
-                Δ = WORLD_EFFECT_MAP[tag]
+                Δ = WORLD_EFFECT_MAP`[tag]`
                 world_state.fertility += Δ.fertility * entity.intensity * K_ENTITY_WORLD_INFLUENCE
                 world_state.moisture += Δ.moisture * entity.intensity * K_ENTITY_WORLD_INFLUENCE
                 world_state.competition += Δ.competition * entity.intensity * K_ENTITY_WORLD_INFLUENCE
                 world_state.disturbance += Δ.disturbance * entity.intensity * K_ENTITY_WORLD_INFLUENCE
                 world_state.toxicity += Δ.toxicity * entity.intensity * K_ENTITY_WORLD_INFLUENCE
     
-    # Нормализация
+    Нормализация
     for param in world_state:
-        world_state[param] = clamp(world_state[param], 0, 1)
+        world_state`[param]` = clamp(world_state`[param]`, 0, 1)
 
 
 **Конфигурация:**
@@ -268,7 +282,7 @@ def apply_entity_world_influence(world_state, entities_in_location):
 def apply_harvest_world_influence(world_state, harvested_resource):
     for tag in harvested_resource.tags:
         if tag in WORLD_EFFECT_MAP:
-            Δ = WORLD_EFFECT_MAP[tag]
+            Δ = WORLD_EFFECT_MAP`[tag]`
             world_state.fertility += Δ.fertility * harvested_resource.intensity * K_HARVEST_IMPACT
             world_state.moisture += Δ.moisture * harvested_resource.intensity * K_HARVEST_IMPACT
             world_state.competition += Δ.competition * harvested_resource.intensity * K_HARVEST_IMPACT
@@ -277,7 +291,7 @@ def apply_harvest_world_influence(world_state, harvested_resource):
     
     # Нормализация
     for param in world_state:
-        world_state[param] = clamp(world_state[param], 0, 1)
+        world_state`[param]` = clamp(world_state`[param]`, 0, 1)
 
 
 **Конфигурация:**
@@ -295,14 +309,14 @@ def apply_harvest_world_influence(world_state, harvested_resource):
 
 def update_entities_from_world(entities_in_location, world_state):
     for entity in entities_in_location:
-        # Обновление жизненного цикла
+        - Обновление жизненного цикла
         entity.growth = clamp(entity.growth + world_state.fertility * K_GROWTH_BASE, 0, 1)
         entity.decay = clamp(entity.decay + world_state.toxicity * K_DECAY_BASE, 0, 1)
         
-        # Обновление интенсивности
+        - Обновление интенсивности
         entity.intensity = entity.growth * (1 - entity.decay)
         
-        # Обновление производных тегов
+        - Обновление производных тегов
         if entity.growth > K_GROWTH_THRESHOLD:
             entity.tags.add("mature")
         elif entity.growth < K_GROWTH_WEAK:
@@ -319,19 +333,19 @@ def update_entities_from_world(entities_in_location, world_state):
 **Формула:**
 
 def calculate_attitude(entity, world_state, player):
-    # Базовая установка от архетипа
+    - Базовая установка от архетипа
     base = entity.base_attitude
     
-    # Модификатор от уважения (для HOST)
+    - Модификатор от уважения (для HOST)
     if entity.archetype == HOST:
         respect_mod = player.respect_score * entity.respect_sensitivity
     else:
         respect_mod = 0
     
-    # Модификатор от памяти коррупции
+    - Модификатор от памяти коррупции
     corruption_mod = -player.corruption_memory * K_ATTITUDE_CORRUPTION_PENALTY
     
-    # Модификатор от состояния мира
+    - Модификатор от состояния мира
     if entity.archetype == HOST:
         if world_state.toxicity > 0.5:
             world_mod = -0.3
@@ -342,7 +356,7 @@ def calculate_attitude(entity, world_state, player):
     else:
         world_mod = 0
     
-    # Итоговое отношение
+    - Итоговое отношение
     attitude = base + respect_mod + corruption_mod + world_mod
     attitude = clamp(attitude, -1, 1)
     
@@ -395,7 +409,7 @@ def calculate_attitude(entity, world_state, player):
 
 def get_temporal_multiplier(entity, season, time_of_day):
     # Сезонный множитель
-    seasonal = entity.seasonal_profile[season]
+    seasonal = entity.seasonal_profile`[season]`
     
     # Суточный множитель (интерполяция между ключевыми точками)
     daily = get_daily_multiplier(entity, time_of_day)
@@ -423,7 +437,7 @@ def get_temporal_multiplier(entity, season, time_of_day):
                 ▼                                                                             │
         ┌───────────────┐                                                                     │
         │  get_entities │  ← полный пересчёт присутствия                                      │
-        │   (4.2.5)     │                                                                     │
+        │   (4.2.5)     │    current_entities сохраняются между вызовами.                     │
         └───────┬───────┘                                                                     │
                 │                                                                             │
                 ▼                                                                             │
@@ -484,8 +498,6 @@ def get_temporal_multiplier(entity, season, time_of_day):
 | **World Evolution** | После алхимии | Алхимия изменяет мир (глобально) |
 | **World → Entity** | После изменения мира | Пересчёт присутствия сущностей |
 
----
-
 ### Конфигурационные параметры
 
 | Константа | Значение | Описание |
@@ -521,6 +533,7 @@ def get_temporal_multiplier(entity, season, time_of_day):
 - Присутствие сущности пересчитывается только при изменении World State, без тиков
 - Нет трансформации сущностей — только смена состава при смене биома
 
+---
 
 ## 4.3 Ресурсы (до обработки)
 
@@ -537,6 +550,8 @@ Resource (pre-process) — структурированное представл
 - является входной единицей для системы
 - `distortion` из ресурса игнорируется (обнуляется)
 
+---
+
 ## 4.4 Поведенческие теги (BehaviorTags)
 
 BehaviorTag — атомарное описание свойства.
@@ -548,9 +563,11 @@ BehaviorTag — атомарное описание свойства.
 
 Примеры:
 - `healing`, `poison`, `night`, `forest`, `water` и др.
-**Примечание - Тег `water` не используется для воды-основы; вода обрабатывается отдельно (см. раздел 5.8)**
+**Примечание - Тег `water` не используется для воды-основы; вода обрабатывается отдельно** *(см. раздел 5.8)*
 
 BehaviorTags являются базой для последующего преобразования. Полная библиотека тегов и их маппинг приведены в разделе 10.5.
+
+---
 
 ## 4.5 Отображение в оси (Axis Mapping)
 
@@ -575,6 +592,8 @@ axes += mapping(tag) × weight
 
 Результат: формируется начальный вектор осей.
 
+---
+
 ## 4.6 Система сборки входных данных (Input Assembly)
 
 Объединяет все источники в единую структуру **GameplayParams**.
@@ -593,7 +612,7 @@ axes += mapping(tag) × weight
 
 **2. Сбор BehaviorTags от всех источников**
 
-AllTags = []
+AllTags = `[]`
 
 # Теги от ресурсов с их весами
 for resource in resources:
@@ -619,15 +638,15 @@ axes = {body: 0, mind: 0, spirit: 0, nature: 0}
 
 for tag, weight in AllTags:
     if tag in AXIS_MAPPING:
-        axes.body   += AXIS_MAPPING[tag].body * weight
-        axes.mind   += AXIS_MAPPING[tag].mind * weight
-        axes.spirit += AXIS_MAPPING[tag].spirit * weight
-        axes.nature += AXIS_MAPPING[tag].nature * weight
+        axes.body   += AXIS_MAPPING`[tag]`.body * weight
+        axes.mind   += AXIS_MAPPING`[tag]`.mind * weight
+        axes.spirit += AXIS_MAPPING`[tag]`.spirit * weight
+        axes.nature += AXIS_MAPPING`[tag]`.nature * weight
 
 **4. Агрегация осей**
 
 `axes = Σ(axes_i × weight_i)`
-где веса определяются Alchemy System (см. раздел 6.2).
+где веса определяются Alchemy System *(см. раздел 6.2)*.
 
 **5. Вычисление meta-параметров**
 
@@ -664,20 +683,18 @@ corruption = weighted_mean(corruption_i) + bonus_from_tags
 Каждый BehaviorTag может давать аддитивные бонусы к `potency` и `corruption` (см. таблицу в разделе 10.5, колонки Δpotency и Δcorruption).
 
 Вычисление:
-```
+
 bonus_potency = Σ(Δpotency_i × weight_i)
 bonus_corruption = Σ(Δcorruption_i × weight_i)
-```
 
 где:
 - `Δpotency_i` и `Δcorruption_i` — бонусы от тега (из таблицы 10.5)
 - `weight_i` — интенсивность источника (для ресурса = resource.intensity, для сущности = entity.intensity × K_ENTITY_INFLUENCE)
 
 Итоговые значения:
-```
+
 potency = weighted_mean(potency_i) + bonus_potency
 corruption = weighted_mean(corruption_i) + bonus_corruption
-```
 
 После суммирования значения **не clamp'ятся** на этом этапе.
 
@@ -740,3 +757,6 @@ Modifiers:
 - отсутствует clamp на этом этапе
 
 Результат этапа — полностью подготовленные входные данные для Process System.
+
+---
+---

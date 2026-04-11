@@ -277,7 +277,6 @@
 | WATER_BASE_CAPACITY     | 3        | Начальная ёмкость |
 | WATER_MAX_CAPACITY      | 20       | Максимум          |
 | WATER_COLLECTION_AMOUNT | 1        | Сбор за действие  |
-
 | WATER_LIVING_STABILITY_PENALTY | -0.15 | Штраф живой воды |
 | WATER_DEAD_PRESSURE_BONUS | 0.2 | Бонус давления |
 

@@ -14,12 +14,12 @@ Memory System хранит агрегированную информацию о 
 ### Хранимые параметры
 
 Memory = {
-    # Существующие параметры
+    - Существующие параметры
     last_distortion: float,      # distortion последнего результата
     corruption_memory: float,    # сглаженное значение corruption
     clarity: float,              # чистота истории
     
-    # НОВЫЙ параметр
+    - НОВЫЙ параметр
     respect_score: float         # ∈ [-1, 1] — накопленное уважение сущностей
 }
 
@@ -27,12 +27,12 @@ Memory = {
 
 После формирования Result Vector:
 
-# Существующие обновления
+-Существующие обновления
 last_distortion = distortion
 corruption_memory = lerp(corruption_memory, corruption, K_MEMORY_CORR_BLEND)
 clarity = lerp(clarity, purity, K_MEMORY_CLARITY_BLEND)
 
-# Обновление respect_score на основе действий игрока
+- Обновление respect_score на основе действий игрока
 respect_score += Δrespect
 respect_score = clamp(respect_score, -1, 1)
 
@@ -118,7 +118,7 @@ Pressure System моделирует интенсивность воздейст
 - скалярный параметр `pressure` [0,1]
 - зависит от условий процесса (Alchemy) и количества ингредиентов
 
-**Формирование** (см. раздел 6.2):
+**Формирование** *(см. раздел 6.2)*:
 
 `pressure = K_PRESSURE_BASE + K_PRESSURE_COUNT × (N / N_max)`
 
@@ -128,7 +128,8 @@ Pressure System моделирует интенсивность воздейст
 - `K_PRESSURE_BASE` — базовое давление (по умолчанию 0.1)
 - `K_PRESSURE_COUNT` — коэффициент влияния количества (по умолчанию 0.3)
 
-**Примечание:** Параметры `temperature`, `duration`, `method` не входят в вычислительную модель. Если они используются в геймплее, они должны влиять на `pressure` через модификаторы контекста или через параметр `intensity` (который агрегируется в `pressure` через отдельный коэффициент, см. раздел 6.2).
+**Примечание:** Параметры `temperature`, `duration`, `method` не входят в вычислительную модель.
+Если они используются в геймплее, они должны влиять на `pressure` через модификаторы контекста или через параметр `intensity` (который агрегируется в `pressure` через отдельный коэффициент, *см. раздел 6.2*).
 
 **Влияние:**
 - усиливает эффект Morok (через λ)
@@ -182,7 +183,7 @@ ecosystem.competition = clamp(ecosystem.competition, 0, 1)
 
 ### 2. Обратная связь от сбора к миру (локальная)
 
-Применяется в момент сбора ресурса (см. раздел 4.2.8):
+Применяется в момент сбора ресурса *(см. раздел 4.2 Обратная связь от сбора к миру (Harvest → World))*:
 
 for tag in harvested_resource.tags:
     if tag in WORLD_EFFECT_MAP:
@@ -200,7 +201,7 @@ for param in [fertility, moisture, competition, disturbance, toxicity]:
 
 ### 3. Влияние сущностей на мир (локальное)
 
-Применяется в момент сбора ресурса (см. раздел 4.2.7):
+Применяется в момент сбора ресурса *(см. раздел 4.2 Отображение мира на сущности (World → Entity))*:
 
 for entity in entities_in_location:
     for tag in entity.tags:
