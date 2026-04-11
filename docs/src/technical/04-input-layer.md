@@ -659,6 +659,29 @@ corruption = weighted_mean(corruption_i) + bonus_from_tags
 - `resonance` не clamp'ится на этом этапе
 - все значения могут выходить за диапазоны
 
+#### Бонусы от тегов (bonus_from_tags)
+
+Каждый BehaviorTag может давать аддитивные бонусы к `potency` и `corruption` (см. таблицу в разделе 10.5, колонки Δpotency и Δcorruption).
+
+Вычисление:
+```
+bonus_potency = Σ(Δpotency_i × weight_i)
+bonus_corruption = Σ(Δcorruption_i × weight_i)
+```
+
+где:
+- `Δpotency_i` и `Δcorruption_i` — бонусы от тега (из таблицы 10.5)
+- `weight_i` — интенсивность источника (для ресурса = resource.intensity, для сущности = entity.intensity × K_ENTITY_INFLUENCE)
+
+Итоговые значения:
+```
+potency = weighted_mean(potency_i) + bonus_potency
+corruption = weighted_mean(corruption_i) + bonus_corruption
+```
+
+После суммирования значения **не clamp'ятся** на этом этапе.
+
+
 **6. Формирование modifiers**
 
 Формируются:

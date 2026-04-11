@@ -222,7 +222,7 @@
 
 | Константа                    | Значение | Описание                            |
 | ---------------------------- | -------- | ----------------------------------- |
-| CR_PRESSURE_STABILITY_FACTOR | 1.0      | stability × (1 - pressure × factor) |
+| CR_PRESSURE_STABILITY_FACTOR | 1.0      | Множитель влияния pressure на stability_eff |
 
 ---
 
