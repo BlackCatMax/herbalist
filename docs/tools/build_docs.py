@@ -35,7 +35,7 @@ DESIGN_ORDER = [
     "design/06-progression.md",
     "design/07-ux.md",
     "design/08-tables.md",
-    "design/09-memory-fragments.md",
+    "design/09-exp_dynamic.md",
     "design/10-intent-evolution.md",
     "design/11-entity-dynamics.md",
     "design/12-biome-change.md",
