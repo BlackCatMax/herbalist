@@ -107,20 +107,32 @@ respect_score = 0  # нейтральное отношение
 | `K_MEMORY_CLARITY_BLEND` | 0.2 | Сглаживание clarity |
 | `K_RESPECT_DECAY` | 0.01 | Естественное затухание respect_score за цикл |
 
+
+---
+
 ## 8.2 Система давления (Pressure System)
 
 Pressure System моделирует интенсивность воздействия на систему.
 
 **Свойства:**
 - скалярный параметр `pressure` [0,1]
-- зависит от условий процесса (Alchemy) и состояния среды (disturbance)
+- зависит от условий процесса (Alchemy) и количества ингредиентов
 
 **Формирование** (см. раздел 6.2):
-pressure = 0.3×temperature + 0.3×duration + 0.2×method + 0.2×disturbance
+
+`pressure = K_PRESSURE_BASE + K_PRESSURE_COUNT × (N / N_max)`
+
+где:
+- `N` — количество ресурсов
+- `N_max` — нормировочный максимум (по умолчанию 10)
+- `K_PRESSURE_BASE` — базовое давление (по умолчанию 0.1)
+- `K_PRESSURE_COUNT` — коэффициент влияния количества (по умолчанию 0.3)
+
+**Примечание:** Параметры `temperature`, `duration`, `method` не входят в вычислительную модель. Если они используются в геймплее, они должны влиять на `pressure` через модификаторы контекста или через параметр `intensity` (который агрегируется в `pressure` через отдельный коэффициент, см. раздел 6.2).
 
 **Влияние:**
 - усиливает эффект Morok (через λ)
-- влияет на Conflict Resolution (через `stability = stability × (1 - pressure)`)
+- влияет на Conflict Resolution (через `stability_eff = stability × (1 - pressure × CR_PRESSURE_STABILITY_FACTOR)`)
 - не изменяет параметры напрямую
 - действует только через указанные механизмы
 
