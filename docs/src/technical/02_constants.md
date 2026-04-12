@@ -1,0 +1,29 @@
+# ----------------------------------------------------------------------
+# CONSTANTS (TECH)
+# ----------------------------------------------------------------------
+
+BOOTSTRAP_GAIN = 0.1
+K_AXIS_GAIN = 1.0
+K_META_GAIN = 1.0
+
+K_RES_GAIN = 0.3
+K_SYNERGY_GAIN = 0.3
+K_PURITY_TO_CORRUPTION = 0.5
+K_AXIS_DIVERGENCE = 0.2
+
+K_SIGN_CORRUPTION = 0.25
+K_SIGN_PURITY = 0.25
+K_SIGN_POTENCY = 0.2
+K_SIGN_STABILITY = 0.2
+K_CONFLICT_CORRUPTION = 0.3
+K_CONFLICT_STABILITY = 0.3
+CONFLICT_POWER = 1.5
+
+K_MOROK_POWER = 1.5
+K_MOROK_SHIFT = 0.3
+
+COLLAPSE_THRESHOLD = 0.3
+CR_PRESSURE_STABILITY_FACTOR = 1.0
+
+K_ZARYANA_CORR = 0.5
+K_ZARYANA_POWER = 0.8
