@@ -24,9 +24,6 @@ ENV/
 *.swo
 .DS_Store
 
-# Generated docs
-docs/build/
-
 # OS
 Thumbs.db
 desktop.ini
