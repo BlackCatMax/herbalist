@@ -1,17 +1,18 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
-#include "CoreMinimal.h"
-#include "GameFramework/GameModeBase.h"
-#include "ProjectHerbalistGameModeBase.generated.h"
+#include "CoreMinimal.h"  // Для базовых типов Unreal
+#include "GameFramework/GameModeBase.h"  // Для работы с GameMode
+#include "ProjectHerbalistGameModeBase.generated.h"  // Это нужно для Unreal Engine (должен быть последним)
 
-/**
- * 
- */
 UCLASS()
 class PROJECTHERBALIST_API AProjectHerbalistGameModeBase : public AGameModeBase
 {
-	GENERATED_BODY()
-	
+    GENERATED_BODY()
+
+public:
+    // Конструктор
+    AProjectHerbalistGameModeBase();
+
+    // Переопределение BeginPlay
+    virtual void BeginPlay() override;
 };
