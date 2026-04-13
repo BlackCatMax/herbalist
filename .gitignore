@@ -17,6 +17,9 @@ env/
 ENV/
 .venv
 
+.vs/
+*.db
+
 # IDE
 .vscode/
 .idea/
