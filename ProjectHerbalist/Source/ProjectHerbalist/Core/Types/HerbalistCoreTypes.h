@@ -2,6 +2,26 @@
 
 namespace HerbalistCore
 {
+    struct FEnvironment
+    {
+        float Toxicity = 0.f;
+        float Fertility = 0.f;
+        float Moisture = 0.f;
+    };
+
+    struct FMemoryState
+    {
+        float AccumulatedDistortion = 0.f;
+        float StabilityMemory = 0.f;
+        float HistoryPurity = 0.f;
+    };
+
+    struct FIntent
+    {
+        float Coherence = 0.f;
+        float Intensity = 0.f;
+    };
+
     struct FDirection
     {
         float Body = 0.f;

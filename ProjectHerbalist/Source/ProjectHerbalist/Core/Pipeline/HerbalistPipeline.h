@@ -1,6 +1,9 @@
 #pragma once
 
+#include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+
+DECLARE_LOG_CATEGORY_EXTERN(LogHerbalist, Log, All);
 
 namespace HerbalistCore
 {
@@ -9,16 +12,12 @@ namespace HerbalistCore
     public:
 
         static FRealState ApplyMorok(
-            const FRealState& Input,
-            float MorokPower,
-            FRngState& Rng
-        );
-
-        static FPerceivedState DistortPerception(
-            const FRealState& Real,
-            float Distortion,
-            float Noise,
-            FRngState& Rng
+            const FRealState& A,
+            const FRealState& B,
+            const FEnvironment& Env,        // ✅ FIX
+            const FMemoryState& Memory,
+            const FIntent& Intent,          // ✅ FIX
+            FRngState& Rng                  // ✅ FIX
         );
     };
 }
