@@ -1,3 +1,4 @@
+// ProjectHerbalistGameModeBase.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -20,7 +21,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
     FRngState Rng;
 
-    // ✅ Новый флаг: включает случайную мутацию ресурсов на каждом шаге
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
     bool bEnableRandomResourceMutation = false;
 };

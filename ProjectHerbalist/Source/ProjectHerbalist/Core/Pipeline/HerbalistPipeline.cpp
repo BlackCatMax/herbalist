@@ -1,3 +1,4 @@
+// HerbalistPipeline.cpp
 #include "HerbalistPipeline.h"
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreTypes.h"
@@ -5,9 +6,6 @@
 
 namespace HerbalistCore
 {
-    // =========================
-    // RNG
-    // =========================
     static float Random01(FRngState& Rng)
     {
         Rng.Seed = (Rng.Seed * 196314165) + 907633515;
@@ -20,7 +18,7 @@ namespace HerbalistCore
     }
 
     // =========================
-    // FOLD (агрегация с весами)
+    // FOLD
     // =========================
     FRealState Pipeline::Fold(const TArray<FRealState>& Inputs)
     {
@@ -69,7 +67,6 @@ namespace HerbalistCore
             Accumulated.Meta.Purity /= TotalWeight;
         }
 
-        // Нормализация направления
         float Len = FMath::Sqrt(
             Accumulated.Direction.Body * Accumulated.Direction.Body +
             Accumulated.Direction.Mind * Accumulated.Direction.Mind +
@@ -119,57 +116,7 @@ namespace HerbalistCore
     }
 
     // =========================
-    // CONTEXT (временный костыль, будет заменён на Harvest)
-    // =========================
-    void Pipeline::ApplyContext(FRealState& Aggregated, const FEnvironment& Env)
-    {
-        float k_axis = 1.0f - 0.3f * Env.Toxicity + 0.2f * Env.Fertility - 0.1f * Env.Moisture;
-        float k_meta = 1.0f + 0.2f * Env.Toxicity - 0.2f * Env.Fertility + 0.1f * Env.Moisture;
-
-        k_axis = FMath::Clamp(k_axis, 0.5f, 1.5f);
-        k_meta = FMath::Clamp(k_meta, 0.5f, 1.5f);
-
-        UE_LOG(LogHerbalist, Warning, TEXT("[CONTEXT] k_axis=%.3f, k_meta=%.3f (Tox=%.3f, Fert=%.3f, Moist=%.3f)"),
-            k_axis, k_meta, Env.Toxicity, Env.Fertility, Env.Moisture);
-
-        Aggregated.Direction.Body *= k_axis;
-        Aggregated.Direction.Mind *= k_axis;
-        Aggregated.Direction.Spirit *= k_axis;
-        Aggregated.Direction.Nature *= k_axis;
-
-        Aggregated.Meta.Distortion *= k_meta;
-        Aggregated.Meta.Stability *= k_meta;
-        Aggregated.Meta.Purity *= k_meta;
-
-        // Повторная нормализация направления
-        float Len = FMath::Sqrt(
-            Aggregated.Direction.Body * Aggregated.Direction.Body +
-            Aggregated.Direction.Mind * Aggregated.Direction.Mind +
-            Aggregated.Direction.Spirit * Aggregated.Direction.Spirit +
-            Aggregated.Direction.Nature * Aggregated.Direction.Nature
-        );
-        if (Len > KINDA_SMALL_NUMBER)
-        {
-            Aggregated.Direction.Body /= Len;
-            Aggregated.Direction.Mind /= Len;
-            Aggregated.Direction.Spirit /= Len;
-            Aggregated.Direction.Nature /= Len;
-        }
-        else
-        {
-            Aggregated.Direction.Body = 0.25f;
-            Aggregated.Direction.Mind = 0.25f;
-            Aggregated.Direction.Spirit = 0.25f;
-            Aggregated.Direction.Nature = 0.25f;
-        }
-
-        Aggregated.Meta.Distortion = FMath::Clamp(Aggregated.Meta.Distortion, 0.0f, 1.0f);
-        Aggregated.Meta.Stability = FMath::Clamp(Aggregated.Meta.Stability, 0.0f, 1.0f);
-        Aggregated.Meta.Purity = FMath::Clamp(Aggregated.Meta.Purity, 0.0f, 1.0f);
-    }
-
-    // =========================
-    // MAIN PIPELINE (Fold → Context → Delta → Morok → Zaryana)
+    // MAIN PIPELINE
     // =========================
     FRealState Pipeline::ApplyMorok(
         const TArray<FRealState>& Inputs,
@@ -186,21 +133,14 @@ namespace HerbalistCore
             Aggregated.Direction.Body, Aggregated.Direction.Mind,
             Aggregated.Direction.Spirit, Aggregated.Direction.Nature);
 
-        // 2. ApplyContext (временный костыль)
-        ApplyContext(Aggregated, Env);
-        UE_LOG(LogHerbalist, Warning, TEXT("[AFTER_CONTEXT] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f)"),
-            Aggregated.Magnitude,
-            Aggregated.Direction.Body, Aggregated.Direction.Mind,
-            Aggregated.Direction.Spirit, Aggregated.Direction.Nature);
-
-        // 3. ComputeDelta
+        // 2. ComputeDelta
         FRealState Delta = ComputeDelta(Aggregated, CurrentBiomeState);
         UE_LOG(LogHerbalist, Warning, TEXT("[DELTA] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f)"),
             Delta.Magnitude,
             Delta.Direction.Body, Delta.Direction.Mind,
             Delta.Direction.Spirit, Delta.Direction.Nature);
 
-        // 4. Distortion (среда + память)
+        // 3. Distortion (среда + память)
         float EnvDist = Env.Toxicity * 0.1f;
         float MemoryDist = Memory.AccumulatedDistortion;
         float Distortion = 1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
@@ -208,7 +148,7 @@ namespace HerbalistCore
         UE_LOG(LogHerbalist, Warning, TEXT("[DIST] Env: %.3f Mem: %.3f -> %.3f"),
             EnvDist, MemoryDist, Distortion);
 
-        // 5. ZaryanaStrength (управляет Morok и Zaryana)
+        // 4. ZaryanaStrength (управляет Morok и Zaryana)
         float ZaryanaStrength = Intent.Coherence * (1.0f - Distortion);
         ZaryanaStrength = FMath::Clamp(ZaryanaStrength, 0.0f, 1.0f);
         UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA] Strength: %.3f"), ZaryanaStrength);
@@ -220,11 +160,10 @@ namespace HerbalistCore
         float NoiseDirection = RandomRange(Rng, -1.0f, 1.0f);
         float RawNoise = NoiseMagnitude * NoiseDirection;
         float EffectiveNoise = RawNoise * (1.0f - ZaryanaStrength);
-        float Nonlinear = FMath::Tanh(EffectiveNoise * 2.0f);      // насыщение
-        float MixStrength = Distortion * 0.5f;                     // сила перемешивания осей
+        float Nonlinear = FMath::Tanh(EffectiveNoise * 2.0f);
+        float MixStrength = Distortion * 0.5f;
 
         FRealState OriginalDelta = Delta;
-        // Перекрёстное смешивание: body<->spirit, mind<->nature
         Delta.Direction.Body = OriginalDelta.Direction.Body * (1.0f - MixStrength) +
             OriginalDelta.Direction.Spirit * MixStrength +
             Nonlinear * 0.1f;
@@ -249,8 +188,8 @@ namespace HerbalistCore
         // =========================
         float AvgDir = (Delta.Direction.Body + Delta.Direction.Mind +
             Delta.Direction.Spirit + Delta.Direction.Nature) / 4.0f;
-        float Boost = 1.0f + ZaryanaStrength * 0.5f;      // максимум 1.5
-        float Suppress = 1.0f - ZaryanaStrength * 0.3f;   // минимум 0.7
+        float Boost = 1.0f + ZaryanaStrength * 0.5f;
+        float Suppress = 1.0f - ZaryanaStrength * 0.3f;
 
         Delta.Direction.Body = (Delta.Direction.Body > AvgDir) ? Delta.Direction.Body * Boost : Delta.Direction.Body * Suppress;
         Delta.Direction.Mind = (Delta.Direction.Mind > AvgDir) ? Delta.Direction.Mind * Boost : Delta.Direction.Mind * Suppress;
@@ -264,7 +203,6 @@ namespace HerbalistCore
         Delta.Meta.Stability = FMath::Clamp(Delta.Meta.Stability, -1.0f, 1.0f);
         Delta.Meta.Purity = FMath::Clamp(Delta.Meta.Purity, -1.0f, 1.0f);
 
-        // Нормализация направления после структурирования
         float LenZ = FMath::Sqrt(
             Delta.Direction.Body * Delta.Direction.Body +
             Delta.Direction.Mind * Delta.Direction.Mind +

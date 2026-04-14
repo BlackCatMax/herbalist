@@ -1,3 +1,4 @@
+// HerbalistCoreTypes.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -97,10 +98,7 @@ struct FRngState
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     int32 Seed = 12345;
-
 };
-
-// HerbalistCoreTypes.h (добавить в конец перед последней скобкой)
 
 USTRUCT(BlueprintType)
 struct FWorldState
@@ -118,4 +116,10 @@ struct FWorldState
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FRealState CurrentState;
+};
+
+// Эталонное состояние Алатырь (S₀)
+struct FAlatyr
+{
+    static const FRealState S0;
 };

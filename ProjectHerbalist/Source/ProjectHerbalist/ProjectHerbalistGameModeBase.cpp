@@ -1,8 +1,10 @@
+// ProjectHerbalistGameModeBase.cpp
 #include "ProjectHerbalistGameModeBase.h"
 #include "ProjectHerbalist.h"
 #include "Core/World/HerbalistSimulation.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Harvest/HerbalistHarvest.h"
 #include "Math/UnrealMathUtility.h"
 
 void AProjectHerbalistGameModeBase::BeginPlay()
@@ -17,74 +19,40 @@ void AProjectHerbalistGameModeBase::BeginPlay()
         World.Intent = WorldConfig->Intent;
         World.CurrentState = WorldConfig->InitialBiomeState;
 
-        // Оригинальные ресурсы из конфига
-        FRealState OriginalA = WorldConfig->InputA;
-        FRealState OriginalB = WorldConfig->InputB;
-
         const int32 Steps = 10;
 
         for (int32 i = 0; i < Steps; i++)
         {
-            FRealState InputA = OriginalA;
-            FRealState InputB = OriginalB;
+            // Генерация ресурсов через Harvest на основе текущего состояния биома
+            FConditionModifier NeutralCond; // пока без погоды/времени суток
+            FRealState Resource1 = FHerbalistHarvest::Harvest(EResourceType::Nettle, World.CurrentState, NeutralCond);
+            FRealState Resource2 = FHerbalistHarvest::Harvest(EResourceType::Fern, World.CurrentState, NeutralCond);
 
+            // Опциональная мутация ресурсов (для тестовой динамики)
             if (bEnableRandomResourceMutation)
             {
-                // Создаём генератор случайных чисел на основе исходного seed + шаг, чтобы повторяемость
                 FRandomStream Stream(Rng.Seed + i);
 
-                // Мутация InputA
-                InputA.Magnitude += Stream.FRandRange(-0.05f, 0.05f);
-                InputA.Magnitude = FMath::Clamp(InputA.Magnitude, 0.0f, 1.0f);
-                InputA.Direction.Body += Stream.FRandRange(-0.05f, 0.05f);
-                InputA.Direction.Mind += Stream.FRandRange(-0.05f, 0.05f);
-                InputA.Direction.Spirit += Stream.FRandRange(-0.05f, 0.05f);
-                InputA.Direction.Nature += Stream.FRandRange(-0.05f, 0.05f);
-                // Нормализуем направление
-                float Len = FMath::Sqrt(
-                    InputA.Direction.Body * InputA.Direction.Body +
-                    InputA.Direction.Mind * InputA.Direction.Mind +
-                    InputA.Direction.Spirit * InputA.Direction.Spirit +
-                    InputA.Direction.Nature * InputA.Direction.Nature
-                );
-                if (Len > KINDA_SMALL_NUMBER)
-                {
-                    InputA.Direction.Body /= Len;
-                    InputA.Direction.Mind /= Len;
-                    InputA.Direction.Spirit /= Len;
-                    InputA.Direction.Nature /= Len;
-                }
-                // Клиппинг мета-параметров (оставляем как есть, можно тоже мутировать)
-                InputA.Meta.Distortion = FMath::Clamp(InputA.Meta.Distortion + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
-                InputA.Meta.Stability = FMath::Clamp(InputA.Meta.Stability + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
-                InputA.Meta.Purity = FMath::Clamp(InputA.Meta.Purity + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
+                auto MutateResource = [&Stream](FRealState& Res)
+                    {
+                        Res.Magnitude += Stream.FRandRange(-0.05f, 0.05f);
+                        Res.Magnitude = FMath::Clamp(Res.Magnitude, 0.0f, 1.0f);
+                        Res.Direction.Body += Stream.FRandRange(-0.05f, 0.05f);
+                        Res.Direction.Mind += Stream.FRandRange(-0.05f, 0.05f);
+                        Res.Direction.Spirit += Stream.FRandRange(-0.05f, 0.05f);
+                        Res.Direction.Nature += Stream.FRandRange(-0.05f, 0.05f);
+                        float Len = FMath::Sqrt(Res.Direction.Body * Res.Direction.Body + Res.Direction.Mind * Res.Direction.Mind + Res.Direction.Spirit * Res.Direction.Spirit + Res.Direction.Nature * Res.Direction.Nature);
+                        if (Len > KINDA_SMALL_NUMBER) { Res.Direction.Body /= Len; Res.Direction.Mind /= Len; Res.Direction.Spirit /= Len; Res.Direction.Nature /= Len; }
+                        Res.Meta.Distortion = FMath::Clamp(Res.Meta.Distortion + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
+                        Res.Meta.Stability = FMath::Clamp(Res.Meta.Stability + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
+                        Res.Meta.Purity = FMath::Clamp(Res.Meta.Purity + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
+                    };
 
-                // Аналогично для InputB
-                InputB.Magnitude += Stream.FRandRange(-0.05f, 0.05f);
-                InputB.Magnitude = FMath::Clamp(InputB.Magnitude, 0.0f, 1.0f);
-                InputB.Direction.Body += Stream.FRandRange(-0.05f, 0.05f);
-                InputB.Direction.Mind += Stream.FRandRange(-0.05f, 0.05f);
-                InputB.Direction.Spirit += Stream.FRandRange(-0.05f, 0.05f);
-                InputB.Direction.Nature += Stream.FRandRange(-0.05f, 0.05f);
-                Len = FMath::Sqrt(
-                    InputB.Direction.Body * InputB.Direction.Body +
-                    InputB.Direction.Mind * InputB.Direction.Mind +
-                    InputB.Direction.Spirit * InputB.Direction.Spirit +
-                    InputB.Direction.Nature * InputB.Direction.Nature
-                );
-                if (Len > KINDA_SMALL_NUMBER)
-                {
-                    InputB.Direction.Body /= Len;
-                    InputB.Direction.Mind /= Len;
-                    InputB.Direction.Spirit /= Len;
-                    InputB.Direction.Nature /= Len;
-                }
-                InputB.Meta.Distortion = FMath::Clamp(InputB.Meta.Distortion + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
-                InputB.Meta.Stability = FMath::Clamp(InputB.Meta.Stability + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
-                InputB.Meta.Purity = FMath::Clamp(InputB.Meta.Purity + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
+                MutateResource(Resource1);
+                MutateResource(Resource2);
             }
 
-            TArray<FRealState> Inputs = { InputA, InputB };
+            TArray<FRealState> Inputs = { Resource1, Resource2 };
             FRealState Result = HerbalistSimulation::UpdateWorld(World, Inputs, Rng);
 
             UE_LOG(LogHerbalist, Warning, TEXT("Step %d | ResultDist: %.3f | MemDist: %.3f"),

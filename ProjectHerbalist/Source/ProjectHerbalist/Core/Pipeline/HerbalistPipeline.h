@@ -1,3 +1,4 @@
+// HerbalistPipeline.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -10,7 +11,6 @@ namespace HerbalistCore
     public:
         static FRealState Fold(const TArray<FRealState>& Inputs);
         static FRealState ComputeDelta(const FRealState& Aggregated, const FRealState& CurrentBiomeState);
-        static void ApplyContext(FRealState& Delta, const FEnvironment& Env);
         static FRealState ApplyMorok(
             const TArray<FRealState>& Inputs,
             const FRealState& CurrentBiomeState,
