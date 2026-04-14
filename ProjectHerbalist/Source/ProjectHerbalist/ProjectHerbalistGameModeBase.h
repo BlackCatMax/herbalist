@@ -2,7 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Core/World/HerbalistWorldConfig.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+
 #include "ProjectHerbalistGameModeBase.generated.h"
 
 UCLASS()
@@ -11,31 +13,24 @@ class PROJECTHERBALIST_API AProjectHerbalistGameModeBase : public AGameModeBase
     GENERATED_BODY()
 
 public:
-    AProjectHerbalistGameModeBase();
 
-protected:
     virtual void BeginPlay() override;
 
-public:
+    // =========================
+    // CONFIG
+    // =========================
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Config")
+    UHerbalistWorldConfig* WorldConfig;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
-    bool bUseEditorInputs = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
+    // =========================
+    // STATE (НЕ ДУБЛИРОВАТЬ В CPP)
+    // =========================
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FRealState A;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FRealState B;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
-    FEnvironment Env;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
-    FMemoryState Memory;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
-    FIntent Intent;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FRngState Rng;
 };

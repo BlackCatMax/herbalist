@@ -1,12 +1,12 @@
+// HerbalistSimulation.h
 #pragma once
 
 #include "Core/Types/HerbalistCoreTypes.h"
 
-namespace HerbalistCore
+struct FRngState;
+
+class PROJECTHERBALIST_API HerbalistSimulation
 {
-    class Simulation
-    {
-    public:
-        static void Tick(FRealState& State, float DeltaTime);
-    };
-}
+public:
+    static FRealState UpdateWorld(FWorldState& World, const FRealState& A, const FRealState& B, FRngState& Rng);
+};

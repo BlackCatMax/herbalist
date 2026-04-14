@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Core/Biome/HerbalistBiomeState.h"
 #include "HerbalistPipeline.h"
 #include "Core/Types/HerbalistCoreMath.h"
 

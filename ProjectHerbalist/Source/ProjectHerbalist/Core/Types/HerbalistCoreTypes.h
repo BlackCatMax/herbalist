@@ -97,4 +97,25 @@ struct FRngState
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     int32 Seed = 12345;
+
+};
+
+// HerbalistCoreTypes.h (добавить в конец перед последней скобкой)
+
+USTRUCT(BlueprintType)
+struct FWorldState
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FEnvironment Env;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FMemoryState Memory;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FIntent Intent;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FRealState CurrentState;
 };

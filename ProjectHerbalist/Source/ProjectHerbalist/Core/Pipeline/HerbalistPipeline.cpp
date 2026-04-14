@@ -2,8 +2,6 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Math/UnrealMathUtility.h"
 
-DEFINE_LOG_CATEGORY(LogHerbalist);
-
 namespace HerbalistCore
 {
     // =========================
