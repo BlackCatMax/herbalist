@@ -14,10 +14,10 @@ namespace HerbalistCore
         static FRealState ApplyMorok(
             const FRealState& A,
             const FRealState& B,
-            const FEnvironment& Env,        // ✅ FIX
+            const FEnvironment& Env,
             const FMemoryState& Memory,
-            const FIntent& Intent,          // ✅ FIX
-            FRngState& Rng                  // ✅ FIX
+            const FIntent& Intent,
+            FRngState& Rng
         );
     };
 }

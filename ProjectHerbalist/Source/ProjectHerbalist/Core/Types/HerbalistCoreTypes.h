@@ -1,60 +1,100 @@
 #pragma once
 
-namespace HerbalistCore
+#include "CoreMinimal.h"
+#include "HerbalistCoreTypes.generated.h"
+
+USTRUCT(BlueprintType)
+struct FDirection
 {
-    struct FEnvironment
-    {
-        float Toxicity = 0.f;
-        float Fertility = 0.f;
-        float Moisture = 0.f;
-    };
+    GENERATED_BODY()
 
-    struct FMemoryState
-    {
-        float AccumulatedDistortion = 0.f;
-        float StabilityMemory = 0.f;
-        float HistoryPurity = 0.f;
-    };
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Body = 0.f;
 
-    struct FIntent
-    {
-        float Coherence = 0.f;
-        float Intensity = 0.f;
-    };
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Mind = 0.f;
 
-    struct FDirection
-    {
-        float Body = 0.f;
-        float Mind = 0.f;
-        float Spirit = 0.f;
-        float Nature = 0.f;
-    };
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Spirit = 0.f;
 
-    struct FMeta
-    {
-        float Purity = 0.f;
-        float Corruption = 0.f;
-        float Stability = 0.f;
-        float Distortion = 0.f;
-        float Potency = 0.f;
-    };
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Nature = 0.f;
+};
 
-    struct FRealState
-    {
-        FDirection Direction;
-        FMeta Meta;
-        float Magnitude = 0.f;
-    };
+USTRUCT(BlueprintType)
+struct FMeta
+{
+    GENERATED_BODY()
 
-    struct FPerceivedState
-    {
-        FDirection Direction;
-        FMeta Meta;
-        float Magnitude = 0.f;
-    };
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Distortion = 0.f;
 
-    struct FRngState
-    {
-        uint32 Seed = 12345;
-    };
-}
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Stability = 0.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Purity = 0.f;
+};
+
+USTRUCT(BlueprintType)
+struct FRealState
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Magnitude = 0.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FDirection Direction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FMeta Meta;
+};
+
+USTRUCT(BlueprintType)
+struct FEnvironment
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Toxicity = 0.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Fertility = 0.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Moisture = 0.f;
+};
+
+USTRUCT(BlueprintType)
+struct FMemoryState
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float AccumulatedDistortion = 0.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float StabilityMemory = 0.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float HistoryPurity = 0.f;
+};
+
+USTRUCT(BlueprintType)
+struct FIntent
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Coherence = 0.f;
+};
+
+USTRUCT(BlueprintType)
+struct FRngState
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 Seed = 12345;
+};

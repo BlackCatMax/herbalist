@@ -7,7 +7,7 @@ DEFINE_LOG_CATEGORY(LogHerbalist);
 namespace HerbalistCore
 {
     // =========================
-    // RNG (простой)
+    // RNG
     // =========================
 
     static float Random01(FRngState& Rng)
@@ -36,39 +36,38 @@ namespace HerbalistCore
         FRealState Result;
 
         // =========================
-        // BASE (FIX: направление НЕ пустое)
+        // BASE
         // =========================
 
         Result.Magnitude = (A.Magnitude + B.Magnitude) * 0.5f;
+        Result.Meta.Distortion = 0.0f;
+
+        // ВАЖНО: теперь используем память как источник стабильности
+        Result.Meta.Stability = Memory.StabilityMemory;
 
         Result.Direction.Body = (A.Direction.Body + B.Direction.Body) * 0.5f;
         Result.Direction.Mind = (A.Direction.Mind + B.Direction.Mind) * 0.5f;
         Result.Direction.Spirit = (A.Direction.Spirit + B.Direction.Spirit) * 0.5f;
         Result.Direction.Nature = (A.Direction.Nature + B.Direction.Nature) * 0.5f;
 
-        Result.Meta.Distortion = 0.0f;
-        Result.Meta.Stability = 0.0f;
-
         UE_LOG(LogHerbalist, Warning, TEXT("[BASE] Mag: %.3f | Dist: %.3f"),
             Result.Magnitude, Result.Meta.Distortion);
 
         // =========================
-        // ENV
+        // DISTORTION (NON-LINEAR, CLAMPED)
         // =========================
 
-        Result.Meta.Distortion += Env.Toxicity * 0.1f;
+        float EnvDist = Env.Toxicity * 0.1f;
+        float MemoryDist = Memory.AccumulatedDistortion;
 
-        UE_LOG(LogHerbalist, Warning, TEXT("[ENV] Tox: %.2f | Dist: %.3f"),
-            Env.Toxicity, Result.Meta.Distortion);
+        Result.Meta.Distortion =
+            1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
 
-        // =========================
-        // MEMORY
-        // =========================
+        // ❗ не даём уйти в полный максимум
+        Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion, 0.0f, 0.95f);
 
-        Result.Meta.Distortion += Memory.AccumulatedDistortion;
-
-        UE_LOG(LogHerbalist, Warning, TEXT("[MEM] Dist: %.3f"),
-            Result.Meta.Distortion);
+        UE_LOG(LogHerbalist, Warning, TEXT("[DIST] Env: %.3f Mem: %.3f -> %.3f"),
+            EnvDist, MemoryDist, Result.Meta.Distortion);
 
         // =========================
         // INTENT
@@ -78,21 +77,12 @@ namespace HerbalistCore
             Intent.Coherence);
 
         // =========================
-        // ZARYANA (оставляем как есть, она корректная)
+        // ZARYANA (STABLE)
         // =========================
 
-        float Base = Intent.Coherence;
-
-        float DistortionResistance =
-            1.0f / (1.0f + Result.Meta.Distortion);
-
-        float StabilityBonus =
-            Result.Meta.Stability * 0.3f;
-
         float ZaryanaStrength =
-            Base * DistortionResistance;
-
-        ZaryanaStrength += StabilityBonus * (1.0f - Base);
+            Intent.Coherence *
+            (1.0f - Result.Meta.Distortion);
 
         ZaryanaStrength = FMath::Clamp(ZaryanaStrength, 0.0f, 1.0f);
 
@@ -100,7 +90,7 @@ namespace HerbalistCore
             ZaryanaStrength);
 
         // =========================
-        // MOROK (теперь искажает ОСНОВУ, а не ноль)
+        // MOROK (SIGNED CHAOS)
         // =========================
 
         float Noise =
@@ -109,17 +99,20 @@ namespace HerbalistCore
         float EffectiveNoise =
             Noise * (1.0f - ZaryanaStrength);
 
-        Result.Direction.Body += EffectiveNoise * 0.2f;
-        Result.Direction.Mind -= EffectiveNoise * 0.15f;
-        Result.Direction.Spirit += EffectiveNoise * 0.1f;
-        Result.Direction.Nature -= EffectiveNoise * 0.05f;
+        float Chaos = EffectiveNoise; // ❗ сохраняем знак
+
+        // ❗ деформация, а не просто усиление
+        Result.Direction.Body = FMath::Lerp(Result.Direction.Body, Chaos, 0.2f);
+        Result.Direction.Mind = FMath::Lerp(Result.Direction.Mind, -Chaos, 0.15f);
+        Result.Direction.Spirit = FMath::Lerp(Result.Direction.Spirit, Chaos, 0.1f);
+        Result.Direction.Nature = FMath::Lerp(Result.Direction.Nature, -Chaos, 0.05f);
 
         UE_LOG(LogHerbalist, Warning,
-            TEXT("[MOROK] Noise: %.3f | Eff: %.3f"),
-            Noise, EffectiveNoise);
+            TEXT("[MOROK] Noise: %.3f | Eff: %.3f | Chaos: %.3f"),
+            Noise, EffectiveNoise, Chaos);
 
         // =========================
-        // NORMALIZATION (FIXED)
+        // NORMALIZATION (SAFE)
         // =========================
 
         Result.Direction.Body = FMath::Max(0.0f, Result.Direction.Body);
@@ -156,10 +149,12 @@ namespace HerbalistCore
             Result.Direction.Nature);
 
         // =========================
-        // FEEDBACK (мягче, иначе всё схлопывается)
+        // FEEDBACK (SOFT)
         // =========================
 
-        float Feedback = 0.5f + Result.Magnitude * 0.5f;
+        float Feedback =
+            0.5f + (Result.Magnitude * 0.5f);
+
         Result.Magnitude *= Feedback;
 
         UE_LOG(LogHerbalist, Warning,
@@ -167,15 +162,15 @@ namespace HerbalistCore
             Result.Magnitude);
 
         // =========================
-        // STRUCT (менее агрессивный)
+        // STRUCT (NOW WORKS)
         // =========================
 
         float Integrity =
-            (1.0f - Result.Meta.Distortion * 0.5f) *
+            (1.0f - Result.Meta.Distortion * 0.7f) *
             (1.0f + Result.Meta.Stability);
 
         float StructureFactor =
-            FMath::Clamp(Integrity, 0.1f, 1.0f);
+            FMath::Clamp(Integrity, 0.0f, 1.0f);
 
         Result.Magnitude *= StructureFactor;
 
