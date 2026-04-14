@@ -1,58 +1,38 @@
-// HerbalistSimulation.cpp
 #include "HerbalistSimulation.h"
+#include "ProjectHerbalist.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
 #include "Math/UnrealMathUtility.h"
 
 FRealState HerbalistSimulation::UpdateWorld(
     FWorldState& World,
-    const FRealState& A,
-    const FRealState& B,
+    const TArray<FRealState>& Inputs,
     FRngState& Rng)
 {
-    // =========================
-    // CORE TRANSFORMATION (НЕ ТРОГАЕМ)
-    // =========================
-    FRealState Result = HerbalistCore::Pipeline::ApplyMorok(
-        A,
-        B,
+    FRealState NewState = HerbalistCore::Pipeline::ApplyMorok(
+        Inputs,
+        World.CurrentState,
         World.Env,
         World.Memory,
         World.Intent,
         Rng
     );
 
-    // =========================
-    // APPLY RESULT TO WORLD
-    // =========================
-    World.CurrentState = Result;
+    World.CurrentState = NewState;
 
-    // =========================
-    // MEMORY LOOP (УЛУЧШЕННЫЙ БАЗОВЫЙ)
-    // =========================
+    // Обновление памяти
     const float AccumulationRate = 0.1f;
-
-    float PrevDist = World.Memory.AccumulatedDistortion;
-    float PrevStab = World.Memory.StabilityMemory;
-
-    float DistDelta = (Result.Meta.Distortion - World.Memory.AccumulatedDistortion);
+    float DistDelta = NewState.Meta.Distortion - World.Memory.AccumulatedDistortion;
     World.Memory.AccumulatedDistortion += DistDelta * AccumulationRate;
+    World.Memory.AccumulatedDistortion = FMath::Clamp(World.Memory.AccumulatedDistortion, 0.0f, 1.0f);
 
-    float StabDelta = (Result.Meta.Stability - World.Memory.StabilityMemory);
+    float StabDelta = NewState.Meta.Stability - World.Memory.StabilityMemory;
     World.Memory.StabilityMemory += StabDelta * AccumulationRate;
+    World.Memory.StabilityMemory = FMath::Clamp(World.Memory.StabilityMemory, 0.0f, 1.0f);
 
-    UE_LOG(LogHerbalist, Warning,
-        TEXT("[WORLD] MemDist: %.3f -> %.3f | ResultDist: %.3f"),
-        PrevDist,
+    UE_LOG(LogHerbalist, Warning, TEXT("[WORLD] MemDist: %.3f | MemStab: %.3f | ResultDist: %.3f"),
         World.Memory.AccumulatedDistortion,
-        Result.Meta.Distortion
-    );
-
-    UE_LOG(LogHerbalist, Warning,
-        TEXT("[WORLD] MemStab: %.3f -> %.3f | ResultStab: %.3f"),
-        PrevStab,
         World.Memory.StabilityMemory,
-        Result.Meta.Stability
-    );
+        NewState.Meta.Distortion);
 
-    return Result;
+    return NewState;
 }
