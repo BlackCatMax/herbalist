@@ -34,10 +34,17 @@ void AProjectHerbalistGameModeBase::SpawnWorldManager()
         WorldManager = GetWorld()->SpawnActor<AGridWorldManager>(SpawnParams);
         if (WorldManager)
         {
-            // Устанавливаем скорость интерполяции из настроек GameMode
             WorldManager->StateInterpolationSpeed = StateInterpolationSpeed;
-            UE_LOG(LogHerbalist, Log, TEXT("WorldManager spawned at %s with interpolation speed %.3f"),
-                *WorldManager->GetActorLocation().ToString(), StateInterpolationSpeed);
+            WorldManager->bHarvestAffectsBiome = bHarvestAffectsBiome;
+            WorldManager->HarvestStressIncrement = HarvestStressIncrement;
+            WorldManager->HarvestStressThreshold = HarvestStressThreshold;
+            WorldManager->MaxHarvestImpactOnDistortion = MaxHarvestImpactOnDistortion;
+            WorldManager->MaxHarvestImpactOnMagnitude = MaxHarvestImpactOnMagnitude;
+            WorldManager->HarvestStressDecayRate = HarvestStressDecayRate;
+            WorldManager->bEnableRecovery = bEnableEcologyRecovery;
+
+            UE_LOG(LogHerbalist, Log, TEXT("WorldManager spawned with interpolation speed %.3f, ecology inc=%.4f thresh=%.2f decay=%.4f"),
+                StateInterpolationSpeed, HarvestStressIncrement, HarvestStressThreshold, HarvestStressDecayRate);
         }
     }
 }
@@ -52,6 +59,7 @@ void AProjectHerbalistGameModeBase::AddToInventory(const FRealState& Resource)
     FRealState* NewResource = new FRealState(Resource);
     Inventory.Add(NewResource);
     UE_LOG(LogHerbalist, Log, TEXT("Added to inventory, count=%d, Mag=%.2f"), Inventory.Num(), NewResource->Magnitude);
+    OnInventoryChanged.Broadcast();
 }
 
 void AProjectHerbalistGameModeBase::RemoveFromInventory(int32 Index)
@@ -61,5 +69,6 @@ void AProjectHerbalistGameModeBase::RemoveFromInventory(int32 Index)
         delete Inventory[Index];
         Inventory.RemoveAt(Index);
         UE_LOG(LogHerbalist, Log, TEXT("Removed from inventory, count=%d"), Inventory.Num());
+        OnInventoryChanged.Broadcast();
     }
 }

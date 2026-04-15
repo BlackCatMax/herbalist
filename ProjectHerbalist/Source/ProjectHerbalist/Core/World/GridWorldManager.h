@@ -25,14 +25,23 @@ struct FGridCell
     UPROPERTY() float HarvestStress = 0.0f;
     UPROPERTY() bool bEntityTriggered = false;
 
+    // Конструктор с явной инициализацией всех полей
     FGridCell()
+        : State()
+        , Environment()
+        , Memory()
+        , Biome()
+        , X(0)
+        , Y(0)
+        , TargetState()
+        , TargetMemory()
+        , HarvestStress(0.0f)
+        , bEntityTriggered(false)
     {
-        TargetState = State;
-        TargetMemory = Memory;
     }
 };
 
-UCLASS()
+UCLASS(BlueprintType)
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
 {
     GENERATED_BODY()
@@ -46,38 +55,24 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid") int32 GridSizeY = 5;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid") float CellSize = 100.0f;
 
-    // Скорость интерполяции параметров (будет установлена из GameMode)
+    // Скорость интерполяции (будет установлена из GameMode)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
     float StateInterpolationSpeed = 0.05f;
 
-    // Влияние сбора на биом
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest|Impact")
+    // Параметры экологии (будут установлены из GameMode)
     bool bHarvestAffectsBiome = true;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest|Impact")
     float HarvestStressIncrement = 0.001f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest|Impact")
     float HarvestStressThreshold = 0.3f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest|Impact")
     float MaxHarvestImpactOnDistortion = 0.2f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest|Impact")
     float MaxHarvestImpactOnMagnitude = 0.1f;
-
-    // Восстановление экологии
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest|Recovery")
     float HarvestStressDecayRate = 0.0005f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest|Recovery")
     bool bEnableRecovery = true;
 
     // Доступ к ячейке
     FGridCell* GetCell(int32 X, int32 Y);
     const FGridCell* GetCellConst(int32 X, int32 Y) const;
 
-    // Обновление целевых значений (вызывается при алхимии, распространении, сборе)
+    // Обновление целевых значений
     void SetTargetState(int32 X, int32 Y, const FRealState& NewState, const FMemoryState& NewMemory);
 
     // Сбор ресурса
@@ -94,7 +89,19 @@ public:
     // Распространение
     void PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, const FMemoryState& MemoryDelta, float Falloff = 0.5f, int32 Depth = 1);
 
-    // Тестовые команды
+    // UI и выбор ячейки
+    void SelectCell(int32 X, int32 Y);
+    int32 GetSelectedX() const { return SelectedX; }
+    int32 GetSelectedY() const { return SelectedY; }
+    FString GetSelectedCellInfo() const;
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void UI_HarvestSelectedCell(int32 ResourceType);
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void UI_ApplyAlchemyToSelectedCell();
+
+    // Тестовые команды (exec, вызываются из PlayerController)
     void HarvestTest(int32 X, int32 Y, int32 ResourceType);
     void ApplyTest(int32 X, int32 Y);
     void ShowInventory();
@@ -104,6 +111,8 @@ protected:
     TArray<FGridCell> Cells;
     TArray<UStaticMeshComponent*> VisualMeshes;
     bool bInterpolationActive = false;
+    int32 SelectedX = -1;
+    int32 SelectedY = -1;
     UPROPERTY() UStaticMesh* CubeMesh = nullptr;
     UPROPERTY() UMaterial* CubeMaterial = nullptr;
 

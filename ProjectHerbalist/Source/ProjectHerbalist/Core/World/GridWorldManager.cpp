@@ -32,7 +32,7 @@ void AGridWorldManager::InitializeCells()
         for (int32 X = 0; X < GridSizeX; X++)
         {
             int32 Index = Y * GridSizeX + X;
-            EBiomeType biome = EBiomeType::MixedForest; // для теста
+            EBiomeType biome = EBiomeType::MixedForest; // можно изменить на разные биомы
             Cells[Index].Biome = biome;
             FRealState defaultState = FBiomeDefaults::GetDefaultState(biome);
             FEnvironment defaultEnv = FBiomeDefaults::GetDefaultEnvironment(biome);
@@ -94,10 +94,8 @@ void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
     float DistortionIncrease = t * MaxHarvestImpactOnDistortion;
     float MagnitudeDecrease = t * MaxHarvestImpactOnMagnitude;
 
-    // Корректируем целевое состояние (не текущее)
     Cell.TargetState.Meta.Distortion = FMath::Clamp(Cell.TargetState.Meta.Distortion + DistortionIncrease, 0.0f, 1.0f);
     Cell.TargetState.Magnitude = FMath::Clamp(Cell.TargetState.Magnitude - MagnitudeDecrease, 0.0f, 1.0f);
-    // Обновляем целевую память
     UpdateMemory(Cell.TargetMemory, Cell.TargetState, 0.1f);
 }
 
@@ -106,26 +104,19 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, EResourceType Re
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return FRealState();
 
-    // Генерируем ресурс на основе текущего (интерполируемого) состояния
     FRealState Resource = FHerbalistHarvest::Harvest(ResourceType, Cell->State, Conditions);
 
     if (bHarvestAffectsBiome)
     {
-        // Увеличиваем стресс
         Cell->HarvestStress += HarvestStressIncrement;
         Cell->HarvestStress = FMath::Clamp(Cell->HarvestStress, 0.0f, 1.0f);
-
-        // Пересчитываем влияние стресса на целевое состояние
         RecalculateDistortionFromHarvestStress(*Cell);
-
-        // Запускаем интерполяцию
         if (!bInterpolationActive)
         {
             bInterpolationActive = true;
             SetActorTickEnabled(true);
         }
     }
-
     return Resource;
 }
 
@@ -139,7 +130,6 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
 
-    // Используем текущее (интерполируемое) состояние для вычисления
     FRealState OldState = Cell->State;
     FRealState NewState = HerbalistCore::Pipeline::ApplyMorok(
         Ingredients,
@@ -150,7 +140,6 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
         Rng
     );
 
-    // Вычисляем дельту (для распространения)
     FRealState Delta;
     Delta.Magnitude = NewState.Magnitude - OldState.Magnitude;
     Delta.Direction.Body = NewState.Direction.Body - OldState.Direction.Body;
@@ -161,18 +150,15 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
     Delta.Meta.Stability = NewState.Meta.Stability - OldState.Meta.Stability;
     Delta.Meta.Purity = NewState.Meta.Purity - OldState.Meta.Purity;
 
-    // Обновляем целевое состояние и память
     FMemoryState NewMemory = Cell->Memory;
     UpdateMemory(NewMemory, NewState, 0.1f);
     SetTargetState(X, Y, NewState, NewMemory);
 
-    // Дельта памяти (для распространения)
     FMemoryState MemoryDelta;
     MemoryDelta.AccumulatedDistortion = NewMemory.AccumulatedDistortion - Cell->Memory.AccumulatedDistortion;
     MemoryDelta.StabilityMemory = NewMemory.StabilityMemory - Cell->Memory.StabilityMemory;
     MemoryDelta.HistoryPurity = NewMemory.HistoryPurity - Cell->Memory.HistoryPurity;
 
-    // Распространение на соседей (обновляет их целевые значения)
     PropagateToNeighbors(X, Y, Delta, MemoryDelta, 0.5f, 1);
 }
 
@@ -187,7 +173,6 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
             FGridCell* Neighbor = GetCell(X + dx, Y + dy);
             if (!Neighbor) continue;
 
-            // Ослабленные дельты
             FRealState WeakDelta = Delta;
             WeakDelta.Magnitude *= Falloff;
             WeakDelta.Direction.Body *= Falloff;
@@ -203,7 +188,6 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
             WeakMemoryDelta.StabilityMemory *= Falloff;
             WeakMemoryDelta.HistoryPurity *= Falloff;
 
-            // Вычисляем новое целевое состояние соседа
             FRealState NewTargetState = Neighbor->TargetState;
             NewTargetState.Direction.Body += WeakDelta.Direction.Body;
             NewTargetState.Direction.Mind += WeakDelta.Direction.Mind;
@@ -214,7 +198,6 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
             NewTargetState.Meta.Stability += WeakDelta.Meta.Stability;
             NewTargetState.Meta.Purity += WeakDelta.Meta.Purity;
 
-            // Нормализация направления
             float Len = FMath::Sqrt(NewTargetState.Direction.Body * NewTargetState.Direction.Body +
                 NewTargetState.Direction.Mind * NewTargetState.Direction.Mind +
                 NewTargetState.Direction.Spirit * NewTargetState.Direction.Spirit +
@@ -235,7 +218,6 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
             NewTargetState.Meta.Stability = FMath::Clamp(NewTargetState.Meta.Stability, 0.0f, 1.0f);
             NewTargetState.Meta.Purity = FMath::Clamp(NewTargetState.Meta.Purity, 0.0f, 1.0f);
 
-            // Обновляем целевую память соседа
             FMemoryState NewTargetMemory = Neighbor->TargetMemory;
             NewTargetMemory.AccumulatedDistortion += WeakMemoryDelta.AccumulatedDistortion;
             NewTargetMemory.StabilityMemory += WeakMemoryDelta.StabilityMemory;
@@ -247,7 +229,6 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
             Neighbor->TargetState = NewTargetState;
             Neighbor->TargetMemory = NewTargetMemory;
 
-            // Запускаем интерполяцию
             if (!bInterpolationActive)
             {
                 bInterpolationActive = true;
@@ -259,7 +240,6 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
 
 void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
 {
-    // Интерполяция состояния
     FRealState& Cur = Cell.State;
     const FRealState& Target = Cell.TargetState;
 
@@ -272,7 +252,6 @@ void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
     Cur.Meta.Stability = FMath::FInterpTo(Cur.Meta.Stability, Target.Meta.Stability, DeltaTime, StateInterpolationSpeed);
     Cur.Meta.Purity = FMath::FInterpTo(Cur.Meta.Purity, Target.Meta.Purity, DeltaTime, StateInterpolationSpeed);
 
-    // Нормализуем направление после интерполяции
     float Len = FMath::Sqrt(Cur.Direction.Body * Cur.Direction.Body + Cur.Direction.Mind * Cur.Direction.Mind +
         Cur.Direction.Spirit * Cur.Direction.Spirit + Cur.Direction.Nature * Cur.Direction.Nature);
     if (Len > KINDA_SMALL_NUMBER)
@@ -287,7 +266,6 @@ void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
         Cur.Direction.Body = Cur.Direction.Mind = Cur.Direction.Spirit = Cur.Direction.Nature = 0.25f;
     }
 
-    // Интерполяция памяти
     FMemoryState& Mem = Cell.Memory;
     const FMemoryState& TargetMem = Cell.TargetMemory;
     Mem.AccumulatedDistortion = FMath::FInterpTo(Mem.AccumulatedDistortion, TargetMem.AccumulatedDistortion, DeltaTime, StateInterpolationSpeed);
@@ -299,7 +277,6 @@ void AGridWorldManager::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // 1. Восстановление экологии (уменьшение HarvestStress)
     if (bEnableRecovery)
     {
         for (FGridCell& Cell : Cells)
@@ -310,7 +287,6 @@ void AGridWorldManager::Tick(float DeltaTime)
                 Cell.HarvestStress = FMath::Max(0.0f, Cell.HarvestStress - HarvestStressDecayRate * DeltaTime);
                 if (OldStress != Cell.HarvestStress)
                 {
-                    // Пересчитываем целевое состояние из стресса
                     RecalculateDistortionFromHarvestStress(Cell);
                     if (!bInterpolationActive)
                     {
@@ -322,11 +298,9 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
-    // 2. Интерполяция состояния и памяти для всех ячеек
     bool bAnyRemaining = false;
     for (FGridCell& Cell : Cells)
     {
-        // Проверяем, достигли ли целевых значений
         bool bStateNear = FMath::IsNearlyEqual(Cell.State.Magnitude, Cell.TargetState.Magnitude, 0.001f) &&
             FMath::IsNearlyEqual(Cell.State.Meta.Distortion, Cell.TargetState.Meta.Distortion, 0.001f) &&
             FMath::IsNearlyEqual(Cell.Memory.AccumulatedDistortion, Cell.TargetMemory.AccumulatedDistortion, 0.001f);
@@ -337,13 +311,11 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
         else
         {
-            // Синхронизируем на случай ошибок округления
             Cell.State = Cell.TargetState;
             Cell.Memory = Cell.TargetMemory;
         }
     }
 
-    // 3. Обновляем цвета всех ячеек (визуализация)
     for (int32 i = 0; i < Cells.Num(); ++i)
     {
         UpdateCellColor(Cells[i].X, Cells[i].Y);
@@ -401,7 +373,6 @@ void AGridWorldManager::UpdateCellColor(int32 X, int32 Y)
     }
     if (!Mat) return;
 
-    // Цвет привязываем к текущему (интерполируемому) накопленному искажению
     const FGridCell* Cell = GetCellConst(X, Y);
     if (!Cell) return;
     float Dist = Cell->Memory.AccumulatedDistortion;
@@ -409,8 +380,50 @@ void AGridWorldManager::UpdateCellColor(int32 X, int32 Y)
     Mat->SetVectorParameterValue("Color", Color);
 }
 
-// ========== Тестовые команды ==========
+// ========== UI и выбор ячейки ==========
+void AGridWorldManager::SelectCell(int32 X, int32 Y)
+{
+    if (GetCell(X, Y))
+    {
+        SelectedX = X;
+        SelectedY = Y;
+        UE_LOG(LogHerbalist, Log, TEXT("Selected cell (%d, %d)"), X, Y);
+    }
+    else
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("Invalid cell (%d, %d)"), X, Y);
+    }
+}
 
+FString AGridWorldManager::GetSelectedCellInfo() const
+{
+    const FGridCell* Cell = GetCellConst(SelectedX, SelectedY);
+    if (!Cell) return TEXT("No cell selected");
+    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f"),
+        SelectedX, SelectedY, Cell->State.Magnitude, Cell->State.Meta.Distortion, Cell->HarvestStress);
+}
+
+void AGridWorldManager::UI_HarvestSelectedCell(int32 ResourceType)
+{
+    if (SelectedX < 0 || SelectedY < 0)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No cell selected for harvest"));
+        return;
+    }
+    HarvestTest(SelectedX, SelectedY, ResourceType);
+}
+
+void AGridWorldManager::UI_ApplyAlchemyToSelectedCell()
+{
+    if (SelectedX < 0 || SelectedY < 0)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No cell selected for alchemy"));
+        return;
+    }
+    ApplyTest(SelectedX, SelectedY);
+}
+
+// ========== Тестовые команды ==========
 void AGridWorldManager::HarvestTest(int32 X, int32 Y, int32 ResourceType)
 {
     EResourceType Type = static_cast<EResourceType>(ResourceType);
@@ -424,10 +437,7 @@ void AGridWorldManager::HarvestTest(int32 X, int32 Y, int32 ResourceType)
 
 void AGridWorldManager::MassHarvestTest(int32 X, int32 Y, int32 ResourceType, int32 Count)
 {
-    for (int32 i = 0; i < Count; ++i)
-    {
-        HarvestTest(X, Y, ResourceType);
-    }
+    for (int32 i = 0; i < Count; ++i) HarvestTest(X, Y, ResourceType);
     UE_LOG(LogHerbalist, Log, TEXT("Mass harvest %d times at (%d,%d)"), Count, X, Y);
 }
 
@@ -465,9 +475,6 @@ void AGridWorldManager::ShowInventory()
                 i, Res.Magnitude, Res.Meta.Distortion,
                 Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);
         }
-        else
-        {
-            UE_LOG(LogHerbalist, Warning, TEXT("[%d] NULL pointer"), i);
-        }
+        else UE_LOG(LogHerbalist, Warning, TEXT("[%d] NULL pointer"), i);
     }
 }

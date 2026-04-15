@@ -1,4 +1,3 @@
-// ProjectHerbalist.Build.cs
 using UnrealBuildTool;
 
 public class ProjectHerbalist : ModuleRules
@@ -12,7 +11,8 @@ public class ProjectHerbalist : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
-            "InputCore"
+            "InputCore",
+            "EnhancedInput"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -24,7 +24,7 @@ public class ProjectHerbalist : ModuleRules
             "ProjectHerbalist/Core/Biome",
             "ProjectHerbalist/Core/Pipeline",
             "ProjectHerbalist/Core/World",
-            "ProjectHerbalist/Core/Harvest",   // добавлено
+            "ProjectHerbalist/Core/Harvest",
             "ProjectHerbalist"
         });
     }
