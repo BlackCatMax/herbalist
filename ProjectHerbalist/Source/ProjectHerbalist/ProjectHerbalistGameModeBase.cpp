@@ -11,7 +11,6 @@ AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
 
 AProjectHerbalistGameModeBase::~AProjectHerbalistGameModeBase()
 {
-    // Очистка инвентаря
     for (FRealState* Res : Inventory)
     {
         delete Res;
@@ -35,7 +34,10 @@ void AProjectHerbalistGameModeBase::SpawnWorldManager()
         WorldManager = GetWorld()->SpawnActor<AGridWorldManager>(SpawnParams);
         if (WorldManager)
         {
-            UE_LOG(LogHerbalist, Log, TEXT("WorldManager spawned at %s"), *WorldManager->GetActorLocation().ToString());
+            // Устанавливаем скорость интерполяции из настроек GameMode
+            WorldManager->StateInterpolationSpeed = StateInterpolationSpeed;
+            UE_LOG(LogHerbalist, Log, TEXT("WorldManager spawned at %s with interpolation speed %.3f"),
+                *WorldManager->GetActorLocation().ToString(), StateInterpolationSpeed);
         }
     }
 }

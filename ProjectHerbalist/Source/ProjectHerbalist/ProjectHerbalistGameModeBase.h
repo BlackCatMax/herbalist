@@ -29,6 +29,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
     bool bEnableRandomResourceMutation = false;
 
+    // Скорость интерполяции параметров мира (чем меньше, тем медленнее)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
+    float StateInterpolationSpeed = 0.05f;
+
     // Инвентарь – без UPROPERTY, храним указатели
     TArray<FRealState*> Inventory;
 
@@ -38,6 +42,8 @@ public:
 
     UPROPERTY(BlueprintReadOnly, Category = "World")
     AGridWorldManager* WorldManager = nullptr;
+
+    float GetStateInterpolationSpeed() const { return StateInterpolationSpeed; }
 
 protected:
     void SpawnWorldManager();
