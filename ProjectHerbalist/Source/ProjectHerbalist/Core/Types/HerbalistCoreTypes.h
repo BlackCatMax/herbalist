@@ -51,7 +51,6 @@ struct FRealState
     FMeta Meta;
 };
 
-// Все остальные структуры оставить без явных конструкторов (положиться на = default)
 USTRUCT(BlueprintType)
 struct FEnvironment
 {

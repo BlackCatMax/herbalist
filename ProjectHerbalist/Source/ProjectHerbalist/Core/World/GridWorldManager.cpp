@@ -27,15 +27,34 @@ void AGridWorldManager::BeginPlay()
 void AGridWorldManager::InitializeCells()
 {
     Cells.SetNum(GridSizeX * GridSizeY);
+    FRandomStream Rng(12345); // детерминированный seed для повторяемости
+
+    const int32 BlockSize = 5;
+    const int32 BlocksX = GridSizeX / BlockSize;
+    const int32 BlocksY = GridSizeY / BlockSize;
+
     for (int32 Y = 0; Y < GridSizeY; Y++)
     {
         for (int32 X = 0; X < GridSizeX; X++)
         {
             int32 Index = Y * GridSizeX + X;
-            EBiomeType biome = EBiomeType::MixedForest; // можно изменить на разные биомы
-            Cells[Index].Biome = biome;
+            int32 BlockX = X / BlockSize;
+            int32 BlockY = Y / BlockSize;
+            int32 BlockIndex = (BlockY * BlocksX + BlockX) % 4;
+
+            EBiomeType biome;
+            switch (BlockIndex)
+            {
+            case 0: biome = EBiomeType::MixedForest; break;
+            case 1: biome = EBiomeType::Swamp; break;
+            case 2: biome = EBiomeType::Steppe; break;
+            default: biome = EBiomeType::Floodplain; break;
+            }
+
             FRealState defaultState = FBiomeDefaults::GetDefaultState(biome);
             FEnvironment defaultEnv = FBiomeDefaults::GetDefaultEnvironment(biome);
+
+            Cells[Index].Biome = biome;
             Cells[Index].State = defaultState;
             Cells[Index].TargetState = defaultState;
             Cells[Index].Environment = defaultEnv;
@@ -45,8 +64,18 @@ void AGridWorldManager::InitializeCells()
             Cells[Index].Y = Y;
             Cells[Index].HarvestStress = 0.0f;
             Cells[Index].bEntityTriggered = false;
+
+            // Генерируем доступный ресурс для ячейки
+            Cells[Index].AvailableResource = FBiomeDefaults::GetRandomResourceForBiome(biome, Rng);
+            Cells[Index].ResourceRegrowthTimer = 0.0f;
         }
     }
+}
+
+void AGridWorldManager::RegenerateCellResource(FGridCell& Cell, FRandomStream& Rng)
+{
+    Cell.AvailableResource = FBiomeDefaults::GetRandomResourceForBiome(Cell.Biome, Rng);
+    Cell.ResourceRegrowthTimer = 0.0f;
 }
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
@@ -99,12 +128,19 @@ void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
     UpdateMemory(Cell.TargetMemory, Cell.TargetState, 0.1f);
 }
 
-FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, EResourceType ResourceType, const FConditionModifier& Conditions)
+FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions)
 {
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return FRealState();
 
-    FRealState Resource = FHerbalistHarvest::Harvest(ResourceType, Cell->State, Conditions);
+    if (Cell->ResourceRegrowthTimer > 0.0f)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("Cell (%d,%d) resource not ready (regrowing)"), X, Y);
+        return FRealState();
+    }
+
+    FRealState Resource = FHerbalistHarvest::Harvest(Cell->AvailableResource, Cell->State, Conditions);
+    Cell->ResourceRegrowthTimer = ResourceRegrowthTime;
 
     if (bHarvestAffectsBiome)
     {
@@ -120,9 +156,9 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, EResourceType Re
     return Resource;
 }
 
-FRealState AGridWorldManager::HarvestFromCellSimple(int32 X, int32 Y, EResourceType ResourceType)
+FRealState AGridWorldManager::HarvestFromCellSimple(int32 X, int32 Y)
 {
-    return HarvestFromCell(X, Y, ResourceType, FConditionModifier());
+    return HarvestFromCell(X, Y, FConditionModifier());
 }
 
 void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng)
@@ -316,12 +352,30 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
+    // Обновление цветов
     for (int32 i = 0; i < Cells.Num(); ++i)
     {
         UpdateCellColor(Cells[i].X, Cells[i].Y);
     }
 
-    if (!bAnyRemaining)
+    // Восстановление ресурсов
+    bool bAnyRegrowing = false;
+    for (FGridCell& Cell : Cells)
+    {
+        if (Cell.ResourceRegrowthTimer > 0.0f)
+        {
+            Cell.ResourceRegrowthTimer -= DeltaTime;
+            if (Cell.ResourceRegrowthTimer <= 0.0f)
+            {
+                FRandomStream Rng(GetWorld()->GetTimeSeconds() * 1000);
+                RegenerateCellResource(Cell, Rng);
+                UE_LOG(LogHerbalist, Log, TEXT("Cell (%d,%d) resource regenerated to %d"), Cell.X, Cell.Y, (int32)Cell.AvailableResource);
+            }
+            bAnyRegrowing = true;
+        }
+    }
+
+    if (!bAnyRemaining && !bAnyRegrowing)
     {
         bInterpolationActive = false;
         SetActorTickEnabled(false);
@@ -343,6 +397,10 @@ void AGridWorldManager::SpawnVisuals()
             MeshComp->SetWorldScale3D(FVector(CellSize / 100.0f, CellSize / 100.0f, 0.2f));
             MeshComp->RegisterComponent();
             VisualMeshes[Y * GridSizeX + X] = MeshComp;
+
+            // Настройка коллизии для трассировки
+            MeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+            MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
             if (CubeMaterial)
             {
@@ -399,45 +457,29 @@ FString AGridWorldManager::GetSelectedCellInfo() const
 {
     const FGridCell* Cell = GetCellConst(SelectedX, SelectedY);
     if (!Cell) return TEXT("No cell selected");
-    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f"),
-        SelectedX, SelectedY, Cell->State.Magnitude, Cell->State.Meta.Distortion, Cell->HarvestStress);
-}
-
-void AGridWorldManager::UI_HarvestSelectedCell(int32 ResourceType)
-{
-    if (SelectedX < 0 || SelectedY < 0)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("No cell selected for harvest"));
-        return;
-    }
-    HarvestTest(SelectedX, SelectedY, ResourceType);
-}
-
-void AGridWorldManager::UI_ApplyAlchemyToSelectedCell()
-{
-    if (SelectedX < 0 || SelectedY < 0)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("No cell selected for alchemy"));
-        return;
-    }
-    ApplyTest(SelectedX, SelectedY);
+    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, Resource=%d, Regrowth=%.1f"),
+        SelectedX, SelectedY,
+        Cell->State.Magnitude,
+        Cell->State.Meta.Distortion,
+        Cell->HarvestStress,
+        (int32)Cell->AvailableResource,
+        Cell->ResourceRegrowthTimer);
 }
 
 // ========== Тестовые команды ==========
-void AGridWorldManager::HarvestTest(int32 X, int32 Y, int32 ResourceType)
+void AGridWorldManager::HarvestTest(int32 X, int32 Y)
 {
-    EResourceType Type = static_cast<EResourceType>(ResourceType);
-    FRealState Res = HarvestFromCellSimple(X, Y, Type);
+    FRealState Res = HarvestFromCellSimple(X, Y);
     AProjectHerbalistGameModeBase* GM = Cast<AProjectHerbalistGameModeBase>(GetWorld()->GetAuthGameMode());
     if (GM) GM->AddToInventory(Res);
     FGridCell* Cell = GetCell(X, Y);
-    UE_LOG(LogHerbalist, Log, TEXT("Harvested from (%d,%d): Mag=%.2f Dist=%.2f Stress=%.3f"),
-        X, Y, Res.Magnitude, Res.Meta.Distortion, Cell ? Cell->HarvestStress : -1.0f);
+    UE_LOG(LogHerbalist, Log, TEXT("Harvested from (%d,%d): Mag=%.2f Dist=%.2f Stress=%.3f Resource=%d"),
+        X, Y, Res.Magnitude, Res.Meta.Distortion, Cell ? Cell->HarvestStress : -1.0f, Cell ? (int32)Cell->AvailableResource : -1);
 }
 
-void AGridWorldManager::MassHarvestTest(int32 X, int32 Y, int32 ResourceType, int32 Count)
+void AGridWorldManager::MassHarvestTest(int32 X, int32 Y, int32 Count)
 {
-    for (int32 i = 0; i < Count; ++i) HarvestTest(X, Y, ResourceType);
+    for (int32 i = 0; i < Count; ++i) HarvestTest(X, Y);
     UE_LOG(LogHerbalist, Log, TEXT("Mass harvest %d times at (%d,%d)"), Count, X, Y);
 }
 

@@ -140,7 +140,7 @@ namespace HerbalistCore
             Delta.Direction.Spirit, Delta.Direction.Nature);
 
         // 3. Distortion (среда + память)
-        float EnvDist = Env.Toxicity * 0.5f; // увеличено для более сильного влияния среды, было 0.2f
+        float EnvDist = Env.Toxicity * 0.33f;
         float MemoryDist = Memory.AccumulatedDistortion;
         float Distortion = 1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
         Distortion = FMath::Clamp(Distortion, 0.0f, 0.95f);
@@ -154,7 +154,7 @@ namespace HerbalistCore
         if (Distortion > BifurcationThreshold)
         {
             float EventChance = FMath::Clamp((Distortion - BifurcationThreshold) / 0.15f, 0.0f, 1.0f);
-            EventChance *= (1.0f - Memory.StabilityMemory); // нестабильность повышает шанс
+            EventChance *= (1.0f - Memory.StabilityMemory);
             if (Random01(Rng) < EventChance)
             {
                 bool bCollapse = Random01(Rng) < 0.5f;
@@ -181,7 +181,7 @@ namespace HerbalistCore
         float ZaryanaStrength = Intent.Coherence * (1.0f - Distortion);
         ZaryanaStrength = FMath::Clamp(ZaryanaStrength, 0.0f, 1.0f);
 
-        // 4.1 Нелинейное усиление Zaryana при высоком Distortion (помогает выйти из плато)
+        // 4.1 Нелинейное усиление Zaryana при высоком Distortion
         float NonlinearZaryana = ZaryanaStrength;
         if (Distortion > 0.7f)
         {

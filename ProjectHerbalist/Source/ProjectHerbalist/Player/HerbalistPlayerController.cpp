@@ -12,15 +12,12 @@
 void AHerbalistPlayerController::BeginPlay()
 {
     Super::BeginPlay();
-    // Курсор не отображаем, чтобы не мешать управлению камерой
     bShowMouseCursor = false;
 
     if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
     {
         if (DefaultMappingContext)
-        {
             Subsystem->AddMappingContext(DefaultMappingContext, 0);
-        }
     }
 }
 
@@ -36,9 +33,6 @@ void AHerbalistPlayerController::SetupInputComponent()
         EnhancedInputComponent->BindAction(InfoAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Info);
         EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Inventory);
         EnhancedInputComponent->BindAction(ApplyAlchemyAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::ApplyAlchemy);
-        EnhancedInputComponent->BindAction(SelectResource1Action, ETriggerEvent::Started, this, &AHerbalistPlayerController::SelectResource1);
-        EnhancedInputComponent->BindAction(SelectResource2Action, ETriggerEvent::Started, this, &AHerbalistPlayerController::SelectResource2);
-        EnhancedInputComponent->BindAction(SelectResource3Action, ETriggerEvent::Started, this, &AHerbalistPlayerController::SelectResource3);
     }
 }
 
@@ -79,49 +73,16 @@ void AHerbalistPlayerController::ApplyAlchemy()
     OnApplyAlchemyKey();
 }
 
-void AHerbalistPlayerController::SelectResource1()
-{
-    CurrentResourceType = 0;
-    GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Selected: Nettle"));
-    UE_LOG(LogHerbalist, Log, TEXT("Selected resource type: Nettle (0)"));
-}
-
-void AHerbalistPlayerController::SelectResource2()
-{
-    CurrentResourceType = 1;
-    GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Selected: Fern"));
-    UE_LOG(LogHerbalist, Log, TEXT("Selected resource type: Fern (1)"));
-}
-
-void AHerbalistPlayerController::SelectResource3()
-{
-    CurrentResourceType = 2;
-    GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Green, TEXT("Selected: Mushroom"));
-    UE_LOG(LogHerbalist, Log, TEXT("Selected resource type: Mushroom (2)"));
-}
-
 bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
 {
-    // Получаем точку обзора (камера)
     FVector CameraLocation;
     FRotator CameraRotation;
     GetPlayerViewPoint(CameraLocation, CameraRotation);
-
-    // Луч из камеры вперёд на заданную дистанцию
-    FVector End = CameraLocation + CameraRotation.Vector() * TraceDistance;
-
-    // Линейная трассировка по каналу Visibility
+    FVector End = CameraLocation + CameraRotation.Vector() * 500.0f;
+    DrawDebugLine(GetWorld(), CameraLocation, End, FColor::Green, false, 0.5f, 0, 1.0f);
     FCollisionQueryParams QueryParams;
-    QueryParams.bTraceComplex = false;
-    QueryParams.AddIgnoredActor(GetPawn()); // игнорируем своего персонажа
-
-    bool bHit = GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
-    if (bHit)
-    {
-        // Рисуем линию для отладки (зелёную)
-        DrawDebugLine(GetWorld(), CameraLocation, End, FColor::Green, false, 0.5f, 0, 1.0f);
-    }
-    return bHit;
+    QueryParams.AddIgnoredActor(GetPawn());
+    return GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
 }
 
 void AHerbalistPlayerController::OnLeftClick()
@@ -130,22 +91,16 @@ void AHerbalistPlayerController::OnLeftClick()
     if (GetHitResultFromCamera(Hit))
     {
         AGridWorldManager* WorldManager = nullptr;
-        for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-        {
-            WorldManager = *It;
-            break;
-        }
+        for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
         if (WorldManager)
         {
-            // Преобразуем точку попадания в локальные координаты менеджера
             FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
             int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
             int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
             if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
             {
-                // Жёлтая линия от точки попадания вверх
                 DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Yellow, false, 1.0f, 0, 2.0f);
-                HarvestTest(X, Y, CurrentResourceType);
+                HarvestTest(X, Y);
             }
         }
     }
@@ -195,12 +150,11 @@ void AHerbalistPlayerController::OnApplyAlchemyKey()
     }
 }
 
-// ========== Exec-команды ==========
-void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y, int32 ResourceType)
+void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y)
 {
     AGridWorldManager* WorldManager = nullptr;
     for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-    if (WorldManager) WorldManager->HarvestTest(X, Y, ResourceType);
+    if (WorldManager) WorldManager->HarvestTest(X, Y);
     else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
 }
 
@@ -220,10 +174,10 @@ void AHerbalistPlayerController::ShowInventory()
     else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
 }
 
-void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 ResourceType, int32 Count)
+void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
 {
     AGridWorldManager* WorldManager = nullptr;
     for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-    if (WorldManager) WorldManager->MassHarvestTest(X, Y, ResourceType, Count);
+    if (WorldManager) WorldManager->MassHarvestTest(X, Y, Count);
     else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
 }

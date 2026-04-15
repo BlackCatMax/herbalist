@@ -8,7 +8,7 @@ static constexpr float k_condition = 0.4f;
 
 FRealState FHerbalistHarvest::GetBaseResourceParams(EResourceType Type)
 {
-    FRealState R; // конструктор обнуляет
+    FRealState R;
     switch (Type)
     {
     case EResourceType::Nettle:
@@ -26,13 +26,32 @@ FRealState FHerbalistHarvest::GetBaseResourceParams(EResourceType Type)
         R.Direction.Body = 0.40f; R.Direction.Mind = 0.80f; R.Direction.Spirit = 0.60f; R.Direction.Nature = 0.20f;
         R.Meta.Distortion = 0.85f; R.Meta.Stability = 0.25f; R.Meta.Purity = 0.30f;
         break;
+    case EResourceType::BirchBark:
+        R.Magnitude = 0.50f;
+        R.Direction.Body = 0.60f; R.Direction.Mind = 0.50f; R.Direction.Spirit = 0.40f; R.Direction.Nature = 0.50f;
+        R.Meta.Distortion = 0.25f; R.Meta.Stability = 0.65f; R.Meta.Purity = 0.70f;
+        break;
+    case EResourceType::Moss:
+        R.Magnitude = 0.50f;
+        R.Direction.Body = 0.30f; R.Direction.Mind = 0.30f; R.Direction.Spirit = 0.60f; R.Direction.Nature = 0.80f;
+        R.Meta.Distortion = 0.35f; R.Meta.Stability = 0.55f; R.Meta.Purity = 0.65f;
+        break;
+    case EResourceType::Cranberry:
+        R.Magnitude = 0.55f;
+        R.Direction.Body = 0.40f; R.Direction.Mind = 0.30f; R.Direction.Spirit = 0.60f; R.Direction.Nature = 0.70f;
+        R.Meta.Distortion = 0.50f; R.Meta.Stability = 0.45f; R.Meta.Purity = 0.60f;
+        break;
+    case EResourceType::BogOre:
+        R.Magnitude = 0.60f;
+        R.Direction.Body = 0.80f; R.Direction.Mind = 0.20f; R.Direction.Spirit = 0.30f; R.Direction.Nature = 0.70f;
+        R.Meta.Distortion = 0.75f; R.Meta.Stability = 0.40f; R.Meta.Purity = 0.35f;
+        break;
     default:
         R.Magnitude = 0.5f;
         R.Direction.Body = R.Direction.Mind = R.Direction.Spirit = R.Direction.Nature = 0.5f;
         R.Meta.Distortion = 0.0f; R.Meta.Stability = 0.5f; R.Meta.Purity = 0.5f;
         break;
     }
-    // Нормализация направления
     float Len = FMath::Sqrt(R.Direction.Body * R.Direction.Body + R.Direction.Mind * R.Direction.Mind + R.Direction.Spirit * R.Direction.Spirit + R.Direction.Nature * R.Direction.Nature);
     if (Len > KINDA_SMALL_NUMBER)
     {

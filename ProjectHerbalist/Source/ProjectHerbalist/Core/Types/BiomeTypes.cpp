@@ -50,3 +50,42 @@ FEnvironment FBiomeDefaults::GetDefaultEnvironment(EBiomeType Biome)
     }
     return Env;
 }
+
+EResourceType FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng)
+{
+    switch (Biome)
+    {
+    case EBiomeType::MixedForest:
+    {
+        int32 r = Rng.RandRange(0, 99);
+        if (r < 40) return EResourceType::Nettle;
+        if (r < 60) return EResourceType::Fern;
+        if (r < 75) return EResourceType::Mushroom;
+        if (r < 90) return EResourceType::BirchBark;
+        return EResourceType::Moss;
+    }
+    case EBiomeType::Swamp:
+    {
+        int32 r = Rng.RandRange(0, 99);
+        if (r < 35) return EResourceType::Mushroom;
+        if (r < 60) return EResourceType::Cranberry;
+        if (r < 80) return EResourceType::Moss;
+        return EResourceType::BogOre;
+    }
+    case EBiomeType::Steppe:
+    {
+        int32 r = Rng.RandRange(0, 99);
+        if (r < 60) return EResourceType::Nettle;
+        return EResourceType::Fern;
+    }
+    case EBiomeType::Floodplain:
+    {
+        int32 r = Rng.RandRange(0, 99);
+        if (r < 45) return EResourceType::Nettle;
+        if (r < 75) return EResourceType::BirchBark;
+        return EResourceType::BogOre;
+    }
+    default:
+        return EResourceType::Nettle;
+    }
+}

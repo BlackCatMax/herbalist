@@ -1,4 +1,3 @@
-// HerbalistHarvest.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -7,16 +6,15 @@
 UENUM(BlueprintType)
 enum class EResourceType : uint8
 {
-    Nettle,      // крапива
-    Fern,        // папоротник
-    Mushroom,    // мухомор
-    BirchBark,   // кора берёзы
-    Moss,        // мох
-    Cranberry,   // клюква
-    BogOre       // болотная руда
+    Nettle,
+    Fern,
+    Mushroom,
+    BirchBark,
+    Moss,
+    Cranberry,
+    BogOre
 };
 
-// Модификаторы условий (погода, время суток, сезон) – пока заглушка
 struct FConditionModifier
 {
     FDirection DeltaDirection;

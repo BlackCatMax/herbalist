@@ -16,13 +16,8 @@ public:
     virtual void SetupInputComponent() override;
     virtual void BeginPlay() override;
 
-    // Дальность луча для взаимодействия с ячейками
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
-    float TraceDistance = 500.0f;
-
-    // Exec-команды (консоль)
     UFUNCTION(Exec)
-    void HarvestTest(int32 X, int32 Y, int32 ResourceType);
+    void HarvestTest(int32 X, int32 Y);
 
     UFUNCTION(Exec)
     void ApplyTest(int32 X, int32 Y);
@@ -31,10 +26,9 @@ public:
     void ShowInventory();
 
     UFUNCTION(Exec)
-    void MassHarvestTest(int32 X, int32 Y, int32 ResourceType, int32 Count);
+    void MassHarvestTest(int32 X, int32 Y, int32 Count);
 
 protected:
-    // Enhanced Input Assets
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     class UInputMappingContext* DefaultMappingContext;
 
@@ -50,29 +44,16 @@ protected:
     class UInputAction* InventoryAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     class UInputAction* ApplyAlchemyAction;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* SelectResource1Action;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* SelectResource2Action;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* SelectResource3Action;
 
-    // Callbacks
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
     void Harvest();
     void Info();
     void Inventory();
     void ApplyAlchemy();
-    void SelectResource1();
-    void SelectResource2();
-    void SelectResource3();
 
-    // Вспомогательные методы
     bool GetHitResultFromCamera(FHitResult& OutHit);
-    void OnLeftClick();          // вызывается из Harvest()
-    void OnRightClick();         // вызывается из Info()
-    void OnApplyAlchemyKey();    // вызывается из ApplyAlchemy()
-
-    int32 CurrentResourceType = 0; // 0 = крапива, 1 = папоротник, 2 = мухомор
+    void OnLeftClick();
+    void OnRightClick();
+    void OnApplyAlchemyKey();
 };

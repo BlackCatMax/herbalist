@@ -9,8 +9,13 @@ namespace HerbalistCore
     class Pipeline
     {
     public:
+        // Агрегация списка ресурсов (Fold)
         static FRealState Fold(const TArray<FRealState>& Inputs);
+
+        // Вычисление дельты между агрегированным состоянием и текущим состоянием биома
         static FRealState ComputeDelta(const FRealState& Aggregated, const FRealState& CurrentBiomeState);
+
+        // Основной пайплайн: Fold → Delta → Distortion → Morok → Zaryana → NewState
         static FRealState ApplyMorok(
             const TArray<FRealState>& Inputs,
             const FRealState& CurrentBiomeState,
