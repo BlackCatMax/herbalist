@@ -31,16 +31,11 @@ void AGridWorldManager::InitializeCells()
         for (int32 X = 0; X < GridSizeX; X++)
         {
             int32 Index = Y * GridSizeX + X;
-            EBiomeType biome;
-            int32 pattern = (X + Y) % 4;
-            if (pattern == 0) biome = EBiomeType::MixedForest;
-            else if (pattern == 1) biome = EBiomeType::Swamp;
-            else if (pattern == 2) biome = EBiomeType::Steppe;
-            else biome = EBiomeType::Floodplain;
-
+            EBiomeType biome = EBiomeType::MixedForest;
             Cells[Index].Biome = biome;
             Cells[Index].State = FBiomeDefaults::GetDefaultState(biome);
             Cells[Index].Environment = FBiomeDefaults::GetDefaultEnvironment(biome);
+            Cells[Index].Memory = FMemoryState();
             Cells[Index].X = X;
             Cells[Index].Y = Y;
         }
@@ -61,14 +56,25 @@ const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
     return nullptr;
 }
 
-void AGridWorldManager::UpdateCellState(int32 X, int32 Y, const FRealState& NewState)
+void AGridWorldManager::UpdateCellState(int32 X, int32 Y, const FRealState& NewState, const FMemoryState& NewMemory)
 {
     FGridCell* Cell = GetCell(X, Y);
     if (Cell)
     {
         Cell->State = NewState;
+        Cell->Memory = NewMemory;
         UpdateCellColor(X, Y);
     }
+}
+
+void AGridWorldManager::UpdateMemory(FMemoryState& Memory, const FRealState& NewState, float Rate)
+{
+    Memory.AccumulatedDistortion += (NewState.Meta.Distortion - Memory.AccumulatedDistortion) * Rate;
+    Memory.StabilityMemory += (NewState.Meta.Stability - Memory.StabilityMemory) * Rate;
+    Memory.HistoryPurity += (NewState.Meta.Purity - Memory.HistoryPurity) * Rate;
+    Memory.AccumulatedDistortion = FMath::Clamp(Memory.AccumulatedDistortion, 0.0f, 1.0f);
+    Memory.StabilityMemory = FMath::Clamp(Memory.StabilityMemory, 0.0f, 1.0f);
+    Memory.HistoryPurity = FMath::Clamp(Memory.HistoryPurity, 0.0f, 1.0f);
 }
 
 FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, EResourceType ResourceType, const FConditionModifier& Conditions)
@@ -93,11 +99,12 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
         Ingredients,
         Cell->State,
         Cell->Environment,
-        FMemoryState(),
+        Cell->Memory,
         Intent,
         Rng
     );
 
+    // Дельта состояния
     FRealState Delta;
     Delta.Magnitude = NewState.Magnitude - OldState.Magnitude;
     Delta.Direction.Body = NewState.Direction.Body - OldState.Direction.Body;
@@ -108,10 +115,29 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
     Delta.Meta.Stability = NewState.Meta.Stability - OldState.Meta.Stability;
     Delta.Meta.Purity = NewState.Meta.Purity - OldState.Meta.Purity;
 
-    UpdateCellState(X, Y, NewState);
+    // Сохраняем старую память, создаём новую и обновляем
+    FMemoryState OldMemory = Cell->Memory;
+    FMemoryState NewMemory = OldMemory;
+    UpdateMemory(NewMemory, NewState, 0.1f);
 
-    // Распространение на соседей (без рекурсии, чтобы избежать возврата)
-    TArray<TPair<FGridCell*, FRealState>> PendingUpdates;
+    // Обновляем ячейку
+    UpdateCellState(X, Y, NewState, NewMemory);
+
+    // Дельта памяти (приращение)
+    FMemoryState MemoryDelta;
+    MemoryDelta.AccumulatedDistortion = NewMemory.AccumulatedDistortion - OldMemory.AccumulatedDistortion;
+    MemoryDelta.StabilityMemory = NewMemory.StabilityMemory - OldMemory.StabilityMemory;
+    MemoryDelta.HistoryPurity = NewMemory.HistoryPurity - OldMemory.HistoryPurity;
+
+    UE_LOG(LogHerbalist, Warning, TEXT("MemoryDelta=%.3f"), MemoryDelta.AccumulatedDistortion);
+
+    // Распространение на соседей
+    PropagateToNeighbors(X, Y, Delta, MemoryDelta, 0.3f, 3);
+}
+
+void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, const FMemoryState& MemoryDelta, float Falloff, int32 Depth)
+{
+    if (Depth <= 0) return;
     for (int32 dx = -1; dx <= 1; dx++)
     {
         for (int32 dy = -1; dy <= 1; dy++)
@@ -120,69 +146,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
             FGridCell* Neighbor = GetCell(X + dx, Y + dy);
             if (!Neighbor) continue;
 
-            FRealState WeakDelta = Delta;
-            WeakDelta.Magnitude *= 0.5f;
-            WeakDelta.Direction.Body *= 0.5f;
-            WeakDelta.Direction.Mind *= 0.5f;
-            WeakDelta.Direction.Spirit *= 0.5f;
-            WeakDelta.Direction.Nature *= 0.5f;
-            WeakDelta.Meta.Distortion *= 0.5f;
-            WeakDelta.Meta.Stability *= 0.5f;
-            WeakDelta.Meta.Purity *= 0.5f;
-
-            PendingUpdates.Add(TPair<FGridCell*, FRealState>(Neighbor, WeakDelta));
-        }
-    }
-
-    for (auto& Update : PendingUpdates)
-    {
-        FGridCell* Neighbor = Update.Key;
-        FRealState WeakDelta = Update.Value;
-        FRealState NewNeighborState = Neighbor->State;
-        NewNeighborState.Direction.Body += WeakDelta.Direction.Body;
-        NewNeighborState.Direction.Mind += WeakDelta.Direction.Mind;
-        NewNeighborState.Direction.Spirit += WeakDelta.Direction.Spirit;
-        NewNeighborState.Direction.Nature += WeakDelta.Direction.Nature;
-        NewNeighborState.Magnitude += WeakDelta.Magnitude;
-        NewNeighborState.Meta.Distortion += WeakDelta.Meta.Distortion;
-        NewNeighborState.Meta.Stability += WeakDelta.Meta.Stability;
-        NewNeighborState.Meta.Purity += WeakDelta.Meta.Purity;
-
-        float Len = FMath::Sqrt(NewNeighborState.Direction.Body * NewNeighborState.Direction.Body + NewNeighborState.Direction.Mind * NewNeighborState.Direction.Mind + NewNeighborState.Direction.Spirit * NewNeighborState.Direction.Spirit + NewNeighborState.Direction.Nature * NewNeighborState.Direction.Nature);
-        if (Len > KINDA_SMALL_NUMBER)
-        {
-            NewNeighborState.Direction.Body /= Len;
-            NewNeighborState.Direction.Mind /= Len;
-            NewNeighborState.Direction.Spirit /= Len;
-            NewNeighborState.Direction.Nature /= Len;
-        }
-        else
-        {
-            NewNeighborState.Direction.Body = NewNeighborState.Direction.Mind = NewNeighborState.Direction.Spirit = NewNeighborState.Direction.Nature = 0.25f;
-        }
-        NewNeighborState.Magnitude = FMath::Clamp(NewNeighborState.Magnitude, 0.0f, 1.0f);
-        NewNeighborState.Meta.Distortion = FMath::Clamp(NewNeighborState.Meta.Distortion, 0.0f, 1.0f);
-        NewNeighborState.Meta.Stability = FMath::Clamp(NewNeighborState.Meta.Stability, 0.0f, 1.0f);
-        NewNeighborState.Meta.Purity = FMath::Clamp(NewNeighborState.Meta.Purity, 0.0f, 1.0f);
-
-        Neighbor->State = NewNeighborState;
-        UpdateCellColor(Neighbor->X, Neighbor->Y);
-    }
-}
-
-void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, float Falloff, int32 Depth)
-{
-    if (Depth <= 0) return;
-    for (int32 dx = -1; dx <= 1; dx++)
-    {
-        for (int32 dy = -1; dy <= 1; dy++)
-        {
-            if (dx == 0 && dy == 0) continue;
-            int32 NX = X + dx;
-            int32 NY = Y + dy;
-            FGridCell* Neighbor = GetCell(NX, NY);
-            if (!Neighbor) continue;
-
+            // Ослабленные дельты
             FRealState WeakDelta = Delta;
             WeakDelta.Magnitude *= Falloff;
             WeakDelta.Direction.Body *= Falloff;
@@ -193,36 +157,59 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
             WeakDelta.Meta.Stability *= Falloff;
             WeakDelta.Meta.Purity *= Falloff;
 
-            FRealState NewState = Neighbor->State;
-            NewState.Direction.Body += WeakDelta.Direction.Body;
-            NewState.Direction.Mind += WeakDelta.Direction.Mind;
-            NewState.Direction.Spirit += WeakDelta.Direction.Spirit;
-            NewState.Direction.Nature += WeakDelta.Direction.Nature;
-            NewState.Magnitude += WeakDelta.Magnitude;
-            NewState.Meta.Distortion += WeakDelta.Meta.Distortion;
-            NewState.Meta.Stability += WeakDelta.Meta.Stability;
-            NewState.Meta.Purity += WeakDelta.Meta.Purity;
+            FMemoryState WeakMemoryDelta = MemoryDelta;
+            WeakMemoryDelta.AccumulatedDistortion *= Falloff;
+            WeakMemoryDelta.StabilityMemory *= Falloff;
+            WeakMemoryDelta.HistoryPurity *= Falloff;
 
-            float Len = FMath::Sqrt(NewState.Direction.Body * NewState.Direction.Body + NewState.Direction.Mind * NewState.Direction.Mind + NewState.Direction.Spirit * NewState.Direction.Spirit + NewState.Direction.Nature * NewState.Direction.Nature);
+            UE_LOG(LogHerbalist, Warning, TEXT("Propagate to (%d,%d): WeakMemoryDelta=%.3f"), X + dx, Y + dy, WeakMemoryDelta.AccumulatedDistortion);
+
+            // Новое состояние соседа
+            FRealState NewNeighborState = Neighbor->State;
+            NewNeighborState.Direction.Body += WeakDelta.Direction.Body;
+            NewNeighborState.Direction.Mind += WeakDelta.Direction.Mind;
+            NewNeighborState.Direction.Spirit += WeakDelta.Direction.Spirit;
+            NewNeighborState.Direction.Nature += WeakDelta.Direction.Nature;
+            NewNeighborState.Magnitude += WeakDelta.Magnitude;
+            NewNeighborState.Meta.Distortion += WeakDelta.Meta.Distortion;
+            NewNeighborState.Meta.Stability += WeakDelta.Meta.Stability;
+            NewNeighborState.Meta.Purity += WeakDelta.Meta.Purity;
+
+            // Нормализация направления
+            float Len = FMath::Sqrt(NewNeighborState.Direction.Body * NewNeighborState.Direction.Body +
+                NewNeighborState.Direction.Mind * NewNeighborState.Direction.Mind +
+                NewNeighborState.Direction.Spirit * NewNeighborState.Direction.Spirit +
+                NewNeighborState.Direction.Nature * NewNeighborState.Direction.Nature);
             if (Len > KINDA_SMALL_NUMBER)
             {
-                NewState.Direction.Body /= Len;
-                NewState.Direction.Mind /= Len;
-                NewState.Direction.Spirit /= Len;
-                NewState.Direction.Nature /= Len;
+                NewNeighborState.Direction.Body /= Len;
+                NewNeighborState.Direction.Mind /= Len;
+                NewNeighborState.Direction.Spirit /= Len;
+                NewNeighborState.Direction.Nature /= Len;
             }
             else
             {
-                NewState.Direction.Body = NewState.Direction.Mind = NewState.Direction.Spirit = NewState.Direction.Nature = 0.25f;
+                NewNeighborState.Direction.Body = NewNeighborState.Direction.Mind = NewNeighborState.Direction.Spirit = NewNeighborState.Direction.Nature = 0.25f;
             }
-            NewState.Magnitude = FMath::Clamp(NewState.Magnitude, 0.0f, 1.0f);
-            NewState.Meta.Distortion = FMath::Clamp(NewState.Meta.Distortion, 0.0f, 1.0f);
-            NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability, 0.0f, 1.0f);
-            NewState.Meta.Purity = FMath::Clamp(NewState.Meta.Purity, 0.0f, 1.0f);
+            NewNeighborState.Magnitude = FMath::Clamp(NewNeighborState.Magnitude, 0.0f, 1.0f);
+            NewNeighborState.Meta.Distortion = FMath::Clamp(NewNeighborState.Meta.Distortion, 0.0f, 1.0f);
+            NewNeighborState.Meta.Stability = FMath::Clamp(NewNeighborState.Meta.Stability, 0.0f, 1.0f);
+            NewNeighborState.Meta.Purity = FMath::Clamp(NewNeighborState.Meta.Purity, 0.0f, 1.0f);
 
-            Neighbor->State = NewState;
-            UpdateCellColor(NX, NY);
-            PropagateToNeighbors(NX, NY, WeakDelta, Falloff, Depth - 1);
+            // Обновляем память соседа
+            FMemoryState NewNeighborMemory = Neighbor->Memory;
+            NewNeighborMemory.AccumulatedDistortion += WeakMemoryDelta.AccumulatedDistortion;
+            NewNeighborMemory.StabilityMemory += WeakMemoryDelta.StabilityMemory;
+            NewNeighborMemory.HistoryPurity += WeakMemoryDelta.HistoryPurity;
+            NewNeighborMemory.AccumulatedDistortion = FMath::Clamp(NewNeighborMemory.AccumulatedDistortion, 0.0f, 1.0f);
+            NewNeighborMemory.StabilityMemory = FMath::Clamp(NewNeighborMemory.StabilityMemory, 0.0f, 1.0f);
+            NewNeighborMemory.HistoryPurity = FMath::Clamp(NewNeighborMemory.HistoryPurity, 0.0f, 1.0f);
+
+            Neighbor->State = NewNeighborState;
+            Neighbor->Memory = NewNeighborMemory;
+            UpdateCellColor(Neighbor->X, Neighbor->Y);
+
+            UE_LOG(LogHerbalist, Warning, TEXT("Neighbor (%d,%d) new Memory=%.3f"), X + dx, Y + dy, NewNeighborMemory.AccumulatedDistortion);
         }
     }
 }
@@ -275,10 +262,10 @@ void AGridWorldManager::UpdateCellColor(int32 X, int32 Y)
     const FGridCell* Cell = GetCellConst(X, Y);
     if (!Cell) return;
 
-    float Dist = Cell->State.Meta.Distortion;
+    float Dist = Cell->Memory.AccumulatedDistortion;
     FLinearColor Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Dist);
     Mat->SetVectorParameterValue("Color", Color);
-    UE_LOG(LogHerbalist, Warning, TEXT("Cell (%d,%d) Dist=%.3f Color=(%.2f,%.2f,%.2f)"), X, Y, Dist, Color.R, Color.G, Color.B);
+    UE_LOG(LogHerbalist, Warning, TEXT("Cell (%d,%d) Dist=%.3f -> Color=(%.2f,%.2f,%.2f)"), X, Y, Dist, Color.R, Color.G, Color.B);
 }
 
 void AGridWorldManager::HarvestTest(int32 X, int32 Y, int32 ResourceType)

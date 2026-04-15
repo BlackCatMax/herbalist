@@ -13,6 +13,7 @@ struct FGridCell
     GENERATED_BODY()
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FRealState State;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FEnvironment Environment;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FMemoryState Memory;   // память ячейки
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EBiomeType Biome;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 X = 0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Y = 0;
@@ -32,13 +33,13 @@ public:
 
     FGridCell* GetCell(int32 X, int32 Y);
     const FGridCell* GetCellConst(int32 X, int32 Y) const;
-    void UpdateCellState(int32 X, int32 Y, const FRealState& NewState);
+    void UpdateCellState(int32 X, int32 Y, const FRealState& NewState, const FMemoryState& NewMemory);
     FRealState HarvestFromCell(int32 X, int32 Y, EResourceType ResourceType, const FConditionModifier& Conditions);
     UFUNCTION(BlueprintCallable, Category = "Harvest") FRealState HarvestFromCellSimple(int32 X, int32 Y, EResourceType ResourceType);
     UFUNCTION(BlueprintCallable, Category = "Alchemy") void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng);
     UFUNCTION(BlueprintCallable, Category = "Visuals") void SpawnVisuals();
     void UpdateCellColor(int32 X, int32 Y);
-    void PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, float Falloff = 0.5f, int32 Depth = 2);
+    void PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, const FMemoryState& MemoryDelta, float Falloff = 0.3f, int32 Depth = 1);
 
     // Тестовые команды
     void HarvestTest(int32 X, int32 Y, int32 ResourceType);
@@ -51,4 +52,5 @@ protected:
     UPROPERTY() UStaticMesh* CubeMesh = nullptr;
     UPROPERTY() UMaterial* CubeMaterial = nullptr;
     void InitializeCells();
+    void UpdateMemory(FMemoryState& Memory, const FRealState& NewState, float Rate = 0.1f);
 };
