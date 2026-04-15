@@ -140,7 +140,7 @@ namespace HerbalistCore
             Delta.Direction.Spirit, Delta.Direction.Nature);
 
         // 3. Distortion (среда + память)
-        float EnvDist = Env.Toxicity * 0.2f; // увеличено для более сильного влияния среды
+        float EnvDist = Env.Toxicity * 0.5f; // увеличено для более сильного влияния среды, было 0.2f
         float MemoryDist = Memory.AccumulatedDistortion;
         float Distortion = 1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
         Distortion = FMath::Clamp(Distortion, 0.0f, 0.95f);
