@@ -1,4 +1,3 @@
-// HerbalistCoreTypes.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -52,73 +51,49 @@ struct FRealState
     FMeta Meta;
 };
 
+// Все остальные структуры оставить без явных конструкторов (положиться на = default)
 USTRUCT(BlueprintType)
 struct FEnvironment
 {
     GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float Toxicity = 0.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float Fertility = 0.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float Moisture = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float Toxicity = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float Fertility = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float Moisture = 0.f;
 };
 
 USTRUCT(BlueprintType)
 struct FMemoryState
 {
     GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float AccumulatedDistortion = 0.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float StabilityMemory = 0.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float HistoryPurity = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float AccumulatedDistortion = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float StabilityMemory = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float HistoryPurity = 0.f;
 };
 
 USTRUCT(BlueprintType)
 struct FIntent
 {
     GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float Coherence = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float Coherence = 0.f;
 };
 
 USTRUCT(BlueprintType)
 struct FRngState
 {
     GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 Seed = 12345;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Seed = 12345;
 };
 
 USTRUCT(BlueprintType)
 struct FWorldState
 {
     GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    FEnvironment Env;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    FMemoryState Memory;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    FIntent Intent;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    FRealState CurrentState;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FEnvironment Env;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FMemoryState Memory;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FIntent Intent;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FRealState CurrentState;
 };
 
-// Эталонное состояние Алатырь (S₀)
 struct FAlatyr
 {
     static const FRealState S0;

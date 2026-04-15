@@ -1,4 +1,3 @@
-// HerbalistPipeline.cpp
 #include "HerbalistPipeline.h"
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreTypes.h"
@@ -141,17 +140,56 @@ namespace HerbalistCore
             Delta.Direction.Spirit, Delta.Direction.Nature);
 
         // 3. Distortion (среда + память)
-        float EnvDist = Env.Toxicity * 0.1f;
+        float EnvDist = Env.Toxicity * 0.2f; // увеличено для более сильного влияния среды
         float MemoryDist = Memory.AccumulatedDistortion;
         float Distortion = 1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
         Distortion = FMath::Clamp(Distortion, 0.0f, 0.95f);
         UE_LOG(LogHerbalist, Warning, TEXT("[DIST] Env: %.3f Mem: %.3f -> %.3f"),
             EnvDist, MemoryDist, Distortion);
 
+        // =========================
+        // БИФУРКАЦИЯ (катастрофа при высоком искажении)
+        // =========================
+        float BifurcationThreshold = 0.85f;
+        if (Distortion > BifurcationThreshold)
+        {
+            float EventChance = FMath::Clamp((Distortion - BifurcationThreshold) / 0.15f, 0.0f, 1.0f);
+            EventChance *= (1.0f - Memory.StabilityMemory); // нестабильность повышает шанс
+            if (Random01(Rng) < EventChance)
+            {
+                bool bCollapse = Random01(Rng) < 0.5f;
+                if (bCollapse)
+                {
+                    Distortion = 0.2f;
+                    Delta.Meta.Stability = -0.5f;
+                    Delta.Meta.Purity = -0.3f;
+                    UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] COLLAPSE! Distortion reset to 0.2"));
+                }
+                else
+                {
+                    Distortion = 0.4f;
+                    Delta.Meta.Stability += 0.4f;
+                    Delta.Meta.Purity += 0.3f;
+                    UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] PURIFICATION! Distortion reset to 0.4"));
+                }
+                Delta.Meta.Stability = FMath::Clamp(Delta.Meta.Stability, -1.0f, 1.0f);
+                Delta.Meta.Purity = FMath::Clamp(Delta.Meta.Purity, -1.0f, 1.0f);
+            }
+        }
+
         // 4. ZaryanaStrength (управляет Morok и Zaryana)
         float ZaryanaStrength = Intent.Coherence * (1.0f - Distortion);
         ZaryanaStrength = FMath::Clamp(ZaryanaStrength, 0.0f, 1.0f);
-        UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA] Strength: %.3f"), ZaryanaStrength);
+
+        // 4.1 Нелинейное усиление Zaryana при высоком Distortion (помогает выйти из плато)
+        float NonlinearZaryana = ZaryanaStrength;
+        if (Distortion > 0.7f)
+        {
+            NonlinearZaryana = ZaryanaStrength * (1.0f + (Distortion - 0.7f) / 0.3f);
+            NonlinearZaryana = FMath::Clamp(NonlinearZaryana, 0.0f, 1.0f);
+            UE_LOG(LogHerbalist, Verbose, TEXT("[ZARYANA] Nonlinear: %.3f -> %.3f"), ZaryanaStrength, NonlinearZaryana);
+        }
+        UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA] Strength: %.3f (Nonlinear: %.3f)"), ZaryanaStrength, NonlinearZaryana);
 
         // =========================
         // MOROK (нелинейное искажение)
@@ -159,7 +197,7 @@ namespace HerbalistCore
         float NoiseMagnitude = RandomRange(Rng, 0.0f, Distortion);
         float NoiseDirection = RandomRange(Rng, -1.0f, 1.0f);
         float RawNoise = NoiseMagnitude * NoiseDirection;
-        float EffectiveNoise = RawNoise * (1.0f - ZaryanaStrength);
+        float EffectiveNoise = RawNoise * (1.0f - NonlinearZaryana);
         float Nonlinear = FMath::Tanh(EffectiveNoise * 2.0f);
         float MixStrength = Distortion * 0.5f;
 
@@ -188,16 +226,16 @@ namespace HerbalistCore
         // =========================
         float AvgDir = (Delta.Direction.Body + Delta.Direction.Mind +
             Delta.Direction.Spirit + Delta.Direction.Nature) / 4.0f;
-        float Boost = 1.0f + ZaryanaStrength * 0.5f;
-        float Suppress = 1.0f - ZaryanaStrength * 0.3f;
+        float Boost = 1.0f + NonlinearZaryana * 0.5f;
+        float Suppress = 1.0f - NonlinearZaryana * 0.3f;
 
         Delta.Direction.Body = (Delta.Direction.Body > AvgDir) ? Delta.Direction.Body * Boost : Delta.Direction.Body * Suppress;
         Delta.Direction.Mind = (Delta.Direction.Mind > AvgDir) ? Delta.Direction.Mind * Boost : Delta.Direction.Mind * Suppress;
         Delta.Direction.Spirit = (Delta.Direction.Spirit > AvgDir) ? Delta.Direction.Spirit * Boost : Delta.Direction.Spirit * Suppress;
         Delta.Direction.Nature = (Delta.Direction.Nature > AvgDir) ? Delta.Direction.Nature * Boost : Delta.Direction.Nature * Suppress;
 
-        float StabilityIncrease = ZaryanaStrength * (1.0f - Distortion) * 0.2f;
-        float PurityIncrease = ZaryanaStrength * (1.0f - Distortion) * 0.15f;
+        float StabilityIncrease = NonlinearZaryana * (1.0f - Distortion) * 0.2f;
+        float PurityIncrease = NonlinearZaryana * (1.0f - Distortion) * 0.15f;
         Delta.Meta.Stability += StabilityIncrease;
         Delta.Meta.Purity += PurityIncrease;
         Delta.Meta.Stability = FMath::Clamp(Delta.Meta.Stability, -1.0f, 1.0f);

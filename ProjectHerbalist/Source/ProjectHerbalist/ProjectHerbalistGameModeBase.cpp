@@ -1,66 +1,63 @@
-// ProjectHerbalistGameModeBase.cpp
 #include "ProjectHerbalistGameModeBase.h"
 #include "ProjectHerbalist.h"
-#include "Core/World/HerbalistSimulation.h"
-#include "Core/Pipeline/HerbalistPipeline.h"
-#include "Core/Types/HerbalistCoreTypes.h"
-#include "Core/Harvest/HerbalistHarvest.h"
-#include "Math/UnrealMathUtility.h"
+#include "Player/HerbalistPlayerController.h"
+#include "Core/World/GridWorldManager.h"
+#include "Engine/World.h"
+
+AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
+{
+    PlayerControllerClass = AHerbalistPlayerController::StaticClass();
+}
+
+AProjectHerbalistGameModeBase::~AProjectHerbalistGameModeBase()
+{
+    // Очистка инвентаря
+    for (FRealState* Res : Inventory)
+    {
+        delete Res;
+    }
+    Inventory.Empty();
+}
 
 void AProjectHerbalistGameModeBase::BeginPlay()
 {
     Super::BeginPlay();
+    SpawnWorldManager();
+    Inventory.Empty();
+}
 
-    FWorldState World;
-    if (WorldConfig)
+void AProjectHerbalistGameModeBase::SpawnWorldManager()
+{
+    if (!WorldManager)
     {
-        World.Env = WorldConfig->Environment;
-        World.Memory = WorldConfig->InitialMemory;
-        World.Intent = WorldConfig->Intent;
-        World.CurrentState = WorldConfig->InitialBiomeState;
-
-        const int32 Steps = 10;
-
-        for (int32 i = 0; i < Steps; i++)
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        WorldManager = GetWorld()->SpawnActor<AGridWorldManager>(SpawnParams);
+        if (WorldManager)
         {
-            // Генерация ресурсов через Harvest на основе текущего состояния биома
-            FConditionModifier NeutralCond; // пока без погоды/времени суток
-            FRealState Resource1 = FHerbalistHarvest::Harvest(EResourceType::Nettle, World.CurrentState, NeutralCond);
-            FRealState Resource2 = FHerbalistHarvest::Harvest(EResourceType::Fern, World.CurrentState, NeutralCond);
-
-            // Опциональная мутация ресурсов (для тестовой динамики)
-            if (bEnableRandomResourceMutation)
-            {
-                FRandomStream Stream(Rng.Seed + i);
-
-                auto MutateResource = [&Stream](FRealState& Res)
-                    {
-                        Res.Magnitude += Stream.FRandRange(-0.05f, 0.05f);
-                        Res.Magnitude = FMath::Clamp(Res.Magnitude, 0.0f, 1.0f);
-                        Res.Direction.Body += Stream.FRandRange(-0.05f, 0.05f);
-                        Res.Direction.Mind += Stream.FRandRange(-0.05f, 0.05f);
-                        Res.Direction.Spirit += Stream.FRandRange(-0.05f, 0.05f);
-                        Res.Direction.Nature += Stream.FRandRange(-0.05f, 0.05f);
-                        float Len = FMath::Sqrt(Res.Direction.Body * Res.Direction.Body + Res.Direction.Mind * Res.Direction.Mind + Res.Direction.Spirit * Res.Direction.Spirit + Res.Direction.Nature * Res.Direction.Nature);
-                        if (Len > KINDA_SMALL_NUMBER) { Res.Direction.Body /= Len; Res.Direction.Mind /= Len; Res.Direction.Spirit /= Len; Res.Direction.Nature /= Len; }
-                        Res.Meta.Distortion = FMath::Clamp(Res.Meta.Distortion + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
-                        Res.Meta.Stability = FMath::Clamp(Res.Meta.Stability + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
-                        Res.Meta.Purity = FMath::Clamp(Res.Meta.Purity + Stream.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
-                    };
-
-                MutateResource(Resource1);
-                MutateResource(Resource2);
-            }
-
-            TArray<FRealState> Inputs = { Resource1, Resource2 };
-            FRealState Result = HerbalistSimulation::UpdateWorld(World, Inputs, Rng);
-
-            UE_LOG(LogHerbalist, Warning, TEXT("Step %d | ResultDist: %.3f | MemDist: %.3f"),
-                i, Result.Meta.Distortion, World.Memory.AccumulatedDistortion);
+            UE_LOG(LogHerbalist, Log, TEXT("WorldManager spawned at %s"), *WorldManager->GetActorLocation().ToString());
         }
     }
-    else
+}
+
+void AProjectHerbalistGameModeBase::AddToInventory(const FRealState& Resource)
+{
+    if (FMath::IsNaN(Resource.Magnitude) || Resource.Magnitude < -0.1f || Resource.Magnitude > 1.1f)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("WorldConfig is NULL - using defaults"));
+        UE_LOG(LogHerbalist, Error, TEXT("Rejected corrupted resource: Mag=%.2f"), Resource.Magnitude);
+        return;
+    }
+    FRealState* NewResource = new FRealState(Resource);
+    Inventory.Add(NewResource);
+    UE_LOG(LogHerbalist, Log, TEXT("Added to inventory, count=%d, Mag=%.2f"), Inventory.Num(), NewResource->Magnitude);
+}
+
+void AProjectHerbalistGameModeBase::RemoveFromInventory(int32 Index)
+{
+    if (Inventory.IsValidIndex(Index))
+    {
+        delete Inventory[Index];
+        Inventory.RemoveAt(Index);
+        UE_LOG(LogHerbalist, Log, TEXT("Removed from inventory, count=%d"), Inventory.Num());
     }
 }
