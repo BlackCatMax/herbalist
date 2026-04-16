@@ -61,8 +61,7 @@ FRealState FHerbalistHarvest::GetBaseResourceParams(EResourceType Type)
         R.Meta.Potency = 0.5f; R.Meta.Resonance = 0.5f; R.Meta.Corruption = 0.5f;
         break;
     }
-    float Len = FMath::Sqrt(R.Direction.Body * R.Direction.Body + R.Direction.Mind * R.Direction.Mind + R.Direction.Spirit * R.Direction.Spirit + R.Direction.Nature * R.Direction.Nature);
-    if (Len > KINDA_SMALL_NUMBER) { R.Direction.Body /= Len; R.Direction.Mind /= Len; R.Direction.Spirit /= Len; R.Direction.Nature /= Len; }
+    R.Direction.NormalizeSum();
     R.Meta.Distortion = FMath::Clamp(R.Meta.Distortion, 0.0f, 1.0f);
     R.Meta.Stability = FMath::Clamp(R.Meta.Stability, 0.0f, 1.0f);
     R.Meta.Purity = FMath::Clamp(R.Meta.Purity, 0.0f, 1.0f);
@@ -104,9 +103,7 @@ FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& Biom
     Result.Meta.Resonance = Base.Meta.Resonance + k_biome * BiomeDelta.Meta.Resonance + k_condition * Conditions.DeltaResonance;
     Result.Meta.Corruption = Base.Meta.Corruption + k_biome * BiomeDelta.Meta.Corruption + k_condition * Conditions.DeltaCorruption;
 
-    float Len = FMath::Sqrt(Result.Direction.Body * Result.Direction.Body + Result.Direction.Mind * Result.Direction.Mind + Result.Direction.Spirit * Result.Direction.Spirit + Result.Direction.Nature * Result.Direction.Nature);
-    if (Len > KINDA_SMALL_NUMBER) { Result.Direction.Body /= Len; Result.Direction.Mind /= Len; Result.Direction.Spirit /= Len; Result.Direction.Nature /= Len; }
-    else { Result.Direction.Body = Result.Direction.Mind = Result.Direction.Spirit = Result.Direction.Nature = 0.25f; }
+    Result.Direction.NormalizeSum();
     Result.Magnitude = FMath::Clamp(Result.Magnitude, 0.0f, 1.0f);
     Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion, 0.0f, 1.0f);
     Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability, 0.0f, 1.0f);

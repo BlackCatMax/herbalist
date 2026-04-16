@@ -42,7 +42,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
     float MaxHarvestImpactOnMagnitude = 0.2f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
-    float HarvestStressDecayRate = 0.5f;
+    float HarvestStressDecayRate = 0.1f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
     bool bEnableRecovery = true;
 

@@ -19,23 +19,6 @@ namespace HerbalistCore
         return Min + (Max - Min) * Random01(Rng);
     }
 
-    // Вспомогательная нормализация направления по сумме (композиция)
-    static void NormalizeDirectionSum(FDirection& Dir)
-    {
-        float Sum = Dir.Body + Dir.Mind + Dir.Spirit + Dir.Nature;
-        if (Sum > KINDA_SMALL_NUMBER)
-        {
-            Dir.Body /= Sum;
-            Dir.Mind /= Sum;
-            Dir.Spirit /= Sum;
-            Dir.Nature /= Sum;
-        }
-        else
-        {
-            Dir.Body = Dir.Mind = Dir.Spirit = Dir.Nature = 0.25f;
-        }
-    }
-
     // =========================
     // FOLD
     // =========================
@@ -95,8 +78,8 @@ namespace HerbalistCore
             Accumulated.Meta.Corruption /= TotalWeight;
         }
 
-        // Нормализация направления по сумме (а не по длине)
-        NormalizeDirectionSum(Accumulated.Direction);
+        // Нормализация направления по сумме
+        Accumulated.Direction.NormalizeSum();
 
         Accumulated.Magnitude = FMath::Clamp(Accumulated.Magnitude, 0.0f, 1.0f);
         Accumulated.Meta.Distortion = FMath::Clamp(Accumulated.Meta.Distortion, 0.0f, 1.0f);
@@ -248,8 +231,8 @@ namespace HerbalistCore
         Delta.Meta.Stability = FMath::Clamp(Delta.Meta.Stability, -1.0f, 1.0f);
         Delta.Meta.Purity = FMath::Clamp(Delta.Meta.Purity, -1.0f, 1.0f);
 
-        // Нормализация Delta.Direction по сумме (после Zaryana)
-        NormalizeDirectionSum(Delta.Direction);
+        // Нормализация дельты направления
+        Delta.Direction.NormalizeSum();
 
         UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA_STRUCT] Boost: %.2f, Suppress: %.2f, Stability+%.3f, Purity+%.3f"),
             Boost, Suppress, StabilityIncrease, PurityIncrease);
@@ -257,21 +240,21 @@ namespace HerbalistCore
         // 9. Применение дельты с интерполяцией направления
         FRealState NewState = CurrentBiomeState;
 
-        // Интерполяция направления: целевой вектор = текущий + Delta (с последующей нормализацией по сумме)
+        // Интерполяция направления: целевой вектор = текущий + Delta (с последующей нормализацией)
         FDirection NewDir;
         NewDir.Body = NewState.Direction.Body + Delta.Direction.Body;
         NewDir.Mind = NewState.Direction.Mind + Delta.Direction.Mind;
         NewDir.Spirit = NewState.Direction.Spirit + Delta.Direction.Spirit;
         NewDir.Nature = NewState.Direction.Nature + Delta.Direction.Nature;
-        NormalizeDirectionSum(NewDir);
+        NewDir.NormalizeSum();
 
-        // Смешивание с исходным направлением в зависимости от силы изменения (InterpAlpha)
+        // Смешивание с исходным направлением в зависимости от силы изменения
         float InterpAlpha = FMath::Clamp(Delta.Magnitude * 2.0f, 0.0f, 1.0f);
         NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, NewDir.Body, InterpAlpha);
         NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, NewDir.Mind, InterpAlpha);
         NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, NewDir.Spirit, InterpAlpha);
         NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, NewDir.Nature, InterpAlpha);
-        NormalizeDirectionSum(NewState.Direction);
+        NewState.Direction.NormalizeSum();
 
         NewState.Magnitude += Delta.Magnitude;
         NewState.Meta.Distortion += Delta.Meta.Distortion;
@@ -282,7 +265,7 @@ namespace HerbalistCore
         NewState.Meta.Corruption += Delta.Meta.Corruption;
 
         // 10. Нормализация и клиппинг
-        NormalizeDirectionSum(NewState.Direction);
+        NewState.Direction.NormalizeSum();
 
         NewState.Magnitude = FMath::Clamp(NewState.Magnitude, 0.0f, 1.0f);
         NewState.Meta.Distortion = FMath::Clamp(NewState.Meta.Distortion, 0.0f, 1.0f);

@@ -38,9 +38,14 @@ struct PROJECTHERBALIST_API FDirection
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float Spirit = 0.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float Nature = 0.f;
 
-    // Нормализация по сумме (композиция)
+    // Нормализация по сумме (все компоненты ≥ 0, сумма = 1)
     void NormalizeSum()
     {
+        Body = FMath::Max(0.0f, Body);
+        Mind = FMath::Max(0.0f, Mind);
+        Spirit = FMath::Max(0.0f, Spirit);
+        Nature = FMath::Max(0.0f, Nature);
+
         float Sum = Body + Mind + Spirit + Nature;
         if (Sum > KINDA_SMALL_NUMBER)
         {
