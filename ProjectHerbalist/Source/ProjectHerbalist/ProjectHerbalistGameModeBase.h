@@ -1,11 +1,11 @@
+// Copyright Project Herbalist. All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "ProjectHerbalistGameModeBase.generated.h"
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
 
 class AGridWorldManager;
 class AHerbalistPlayerController;
@@ -20,12 +20,14 @@ public:
     virtual ~AProjectHerbalistGameModeBase();
     virtual void BeginPlay() override;
 
+    // Параметры тестов
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
     FRngState Rng;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
     bool bEnableRandomResourceMutation = false;
 
+    // Параметры мира (передаются в GridWorldManager)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     float StateInterpolationSpeed = 0.05f;
 
@@ -44,17 +46,8 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ecology")
     bool bEnableEcologyRecovery = true;
 
-    TArray<FRealState*> Inventory;
-
     UPROPERTY(BlueprintReadOnly, Category = "World")
     AGridWorldManager* WorldManager = nullptr;
-
-    UPROPERTY(BlueprintAssignable, Category = "Inventory")
-    FOnInventoryChanged OnInventoryChanged;
-
-    void AddToInventory(const FRealState& Resource);
-    void RemoveFromInventory(int32 Index);
-    TArray<FRealState*> GetInventory() const { return Inventory; }
 
     float GetStateInterpolationSpeed() const { return StateInterpolationSpeed; }
 

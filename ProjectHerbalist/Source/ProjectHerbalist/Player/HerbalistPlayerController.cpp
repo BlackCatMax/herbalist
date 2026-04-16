@@ -1,13 +1,18 @@
-#include "HerbalistPlayerController.h"
+// Copyright Project Herbalist. All Rights Reserved.
+
+#include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "Engine/World.h"
-#include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "DrawDebugHelpers.h"
 #include "Core/World/GridWorldManager.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "ProjectHerbalistGameModeBase.h"
+
+AHerbalistPlayerController::AHerbalistPlayerController()
+{
+    InventoryComponent = CreateDefaultSubobject<UHerbalistInventoryComponent>(TEXT("InventoryComponent"));
+}
 
 void AHerbalistPlayerController::BeginPlay()
 {
@@ -53,25 +58,10 @@ void AHerbalistPlayerController::Look(const FInputActionValue& Value)
     AddPitchInput(LookVector.Y);
 }
 
-void AHerbalistPlayerController::Harvest()
-{
-    OnLeftClick();
-}
-
-void AHerbalistPlayerController::Info()
-{
-    OnRightClick();
-}
-
-void AHerbalistPlayerController::Inventory()
-{
-    ShowInventory();
-}
-
-void AHerbalistPlayerController::ApplyAlchemy()
-{
-    OnApplyAlchemyKey();
-}
+void AHerbalistPlayerController::Harvest() { OnLeftClick(); }
+void AHerbalistPlayerController::Info()    { OnRightClick(); }
+void AHerbalistPlayerController::Inventory() { ShowInventory(); }
+void AHerbalistPlayerController::ApplyAlchemy() { OnApplyAlchemyKey(); }
 
 bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
 {

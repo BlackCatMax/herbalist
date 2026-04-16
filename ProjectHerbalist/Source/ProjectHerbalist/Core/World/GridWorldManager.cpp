@@ -1,5 +1,6 @@
 // GridWorldManager.cpp
 #include "GridWorldManager.h"
+#include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/Types/BiomeTypes.h"
@@ -524,8 +525,13 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
 void AGridWorldManager::HarvestTest(int32 X, int32 Y)
 {
     FRealState Res = HarvestFromCellSimple(X, Y);
-    AProjectHerbalistGameModeBase* GM = Cast<AProjectHerbalistGameModeBase>(GetWorld()->GetAuthGameMode());
-    if (GM) GM->AddToInventory(Res);
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (PC && PC->InventoryComponent)
+    {
+        FGridCell* Cell = GetCell(X, Y);
+        if (Cell)
+            PC->InventoryComponent->AddItem(Res, Cell->AvailableResource);
+    }
     FGridCell* Cell = GetCell(X, Y);
     UE_LOG(LogHerbalist, Log, TEXT("Harvested from (%d,%d): Mag=%.2f Dist=%.2f Stress=%.3f Resource=%d"),
         X, Y, Res.Magnitude, Res.Meta.Distortion, Cell ? Cell->HarvestStress : -1.0f, Cell ? (int32)Cell->AvailableResource : -1);
@@ -539,19 +545,24 @@ void AGridWorldManager::MassHarvestTest(int32 X, int32 Y, int32 Count)
 
 void AGridWorldManager::ApplyTest(int32 X, int32 Y)
 {
-    AProjectHerbalistGameModeBase* GM = Cast<AProjectHerbalistGameModeBase>(GetWorld()->GetAuthGameMode());
-    if (!GM) return;
-    TArray<FRealState*> Inventory = GM->GetInventory();
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (!PC || !PC->InventoryComponent)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No player controller or inventory component found"));
+        return;
+    }
+
+    TArray<FInventoryItem> Inventory = PC->InventoryComponent->GetItems();
     if (Inventory.Num() < 2)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("Need at least 2 resources in inventory"));
         return;
     }
 
-    FRealState Ingredient1 = *Inventory[0];
-    FRealState Ingredient2 = *Inventory[1];
-    GM->RemoveFromInventory(1);
-    GM->RemoveFromInventory(0);
+    FRealState Ingredient1 = Inventory[0].State;
+    FRealState Ingredient2 = Inventory[1].State;
+    PC->InventoryComponent->RemoveItem(1);
+    PC->InventoryComponent->RemoveItem(0);
 
     TArray<FRealState> Ingredients = { Ingredient1, Ingredient2 };
     FIntent Intent;
@@ -564,19 +575,21 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
 
 void AGridWorldManager::ShowInventory()
 {
-    AProjectHerbalistGameModeBase* GM = Cast<AProjectHerbalistGameModeBase>(GetWorld()->GetAuthGameMode());
-    if (!GM) return;
-    TArray<FRealState*> Inventory = GM->GetInventory();
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (!PC || !PC->InventoryComponent)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No player controller or inventory component found"));
+        return;
+    }
+
+    TArray<FInventoryItem> Inventory = PC->InventoryComponent->GetItems();
     UE_LOG(LogHerbalist, Log, TEXT("=== INVENTORY (%d items) ==="), Inventory.Num());
     for (int32 i = 0; i < Inventory.Num(); ++i)
     {
-        if (Inventory[i])
-        {
-            const FRealState& Res = *Inventory[i];
-            UE_LOG(LogHerbalist, Log, TEXT("[%d] Mag: %.2f, Dist: %.2f, Pot:%.2f Res:%.2f Cor:%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
-                i, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
-                Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);
-        }
-        else UE_LOG(LogHerbalist, Warning, TEXT("[%d] NULL pointer"), i);
+        const FInventoryItem& Item = Inventory[i];
+        const FRealState& Res = Item.State;
+        UE_LOG(LogHerbalist, Log, TEXT("[%d] Mag: %.2f, Dist: %.2f, Pot:%.2f Res:%.2f Cor:%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
+            i, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
+            Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);
     }
 }

@@ -19,12 +19,15 @@ public class ProjectHerbalist : ModuleRules
 
         PublicIncludePaths.AddRange(new string[]
         {
-            "ProjectHerbalist",                      // <-- добавить эту строку
+            "ProjectHerbalist",
             "ProjectHerbalist/Core",
             "ProjectHerbalist/Core/Types",
             "ProjectHerbalist/Core/Pipeline",
             "ProjectHerbalist/Core/World",
             "ProjectHerbalist/Core/Harvest",
+            "ProjectHerbalist/Core/Inventory",   // новая папка для инвентаря
+            "ProjectHerbalist/Core/Alchemy",     // для будущего алхимического сервиса
+            "ProjectHerbalist/Core/Storage",     // для будущих акторов-хранилищ
             "ProjectHerbalist/Player"
         });
     }
