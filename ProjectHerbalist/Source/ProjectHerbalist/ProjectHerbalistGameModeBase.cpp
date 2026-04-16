@@ -51,9 +51,9 @@ void AProjectHerbalistGameModeBase::SpawnWorldManager()
 
 void AProjectHerbalistGameModeBase::AddToInventory(const FRealState& Resource)
 {
-    if (FMath::IsNaN(Resource.Magnitude) || Resource.Magnitude < -0.1f || Resource.Magnitude > 1.1f)
+    if (FMath::IsNaN(Resource.Magnitude) || Resource.Magnitude < -0.1f || Resource.Magnitude > 1.1f || Resource.Magnitude < 0.01f)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("Rejected corrupted resource: Mag=%.2f"), Resource.Magnitude);
+        UE_LOG(LogHerbalist, Error, TEXT("Rejected corrupted or empty resource: Mag=%.2f"), Resource.Magnitude);
         return;
     }
     FRealState* NewResource = new FRealState(Resource);

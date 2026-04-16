@@ -1,19 +1,11 @@
+// BiomeTypes.h
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Types/HerbalistCoreTypes.h"
-#include "Harvest/HerbalistHarvest.h"   // <-- добавить эту строку
+#include "Core/Types/HerbalistCoreTypes.h"   // для EBiomeType, FRealState, FEnvironment, EResourceType
 #include "Math/RandomStream.h"
-#include "BiomeTypes.generated.h"
 
-UENUM(BlueprintType)
-enum class EBiomeType : uint8
-{
-    MixedForest,
-    Swamp,
-    Steppe,
-    Floodplain
-};
+// UENUM(EBiomeType) УДАЛЁН – теперь в HerbalistCoreTypes.h
 
 struct PROJECTHERBALIST_API FBiomeDefaults
 {

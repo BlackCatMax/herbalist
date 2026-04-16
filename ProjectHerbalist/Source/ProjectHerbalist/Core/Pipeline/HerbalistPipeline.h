@@ -6,6 +6,9 @@
 
 namespace HerbalistCore
 {
+    // Генератор случайных чисел (публичный для использования в GridWorldManager)
+    float Random01(FRngState& Rng);
+
     class Pipeline
     {
     public:

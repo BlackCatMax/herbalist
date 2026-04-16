@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "Core/World/HerbalistWorldConfig.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "ProjectHerbalistGameModeBase.generated.h"
 
@@ -20,9 +19,6 @@ public:
     AProjectHerbalistGameModeBase();
     virtual ~AProjectHerbalistGameModeBase();
     virtual void BeginPlay() override;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Config")
-    UHerbalistWorldConfig* WorldConfig;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
     FRngState Rng;

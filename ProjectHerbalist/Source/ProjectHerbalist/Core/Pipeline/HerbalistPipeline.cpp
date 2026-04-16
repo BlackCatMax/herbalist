@@ -1,3 +1,4 @@
+// HerbalistPipeline.cpp
 #include "HerbalistPipeline.h"
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreTypes.h"
@@ -5,15 +6,34 @@
 
 namespace HerbalistCore
 {
-    static float Random01(FRngState& Rng)
+    // Реализация Random01 (не static)
+    float Random01(FRngState& Rng)
     {
         Rng.Seed = (Rng.Seed * 196314165) + 907633515;
         return (Rng.Seed & 0x00FFFFFF) / float(0x01000000);
     }
 
+    // Вспомогательная функция RandomRange (static, используется только внутри)
     static float RandomRange(FRngState& Rng, float Min, float Max)
     {
         return Min + (Max - Min) * Random01(Rng);
+    }
+
+    // Вспомогательная нормализация направления по сумме (композиция)
+    static void NormalizeDirectionSum(FDirection& Dir)
+    {
+        float Sum = Dir.Body + Dir.Mind + Dir.Spirit + Dir.Nature;
+        if (Sum > KINDA_SMALL_NUMBER)
+        {
+            Dir.Body /= Sum;
+            Dir.Mind /= Sum;
+            Dir.Spirit /= Sum;
+            Dir.Nature /= Sum;
+        }
+        else
+        {
+            Dir.Body = Dir.Mind = Dir.Spirit = Dir.Nature = 0.25f;
+        }
     }
 
     // =========================
@@ -36,6 +56,9 @@ namespace HerbalistCore
         Accumulated.Meta.Distortion = 0.0f;
         Accumulated.Meta.Stability = 0.0f;
         Accumulated.Meta.Purity = 0.0f;
+        Accumulated.Meta.Potency = 0.0f;
+        Accumulated.Meta.Resonance = 0.0f;
+        Accumulated.Meta.Corruption = 0.0f;
 
         for (const FRealState& Res : Inputs)
         {
@@ -50,6 +73,9 @@ namespace HerbalistCore
             Accumulated.Meta.Distortion += Res.Meta.Distortion * w;
             Accumulated.Meta.Stability += Res.Meta.Stability * w;
             Accumulated.Meta.Purity += Res.Meta.Purity * w;
+            Accumulated.Meta.Potency += Res.Meta.Potency * w;
+            Accumulated.Meta.Resonance += Res.Meta.Resonance * w;
+            Accumulated.Meta.Corruption += Res.Meta.Corruption * w;
 
             Weight *= WeightDecay;
         }
@@ -64,33 +90,21 @@ namespace HerbalistCore
             Accumulated.Meta.Distortion /= TotalWeight;
             Accumulated.Meta.Stability /= TotalWeight;
             Accumulated.Meta.Purity /= TotalWeight;
+            Accumulated.Meta.Potency /= TotalWeight;
+            Accumulated.Meta.Resonance /= TotalWeight;
+            Accumulated.Meta.Corruption /= TotalWeight;
         }
 
-        float Len = FMath::Sqrt(
-            Accumulated.Direction.Body * Accumulated.Direction.Body +
-            Accumulated.Direction.Mind * Accumulated.Direction.Mind +
-            Accumulated.Direction.Spirit * Accumulated.Direction.Spirit +
-            Accumulated.Direction.Nature * Accumulated.Direction.Nature
-        );
-        if (Len > KINDA_SMALL_NUMBER)
-        {
-            Accumulated.Direction.Body /= Len;
-            Accumulated.Direction.Mind /= Len;
-            Accumulated.Direction.Spirit /= Len;
-            Accumulated.Direction.Nature /= Len;
-        }
-        else
-        {
-            Accumulated.Direction.Body = 0.5f;
-            Accumulated.Direction.Mind = 0.5f;
-            Accumulated.Direction.Spirit = 0.5f;
-            Accumulated.Direction.Nature = 0.5f;
-        }
+        // Нормализация направления по сумме (а не по длине)
+        NormalizeDirectionSum(Accumulated.Direction);
 
         Accumulated.Magnitude = FMath::Clamp(Accumulated.Magnitude, 0.0f, 1.0f);
         Accumulated.Meta.Distortion = FMath::Clamp(Accumulated.Meta.Distortion, 0.0f, 1.0f);
         Accumulated.Meta.Stability = FMath::Clamp(Accumulated.Meta.Stability, 0.0f, 1.0f);
         Accumulated.Meta.Purity = FMath::Clamp(Accumulated.Meta.Purity, 0.0f, 1.0f);
+        Accumulated.Meta.Potency = FMath::Clamp(Accumulated.Meta.Potency, 0.0f, 1.0f);
+        Accumulated.Meta.Resonance = FMath::Clamp(Accumulated.Meta.Resonance, 0.0f, 1.0f);
+        Accumulated.Meta.Corruption = FMath::Clamp(Accumulated.Meta.Corruption, 0.0f, 1.0f);
 
         return Accumulated;
     }
@@ -110,6 +124,9 @@ namespace HerbalistCore
         Delta.Meta.Distortion = Aggregated.Meta.Distortion - CurrentBiomeState.Meta.Distortion;
         Delta.Meta.Stability = Aggregated.Meta.Stability - CurrentBiomeState.Meta.Stability;
         Delta.Meta.Purity = Aggregated.Meta.Purity - CurrentBiomeState.Meta.Purity;
+        Delta.Meta.Potency = Aggregated.Meta.Potency - CurrentBiomeState.Meta.Potency;
+        Delta.Meta.Resonance = Aggregated.Meta.Resonance - CurrentBiomeState.Meta.Resonance;
+        Delta.Meta.Corruption = Aggregated.Meta.Corruption - CurrentBiomeState.Meta.Corruption;
 
         return Delta;
     }
@@ -127,78 +144,70 @@ namespace HerbalistCore
     {
         // 1. Fold
         FRealState Aggregated = Fold(Inputs);
-        UE_LOG(LogHerbalist, Warning, TEXT("[FOLD] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f)"),
+        UE_LOG(LogHerbalist, Warning, TEXT("[FOLD] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f) | Dist:%.3f Stab:%.3f Pur:%.3f Pot:%.3f Res:%.3f Cor:%.3f"),
             Aggregated.Magnitude,
             Aggregated.Direction.Body, Aggregated.Direction.Mind,
-            Aggregated.Direction.Spirit, Aggregated.Direction.Nature);
+            Aggregated.Direction.Spirit, Aggregated.Direction.Nature,
+            Aggregated.Meta.Distortion, Aggregated.Meta.Stability, Aggregated.Meta.Purity,
+            Aggregated.Meta.Potency, Aggregated.Meta.Resonance, Aggregated.Meta.Corruption);
 
         // 2. ComputeDelta
         FRealState Delta = ComputeDelta(Aggregated, CurrentBiomeState);
-        UE_LOG(LogHerbalist, Warning, TEXT("[DELTA] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f)"),
+        UE_LOG(LogHerbalist, Warning, TEXT("[DELTA] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f) | Dist:%.3f Stab:%.3f Pur:%.3f Pot:%.3f Res:%.3f Cor:%.3f"),
             Delta.Magnitude,
             Delta.Direction.Body, Delta.Direction.Mind,
-            Delta.Direction.Spirit, Delta.Direction.Nature);
+            Delta.Direction.Spirit, Delta.Direction.Nature,
+            Delta.Meta.Distortion, Delta.Meta.Stability, Delta.Meta.Purity,
+            Delta.Meta.Potency, Delta.Meta.Resonance, Delta.Meta.Corruption);
 
         // 3. Distortion (среда + память)
-        float EnvDist = Env.Toxicity * 0.33f;
+        float EnvDist = Env.Toxicity * 0.5f;
         float MemoryDist = Memory.AccumulatedDistortion;
         float Distortion = 1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
         Distortion = FMath::Clamp(Distortion, 0.0f, 0.95f);
-        UE_LOG(LogHerbalist, Warning, TEXT("[DIST] Env: %.3f Mem: %.3f -> %.3f"),
-            EnvDist, MemoryDist, Distortion);
+        UE_LOG(LogHerbalist, Warning, TEXT("[DIST] Env: %.3f Mem: %.3f -> %.3f"), EnvDist, MemoryDist, Distortion);
 
-        // =========================
-        // БИФУРКАЦИЯ (катастрофа при высоком искажении)
-        // =========================
-        float BifurcationThreshold = 0.85f;
-        if (Distortion > BifurcationThreshold)
-        {
-            float EventChance = FMath::Clamp((Distortion - BifurcationThreshold) / 0.15f, 0.0f, 1.0f);
-            EventChance *= (1.0f - Memory.StabilityMemory);
-            if (Random01(Rng) < EventChance)
-            {
-                bool bCollapse = Random01(Rng) < 0.5f;
-                if (bCollapse)
-                {
-                    Distortion = 0.2f;
-                    Delta.Meta.Stability = -0.5f;
-                    Delta.Meta.Purity = -0.3f;
-                    UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] COLLAPSE! Distortion reset to 0.2"));
-                }
-                else
-                {
-                    Distortion = 0.4f;
-                    Delta.Meta.Stability += 0.4f;
-                    Delta.Meta.Purity += 0.3f;
-                    UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] PURIFICATION! Distortion reset to 0.4"));
-                }
-                Delta.Meta.Stability = FMath::Clamp(Delta.Meta.Stability, -1.0f, 1.0f);
-                Delta.Meta.Purity = FMath::Clamp(Delta.Meta.Purity, -1.0f, 1.0f);
-            }
-        }
-
-        // 4. ZaryanaStrength (управляет Morok и Zaryana)
+        // 4. ZaryanaStrength
         float ZaryanaStrength = Intent.Coherence * (1.0f - Distortion);
         ZaryanaStrength = FMath::Clamp(ZaryanaStrength, 0.0f, 1.0f);
+        UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA] Strength: %.3f"), ZaryanaStrength);
 
-        // 4.1 Нелинейное усиление Zaryana при высоком Distortion
-        float NonlinearZaryana = ZaryanaStrength;
-        if (Distortion > 0.7f)
-        {
-            NonlinearZaryana = ZaryanaStrength * (1.0f + (Distortion - 0.7f) / 0.3f);
-            NonlinearZaryana = FMath::Clamp(NonlinearZaryana, 0.0f, 1.0f);
-            UE_LOG(LogHerbalist, Verbose, TEXT("[ZARYANA] Nonlinear: %.3f -> %.3f"), ZaryanaStrength, NonlinearZaryana);
-        }
-        UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA] Strength: %.3f (Nonlinear: %.3f)"), ZaryanaStrength, NonlinearZaryana);
+        // 5. Влияние Intent на Delta
+        float IntentFactor = 0.5f + Intent.Coherence;
+        Delta.Magnitude *= IntentFactor;
+        Delta.Meta.Stability *= IntentFactor;
+        Delta.Meta.Purity *= IntentFactor;
+        UE_LOG(LogHerbalist, Warning, TEXT("[INTENT] Factor=%.3f"), IntentFactor);
 
-        // =========================
-        // MOROK (нелинейное искажение)
-        // =========================
+        // 6. Масштабирование от Potency, Resonance, Corruption
+        float PotencyScale = 1.0f + (Aggregated.Meta.Potency - 0.5f) * 0.5f;
+        Delta.Magnitude *= PotencyScale;
+        Delta.Meta.Distortion *= PotencyScale;
+        Delta.Meta.Stability *= PotencyScale;
+        Delta.Meta.Purity *= PotencyScale;
+        Delta.Meta.Potency *= PotencyScale;
+        Delta.Meta.Resonance *= PotencyScale;
+        Delta.Meta.Corruption *= PotencyScale;
+
+        float ResonanceFactor = 1.0f + Aggregated.Meta.Resonance * 0.5f;
+        Delta.Direction.Body = Delta.Direction.Body > 0 ? Delta.Direction.Body * ResonanceFactor : Delta.Direction.Body;
+        Delta.Direction.Mind = Delta.Direction.Mind > 0 ? Delta.Direction.Mind * ResonanceFactor : Delta.Direction.Mind;
+        Delta.Direction.Spirit = Delta.Direction.Spirit > 0 ? Delta.Direction.Spirit * ResonanceFactor : Delta.Direction.Spirit;
+        Delta.Direction.Nature = Delta.Direction.Nature > 0 ? Delta.Direction.Nature * ResonanceFactor : Delta.Direction.Nature;
+
+        Delta.Meta.Distortion += Aggregated.Meta.Corruption * 0.1f;
+        Delta.Meta.Stability -= Aggregated.Meta.Corruption * 0.05f;
+        Delta.Meta.Purity -= Aggregated.Meta.Corruption * 0.05f;
+        Delta.Meta.Corruption += Aggregated.Meta.Corruption * 0.05f;
+
+        UE_LOG(LogHerbalist, Warning, TEXT("[POTENCY] Scale=%.3f | [RESONANCE] Factor=%.3f | [CORRUPTION] AddDist=%.3f"),
+            PotencyScale, ResonanceFactor, Aggregated.Meta.Corruption * 0.1f);
+
+        // 7. Morok (нелинейное искажение)
         float NoiseMagnitude = RandomRange(Rng, 0.0f, Distortion);
         float NoiseDirection = RandomRange(Rng, -1.0f, 1.0f);
         float RawNoise = NoiseMagnitude * NoiseDirection;
-        float EffectiveNoise = RawNoise * (1.0f - NonlinearZaryana);
-        float Nonlinear = FMath::Tanh(EffectiveNoise * 2.0f);
+        float Nonlinear = FMath::Tanh(RawNoise * 2.0f);
         float MixStrength = Distortion * 0.5f;
 
         FRealState OriginalDelta = Delta;
@@ -221,96 +230,79 @@ namespace HerbalistCore
         UE_LOG(LogHerbalist, Warning, TEXT("[MOROK] Noise: %.3f -> Nonlinear: %.3f | MixStrength: %.3f"),
             RawNoise, Nonlinear, MixStrength);
 
-        // =========================
-        // ZARYANA (структурирование)
-        // =========================
+        // 8. Zaryana (структурирование)
         float AvgDir = (Delta.Direction.Body + Delta.Direction.Mind +
             Delta.Direction.Spirit + Delta.Direction.Nature) / 4.0f;
-        float Boost = 1.0f + NonlinearZaryana * 0.5f;
-        float Suppress = 1.0f - NonlinearZaryana * 0.3f;
+        float Boost = 1.0f + ZaryanaStrength * 0.5f;
+        float Suppress = 1.0f - ZaryanaStrength * 0.3f;
 
         Delta.Direction.Body = (Delta.Direction.Body > AvgDir) ? Delta.Direction.Body * Boost : Delta.Direction.Body * Suppress;
         Delta.Direction.Mind = (Delta.Direction.Mind > AvgDir) ? Delta.Direction.Mind * Boost : Delta.Direction.Mind * Suppress;
         Delta.Direction.Spirit = (Delta.Direction.Spirit > AvgDir) ? Delta.Direction.Spirit * Boost : Delta.Direction.Spirit * Suppress;
         Delta.Direction.Nature = (Delta.Direction.Nature > AvgDir) ? Delta.Direction.Nature * Boost : Delta.Direction.Nature * Suppress;
 
-        float StabilityIncrease = NonlinearZaryana * (1.0f - Distortion) * 0.2f;
-        float PurityIncrease = NonlinearZaryana * (1.0f - Distortion) * 0.15f;
+        float StabilityIncrease = ZaryanaStrength * (1.0f - Distortion) * 0.2f;
+        float PurityIncrease = ZaryanaStrength * (1.0f - Distortion) * 0.15f;
         Delta.Meta.Stability += StabilityIncrease;
         Delta.Meta.Purity += PurityIncrease;
         Delta.Meta.Stability = FMath::Clamp(Delta.Meta.Stability, -1.0f, 1.0f);
         Delta.Meta.Purity = FMath::Clamp(Delta.Meta.Purity, -1.0f, 1.0f);
 
-        float LenZ = FMath::Sqrt(
-            Delta.Direction.Body * Delta.Direction.Body +
-            Delta.Direction.Mind * Delta.Direction.Mind +
-            Delta.Direction.Spirit * Delta.Direction.Spirit +
-            Delta.Direction.Nature * Delta.Direction.Nature
-        );
-        if (LenZ > KINDA_SMALL_NUMBER)
-        {
-            Delta.Direction.Body /= LenZ;
-            Delta.Direction.Mind /= LenZ;
-            Delta.Direction.Spirit /= LenZ;
-            Delta.Direction.Nature /= LenZ;
-        }
+        // Нормализация Delta.Direction по сумме (после Zaryana)
+        NormalizeDirectionSum(Delta.Direction);
 
         UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA_STRUCT] Boost: %.2f, Suppress: %.2f, Stability+%.3f, Purity+%.3f"),
             Boost, Suppress, StabilityIncrease, PurityIncrease);
 
-        // =========================
-        // ПРИМЕНЕНИЕ ДЕЛЬТЫ
-        // =========================
+        // 9. Применение дельты с интерполяцией направления
         FRealState NewState = CurrentBiomeState;
-        NewState.Direction.Body += Delta.Direction.Body;
-        NewState.Direction.Mind += Delta.Direction.Mind;
-        NewState.Direction.Spirit += Delta.Direction.Spirit;
-        NewState.Direction.Nature += Delta.Direction.Nature;
+
+        // Интерполяция направления: целевой вектор = текущий + Delta (с последующей нормализацией по сумме)
+        FDirection NewDir;
+        NewDir.Body = NewState.Direction.Body + Delta.Direction.Body;
+        NewDir.Mind = NewState.Direction.Mind + Delta.Direction.Mind;
+        NewDir.Spirit = NewState.Direction.Spirit + Delta.Direction.Spirit;
+        NewDir.Nature = NewState.Direction.Nature + Delta.Direction.Nature;
+        NormalizeDirectionSum(NewDir);
+
+        // Смешивание с исходным направлением в зависимости от силы изменения (InterpAlpha)
+        float InterpAlpha = FMath::Clamp(Delta.Magnitude * 2.0f, 0.0f, 1.0f);
+        NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, NewDir.Body, InterpAlpha);
+        NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, NewDir.Mind, InterpAlpha);
+        NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, NewDir.Spirit, InterpAlpha);
+        NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, NewDir.Nature, InterpAlpha);
+        NormalizeDirectionSum(NewState.Direction);
+
         NewState.Magnitude += Delta.Magnitude;
         NewState.Meta.Distortion += Delta.Meta.Distortion;
         NewState.Meta.Stability += Delta.Meta.Stability;
         NewState.Meta.Purity += Delta.Meta.Purity;
+        NewState.Meta.Potency += Delta.Meta.Potency;
+        NewState.Meta.Resonance += Delta.Meta.Resonance;
+        NewState.Meta.Corruption += Delta.Meta.Corruption;
 
-        // =========================
-        // НОРМАЛИЗАЦИЯ И КЛИППИНГ
-        // =========================
-        float Len = FMath::Sqrt(
-            NewState.Direction.Body * NewState.Direction.Body +
-            NewState.Direction.Mind * NewState.Direction.Mind +
-            NewState.Direction.Spirit * NewState.Direction.Spirit +
-            NewState.Direction.Nature * NewState.Direction.Nature
-        );
-        if (Len > KINDA_SMALL_NUMBER)
-        {
-            NewState.Direction.Body /= Len;
-            NewState.Direction.Mind /= Len;
-            NewState.Direction.Spirit /= Len;
-            NewState.Direction.Nature /= Len;
-        }
-        else
-        {
-            NewState.Direction.Body = 0.25f;
-            NewState.Direction.Mind = 0.25f;
-            NewState.Direction.Spirit = 0.25f;
-            NewState.Direction.Nature = 0.25f;
-        }
+        // 10. Нормализация и клиппинг
+        NormalizeDirectionSum(NewState.Direction);
 
         NewState.Magnitude = FMath::Clamp(NewState.Magnitude, 0.0f, 1.0f);
         NewState.Meta.Distortion = FMath::Clamp(NewState.Meta.Distortion, 0.0f, 1.0f);
         NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability, 0.0f, 1.0f);
         NewState.Meta.Purity = FMath::Clamp(NewState.Meta.Purity, 0.0f, 1.0f);
+        NewState.Meta.Potency = FMath::Clamp(NewState.Meta.Potency, 0.0f, 1.0f);
+        NewState.Meta.Resonance = FMath::Clamp(NewState.Meta.Resonance, 0.0f, 1.0f);
+        NewState.Meta.Corruption = FMath::Clamp(NewState.Meta.Corruption, 0.0f, 1.0f);
 
-        // =========================
-        // СТРУКТУРНЫЙ ФАКТОР
-        // =========================
+        // 11. Структурный фактор
         float Integrity = (1.0f - NewState.Meta.Distortion * 0.7f) * (1.0f + NewState.Meta.Stability);
         float StructureFactor = FMath::Clamp(Integrity, 0.0f, 1.0f);
         NewState.Magnitude *= StructureFactor;
 
-        UE_LOG(LogHerbalist, Warning, TEXT("[NEW_STATE] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f)"),
+        UE_LOG(LogHerbalist, Warning, TEXT("[NEW_STATE] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f) | Dist:%.3f Stab:%.3f Pur:%.3f Pot:%.3f Res:%.3f Cor:%.3f"),
             NewState.Magnitude,
             NewState.Direction.Body, NewState.Direction.Mind,
-            NewState.Direction.Spirit, NewState.Direction.Nature);
+            NewState.Direction.Spirit, NewState.Direction.Nature,
+            NewState.Meta.Distortion, NewState.Meta.Stability, NewState.Meta.Purity,
+            NewState.Meta.Potency, NewState.Meta.Resonance, NewState.Meta.Corruption);
 
         return NewState;
     }

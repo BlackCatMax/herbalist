@@ -1,3 +1,4 @@
+// BiomeTypes.cpp
 #include "BiomeTypes.h"
 #include "Math/UnrealMathUtility.h"
 
@@ -10,21 +11,25 @@ FRealState FBiomeDefaults::GetDefaultState(EBiomeType Biome)
         S.Magnitude = 0.65f;
         S.Direction.Body = 0.50f; S.Direction.Mind = 0.55f; S.Direction.Spirit = 0.45f; S.Direction.Nature = 0.48f;
         S.Meta.Distortion = 0.28f; S.Meta.Stability = 0.65f; S.Meta.Purity = 0.70f;
+        S.Meta.Potency = 0.58f; S.Meta.Resonance = 0.55f; S.Meta.Corruption = 0.25f;
         break;
     case EBiomeType::Swamp:
         S.Magnitude = 0.70f;
         S.Direction.Body = 0.35f; S.Direction.Mind = 0.35f; S.Direction.Spirit = 0.65f; S.Direction.Nature = 0.65f;
         S.Meta.Distortion = 0.75f; S.Meta.Stability = 0.25f; S.Meta.Purity = 0.25f;
+        S.Meta.Potency = 0.70f; S.Meta.Resonance = 0.80f; S.Meta.Corruption = 0.70f;
         break;
     case EBiomeType::Steppe:
         S.Magnitude = 0.45f;
         S.Direction.Body = 0.65f; S.Direction.Mind = 0.60f; S.Direction.Spirit = 0.30f; S.Direction.Nature = 0.35f;
         S.Meta.Distortion = 0.38f; S.Meta.Stability = 0.50f; S.Meta.Purity = 0.55f;
+        S.Meta.Potency = 0.40f; S.Meta.Resonance = 0.45f; S.Meta.Corruption = 0.40f;
         break;
     case EBiomeType::Floodplain:
         S.Magnitude = 0.75f;
         S.Direction.Body = 0.45f; S.Direction.Mind = 0.45f; S.Direction.Spirit = 0.55f; S.Direction.Nature = 0.55f;
         S.Meta.Distortion = 0.50f; S.Meta.Stability = 0.45f; S.Meta.Purity = 0.50f;
+        S.Meta.Potency = 0.70f; S.Meta.Resonance = 0.70f; S.Meta.Corruption = 0.45f;
         break;
     default: break;
     }
@@ -33,6 +38,9 @@ FRealState FBiomeDefaults::GetDefaultState(EBiomeType Biome)
     S.Meta.Distortion = FMath::Clamp(S.Meta.Distortion, 0.0f, 1.0f);
     S.Meta.Stability = FMath::Clamp(S.Meta.Stability, 0.0f, 1.0f);
     S.Meta.Purity = FMath::Clamp(S.Meta.Purity, 0.0f, 1.0f);
+    S.Meta.Potency = FMath::Clamp(S.Meta.Potency, 0.0f, 1.0f);
+    S.Meta.Resonance = FMath::Clamp(S.Meta.Resonance, 0.0f, 1.0f);
+    S.Meta.Corruption = FMath::Clamp(S.Meta.Corruption, 0.0f, 1.0f);
     S.Magnitude = FMath::Clamp(S.Magnitude, 0.0f, 1.0f);
     return S;
 }
@@ -58,32 +66,35 @@ EResourceType FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRando
     case EBiomeType::MixedForest:
     {
         int32 r = Rng.RandRange(0, 99);
-        if (r < 40) return EResourceType::Nettle;
-        if (r < 60) return EResourceType::Fern;
-        if (r < 75) return EResourceType::Mushroom;
-        if (r < 90) return EResourceType::BirchBark;
-        return EResourceType::Moss;
+        if (r < 35) return EResourceType::Nettle;      // 35%
+        if (r < 55) return EResourceType::Fern;        // 20%
+        if (r < 70) return EResourceType::Mushroom;    // 15%
+        if (r < 85) return EResourceType::BirchBark;   // 15%
+        return EResourceType::Moss;                    // 15%
     }
     case EBiomeType::Swamp:
     {
         int32 r = Rng.RandRange(0, 99);
-        if (r < 35) return EResourceType::Mushroom;
-        if (r < 60) return EResourceType::Cranberry;
-        if (r < 80) return EResourceType::Moss;
-        return EResourceType::BogOre;
+        if (r < 30) return EResourceType::Mushroom;    // 30%
+        if (r < 50) return EResourceType::Cranberry;   // 20%
+        if (r < 70) return EResourceType::Moss;        // 20%
+        if (r < 85) return EResourceType::BogOre;      // 15%
+        return EResourceType::Fern;                    // 15%
     }
     case EBiomeType::Steppe:
     {
         int32 r = Rng.RandRange(0, 99);
-        if (r < 60) return EResourceType::Nettle;
-        return EResourceType::Fern;
+        if (r < 50) return EResourceType::Nettle;      // 50%
+        if (r < 80) return EResourceType::Fern;        // 30%
+        return EResourceType::BirchBark;               // 20%
     }
     case EBiomeType::Floodplain:
     {
         int32 r = Rng.RandRange(0, 99);
-        if (r < 45) return EResourceType::Nettle;
-        if (r < 75) return EResourceType::BirchBark;
-        return EResourceType::BogOre;
+        if (r < 40) return EResourceType::Nettle;      // 40%
+        if (r < 70) return EResourceType::BirchBark;   // 30%
+        if (r < 85) return EResourceType::BogOre;      // 15%
+        return EResourceType::Moss;                    // 15%
     }
     default:
         return EResourceType::Nettle;
