@@ -3,10 +3,10 @@
 
 #include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h" // для FInventoryItem
 
 namespace HerbalistCore
 {
-    // Генератор случайных чисел (публичный для использования в GridWorldManager)
     float Random01(FRngState& Rng);
 
     class Pipeline
@@ -19,8 +19,9 @@ namespace HerbalistCore
         static FRealState ComputeDelta(const FRealState& Aggregated, const FRealState& CurrentBiomeState);
 
         // Основной пайплайн: Fold → Delta → Distortion → Morok → Zaryana → NewState
+        // Принимает массив FInventoryItem (с типами ресурсов) для корректной обработки воды
         static FRealState ApplyMorok(
-            const TArray<FRealState>& Inputs,
+            const TArray<FInventoryItem>& Inputs,
             const FRealState& CurrentBiomeState,
             const FEnvironment& Env,
             const FMemoryState& Memory,

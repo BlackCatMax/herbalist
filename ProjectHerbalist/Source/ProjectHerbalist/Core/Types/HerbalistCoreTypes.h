@@ -24,7 +24,8 @@ enum class EResourceType : uint8
     BirchBark,
     Moss,
     Cranberry,
-    BogOre
+    BogOre,
+    Water
 };
 
 // ========== Базовые структуры ==========
@@ -38,14 +39,12 @@ struct PROJECTHERBALIST_API FDirection
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float Spirit = 0.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float Nature = 0.f;
 
-    // Нормализация по сумме (все компоненты ≥ 0, сумма = 1)
     void NormalizeSum()
     {
         Body = FMath::Max(0.0f, Body);
         Mind = FMath::Max(0.0f, Mind);
         Spirit = FMath::Max(0.0f, Spirit);
         Nature = FMath::Max(0.0f, Nature);
-
         float Sum = Body + Mind + Spirit + Nature;
         if (Sum > KINDA_SMALL_NUMBER)
         {
@@ -124,7 +123,7 @@ struct PROJECTHERBALIST_API FWorldState
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FRealState CurrentState;
 };
 
-// ========== Структура клетки (без TargetMemory) ==========
+// ========== Структура клетки ==========
 USTRUCT(BlueprintType)
 struct PROJECTHERBALIST_API FGridCell
 {
@@ -140,6 +139,7 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEntityTriggered = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EResourceType AvailableResource = EResourceType::None;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float ResourceRegrowthTimer = 0.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsWater = false;
 };
 
 USTRUCT(BlueprintType)
@@ -165,7 +165,6 @@ struct PROJECTHERBALIST_API FConditionModifier
     }
 };
 
-// ========== Вспомогательный класс ==========
 struct PROJECTHERBALIST_API FAlatyr
 {
     static const FRealState S0;

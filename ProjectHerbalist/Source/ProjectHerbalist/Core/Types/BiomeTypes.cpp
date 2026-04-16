@@ -100,3 +100,44 @@ EResourceType FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRando
         return EResourceType::Nettle;
     }
 }
+
+FRealState FBiomeDefaults::GetDefaultWaterState(EBiomeType Biome)
+{
+    FRealState Water;
+    Water.Magnitude = 0.5f;
+
+    switch (Biome)
+    {
+    case EBiomeType::MixedForest:
+        Water.Direction.Body = 0.50f; Water.Direction.Mind = 0.55f;
+        Water.Direction.Spirit = 0.45f; Water.Direction.Nature = 0.48f;
+        Water.Meta.Purity = 0.75f; Water.Meta.Corruption = 0.22f; Water.Meta.Distortion = 0.28f;
+        break;
+    case EBiomeType::Swamp:
+        Water.Direction.Body = 0.35f; Water.Direction.Mind = 0.35f;
+        Water.Direction.Spirit = 0.65f; Water.Direction.Nature = 0.65f;
+        Water.Meta.Purity = 0.25f; Water.Meta.Corruption = 0.75f; Water.Meta.Distortion = 0.75f;
+        break;
+    case EBiomeType::Steppe:
+        Water.Direction.Body = 0.65f; Water.Direction.Mind = 0.60f;
+        Water.Direction.Spirit = 0.30f; Water.Direction.Nature = 0.35f;
+        Water.Meta.Purity = 0.50f; Water.Meta.Corruption = 0.42f; Water.Meta.Distortion = 0.38f;
+        break;
+    case EBiomeType::Floodplain:
+        Water.Direction.Body = 0.45f; Water.Direction.Mind = 0.45f;
+        Water.Direction.Spirit = 0.55f; Water.Direction.Nature = 0.55f;
+        Water.Meta.Purity = 0.55f; Water.Meta.Corruption = 0.45f; Water.Meta.Distortion = 0.50f;
+        break;
+    default:
+        Water.Direction.Body = Water.Direction.Mind = Water.Direction.Spirit = Water.Direction.Nature = 0.25f;
+        Water.Meta.Purity = 0.5f; Water.Meta.Corruption = 0.5f; Water.Meta.Distortion = 0.5f;
+        break;
+    }
+
+    Water.Meta.Potency = 0.5f;
+    Water.Meta.Stability = 0.6f;
+    Water.Meta.Resonance = 0.5f;
+
+    Water.Direction.NormalizeSum();
+    return Water;
+}

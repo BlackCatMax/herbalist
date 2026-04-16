@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h" // для FInventoryItem
 #include "GridWorldManager.generated.h"
 
 UCLASS()
@@ -27,7 +28,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulation")
     float StateInterpolationSpeed = 5.0f;
 
-    // Глубина распространения изменений (количество шагов от источника)
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulation")
     int32 PropagationDepth = 1;
 
@@ -42,7 +42,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
     float MaxHarvestImpactOnMagnitude = 0.2f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
-    float HarvestStressDecayRate = 0.1f;
+    float HarvestStressDecayRate = 0.5f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
     bool bEnableRecovery = true;
 
@@ -54,7 +54,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bEnableDebugDraw = true;
 
-    // Доступ к ячейкам (не BlueprintCallable, возвращают указатель)
     FGridCell* GetCell(int32 X, int32 Y);
     const FGridCell* GetCellConst(int32 X, int32 Y) const;
 
@@ -67,6 +66,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Harvest")
     FRealState HarvestFromCellSimple(int32 X, int32 Y);
 
+    // Новая перегрузка для алхимии с FInventoryItem
+    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng);
+
+    // Старая перегрузка для обратной совместимости
     UFUNCTION(BlueprintCallable, Category = "Alchemy")
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng);
 
@@ -104,7 +107,6 @@ private:
     int32 SelectedX = -1, SelectedY = -1;
     FTimerHandle DebugDrawTimer;
 
-    // Детерминированный генератор случайных чисел для регенерации ресурсов
     FRandomStream WorldRNG;
 
     void InitializeCells();

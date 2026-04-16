@@ -1,11 +1,12 @@
 // GridWorldManager.cpp
 #include "GridWorldManager.h"
-#include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Harvest/HerbalistHarvest.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "ProjectHerbalistGameModeBase.h"
+#include "Player/HerbalistPlayerController.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -19,7 +20,7 @@ AGridWorldManager::AGridWorldManager()
 void AGridWorldManager::BeginPlay()
 {
     Super::BeginPlay();
-    WorldRNG.Initialize(12345); // фиксированный сид для детерминированности
+    WorldRNG.Initialize(12345);
     InitializeCells();
     if (bEnableDebugDraw)
     {
@@ -34,6 +35,7 @@ void AGridWorldManager::InitializeCells()
     const int32 BlocksX = GridSizeX / BlockSize;
     const int32 BlocksY = GridSizeY / BlockSize;
 
+    // 1. Инициализация всех клеток (обычные)
     for (int32 Y = 0; Y < GridSizeY; Y++)
     {
         for (int32 X = 0; X < GridSizeX; X++)
@@ -63,6 +65,31 @@ void AGridWorldManager::InitializeCells()
             Cells[Index].bEntityTriggered = false;
             Cells[Index].AvailableResource = FBiomeDefaults::GetRandomResourceForBiome(biome, WorldRNG);
             Cells[Index].ResourceRegrowthTimer = 0.0f;
+            Cells[Index].bIsWater = false;
+        }
+    }
+
+    // 2. Назначение водных ячеек (одна на блок)
+    for (int32 BlockY = 0; BlockY < BlocksY; BlockY++)
+    {
+        for (int32 BlockX = 0; BlockX < BlocksX; BlockX++)
+        {
+            int32 LocalX = WorldRNG.RandRange(0, BlockSize - 1);
+            int32 LocalY = WorldRNG.RandRange(0, BlockSize - 1);
+            int32 GlobalX = BlockX * BlockSize + LocalX;
+            int32 GlobalY = BlockY * BlockSize + LocalY;
+            int32 Index = GlobalY * GridSizeX + GlobalX;
+            if (Index < Cells.Num())
+            {
+                FGridCell& Cell = Cells[Index];
+                Cell.bIsWater = true;
+                Cell.AvailableResource = EResourceType::None;
+                FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
+                Cell.State = waterState;
+                Cell.TargetState = waterState;
+                Cell.HarvestStress = 0.0f;
+                Cell.ResourceRegrowthTimer = 0.0f;
+            }
         }
     }
 }
@@ -114,12 +141,9 @@ void AGridWorldManager::UpdateMemory(FMemoryState& Memory, const FRealState& New
 
 void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
 {
-    // Вычисляем вклад стресса как добавку к базовому искажению (из текущего устоявшегося состояния)
     float t = FMath::Clamp((Cell.HarvestStress - HarvestStressThreshold) / (1.0f - HarvestStressThreshold), 0.0f, 1.0f);
     float DistortionIncrease = t * MaxHarvestImpactOnDistortion;
     float MagnitudeDecrease = t * MaxHarvestImpactOnMagnitude;
-
-    // Берём базу из текущего состояния (State), а не из TargetState
     float BaseDistortion = Cell.State.Meta.Distortion;
     Cell.TargetState.Meta.Distortion = FMath::Clamp(BaseDistortion + DistortionIncrease, 0.0f, 1.0f);
     Cell.TargetState.Magnitude = FMath::Clamp(Cell.TargetState.Magnitude - MagnitudeDecrease, 0.0f, 1.0f);
@@ -130,6 +154,36 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
 {
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return FRealState();
+
+    if (Cell->bIsWater)
+    {
+        FRealState Water = Cell->State;
+        constexpr float k_condition = 0.4f;
+        Water.Magnitude += k_condition * Conditions.DeltaMagnitude;
+        Water.Direction.Body += k_condition * Conditions.DeltaDirection.Body;
+        Water.Direction.Mind += k_condition * Conditions.DeltaDirection.Mind;
+        Water.Direction.Spirit += k_condition * Conditions.DeltaDirection.Spirit;
+        Water.Direction.Nature += k_condition * Conditions.DeltaDirection.Nature;
+        Water.Meta.Distortion += k_condition * Conditions.DeltaDistortion;
+        Water.Meta.Stability += k_condition * Conditions.DeltaStability;
+        Water.Meta.Purity += k_condition * Conditions.DeltaPurity;
+        Water.Meta.Potency += k_condition * Conditions.DeltaPotency;
+        Water.Meta.Resonance += k_condition * Conditions.DeltaResonance;
+        Water.Meta.Corruption += k_condition * Conditions.DeltaCorruption;
+
+        Water.Direction.NormalizeSum();
+        Water.Magnitude = FMath::Clamp(Water.Magnitude, 0.0f, 1.0f);
+        Water.Meta.Distortion = FMath::Clamp(Water.Meta.Distortion, 0.0f, 1.0f);
+        Water.Meta.Stability = FMath::Clamp(Water.Meta.Stability, 0.0f, 1.0f);
+        Water.Meta.Purity = FMath::Clamp(Water.Meta.Purity, 0.0f, 1.0f);
+        Water.Meta.Potency = FMath::Clamp(Water.Meta.Potency, 0.0f, 1.0f);
+        Water.Meta.Resonance = FMath::Clamp(Water.Meta.Resonance, 0.0f, 1.0f);
+        Water.Meta.Corruption = FMath::Clamp(Water.Meta.Corruption, 0.0f, 1.0f);
+
+        UE_LOG(LogHerbalist, Log, TEXT("Harvested water from (%d,%d): Mag=%.2f Dist=%.2f"), X, Y, Water.Magnitude, Water.Meta.Distortion);
+        return Water;
+    }
+
     if (Cell->ResourceRegrowthTimer > 0.0f)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("Cell (%d,%d) resource not ready (regrowing)"), X, Y);
@@ -158,7 +212,7 @@ FRealState AGridWorldManager::HarvestFromCellSimple(int32 X, int32 Y)
     return HarvestFromCell(X, Y, FConditionModifier());
 }
 
-void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng)
+void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng)
 {
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
@@ -173,10 +227,9 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
         Rng
     );
 
-    // ========== БИФУРКАЦИЯ (катастрофа / очищение) ==========
+    // БИФУРКАЦИЯ (катастрофа / очищение)
     constexpr float BifurcationThreshold = 0.85f;
     constexpr float MaxDistortion = 1.0f;
-
     if (NewState.Meta.Distortion > BifurcationThreshold)
     {
         float Excess = (NewState.Meta.Distortion - BifurcationThreshold) / (MaxDistortion - BifurcationThreshold);
@@ -184,35 +237,22 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
         float Instability = (1.0f - NewState.Meta.Stability) * (1.0f - NewState.Meta.Purity);
         float InstabilityFactor = FMath::Lerp(0.5f, 1.0f, Instability);
         float MemoryFactor = 1.0f - Cell->Memory.StabilityMemory * 0.7f;
-
         float EventChance = BaseChance * InstabilityFactor * MemoryFactor;
         EventChance = FMath::Clamp(EventChance, 0.0f, 0.95f);
 
         if (HerbalistCore::Random01(Rng) < EventChance)
         {
             bool bCollapse = HerbalistCore::Random01(Rng) < 0.5f;
-
             if (bCollapse)
             {
                 NewState.Meta.Distortion = 0.2f;
                 NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability + 0.1f, 0.0f, 1.0f);
-                // Сдвиг направления к S₀ (0.25 по каждой оси) с нормализацией по сумме
-                FVector4 DirVec(NewState.Direction.Body, NewState.Direction.Mind, NewState.Direction.Spirit, NewState.Direction.Nature);
-                FVector4 TargetDir(0.25f, 0.25f, 0.25f, 0.25f);
-                DirVec = FMath::Lerp(DirVec, TargetDir, 0.1f);
-                float Sum = DirVec.X + DirVec.Y + DirVec.Z + DirVec.W;
-                if (Sum > KINDA_SMALL_NUMBER)
-                {
-                    NewState.Direction.Body = DirVec.X / Sum;
-                    NewState.Direction.Mind = DirVec.Y / Sum;
-                    NewState.Direction.Spirit = DirVec.Z / Sum;
-                    NewState.Direction.Nature = DirVec.W / Sum;
-                }
-                else
-                {
-                    NewState.Direction.Body = NewState.Direction.Mind = NewState.Direction.Spirit = NewState.Direction.Nature = 0.25f;
-                }
-                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] COLLAPSE! Distortion reset to 0.2, Stability+0.1, Direction shifted to center"));
+                NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, 0.25f, 0.1f);
+                NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, 0.25f, 0.1f);
+                NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, 0.25f, 0.1f);
+                NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, 0.25f, 0.1f);
+                NewState.Direction.NormalizeSum();
+                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] COLLAPSE! Distortion reset to 0.2, Stability+0.1"));
             }
             else
             {
@@ -220,27 +260,17 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
                 float Boost = 0.3f * (1.0f - NewState.Meta.Stability);
                 NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability + Boost, 0.0f, 1.0f);
                 NewState.Meta.Purity = FMath::Clamp(NewState.Meta.Purity + Boost * 0.8f, 0.0f, 1.0f);
-                FVector4 DirVec(NewState.Direction.Body, NewState.Direction.Mind, NewState.Direction.Spirit, NewState.Direction.Nature);
-                FVector4 TargetDir(0.25f, 0.25f, 0.25f, 0.25f);
-                DirVec = FMath::Lerp(DirVec, TargetDir, 0.2f);
-                float Sum = DirVec.X + DirVec.Y + DirVec.Z + DirVec.W;
-                if (Sum > KINDA_SMALL_NUMBER)
-                {
-                    NewState.Direction.Body = DirVec.X / Sum;
-                    NewState.Direction.Mind = DirVec.Y / Sum;
-                    NewState.Direction.Spirit = DirVec.Z / Sum;
-                    NewState.Direction.Nature = DirVec.W / Sum;
-                }
-                else
-                {
-                    NewState.Direction.Body = NewState.Direction.Mind = NewState.Direction.Spirit = NewState.Direction.Nature = 0.25f;
-                }
-                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] PURIFICATION! Distortion reset to 0.4, Stability+%.2f, Purity+%.2f, Direction shifted to center"), Boost, Boost * 0.8f);
+                NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, 0.25f, 0.2f);
+                NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, 0.25f, 0.2f);
+                NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, 0.25f, 0.2f);
+                NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, 0.25f, 0.2f);
+                NewState.Direction.NormalizeSum();
+                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] PURIFICATION! Distortion reset to 0.4, Stability+%.2f, Purity+%.2f"), Boost, Boost * 0.8f);
             }
         }
     }
 
-    // ========== ВЫЧИСЛЕНИЕ ДЕЛЬТЫ ==========
+    // Дельта
     FRealState Delta;
     Delta.Magnitude = NewState.Magnitude - OldState.Magnitude;
     Delta.Direction.Body = NewState.Direction.Body - OldState.Direction.Body;
@@ -256,6 +286,19 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
 
     SetTargetState(X, Y, NewState);
     PropagateToNeighbors(X, Y, Delta, 0.5f, PropagationDepth);
+}
+
+void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng)
+{
+    TArray<FInventoryItem> Items;
+    for (const FRealState& State : Ingredients)
+    {
+        FInventoryItem Item;
+        Item.Type = EResourceType::None;
+        Item.State = State;
+        Items.Add(Item);
+    }
+    ApplyAlchemyResult(X, Y, Items, Intent, Rng);
 }
 
 void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, float Falloff, int32 Depth)
@@ -293,30 +336,24 @@ void AGridWorldManager::PropagateToNeighbors(int32 X, int32 Y, const FRealState&
 
                 Visited.Add(Idx);
 
-                // Ослабляем дельту
                 FRealState WeakDelta = Node.CurrentDelta;
                 WeakDelta.Magnitude *= Falloff;
-                // Распространяем только Distortion (только положительную) и Corruption
                 WeakDelta.Meta.Distortion = FMath::Max(0.0f, WeakDelta.Meta.Distortion * Falloff);
                 WeakDelta.Meta.Corruption *= Falloff;
-                // Остальные Meta не распространяем
                 WeakDelta.Meta.Stability = 0.0f;
                 WeakDelta.Meta.Purity = 0.0f;
                 WeakDelta.Meta.Potency = 0.0f;
                 WeakDelta.Meta.Resonance = 0.0f;
-                // Направление не распространяем
                 WeakDelta.Direction.Body = 0.0f;
                 WeakDelta.Direction.Mind = 0.0f;
                 WeakDelta.Direction.Spirit = 0.0f;
                 WeakDelta.Direction.Nature = 0.0f;
 
-                // Применяем к TargetState соседа
                 FRealState NewTargetState = Neighbor->TargetState;
                 NewTargetState.Magnitude += WeakDelta.Magnitude;
                 NewTargetState.Meta.Distortion += WeakDelta.Meta.Distortion;
                 NewTargetState.Meta.Corruption += WeakDelta.Meta.Corruption;
 
-                // Клиппинг
                 NewTargetState.Magnitude = FMath::Clamp(NewTargetState.Magnitude, 0.0f, 1.0f);
                 NewTargetState.Meta.Distortion = FMath::Clamp(NewTargetState.Meta.Distortion, 0.0f, 1.0f);
                 NewTargetState.Meta.Corruption = FMath::Clamp(NewTargetState.Meta.Corruption, 0.0f, 1.0f);
@@ -350,26 +387,13 @@ void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
     Cur.Meta.Resonance = FMath::FInterpTo(Cur.Meta.Resonance, Target.Meta.Resonance, DeltaTime, StateInterpolationSpeed);
     Cur.Meta.Corruption = FMath::FInterpTo(Cur.Meta.Corruption, Target.Meta.Corruption, DeltaTime, StateInterpolationSpeed);
 
-    // Нормализация направления по сумме (композиция)
-    float Sum = Cur.Direction.Body + Cur.Direction.Mind + Cur.Direction.Spirit + Cur.Direction.Nature;
-    if (Sum > KINDA_SMALL_NUMBER)
-    {
-        Cur.Direction.Body /= Sum;
-        Cur.Direction.Mind /= Sum;
-        Cur.Direction.Spirit /= Sum;
-        Cur.Direction.Nature /= Sum;
-    }
-    else
-    {
-        Cur.Direction.Body = Cur.Direction.Mind = Cur.Direction.Spirit = Cur.Direction.Nature = 0.25f;
-    }
+    Cur.Direction.NormalizeSum();
 }
 
 void AGridWorldManager::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // ФАЗА 1: Decay стресса (только клетки со стрессом)
     if (bEnableRecovery && StressCells.Num() > 0)
     {
         TSet<int32> ProcessedStress = StressCells;
@@ -392,7 +416,6 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
-    // ФАЗА 2: Регенерация ресурсов
     TSet<int32> ProcessedRegrow = RegrowingCells;
     for (int32 Idx : ProcessedRegrow)
     {
@@ -410,7 +433,6 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
-    // ФАЗА 3: Интерполяция грязных клеток и обновление памяти
     TSet<int32> ProcessedDirty = DirtyCells;
     for (int32 Idx : ProcessedDirty)
     {
@@ -419,7 +441,6 @@ void AGridWorldManager::Tick(float DeltaTime)
         FGridCell* Cell = GetCell(X, Y);
         if (!Cell) continue;
 
-        // Проверяем достижение всех параметров
         bool bStateNear =
             FMath::IsNearlyEqual(Cell->State.Magnitude, Cell->TargetState.Magnitude, 0.001f) &&
             FMath::IsNearlyEqual(Cell->State.Meta.Distortion, Cell->TargetState.Meta.Distortion, 0.001f) &&
@@ -436,7 +457,6 @@ void AGridWorldManager::Tick(float DeltaTime)
         if (!bStateNear)
         {
             InterpolateCell(*Cell, DeltaTime);
-            // Память обновляем плавно от текущего интерполируемого состояния
             UpdateMemory(Cell->Memory, Cell->State, 0.05f * DeltaTime);
         }
         else
@@ -447,7 +467,6 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
-    // Управление тиком
     bool bShouldTick = (DirtyCells.Num() > 0) || (RegrowingCells.Num() > 0) || (StressCells.Num() > 0);
     if (bInterpolationActive != bShouldTick)
     {
@@ -464,14 +483,21 @@ void AGridWorldManager::RedrawDebugBoxes()
     {
         FVector Center = FVector(Cell.X * CellSize, Cell.Y * CellSize, 0.0f);
         FVector Extent = FVector(CellSize / 2.0f, CellSize / 2.0f, CellHeight / 2.0f);
-        float Dist = Cell.Memory.AccumulatedDistortion;
-        FLinearColor LinearColor = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Dist);
-        FColor Color = LinearColor.ToFColor(false);
+        FColor Color;
+        if (Cell.bIsWater)
+        {
+            Color = FColor::Blue;
+        }
+        else
+        {
+            float Dist = Cell.Memory.AccumulatedDistortion;
+            FLinearColor LinearColor = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Dist);
+            Color = LinearColor.ToFColor(false);
+        }
         DrawDebugBox(GetWorld(), Center, Extent, Color, true, -1.0f, 0, BorderThickness);
     }
 }
 
-// ========== UI и выбор ячейки ==========
 void AGridWorldManager::SelectCell(int32 X, int32 Y)
 {
     if (GetCell(X, Y))
@@ -490,12 +516,13 @@ FString AGridWorldManager::GetSelectedCellInfo() const
 {
     const FGridCell* Cell = GetCellConst(SelectedX, SelectedY);
     if (!Cell) return TEXT("No cell selected");
-    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, Resource=%d, Regrowth=%.1f"),
+    FString ResourceStr = Cell->bIsWater ? TEXT("Water") : FString::Printf(TEXT("%d"), (int32)Cell->AvailableResource);
+    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, Resource=%s, Regrowth=%.1f"),
         SelectedX, SelectedY,
         Cell->State.Magnitude,
         Cell->State.Meta.Distortion,
         Cell->HarvestStress,
-        (int32)Cell->AvailableResource,
+        *ResourceStr,
         Cell->ResourceRegrowthTimer);
 }
 
@@ -508,7 +535,14 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
         FGridCell* Cell = GetCell(X, Y);
         if (Cell)
         {
-            ResourceName = FHerbalistHarvest::GetResourceName(Cell->AvailableResource, false);
+            if (Cell->bIsWater)
+            {
+                ResourceName = TEXT("Вода");
+            }
+            else
+            {
+                ResourceName = FHerbalistHarvest::GetResourceName(Cell->AvailableResource, false);
+            }
             RegrowthTimer = Cell->ResourceRegrowthTimer;
             Distortion = Cell->State.Meta.Distortion;
             HarvestStress = Cell->HarvestStress;
@@ -521,7 +555,6 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
     HarvestStress = 0.0f;
 }
 
-// ========== Тестовые команды ==========
 void AGridWorldManager::HarvestTest(int32 X, int32 Y)
 {
     FRealState Res = HarvestFromCellSimple(X, Y);
@@ -530,11 +563,22 @@ void AGridWorldManager::HarvestTest(int32 X, int32 Y)
     {
         FGridCell* Cell = GetCell(X, Y);
         if (Cell)
-            PC->InventoryComponent->AddItem(Res, Cell->AvailableResource);
+        {
+            EResourceType Type = Cell->bIsWater ? EResourceType::Water : Cell->AvailableResource;
+            PC->InventoryComponent->AddItem(Res, Type);
+        }
     }
     FGridCell* Cell = GetCell(X, Y);
-    UE_LOG(LogHerbalist, Log, TEXT("Harvested from (%d,%d): Mag=%.2f Dist=%.2f Stress=%.3f Resource=%d"),
-        X, Y, Res.Magnitude, Res.Meta.Distortion, Cell ? Cell->HarvestStress : -1.0f, Cell ? (int32)Cell->AvailableResource : -1);
+    FString ResourceName;
+    if (Cell)
+    {
+        if (Cell->bIsWater)
+            ResourceName = TEXT("Water");
+        else
+            ResourceName = FHerbalistHarvest::GetResourceName(Cell->AvailableResource, false);
+    }
+    UE_LOG(LogHerbalist, Log, TEXT("Harvested from (%d,%d): Mag=%.2f Dist=%.2f Stress=%.3f Resource=%s"),
+        X, Y, Res.Magnitude, Res.Meta.Distortion, Cell ? Cell->HarvestStress : -1.0f, *ResourceName);
 }
 
 void AGridWorldManager::MassHarvestTest(int32 X, int32 Y, int32 Count)
@@ -559,12 +603,12 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
         return;
     }
 
-    FRealState Ingredient1 = Inventory[0].State;
-    FRealState Ingredient2 = Inventory[1].State;
+    FInventoryItem Ingredient1 = Inventory[0];
+    FInventoryItem Ingredient2 = Inventory[1];
     PC->InventoryComponent->RemoveItem(1);
     PC->InventoryComponent->RemoveItem(0);
 
-    TArray<FRealState> Ingredients = { Ingredient1, Ingredient2 };
+    TArray<FInventoryItem> Ingredients = { Ingredient1, Ingredient2 };
     FIntent Intent;
     Intent.Coherence = 0.5f;
     FRngState Rng;
@@ -588,8 +632,9 @@ void AGridWorldManager::ShowInventory()
     {
         const FInventoryItem& Item = Inventory[i];
         const FRealState& Res = Item.State;
-        UE_LOG(LogHerbalist, Log, TEXT("[%d] Mag: %.2f, Dist: %.2f, Pot:%.2f Res:%.2f Cor:%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
-            i, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
+        FString Name = FHerbalistHarvest::GetResourceName(Item.Type, false);
+        UE_LOG(LogHerbalist, Log, TEXT("[%d] %s: Mag=%.2f, Dist=%.2f, Pot=%.2f Res=%.2f Cor=%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
+            i, *Name, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
             Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);
     }
 }

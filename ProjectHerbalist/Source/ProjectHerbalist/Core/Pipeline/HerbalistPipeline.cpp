@@ -2,18 +2,17 @@
 #include "HerbalistPipeline.h"
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Math/UnrealMathUtility.h"
 
 namespace HerbalistCore
 {
-    // Реализация Random01 (не static)
     float Random01(FRngState& Rng)
     {
         Rng.Seed = (Rng.Seed * 196314165) + 907633515;
         return (Rng.Seed & 0x00FFFFFF) / float(0x01000000);
     }
 
-    // Вспомогательная функция RandomRange (static, используется только внутри)
     static float RandomRange(FRngState& Rng, float Min, float Max)
     {
         return Min + (Max - Min) * Random01(Rng);
@@ -78,7 +77,6 @@ namespace HerbalistCore
             Accumulated.Meta.Corruption /= TotalWeight;
         }
 
-        // Нормализация направления по сумме
         Accumulated.Direction.NormalizeSum();
 
         Accumulated.Magnitude = FMath::Clamp(Accumulated.Magnitude, 0.0f, 1.0f);
@@ -118,15 +116,177 @@ namespace HerbalistCore
     // MAIN PIPELINE
     // =========================
     FRealState Pipeline::ApplyMorok(
-        const TArray<FRealState>& Inputs,
+        const TArray<FInventoryItem>& Inputs,
         const FRealState& CurrentBiomeState,
         const FEnvironment& Env,
         const FMemoryState& Memory,
         const FIntent& Intent,
         FRngState& Rng)
     {
-        // 1. Fold
-        FRealState Aggregated = Fold(Inputs);
+        // Разделяем воду и не-воду
+        TArray<FRealState> NonWaterStates;
+        TArray<FRealState> WaterStates;
+        for (const FInventoryItem& Item : Inputs)
+        {
+            if (Item.Type == EResourceType::Water)
+                WaterStates.Add(Item.State);
+            else
+                NonWaterStates.Add(Item.State);
+        }
+
+        // 1. Только вода -> варёная вода
+        if (NonWaterStates.Num() == 0 && WaterStates.Num() > 0)
+        {
+            // Усредняем воду
+            FRealState AvgWater;
+            AvgWater.Magnitude = 0.0f;
+            AvgWater.Direction.Body = 0.0f; AvgWater.Direction.Mind = 0.0f;
+            AvgWater.Direction.Spirit = 0.0f; AvgWater.Direction.Nature = 0.0f;
+            AvgWater.Meta.Purity = 0.0f; AvgWater.Meta.Stability = 0.0f;
+            AvgWater.Meta.Corruption = 0.0f; AvgWater.Meta.Potency = 0.0f;
+            // resonance, distortion не суммируем
+            for (const FRealState& W : WaterStates)
+            {
+                AvgWater.Magnitude += W.Magnitude;
+                AvgWater.Direction.Body += W.Direction.Body;
+                AvgWater.Direction.Mind += W.Direction.Mind;
+                AvgWater.Direction.Spirit += W.Direction.Spirit;
+                AvgWater.Direction.Nature += W.Direction.Nature;
+                AvgWater.Meta.Purity += W.Meta.Purity;
+                AvgWater.Meta.Stability += W.Meta.Stability;
+                AvgWater.Meta.Corruption += W.Meta.Corruption;
+                AvgWater.Meta.Potency += W.Meta.Potency;
+            }
+            float Count = (float)WaterStates.Num();
+            AvgWater.Magnitude /= Count;
+            AvgWater.Direction.Body /= Count;
+            AvgWater.Direction.Mind /= Count;
+            AvgWater.Direction.Spirit /= Count;
+            AvgWater.Direction.Nature /= Count;
+            AvgWater.Meta.Purity /= Count;
+            AvgWater.Meta.Stability /= Count;
+            AvgWater.Meta.Corruption /= Count;
+            AvgWater.Meta.Potency /= Count;
+            AvgWater.Direction.NormalizeSum();
+
+            // Кипячение: повышаем чистоту и стабильность, снижаем искажение и порчу
+            AvgWater.Magnitude = FMath::Clamp(AvgWater.Magnitude * 0.8f, 0.0f, 1.0f);
+            AvgWater.Meta.Purity = FMath::Clamp(AvgWater.Meta.Purity + 0.2f, 0.0f, 1.0f);
+            AvgWater.Meta.Stability = FMath::Clamp(AvgWater.Meta.Stability + 0.1f, 0.0f, 1.0f);
+            AvgWater.Meta.Distortion = FMath::Clamp(AvgWater.Meta.Distortion - 0.2f, 0.0f, 1.0f);
+            AvgWater.Meta.Corruption = FMath::Clamp(AvgWater.Meta.Corruption - 0.1f, 0.0f, 1.0f);
+            // Направление слегка к центру
+            FVector4 DirVec(AvgWater.Direction.Body, AvgWater.Direction.Mind, AvgWater.Direction.Spirit, AvgWater.Direction.Nature);
+            FVector4 Center(0.25f, 0.25f, 0.25f, 0.25f);
+            DirVec = FMath::Lerp(DirVec, Center, 0.2f);
+            float Sum = DirVec.X + DirVec.Y + DirVec.Z + DirVec.W;
+            if (Sum > KINDA_SMALL_NUMBER)
+            {
+                AvgWater.Direction.Body = DirVec.X / Sum;
+                AvgWater.Direction.Mind = DirVec.Y / Sum;
+                AvgWater.Direction.Spirit = DirVec.Z / Sum;
+                AvgWater.Direction.Nature = DirVec.W / Sum;
+            }
+            else
+            {
+                AvgWater.Direction.Body = AvgWater.Direction.Mind = AvgWater.Direction.Spirit = AvgWater.Direction.Nature = 0.25f;
+            }
+
+            UE_LOG(LogHerbalist, Log, TEXT("Boiled water produced: Mag=%.2f Purity=%.2f Dist=%.2f"), AvgWater.Magnitude, AvgWater.Meta.Purity, AvgWater.Meta.Distortion);
+            return AvgWater;
+        }
+
+        // 2. Нет воды -> зола
+        if (WaterStates.Num() == 0)
+        {
+            FRealState Ash;
+            Ash.Magnitude = 0.1f;
+            Ash.Meta.Distortion = 0.9f;
+            Ash.Meta.Stability = 0.0f;
+            Ash.Meta.Purity = 0.0f;
+            Ash.Meta.Potency = 0.0f;
+            Ash.Meta.Resonance = 0.0f;
+            Ash.Meta.Corruption = 0.9f;
+            Ash.Direction.Body = Ash.Direction.Mind = Ash.Direction.Spirit = Ash.Direction.Nature = 0.25f;
+            UE_LOG(LogHerbalist, Warning, TEXT("No water in ingredients! Produced ash."));
+            return Ash;
+        }
+
+        // 3. Обычный случай: есть и вода, и не-вода
+        // 3.1 Fold для не-водных ингредиентов
+        FRealState NonWaterAggregated = Fold(NonWaterStates);
+
+        // 3.2 Агрегируем воду (среднее)
+        FRealState WaterAggregated;
+        WaterAggregated.Magnitude = 0.0f;
+        WaterAggregated.Direction.Body = 0.0f; WaterAggregated.Direction.Mind = 0.0f;
+        WaterAggregated.Direction.Spirit = 0.0f; WaterAggregated.Direction.Nature = 0.0f;
+        WaterAggregated.Meta.Purity = 0.0f; WaterAggregated.Meta.Stability = 0.0f;
+        WaterAggregated.Meta.Corruption = 0.0f; WaterAggregated.Meta.Potency = 0.0f;
+        // resonance, distortion не суммируем
+        for (const FRealState& W : WaterStates)
+        {
+            WaterAggregated.Magnitude += W.Magnitude;
+            WaterAggregated.Direction.Body += W.Direction.Body;
+            WaterAggregated.Direction.Mind += W.Direction.Mind;
+            WaterAggregated.Direction.Spirit += W.Direction.Spirit;
+            WaterAggregated.Direction.Nature += W.Direction.Nature;
+            WaterAggregated.Meta.Purity += W.Meta.Purity;
+            WaterAggregated.Meta.Stability += W.Meta.Stability;
+            WaterAggregated.Meta.Corruption += W.Meta.Corruption;
+            WaterAggregated.Meta.Potency += W.Meta.Potency;
+        }
+        float WaterCount = (float)WaterStates.Num();
+        WaterAggregated.Magnitude /= WaterCount;
+        WaterAggregated.Direction.Body /= WaterCount;
+        WaterAggregated.Direction.Mind /= WaterCount;
+        WaterAggregated.Direction.Spirit /= WaterCount;
+        WaterAggregated.Direction.Nature /= WaterCount;
+        WaterAggregated.Meta.Purity /= WaterCount;
+        WaterAggregated.Meta.Stability /= WaterCount;
+        WaterAggregated.Meta.Corruption /= WaterCount;
+        WaterAggregated.Meta.Potency /= WaterCount;
+        WaterAggregated.Direction.NormalizeSum();
+
+        // 3.3 Вычисляем долю воды
+        float TotalNonWaterVolume = (float)NonWaterStates.Num();
+        float TotalWaterVolume = WaterCount;
+        float WaterRatio = TotalWaterVolume / (TotalWaterVolume + TotalNonWaterVolume);
+        const float MaxWaterRatio = 0.8f;
+        float EffectiveWaterRatio = FMath::Min(WaterRatio, MaxWaterRatio);
+        float DilutionPenalty = (WaterRatio > MaxWaterRatio) ? 0.2f : 1.0f;
+
+        // 3.4 Смешиваем параметры
+        const float NonWaterWeight = 1.0f - EffectiveWaterRatio;
+        const float WaterWeight = EffectiveWaterRatio;
+
+        FRealState Aggregated;
+        Aggregated.Magnitude = NonWaterAggregated.Magnitude * (1.0f - EffectiveWaterRatio * 0.8f) * DilutionPenalty;
+        Aggregated.Magnitude = FMath::Clamp(Aggregated.Magnitude, 0.0f, 1.0f);
+
+        Aggregated.Direction.Body = NonWaterAggregated.Direction.Body * NonWaterWeight + WaterAggregated.Direction.Body * WaterWeight;
+        Aggregated.Direction.Mind = NonWaterAggregated.Direction.Mind * NonWaterWeight + WaterAggregated.Direction.Mind * WaterWeight;
+        Aggregated.Direction.Spirit = NonWaterAggregated.Direction.Spirit * NonWaterWeight + WaterAggregated.Direction.Spirit * WaterWeight;
+        Aggregated.Direction.Nature = NonWaterAggregated.Direction.Nature * NonWaterWeight + WaterAggregated.Direction.Nature * WaterWeight;
+        Aggregated.Direction.NormalizeSum();
+
+        Aggregated.Meta.Purity = NonWaterAggregated.Meta.Purity * NonWaterWeight + WaterAggregated.Meta.Purity * WaterWeight;
+        Aggregated.Meta.Stability = NonWaterAggregated.Meta.Stability * NonWaterWeight + WaterAggregated.Meta.Stability * WaterWeight;
+        Aggregated.Meta.Corruption = NonWaterAggregated.Meta.Corruption * NonWaterWeight + WaterAggregated.Meta.Corruption * WaterWeight;
+        Aggregated.Meta.Potency = NonWaterAggregated.Meta.Potency * NonWaterWeight + WaterAggregated.Meta.Potency * WaterWeight;
+        // resonance и distortion не зависят от воды
+        Aggregated.Meta.Resonance = NonWaterAggregated.Meta.Resonance;
+        Aggregated.Meta.Distortion = NonWaterAggregated.Meta.Distortion;
+
+        // Клиппинг
+        Aggregated.Meta.Purity = FMath::Clamp(Aggregated.Meta.Purity, 0.0f, 1.0f);
+        Aggregated.Meta.Stability = FMath::Clamp(Aggregated.Meta.Stability, 0.0f, 1.0f);
+        Aggregated.Meta.Corruption = FMath::Clamp(Aggregated.Meta.Corruption, 0.0f, 1.0f);
+        Aggregated.Meta.Potency = FMath::Clamp(Aggregated.Meta.Potency, 0.0f, 1.0f);
+        Aggregated.Meta.Resonance = FMath::Clamp(Aggregated.Meta.Resonance, 0.0f, 1.0f);
+        Aggregated.Meta.Distortion = FMath::Clamp(Aggregated.Meta.Distortion, 0.0f, 1.0f);
+
+        // ===== ДАЛЬНЕЙШИЙ ПАЙПЛАЙН (без изменений, используем Aggregated) =====
         UE_LOG(LogHerbalist, Warning, TEXT("[FOLD] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f) | Dist:%.3f Stab:%.3f Pur:%.3f Pot:%.3f Res:%.3f Cor:%.3f"),
             Aggregated.Magnitude,
             Aggregated.Direction.Body, Aggregated.Direction.Mind,
@@ -231,7 +391,6 @@ namespace HerbalistCore
         Delta.Meta.Stability = FMath::Clamp(Delta.Meta.Stability, -1.0f, 1.0f);
         Delta.Meta.Purity = FMath::Clamp(Delta.Meta.Purity, -1.0f, 1.0f);
 
-        // Нормализация дельты направления
         Delta.Direction.NormalizeSum();
 
         UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA_STRUCT] Boost: %.2f, Suppress: %.2f, Stability+%.3f, Purity+%.3f"),
@@ -240,7 +399,6 @@ namespace HerbalistCore
         // 9. Применение дельты с интерполяцией направления
         FRealState NewState = CurrentBiomeState;
 
-        // Интерполяция направления: целевой вектор = текущий + Delta (с последующей нормализацией)
         FDirection NewDir;
         NewDir.Body = NewState.Direction.Body + Delta.Direction.Body;
         NewDir.Mind = NewState.Direction.Mind + Delta.Direction.Mind;
@@ -248,7 +406,6 @@ namespace HerbalistCore
         NewDir.Nature = NewState.Direction.Nature + Delta.Direction.Nature;
         NewDir.NormalizeSum();
 
-        // Смешивание с исходным направлением в зависимости от силы изменения
         float InterpAlpha = FMath::Clamp(Delta.Magnitude * 2.0f, 0.0f, 1.0f);
         NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, NewDir.Body, InterpAlpha);
         NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, NewDir.Mind, InterpAlpha);
@@ -264,7 +421,6 @@ namespace HerbalistCore
         NewState.Meta.Resonance += Delta.Meta.Resonance;
         NewState.Meta.Corruption += Delta.Meta.Corruption;
 
-        // 10. Нормализация и клиппинг
         NewState.Direction.NormalizeSum();
 
         NewState.Magnitude = FMath::Clamp(NewState.Magnitude, 0.0f, 1.0f);
@@ -275,7 +431,6 @@ namespace HerbalistCore
         NewState.Meta.Resonance = FMath::Clamp(NewState.Meta.Resonance, 0.0f, 1.0f);
         NewState.Meta.Corruption = FMath::Clamp(NewState.Meta.Corruption, 0.0f, 1.0f);
 
-        // 11. Структурный фактор
         float Integrity = (1.0f - NewState.Meta.Distortion * 0.7f) * (1.0f + NewState.Meta.Stability);
         float StructureFactor = FMath::Clamp(Integrity, 0.0f, 1.0f);
         NewState.Magnitude *= StructureFactor;

@@ -54,6 +54,12 @@ FRealState FHerbalistHarvest::GetBaseResourceParams(EResourceType Type)
         R.Meta.Distortion = 0.75f; R.Meta.Stability = 0.40f; R.Meta.Purity = 0.35f;
         R.Meta.Potency = 0.55f; R.Meta.Resonance = 0.65f; R.Meta.Corruption = 0.70f;
         break;
+    case EResourceType::Water:
+        R.Magnitude = 0.5f;
+        R.Direction.Body = R.Direction.Mind = R.Direction.Spirit = R.Direction.Nature = 0.25f;
+        R.Meta.Potency = 0.5f; R.Meta.Purity = 0.5f; R.Meta.Stability = 0.5f;
+        R.Meta.Resonance = 0.5f; R.Meta.Corruption = 0.0f; R.Meta.Distortion = 0.0f;
+        break;
     default:
         R.Magnitude = 0.5f;
         R.Direction.Body = R.Direction.Mind = R.Direction.Spirit = R.Direction.Nature = 0.5f;
@@ -129,6 +135,7 @@ FString FHerbalistHarvest::GetResourceName(EResourceType Type, bool bEnglish)
     case EResourceType::Moss:        return bEnglish ? TEXT("Moss") : TEXT("Мох");
     case EResourceType::Cranberry:   return bEnglish ? TEXT("Cranberry") : TEXT("Клюква");
     case EResourceType::BogOre:      return bEnglish ? TEXT("Bog Ore") : TEXT("Болотная руда");
+    case EResourceType::Water:       return bEnglish ? TEXT("Water") : TEXT("Вода");
     default: return TEXT("Unknown");
     }
 }
