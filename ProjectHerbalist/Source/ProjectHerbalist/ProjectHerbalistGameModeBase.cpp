@@ -38,6 +38,7 @@ void AProjectHerbalistGameModeBase::SpawnWorldManager()
             WorldManager->MaxHarvestImpactOnDistortion = MaxHarvestImpactOnDistortion;
             WorldManager->MaxHarvestImpactOnMagnitude = MaxHarvestImpactOnMagnitude;
             WorldManager->HarvestStressDecayRate = HarvestStressDecayRate;
+            // Исправлено: прямой доступ к публичному полю bEnableRecovery
             WorldManager->bEnableRecovery = bEnableEcologyRecovery;
 
             UE_LOG(LogHerbalist, Log, TEXT("WorldManager spawned with interpolation speed %.3f, ecology inc=%.4f thresh=%.2f decay=%.4f"),

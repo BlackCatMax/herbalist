@@ -5,6 +5,7 @@
 #include "EngineUtils.h"
 #include "DrawDebugHelpers.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/Storage/StorageContainer.h"
 #include "UI/InventoryWidget.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -38,6 +39,7 @@ void AHerbalistPlayerController::SetupInputComponent()
         EnhancedInputComponent->BindAction(InfoAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Info);
         EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Inventory);
         EnhancedInputComponent->BindAction(ApplyAlchemyAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::ApplyAlchemy);
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Interact);
     }
 }
 
@@ -59,51 +61,85 @@ void AHerbalistPlayerController::Look(const FInputActionValue& Value)
 }
 
 void AHerbalistPlayerController::Harvest() { OnLeftClick(); }
-void AHerbalistPlayerController::Info()    { OnRightClick(); }
+void AHerbalistPlayerController::Info() { OnRightClick(); }
 void AHerbalistPlayerController::ApplyAlchemy() { OnApplyAlchemyKey(); }
 
-void AHerbalistPlayerController::Inventory()
+void AHerbalistPlayerController::CloseAnyWidget()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("Inventory() called"));
-    // Если виджет уже существует и открыт, закрываем
+    UE_LOG(LogHerbalist, Log, TEXT("CloseAnyWidget called"));
+
     if (InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
     {
         InventoryWidgetInstance->RemoveFromParent();
-        InventoryWidgetInstance = nullptr; // обязательно!
-        bShowMouseCursor = false;
-        FInputModeGameOnly InputMode;
-        SetInputMode(InputMode);
+        InventoryWidgetInstance = nullptr;
+        UE_LOG(LogHerbalist, Log, TEXT("Inventory widget removed"));
+    }
+
+    bShowMouseCursor = false;
+    FInputModeGameOnly GameMode;
+    SetInputMode(GameMode);
+    SetIgnoreLookInput(false);
+    bIsAnyWidgetOpen = false;
+
+    UE_LOG(LogHerbalist, Log, TEXT("CloseAnyWidget finished, bIsAnyWidgetOpen=%d"), bIsAnyWidgetOpen);
+}
+
+void AHerbalistPlayerController::Inventory()
+{
+    UE_LOG(LogHerbalist, Log, TEXT("Inventory() called, bIsAnyWidgetOpen=%d, InventoryWidgetInstance=%p"),
+        bIsAnyWidgetOpen, InventoryWidgetInstance);
+
+    // Если виджет открыт – закрываем его
+    if (bIsAnyWidgetOpen && InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
+    {
+        UE_LOG(LogHerbalist, Log, TEXT("Inventory widget is open, closing"));
+        CloseAnyWidget();
         return;
     }
-    // Если виджет существует, но не открыт, уничтожаем его и создадим новый
+
+    // Если открыт другой виджет (например, сундук) – не открываем инвентарь
+    if (bIsAnyWidgetOpen)
+    {
+        UE_LOG(LogHerbalist, Log, TEXT("Inventory: another widget is open, ignoring"));
+        return;
+    }
+
     if (InventoryWidgetInstance)
     {
         InventoryWidgetInstance->Destruct();
         InventoryWidgetInstance = nullptr;
     }
-    // Создаём новый виджет
+
     if (!InventoryWidgetClass)
     {
         UE_LOG(LogHerbalist, Error, TEXT("InventoryWidgetClass is null"));
         return;
     }
+
     InventoryWidgetInstance = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
     if (!InventoryWidgetInstance)
     {
         UE_LOG(LogHerbalist, Error, TEXT("Failed to create widget"));
         return;
     }
+
     if (!InventoryComponent)
     {
         UE_LOG(LogHerbalist, Error, TEXT("InventoryComponent is null"));
         return;
     }
+
     InventoryWidgetInstance->BindInventory(InventoryComponent);
     InventoryWidgetInstance->AddToViewport();
+
     bShowMouseCursor = true;
     FInputModeGameAndUI InputMode;
     InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
     SetInputMode(InputMode);
+    SetIgnoreLookInput(true);
+    bIsAnyWidgetOpen = true;
+
+    UE_LOG(LogHerbalist, Log, TEXT("Inventory widget created and opened, bIsAnyWidgetOpen=%d"), bIsAnyWidgetOpen);
 }
 
 bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
@@ -183,6 +219,41 @@ void AHerbalistPlayerController::OnApplyAlchemyKey()
     }
 }
 
+void AHerbalistPlayerController::Interact()
+{
+    UE_LOG(LogHerbalist, Log, TEXT("Interact() called (E key), bIsAnyWidgetOpen=%d"), bIsAnyWidgetOpen);
+
+    FHitResult Hit;
+    if (GetHitResultFromCamera(Hit))
+    {
+        AActor* HitActor = Hit.GetActor();
+        UE_LOG(LogHerbalist, Log, TEXT("Hit actor: %s"), HitActor ? *HitActor->GetName() : TEXT("None"));
+
+        AStorageContainer* Storage = Cast<AStorageContainer>(HitActor);
+        if (Storage)
+        {
+            UE_LOG(LogHerbalist, Log, TEXT("Storage detected, calling OnInteract"));
+            Storage->OnInteract(this);
+            return;
+        }
+
+        // Иначе – сбор ресурса (не мешаем виджетам)
+        AGridWorldManager* WorldManager = nullptr;
+        for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
+        if (WorldManager)
+        {
+            FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
+            int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
+            int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
+            if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
+            {
+                DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Cyan, false, 1.0f, 0, 2.0f);
+                HarvestTest(X, Y);
+            }
+        }
+    }
+}
+
 void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y)
 {
     AGridWorldManager* WorldManager = nullptr;
@@ -201,7 +272,7 @@ void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
 
 void AHerbalistPlayerController::ShowInventory()
 {
-    Inventory(); // консольная команда вызывает тот же метод
+    Inventory();
 }
 
 void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)

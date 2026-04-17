@@ -11,7 +11,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 
-AGridWorldManager::AGridWorldManager()
+    AGridWorldManager::AGridWorldManager()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = true;
@@ -557,6 +557,21 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
 
 void AGridWorldManager::HarvestTest(int32 X, int32 Y)
 {
+    // ЗАЩИТА ОТ ДВОЙНОГО ВЫЗОВА (добавлено)
+    int32 CellIdx = Y * GridSizeX + X;
+    float CurrentTime = GetWorld()->GetTimeSeconds();
+    if (LastHarvestTimeMap.Contains(CellIdx))
+    {
+        float TimeSinceLast = CurrentTime - LastHarvestTimeMap[CellIdx];
+        if (TimeSinceLast < HarvestCooldown)
+        {
+            UE_LOG(LogHerbalist, Warning, TEXT("HarvestTest: too fast from (%d,%d), ignored (%.3f s)"), X, Y, TimeSinceLast);
+            return;
+        }
+    }
+    LastHarvestTimeMap.Add(CellIdx, CurrentTime);
+
+    // ОРИГИНАЛЬНЫЙ КОД HARVESTTEST (без изменений)
     FRealState Res = HarvestFromCellSimple(X, Y);
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
     if (PC && PC->InventoryComponent)

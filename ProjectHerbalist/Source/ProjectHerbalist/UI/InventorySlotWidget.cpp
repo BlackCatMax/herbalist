@@ -1,86 +1,130 @@
 #include "UI/InventorySlotWidget.h"
 #include "ProjectHerbalist.h"
 #include "Core/Harvest/HerbalistHarvest.h"
-#include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Player/HerbalistPlayerController.h"
+#include "UI/InventoryTransferWidget.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
     UE_LOG(LogHerbalist, Log, TEXT("InitializeSlot: index=%d, type=%d"), InIndex, (int32)InItem.Type);
-    SlotIndex = InIndex;          // может пригодиться для перетаскивания
+    SlotIndex = InIndex;
     InventoryComponent = InInventory;
-    CachedItem = InItem;          // <-- сохраняем копию
+    CachedItem = InItem;
     UpdateDisplay();
 }
 
 void UInventorySlotWidget::UpdateDisplay()
 {
-    // Используем CachedItem, а не InventoryComponent->GetItems()[SlotIndex]
     if (CachedItem.Type == EResourceType::None && CachedItem.State.Magnitude < 0.01f)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("UpdateDisplay: slot %d invalid (empty), setting Empty"), SlotIndex);
         if (ItemNameText)
-        {
             ItemNameText->SetText(FText::FromString(TEXT("Empty")));
-        }
         return;
     }
 
     FString Name = FHerbalistHarvest::GetResourceName(CachedItem.Type, false);
     UE_LOG(LogHerbalist, Log, TEXT("UpdateDisplay: slot %d, type=%d, name=%s"), SlotIndex, (int32)CachedItem.Type, *Name);
     if (ItemNameText)
-    {
         ItemNameText->SetText(FText::FromString(Name));
-    }
 }
 
-FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+FReply UInventorySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-    if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && InventoryComponent && SlotIndex < InventoryComponent->GetItems().Num())
-    {
-        return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
-    }
+    UE_LOG(LogHerbalist, Log, TEXT("Double click on slot %d"), SlotIndex);
+    if (TryMoveToOtherInventory())
+        return FReply::Handled();
     return FReply::Unhandled();
 }
 
-void UInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
+bool UInventorySlotWidget::TryMoveToOtherInventory()
 {
-    if (!InventoryComponent || SlotIndex < 0 || SlotIndex >= InventoryComponent->GetItems().Num())
-        return;
-
-    UInventoryDragDropOperation* DragOp = NewObject<UInventoryDragDropOperation>();
-    DragOp->SourceIndex = SlotIndex;
-    DragOp->SourceInventory = InventoryComponent;
-    DragOp->DefaultDragVisual = this;
-    OutOperation = DragOp;
-}
-
-bool UInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
-{
-    UInventoryDragDropOperation* DragOp = Cast<UInventoryDragDropOperation>(InOperation);
-    if (!DragOp || !DragOp->SourceInventory)
-        return false;
-
-    return TryMoveItem(DragOp);
-}
-
-bool UInventorySlotWidget::TryMoveItem(UInventoryDragDropOperation* DragOp)
-{
-    if (DragOp->SourceInventory == InventoryComponent)
+    // Проверяем, что предмет в слоте валидный
+    if (!InventoryComponent || CachedItem.Type == EResourceType::None || CachedItem.State.Magnitude < 0.01f)
     {
-        if (SlotIndex == DragOp->SourceIndex) return false;
-        TArray<FInventoryItem> Items = InventoryComponent->GetItems();
-        if (!Items.IsValidIndex(DragOp->SourceIndex) || !Items.IsValidIndex(SlotIndex))
-            return false;
-        Items.Swap(DragOp->SourceIndex, SlotIndex);
-        InventoryComponent->Clear();
-        for (const FInventoryItem& Item : Items)
-        {
-            InventoryComponent->AddItem(Item.State, Item.Type);
-        }
-        InventoryComponent->OnInventoryChanged.Broadcast();
-        return true;
+        UE_LOG(LogHerbalist, Warning, TEXT("TryMoveToOtherInventory: invalid cached item"));
+        return false;
     }
-    return false;
+
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (!PC)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("TryMoveToOtherInventory: no PlayerController"));
+        return false;
+    }
+
+    // Только если открыт виджет сундука
+    if (!PC->CurrentTransferWidget || !PC->CurrentTransferWidget->IsInViewport())
+    {
+        UE_LOG(LogHerbalist, Log, TEXT("TryMoveToOtherInventory: transfer widget not open"));
+        return false;
+    }
+
+    // Определяем источник и цель
+    UHerbalistInventoryComponent* Source = InventoryComponent;
+    UHerbalistInventoryComponent* Target = nullptr;
+
+    if (Source == PC->InventoryComponent)
+        Target = PC->CurrentTransferWidget->GetRightInventory();   // из игрока в сундук
+    else if (Source == PC->CurrentTransferWidget->GetLeftInventory() || Source == PC->CurrentTransferWidget->GetRightInventory())
+        Target = PC->InventoryComponent;                           // из сундука в игрока
+    else
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("TryMoveToOtherInventory: unknown source inventory"));
+        return false;
+    }
+
+    if (!Target)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("TryMoveToOtherInventory: target inventory is null"));
+        return false;
+    }
+
+    // Проверяем место в цели
+    if (Target->GetItems().Num() >= Target->MaxSlots)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("TryMoveToOtherInventory: target inventory is full"));
+        return false;
+    }
+
+    // Находим реальный индекс предмета CachedItem в источнике (по уникальным свойствам)
+    int32 RealIndex = -1;
+    TArray<FInventoryItem> SourceItems = Source->GetItems();
+    for (int32 i = 0; i < SourceItems.Num(); ++i)
+    {
+        const FInventoryItem& Item = SourceItems[i];
+        if (Item.Type == CachedItem.Type &&
+            FMath::IsNearlyEqual(Item.State.Magnitude, CachedItem.State.Magnitude, 0.01f) &&
+            FMath::IsNearlyEqual(Item.State.Meta.Distortion, CachedItem.State.Meta.Distortion, 0.01f))
+        {
+            RealIndex = i;
+            break;
+        }
+    }
+
+    if (RealIndex == -1)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("TryMoveToOtherInventory: cannot find cached item in source inventory (type %d)"), (int32)CachedItem.Type);
+        return false;
+    }
+
+    FInventoryItem Item = SourceItems[RealIndex];
+    UE_LOG(LogHerbalist, Log, TEXT("TryMoveToOtherInventory: moving item type %d from index %d"), (int32)Item.Type, RealIndex);
+
+    // Перемещение
+    Source->RemoveItem(RealIndex);
+    bool bAdded = Target->AddItem(Item.State, Item.Type);
+
+    if (!bAdded)
+    {
+        // Откат: возвращаем предмет обратно
+        Source->AddItem(Item.State, Item.Type);
+        UE_LOG(LogHerbalist, Error, TEXT("TryMoveToOtherInventory: failed to add to target, rolled back"));
+        return false;
+    }
+
+    UE_LOG(LogHerbalist, Log, TEXT("TryMoveToOtherInventory: successfully moved item type %d"), (int32)Item.Type);
+    return true;
 }

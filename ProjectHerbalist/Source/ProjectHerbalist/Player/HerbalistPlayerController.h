@@ -7,8 +7,11 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "UI/InventoryWidget.h"           // <-- добавить эту строку
+#include "UI/InventoryWidget.h"
 #include "HerbalistPlayerController.generated.h"
+
+class AStorageContainer;
+class UInventoryTransferWidget;
 
 UCLASS()
 class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
@@ -21,20 +24,25 @@ public:
     virtual void SetupInputComponent() override;
     virtual void BeginPlay() override;
 
-    // Компонент инвентаря (будет создан автоматически)
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
     UHerbalistInventoryComponent* InventoryComponent;
 
-    // Команды для тестирования (консоль)
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    bool bIsAnyWidgetOpen = false;
+
+    // Текущий открытый виджет сундука (для двойного клика)
+    UPROPERTY()
+    class UInventoryTransferWidget* CurrentTransferWidget = nullptr;
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void CloseAnyWidget();
+
     UFUNCTION(Exec)
     void HarvestTest(int32 X, int32 Y);
-
     UFUNCTION(Exec)
     void ApplyTest(int32 X, int32 Y);
-
     UFUNCTION(Exec)
     void ShowInventory();
-
     UFUNCTION(Exec)
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
 
@@ -55,8 +63,9 @@ protected:
     class UInputAction* InventoryAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     class UInputAction* ApplyAlchemyAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    class UInputAction* InteractAction;
 
-    // Виджет инвентаря (назначается в Blueprint)
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UInventoryWidget> InventoryWidgetClass;
 
@@ -66,6 +75,7 @@ protected:
     void Info();
     void Inventory();
     void ApplyAlchemy();
+    void Interact();
 
     bool GetHitResultFromCamera(FHitResult& OutHit);
     void OnLeftClick();

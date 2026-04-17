@@ -2,10 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Core/Inventory/InventoryDragDropOperation.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "InventoryWidget.generated.h"
 
-class UHerbalistInventoryComponent;
 class UInventorySlotWidget;
 class UVerticalBox;
 
@@ -16,6 +15,7 @@ class PROJECTHERBALIST_API UInventoryWidget : public UUserWidget
 
 public:
     void BindInventory(UHerbalistInventoryComponent* InInventory);
+    UHerbalistInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 
 protected:
     virtual void NativeConstruct() override;

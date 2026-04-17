@@ -4,7 +4,9 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/Types/HerbalistCoreTypes.h"
-#include "Core/Inventory/HerbalistInventoryComponent.h" // для FInventoryItem
+#include "Core/Types/BiomeTypes.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
+#include "Math/RandomStream.h"
 #include "GridWorldManager.generated.h"
 
 UCLASS()
@@ -15,111 +17,99 @@ class PROJECTHERBALIST_API AGridWorldManager : public AActor
 public:
     AGridWorldManager();
 
-    // Параметры сетки
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
-    int32 GridSizeX = 40;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
-    int32 GridSizeY = 40;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
+    virtual void BeginPlay() override;
+    virtual void Tick(float DeltaTime) override;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
+    int32 GridSizeX = 20;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
+    int32 GridSizeY = 20;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     float CellSize = 100.0f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grid")
-    float CellHeight = 50.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
+    float CellHeight = 10.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulation")
-    float StateInterpolationSpeed = 5.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Simulation")
-    int32 PropagationDepth = 1;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
+    float ResourceRegrowthTime = 10.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
     bool bHarvestAffectsBiome = true;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
     float HarvestStressIncrement = 0.1f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
-    float HarvestStressThreshold = 0.5f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
+    float HarvestStressDecayRate = 0.05f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
+    float HarvestStressThreshold = 0.3f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
     float MaxHarvestImpactOnDistortion = 0.3f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
     float MaxHarvestImpactOnMagnitude = 0.2f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
-    float HarvestStressDecayRate = 0.5f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvest")
-    bool bEnableRecovery = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Regrowth")
-    float ResourceRegrowthTime = 5.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interpolation")
+    float StateInterpolationSpeed = 2.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
-    float BorderThickness = 5.0f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Propagation")
+    int32 PropagationDepth = 2;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bEnableDebugDraw = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    float BorderThickness = 2.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery")
+    bool bEnableRecovery = true;
 
     FGridCell* GetCell(int32 X, int32 Y);
     const FGridCell* GetCellConst(int32 X, int32 Y) const;
 
-    UFUNCTION(BlueprintCallable, Category = "Grid")
     void SetTargetState(int32 X, int32 Y, const FRealState& NewState);
-
-    UFUNCTION(BlueprintCallable, Category = "Harvest")
-    FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions);
-
-    UFUNCTION(BlueprintCallable, Category = "Harvest")
+    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng);
+    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng);
+    void PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, float Falloff, int32 Depth);
+    FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
     FRealState HarvestFromCellSimple(int32 X, int32 Y);
 
-    // Новая перегрузка для алхимии с FInventoryItem
-    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng);
-
-    // Старая перегрузка для обратной совместимости
-    UFUNCTION(BlueprintCallable, Category = "Alchemy")
-    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng);
-
-    UFUNCTION(BlueprintCallable, Category = "Selection")
     void SelectCell(int32 X, int32 Y);
-
-    UFUNCTION(BlueprintCallable, Category = "Selection")
     FString GetSelectedCellInfo() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Selection")
+    UFUNCTION(BlueprintCallable, Category = "Debug")
     void GetSelectedCellInfoBP(int32& X, int32& Y, FString& ResourceName, float& RegrowthTimer, float& Distortion, float& HarvestStress);
 
-    UFUNCTION(BlueprintCallable, Category = "Test")
+    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void HarvestTest(int32 X, int32 Y);
-
-    UFUNCTION(BlueprintCallable, Category = "Test")
+    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
-
-    UFUNCTION(BlueprintCallable, Category = "Test")
+    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ApplyTest(int32 X, int32 Y);
-
-    UFUNCTION(BlueprintCallable, Category = "Test")
+    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowInventory();
 
 protected:
-    virtual void BeginPlay() override;
-    virtual void Tick(float DeltaTime) override;
-
-private:
     TArray<FGridCell> Cells;
+    FRandomStream WorldRNG;   // изменено с FRngState на FRandomStream
+
     TSet<int32> DirtyCells;
     TSet<int32> RegrowingCells;
     TSet<int32> StressCells;
     bool bInterpolationActive = false;
-    int32 SelectedX = -1, SelectedY = -1;
-    FTimerHandle DebugDrawTimer;
 
-    FRandomStream WorldRNG;
+    // Защита от двойного сбора
+    TMap<int32, float> LastHarvestTimeMap;
+    const float HarvestCooldown = 0.2f;
 
     void InitializeCells();
     void RegenerateCellResource(FGridCell& Cell);
+    void InterpolateCell(FGridCell& Cell, float DeltaTime);
     void UpdateMemory(FMemoryState& Memory, const FRealState& NewState, float Rate);
     void RecalculateDistortionFromHarvestStress(FGridCell& Cell);
-    void PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, float Falloff, int32 Depth);
-    void InterpolateCell(FGridCell& Cell, float DeltaTime);
     void RedrawDebugBoxes();
 
+    void MarkDirty(int32 X, int32 Y) { DirtyCells.Add(Y * GridSizeX + X); }
+    void MarkRegrowing(int32 X, int32 Y) { RegrowingCells.Add(Y * GridSizeX + X); }
+    void UnmarkRegrowing(int32 X, int32 Y) { RegrowingCells.Remove(Y * GridSizeX + X); }
+    void MarkStress(int32 X, int32 Y) { StressCells.Add(Y * GridSizeX + X); }
+
     inline int32 GetCellIndex(int32 X, int32 Y) const { return Y * GridSizeX + X; }
-    inline void MarkDirty(int32 X, int32 Y) { DirtyCells.Add(GetCellIndex(X, Y)); }
-    inline void MarkStress(int32 X, int32 Y) { StressCells.Add(GetCellIndex(X, Y)); }
-    inline void MarkRegrowing(int32 X, int32 Y) { RegrowingCells.Add(GetCellIndex(X, Y)); }
-    inline void UnmarkRegrowing(int32 X, int32 Y) { RegrowingCells.Remove(GetCellIndex(X, Y)); }
+
+private:
+    int32 SelectedX = -1, SelectedY = -1;
+    FTimerHandle DebugDrawTimer;
 };

@@ -7,8 +7,6 @@
 
 class UImage;
 class UTextBlock;
-class UHerbalistInventoryComponent;
-class UInventoryDragDropOperation;
 
 UCLASS()
 class PROJECTHERBALIST_API UInventorySlotWidget : public UUserWidget
@@ -20,9 +18,7 @@ public:
     void Refresh();
 
 protected:
-    virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-    virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
-    virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+    virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
     UPROPERTY(meta = (BindWidget))
     UImage* ItemIcon;
@@ -36,7 +32,7 @@ private:
     UHerbalistInventoryComponent* InventoryComponent = nullptr;
 
     void UpdateDisplay();
-    bool TryMoveItem(UInventoryDragDropOperation* DragOp);
+    bool TryMoveToOtherInventory();
 
     FInventoryItem CachedItem;
 };
