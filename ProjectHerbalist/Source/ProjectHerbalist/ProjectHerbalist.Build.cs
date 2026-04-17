@@ -12,7 +12,10 @@ public class ProjectHerbalist : ModuleRules
             "CoreUObject",
             "Engine",
             "InputCore",
-            "EnhancedInput"
+            "EnhancedInput",
+            "UMG",         // для UUserWidget
+            "Slate",       // для FSlateDrawElement
+            "SlateCore"    // для FSlateDrawElement::MakeLines и др.
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -25,10 +28,11 @@ public class ProjectHerbalist : ModuleRules
             "ProjectHerbalist/Core/Pipeline",
             "ProjectHerbalist/Core/World",
             "ProjectHerbalist/Core/Harvest",
-            "ProjectHerbalist/Core/Inventory",   // новая папка для инвентаря
-            "ProjectHerbalist/Core/Alchemy",     // для будущего алхимического сервиса
-            "ProjectHerbalist/Core/Storage",     // для будущих акторов-хранилищ
-            "ProjectHerbalist/Player"
+            "ProjectHerbalist/Core/Inventory",
+            "ProjectHerbalist/Core/Alchemy",
+            "ProjectHerbalist/Core/Storage",
+            "ProjectHerbalist/Player",
+            "ProjectHerbalist/UI"  // добавить путь к UI
         });
     }
 }

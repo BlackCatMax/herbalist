@@ -1,5 +1,4 @@
-// Copyright Project Herbalist. All Rights Reserved.
-
+// HerbalistPlayerController.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -8,6 +7,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
+#include "UI/InventoryWidget.h"           // <-- добавить эту строку
 #include "HerbalistPlayerController.generated.h"
 
 UCLASS()
@@ -56,6 +56,10 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     class UInputAction* ApplyAlchemyAction;
 
+    // Виджет инвентаря (назначается в Blueprint)
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UInventoryWidget> InventoryWidgetClass;
+
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
     void Harvest();
@@ -67,4 +71,8 @@ protected:
     void OnLeftClick();
     void OnRightClick();
     void OnApplyAlchemyKey();
+
+private:
+    UPROPERTY()
+    UInventoryWidget* InventoryWidgetInstance = nullptr;
 };

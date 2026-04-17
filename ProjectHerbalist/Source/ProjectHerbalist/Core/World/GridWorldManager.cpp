@@ -565,7 +565,19 @@ void AGridWorldManager::HarvestTest(int32 X, int32 Y)
         if (Cell)
         {
             EResourceType Type = Cell->bIsWater ? EResourceType::Water : Cell->AvailableResource;
-            PC->InventoryComponent->AddItem(Res, Type);
+            UE_LOG(LogHerbalist, Log, TEXT("HarvestTest: cell (%d,%d), Type=%d, bIsWater=%d, AvailableResource=%d"),
+                X, Y, (int32)Type, Cell->bIsWater, (int32)Cell->AvailableResource);
+
+            if (Type != EResourceType::None)
+            {
+                bool bAdded = PC->InventoryComponent->AddItem(Res, Type);
+                UE_LOG(LogHerbalist, Log, TEXT("HarvestTest: AddItem result = %d, Mag=%.2f, Dist=%.2f"),
+                    bAdded, Res.Magnitude, Res.Meta.Distortion);
+            }
+            else
+            {
+                UE_LOG(LogHerbalist, Warning, TEXT("Harvested resource has None type, skipping add to inventory"));
+            }
         }
     }
     FGridCell* Cell = GetCell(X, Y);

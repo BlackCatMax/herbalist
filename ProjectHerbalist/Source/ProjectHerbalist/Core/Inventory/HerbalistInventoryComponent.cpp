@@ -47,3 +47,12 @@ void UHerbalistInventoryComponent::Clear()
     Items.Empty();
     OnInventoryChanged.Broadcast();
 }
+
+void UHerbalistInventoryComponent::SwapItems(int32 IndexA, int32 IndexB)
+{
+    if (Items.IsValidIndex(IndexA) && Items.IsValidIndex(IndexB) && IndexA != IndexB)
+    {
+        Items.Swap(IndexA, IndexB);
+        OnInventoryChanged.Broadcast();
+    }
+}

@@ -1,11 +1,11 @@
-// Copyright Project Herbalist. All Rights Reserved.
-
+// HerbalistPlayerController.cpp
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "DrawDebugHelpers.h"
 #include "Core/World/GridWorldManager.h"
+#include "UI/InventoryWidget.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 
@@ -60,8 +60,51 @@ void AHerbalistPlayerController::Look(const FInputActionValue& Value)
 
 void AHerbalistPlayerController::Harvest() { OnLeftClick(); }
 void AHerbalistPlayerController::Info()    { OnRightClick(); }
-void AHerbalistPlayerController::Inventory() { ShowInventory(); }
 void AHerbalistPlayerController::ApplyAlchemy() { OnApplyAlchemyKey(); }
+
+void AHerbalistPlayerController::Inventory()
+{
+    UE_LOG(LogHerbalist, Log, TEXT("Inventory() called"));
+    // Если виджет уже существует и открыт, закрываем
+    if (InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
+    {
+        InventoryWidgetInstance->RemoveFromParent();
+        InventoryWidgetInstance = nullptr; // обязательно!
+        bShowMouseCursor = false;
+        FInputModeGameOnly InputMode;
+        SetInputMode(InputMode);
+        return;
+    }
+    // Если виджет существует, но не открыт, уничтожаем его и создадим новый
+    if (InventoryWidgetInstance)
+    {
+        InventoryWidgetInstance->Destruct();
+        InventoryWidgetInstance = nullptr;
+    }
+    // Создаём новый виджет
+    if (!InventoryWidgetClass)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("InventoryWidgetClass is null"));
+        return;
+    }
+    InventoryWidgetInstance = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
+    if (!InventoryWidgetInstance)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("Failed to create widget"));
+        return;
+    }
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("InventoryComponent is null"));
+        return;
+    }
+    InventoryWidgetInstance->BindInventory(InventoryComponent);
+    InventoryWidgetInstance->AddToViewport();
+    bShowMouseCursor = true;
+    FInputModeGameAndUI InputMode;
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+}
 
 bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
 {
@@ -158,10 +201,7 @@ void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
 
 void AHerbalistPlayerController::ShowInventory()
 {
-    AGridWorldManager* WorldManager = nullptr;
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-    if (WorldManager) WorldManager->ShowInventory();
-    else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
+    Inventory(); // консольная команда вызывает тот же метод
 }
 
 void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)

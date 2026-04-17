@@ -43,6 +43,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void RemoveItem(int32 Index);
 
+    // Добавить в public секцию после RemoveItem
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void SwapItems(int32 IndexA, int32 IndexB);
+
     // Получить копию всех предметов
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     TArray<FInventoryItem> GetItems() const { return Items; }
