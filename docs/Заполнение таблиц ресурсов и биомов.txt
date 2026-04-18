@@ -1,0 +1,62 @@
+Теперь заполнение таблиц (быстрый способ)
+DT_ResourceBalance
+Удалите старую таблицу (если она есть), чтобы структура обновилась.
+
+Создайте новую – структура FResourceBalanceRow.
+
+Добавьте строки для каждого ресурса (7 штук + вода? Вода не должна спавниться, но можно добавить строку для воды с RarityWeight=0).
+
+Для каждой строки заполните AllowedBiomes:
+
+Нажмите на ячейку → появится (Array). Нажмите + столько раз, сколько биомов нужно.
+
+Для каждого элемента выберите биом из выпадающего списка.
+
+Пример для крапивы: добавьте элементы: MixedForest, BroadleafForest, ForestSteppe, Steppe, Floodplain.
+
+Заполните RarityWeight (35,20,15,15,15,10,10 как ранее).
+
+SeasonMask и TimeOfDayMask пока оставьте 0 (любое время).
+
+PrimaryAssetId = Nettle, Fern и т.д. (совпадает с именем DataAsset).
+
+ResourceType выберите соответствующий.
+
+DT_BiomeDefaults
+Создайте таблицу со структурой FBiomeRow.
+
+Добавьте 8 строк, имена строк: Tundra, Taiga, MixedForest, BroadleafForest, ForestSteppe, Steppe, Floodplain, Bog.
+
+Заполните DisplayName (русские названия).
+
+Остальные поля пока заполните временными значениями (например, Magnitude=0.5, все Meta=0.5, Environment=0.5, Direction=(0.25,0.25,0.25,0.25), EntityActivityBase=0.3). Позже отбалансируете по ГДД.
+
+DataAsset для ресурсов
+Создайте 7 DataAsset'ов (класс HerbalistItemData). Назовите DA_Nettle, DA_Fern, DA_Mushroom, DA_BirchBark, DA_Moss, DA_Cranberry, DA_BogOre. Заполните:
+
+DisplayName (русское название)
+
+ResourceType (выберите из enum)
+
+BaseState – скопируйте значения из старого GetBaseResourceParams. Если не помните, вот они (из HerbalistHarvest.cpp старого):
+
+Nettle: Magnitude=0.55; Direction=(0.5,0.3,0.4,0.8); Meta=(Dist=0.3, Stab=0.5, Pur=0.6, Pot=0.5, Res=0.6, Corr=0.3)
+
+Fern: Magnitude=0.65; Direction=(0.3,0.3,0.7,0.7); Meta=(0.6,0.35,0.4,0.7,0.8,0.5)
+
+Mushroom: Magnitude=0.7; Direction=(0.4,0.8,0.6,0.2); Meta=(0.85,0.25,0.3,0.75,0.85,0.8)
+
+BirchBark: Magnitude=0.5; Direction=(0.6,0.5,0.4,0.5); Meta=(0.25,0.65,0.7,0.45,0.5,0.2)
+
+Moss: Magnitude=0.5; Direction=(0.3,0.3,0.6,0.8); Meta=(0.35,0.55,0.65,0.5,0.65,0.3)
+
+Cranberry: Magnitude=0.55; Direction=(0.4,0.3,0.6,0.7); Meta=(0.5,0.45,0.6,0.5,0.65,0.45)
+
+BogOre: Magnitude=0.6; Direction=(0.8,0.2,0.3,0.7); Meta=(0.75,0.4,0.35,0.55,0.65,0.7)
+
+Вода: создайте отдельный DataAsset DA_Water (ResourceType=Water) с BaseState: Magnitude=0.5; Direction=(0.25,0.25,0.25,0.25); Meta=(Dist=0, Stab=0.5, Pur=0.5, Pot=0.5, Res=0.5, Corr=0). Она не будет спавниться, но может использоваться в алхимии.
+
+Итог
+После заполнения запустите игру, проверьте сбор крапивы в лесу. Должны получаться параметры как раньше. Если нет – проверьте пути к DataTable и DataAsset.
+
+Теперь вы можете легко добавлять новые ресурсы (создать DataAsset, добавить строку в DT_ResourceBalance с нужными биомами). Биомы тоже расширяются: добавили новый в EBiomeType – появится в выпадающем списке в таблице.

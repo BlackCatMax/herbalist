@@ -6,27 +6,6 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "ResourceBalanceRow.generated.h"
 
-// Биомы по ГДД (13 типов) - используется только в C++, не BlueprintType (иначе нужен uint8)
-UENUM()
-enum class EBiomeMask : int32
-{
-    None = 0,
-    Tundra = 1 << 0,
-    ForestTundra = 1 << 1,
-    NorthernTaiga = 1 << 2,
-    MiddleTaiga = 1 << 3,
-    SouthernTaiga = 1 << 4,
-    MixedForest = 1 << 5,
-    BroadleafForest = 1 << 6,
-    ForestSteppe = 1 << 7,
-    Steppe = 1 << 8,
-    SemiDesert = 1 << 9,
-    Floodplain = 1 << 10,
-    RaisedBog = 1 << 11,
-    LowlandBog = 1 << 12,
-};
-ENUM_CLASS_FLAGS(EBiomeMask)
-
 UENUM(BlueprintType, meta = (Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
 enum class ESeasonMask : uint8
 {
@@ -74,9 +53,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Balance")
     int32 RarityWeight = 0;
 
-    // Биомы (битовая маска) - просто int32, без BitmaskEnum в Blueprint
+    // Массив разрешённых биомов (мультивыбор в редакторе)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Balance")
-    int32 BiomeMask = 0;
+    TArray<EBiomeType> AllowedBiomes;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Balance", meta = (Bitmask, BitmaskEnum = "/Script/ProjectHerbalist.ESeasonMask"))
     int32 SeasonMask = 0;

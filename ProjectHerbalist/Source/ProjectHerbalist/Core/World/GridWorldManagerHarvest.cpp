@@ -5,6 +5,8 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Player/HerbalistPlayerController.h"
 
+static constexpr float k_condition = 0.4f;   // объявляем на уровне файла
+
 FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions)
 {
     FGridCell* Cell = GetCell(X, Y);
@@ -13,7 +15,7 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
     if (Cell->bIsWater)
     {
         FRealState Water = Cell->State;
-        constexpr float k_condition = 0.4f;
+        // используем k_condition из файла
         Water.Magnitude += k_condition * Conditions.DeltaMagnitude;
         Water.Direction.Body += k_condition * Conditions.DeltaDirection.Body;
         Water.Direction.Mind += k_condition * Conditions.DeltaDirection.Mind;

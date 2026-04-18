@@ -5,29 +5,25 @@
 #include "Core/Types/BiomeRow.h"
 #include "Core/Types/ResourceBalanceRow.h"
 
+// BiomeTypes.cpp (фрагмент с маппингом)
 static const TMap<EBiomeType, FName> BiomeToNameMap = {
     { EBiomeType::Tundra,          TEXT("Tundra") },
-    { EBiomeType::ForestTundra,    TEXT("ForestTundra") },
-    { EBiomeType::NorthernTaiga,   TEXT("NorthernTaiga") },
-    { EBiomeType::MiddleTaiga,     TEXT("MiddleTaiga") },
-    { EBiomeType::SouthernTaiga,   TEXT("SouthernTaiga") },
+    { EBiomeType::Taiga,           TEXT("Taiga") },
     { EBiomeType::MixedForest,     TEXT("MixedForest") },
     { EBiomeType::BroadleafForest, TEXT("BroadleafForest") },
     { EBiomeType::ForestSteppe,    TEXT("ForestSteppe") },
     { EBiomeType::Steppe,          TEXT("Steppe") },
-    { EBiomeType::SemiDesert,      TEXT("SemiDesert") },
     { EBiomeType::Floodplain,      TEXT("Floodplain") },
-    { EBiomeType::RaisedBog,       TEXT("RaisedBog") },
-    { EBiomeType::LowlandBog,      TEXT("LowlandBog") }
+    { EBiomeType::Bog,             TEXT("Bog") }
 };
 
 static const TMap<FName, EBiomeType> NameToBiomeMap = []()
-{
-    TMap<FName, EBiomeType> Map;
-    for (const auto& Pair : BiomeToNameMap)
-        Map.Add(Pair.Value, Pair.Key);
-    return Map;
-}();
+    {
+        TMap<FName, EBiomeType> Map;
+        for (const auto& Pair : BiomeToNameMap)
+            Map.Add(Pair.Value, Pair.Key);
+        return Map;
+    }();
 
 FName FBiomeDefaults::BiomeTypeToName(EBiomeType Biome)
 {

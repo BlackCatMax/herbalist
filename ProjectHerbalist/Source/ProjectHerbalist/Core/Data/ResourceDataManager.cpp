@@ -83,7 +83,6 @@ void UResourceDataManager::GetSpawnableResources(
 
     if (!ResourceBalanceTable) return;
 
-    int32 BiomeFlag = 1 << static_cast<int32>(Biome);
     int32 SeasonFlag = static_cast<int32>(Season);
     int32 TimeFlag = static_cast<int32>(TimeOfDay);
 
@@ -93,7 +92,9 @@ void UResourceDataManager::GetSpawnableResources(
         const FResourceBalanceRow* Row = ResourceBalanceTable->FindRow<FResourceBalanceRow>(Name, TEXT("GetSpawnable"));
         if (!Row || Row->RarityWeight <= 0) continue;
 
-        if ((Row->BiomeMask & BiomeFlag) == 0) continue;
+        // Проверка по массиву биомов
+        if (!Row->AllowedBiomes.Contains(Biome)) continue;
+
         if (Row->SeasonMask != 0 && (Row->SeasonMask & SeasonFlag) == 0) continue;
         if (Row->TimeOfDayMask != 0 && (Row->TimeOfDayMask & TimeFlag) == 0) continue;
 

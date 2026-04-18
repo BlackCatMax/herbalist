@@ -9,18 +9,13 @@ UENUM(BlueprintType)
 enum class EBiomeType : uint8
 {
     Tundra,
-    ForestTundra,
-    NorthernTaiga,
-    MiddleTaiga,
-    SouthernTaiga,
+    Taiga,
     MixedForest,
     BroadleafForest,
     ForestSteppe,
     Steppe,
-    SemiDesert,
     Floodplain,
-    RaisedBog,
-    LowlandBog
+    Bog
 };
 
 UENUM(BlueprintType)

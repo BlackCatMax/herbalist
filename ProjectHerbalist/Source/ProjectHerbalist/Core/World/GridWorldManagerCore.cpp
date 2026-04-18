@@ -35,11 +35,14 @@ void AGridWorldManager::InitializeCells()
     {
         // fallback
         AllBiomes = {
-            EBiomeType::Tundra, EBiomeType::ForestTundra, EBiomeType::NorthernTaiga,
-            EBiomeType::MiddleTaiga, EBiomeType::SouthernTaiga, EBiomeType::MixedForest,
-            EBiomeType::BroadleafForest, EBiomeType::ForestSteppe, EBiomeType::Steppe,
-            EBiomeType::SemiDesert, EBiomeType::Floodplain, EBiomeType::RaisedBog,
-            EBiomeType::LowlandBog
+            EBiomeType::Tundra,
+            EBiomeType::Taiga,
+            EBiomeType::MixedForest,
+            EBiomeType::BroadleafForest,
+            EBiomeType::ForestSteppe,
+            EBiomeType::Steppe,
+            EBiomeType::Floodplain,
+            EBiomeType::Bog
         };
     }
 
