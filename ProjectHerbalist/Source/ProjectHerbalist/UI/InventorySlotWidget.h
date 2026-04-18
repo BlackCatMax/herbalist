@@ -26,6 +26,9 @@ protected:
     UPROPERTY(meta = (BindWidget))
     UTextBlock* ItemNameText;
 
+    UPROPERTY(meta = (BindWidget))
+    UTextBlock* CountText;
+
 private:
     int32 SlotIndex = -1;
     UPROPERTY()

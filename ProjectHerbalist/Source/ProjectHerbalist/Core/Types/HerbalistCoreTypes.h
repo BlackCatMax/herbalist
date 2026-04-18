@@ -8,10 +8,19 @@
 UENUM(BlueprintType)
 enum class EBiomeType : uint8
 {
+    Tundra,
+    ForestTundra,
+    NorthernTaiga,
+    MiddleTaiga,
+    SouthernTaiga,
     MixedForest,
-    Swamp,
+    BroadleafForest,
+    ForestSteppe,
     Steppe,
-    Floodplain
+    SemiDesert,
+    Floodplain,
+    RaisedBog,
+    LowlandBog
 };
 
 UENUM(BlueprintType)
@@ -168,4 +177,23 @@ struct PROJECTHERBALIST_API FConditionModifier
 struct PROJECTHERBALIST_API FAlatyr
 {
     static const FRealState S0;
+};
+
+// ========== FInventoryItem (добавлен Count) ==========
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FInventoryItem
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    EResourceType Type = EResourceType::None;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FRealState State;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 Count = 1;
+
+    bool IsEmpty() const { return Type == EResourceType::None || Count <= 0; }
+    void Clear() { Type = EResourceType::None; State = FRealState(); Count = 0; }
 };

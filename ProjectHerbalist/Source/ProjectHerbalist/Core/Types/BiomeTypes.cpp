@@ -1,143 +1,124 @@
 // BiomeTypes.cpp
 #include "BiomeTypes.h"
-#include "Math/UnrealMathUtility.h"
+#include "ProjectHerbalist.h"
+#include "Core/Data/ResourceDataManager.h"
+#include "Core/Types/BiomeRow.h"
+#include "Core/Types/ResourceBalanceRow.h"
+
+static const TMap<EBiomeType, FName> BiomeToNameMap = {
+    { EBiomeType::Tundra,          TEXT("Tundra") },
+    { EBiomeType::ForestTundra,    TEXT("ForestTundra") },
+    { EBiomeType::NorthernTaiga,   TEXT("NorthernTaiga") },
+    { EBiomeType::MiddleTaiga,     TEXT("MiddleTaiga") },
+    { EBiomeType::SouthernTaiga,   TEXT("SouthernTaiga") },
+    { EBiomeType::MixedForest,     TEXT("MixedForest") },
+    { EBiomeType::BroadleafForest, TEXT("BroadleafForest") },
+    { EBiomeType::ForestSteppe,    TEXT("ForestSteppe") },
+    { EBiomeType::Steppe,          TEXT("Steppe") },
+    { EBiomeType::SemiDesert,      TEXT("SemiDesert") },
+    { EBiomeType::Floodplain,      TEXT("Floodplain") },
+    { EBiomeType::RaisedBog,       TEXT("RaisedBog") },
+    { EBiomeType::LowlandBog,      TEXT("LowlandBog") }
+};
+
+static const TMap<FName, EBiomeType> NameToBiomeMap = []()
+{
+    TMap<FName, EBiomeType> Map;
+    for (const auto& Pair : BiomeToNameMap)
+        Map.Add(Pair.Value, Pair.Key);
+    return Map;
+}();
+
+FName FBiomeDefaults::BiomeTypeToName(EBiomeType Biome)
+{
+    if (const FName* Name = BiomeToNameMap.Find(Biome))
+        return *Name;
+    return TEXT("MixedForest");
+}
+
+EBiomeType FBiomeDefaults::NameToBiomeType(FName Name)
+{
+    if (const EBiomeType* Biome = NameToBiomeMap.Find(Name))
+        return *Biome;
+    return EBiomeType::MixedForest;
+}
+
+TArray<EBiomeType> FBiomeDefaults::GetAllBiomeTypes()
+{
+    TArray<EBiomeType> Types;
+    BiomeToNameMap.GenerateKeyArray(Types);
+    return Types;
+}
 
 FRealState FBiomeDefaults::GetDefaultState(EBiomeType Biome)
 {
-    FRealState S;
-    switch (Biome)
-    {
-    case EBiomeType::MixedForest:
-        S.Magnitude = 0.65f;
-        S.Direction.Body = 0.50f; S.Direction.Mind = 0.55f; S.Direction.Spirit = 0.45f; S.Direction.Nature = 0.48f;
-        S.Meta.Distortion = 0.28f; S.Meta.Stability = 0.65f; S.Meta.Purity = 0.70f;
-        S.Meta.Potency = 0.58f; S.Meta.Resonance = 0.55f; S.Meta.Corruption = 0.25f;
-        break;
-    case EBiomeType::Swamp:
-        S.Magnitude = 0.70f;
-        S.Direction.Body = 0.35f; S.Direction.Mind = 0.35f; S.Direction.Spirit = 0.65f; S.Direction.Nature = 0.65f;
-        S.Meta.Distortion = 0.75f; S.Meta.Stability = 0.25f; S.Meta.Purity = 0.25f;
-        S.Meta.Potency = 0.70f; S.Meta.Resonance = 0.80f; S.Meta.Corruption = 0.70f;
-        break;
-    case EBiomeType::Steppe:
-        S.Magnitude = 0.45f;
-        S.Direction.Body = 0.65f; S.Direction.Mind = 0.60f; S.Direction.Spirit = 0.30f; S.Direction.Nature = 0.35f;
-        S.Meta.Distortion = 0.38f; S.Meta.Stability = 0.50f; S.Meta.Purity = 0.55f;
-        S.Meta.Potency = 0.40f; S.Meta.Resonance = 0.45f; S.Meta.Corruption = 0.40f;
-        break;
-    case EBiomeType::Floodplain:
-        S.Magnitude = 0.75f;
-        S.Direction.Body = 0.45f; S.Direction.Mind = 0.45f; S.Direction.Spirit = 0.55f; S.Direction.Nature = 0.55f;
-        S.Meta.Distortion = 0.50f; S.Meta.Stability = 0.45f; S.Meta.Purity = 0.50f;
-        S.Meta.Potency = 0.70f; S.Meta.Resonance = 0.70f; S.Meta.Corruption = 0.45f;
-        break;
-    default: break;
-    }
-    float Len = FMath::Sqrt(S.Direction.Body * S.Direction.Body + S.Direction.Mind * S.Direction.Mind + S.Direction.Spirit * S.Direction.Spirit + S.Direction.Nature * S.Direction.Nature);
-    if (Len > KINDA_SMALL_NUMBER) { S.Direction.Body /= Len; S.Direction.Mind /= Len; S.Direction.Spirit /= Len; S.Direction.Nature /= Len; }
-    S.Meta.Distortion = FMath::Clamp(S.Meta.Distortion, 0.0f, 1.0f);
-    S.Meta.Stability = FMath::Clamp(S.Meta.Stability, 0.0f, 1.0f);
-    S.Meta.Purity = FMath::Clamp(S.Meta.Purity, 0.0f, 1.0f);
-    S.Meta.Potency = FMath::Clamp(S.Meta.Potency, 0.0f, 1.0f);
-    S.Meta.Resonance = FMath::Clamp(S.Meta.Resonance, 0.0f, 1.0f);
-    S.Meta.Corruption = FMath::Clamp(S.Meta.Corruption, 0.0f, 1.0f);
-    S.Magnitude = FMath::Clamp(S.Magnitude, 0.0f, 1.0f);
-    return S;
+    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
+    if (!Manager) return FRealState();
+
+    const FBiomeRow* Row = Manager->GetBiomeRow(Biome);
+    if (!Row) return FRealState();
+
+    FRealState State;
+    State.Direction = Row->Direction;
+    State.Magnitude = Row->Magnitude;
+    State.Meta = Row->Meta;
+    State.Direction.NormalizeSum();
+    // клиппинг
+    State.Magnitude = FMath::Clamp(State.Magnitude, 0.0f, 1.0f);
+    State.Meta.Distortion = FMath::Clamp(State.Meta.Distortion, 0.0f, 1.0f);
+    State.Meta.Stability = FMath::Clamp(State.Meta.Stability, 0.0f, 1.0f);
+    State.Meta.Purity = FMath::Clamp(State.Meta.Purity, 0.0f, 1.0f);
+    State.Meta.Potency = FMath::Clamp(State.Meta.Potency, 0.0f, 1.0f);
+    State.Meta.Resonance = FMath::Clamp(State.Meta.Resonance, 0.0f, 1.0f);
+    State.Meta.Corruption = FMath::Clamp(State.Meta.Corruption, 0.0f, 1.0f);
+    return State;
 }
 
 FEnvironment FBiomeDefaults::GetDefaultEnvironment(EBiomeType Biome)
 {
-    FEnvironment Env;
-    switch (Biome)
-    {
-    case EBiomeType::MixedForest: Env.Toxicity = 0.30f; Env.Fertility = 0.70f; Env.Moisture = 0.60f; break;
-    case EBiomeType::Swamp:       Env.Toxicity = 0.80f; Env.Fertility = 0.40f; Env.Moisture = 0.85f; break;
-    case EBiomeType::Steppe:      Env.Toxicity = 0.60f; Env.Fertility = 0.45f; Env.Moisture = 0.30f; break;
-    case EBiomeType::Floodplain:  Env.Toxicity = 0.60f; Env.Fertility = 0.80f; Env.Moisture = 0.80f; break;
-    default: break;
-    }
-    return Env;
-}
-
-EResourceType FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng)
-{
-    switch (Biome)
-    {
-    case EBiomeType::MixedForest:
-    {
-        int32 r = Rng.RandRange(0, 99);
-        if (r < 35) return EResourceType::Nettle;      // 35%
-        if (r < 55) return EResourceType::Fern;        // 20%
-        if (r < 70) return EResourceType::Mushroom;    // 15%
-        if (r < 85) return EResourceType::BirchBark;   // 15%
-        return EResourceType::Moss;                    // 15%
-    }
-    case EBiomeType::Swamp:
-    {
-        int32 r = Rng.RandRange(0, 99);
-        if (r < 30) return EResourceType::Mushroom;    // 30%
-        if (r < 50) return EResourceType::Cranberry;   // 20%
-        if (r < 70) return EResourceType::Moss;        // 20%
-        if (r < 85) return EResourceType::BogOre;      // 15%
-        return EResourceType::Fern;                    // 15%
-    }
-    case EBiomeType::Steppe:
-    {
-        int32 r = Rng.RandRange(0, 99);
-        if (r < 50) return EResourceType::Nettle;      // 50%
-        if (r < 80) return EResourceType::Fern;        // 30%
-        return EResourceType::BirchBark;               // 20%
-    }
-    case EBiomeType::Floodplain:
-    {
-        int32 r = Rng.RandRange(0, 99);
-        if (r < 40) return EResourceType::Nettle;      // 40%
-        if (r < 70) return EResourceType::BirchBark;   // 30%
-        if (r < 85) return EResourceType::BogOre;      // 15%
-        return EResourceType::Moss;                    // 15%
-    }
-    default:
-        return EResourceType::Nettle;
-    }
+    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
+    if (!Manager) return FEnvironment();
+    const FBiomeRow* Row = Manager->GetBiomeRow(Biome);
+    if (!Row) return FEnvironment();
+    return Row->Environment;
 }
 
 FRealState FBiomeDefaults::GetDefaultWaterState(EBiomeType Biome)
 {
-    FRealState Water;
-    Water.Magnitude = 0.5f;
+    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
+    if (!Manager) return FRealState();
+    const FBiomeRow* Row = Manager->GetBiomeRow(Biome);
+    if (!Row) return FRealState();
+    return Row->DefaultWaterState;
+}
 
-    switch (Biome)
+EResourceType FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng,
+    ESeasonMask Season, ETimeOfDayMask TimeOfDay)
+{
+    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
+    if (!Manager) return EResourceType::Nettle;
+
+    TArray<FName> ResourceIds;
+    TArray<int32> Weights;
+    Manager->GetSpawnableResources(Biome, Season, TimeOfDay, ResourceIds, Weights);
+
+    if (ResourceIds.Num() == 0) return EResourceType::Nettle;
+
+    int32 TotalWeight = 0;
+    for (int32 w : Weights) TotalWeight += w;
+    if (TotalWeight <= 0) return EResourceType::Nettle;
+
+    int32 Roll = Rng.RandRange(1, TotalWeight);
+    int32 Accum = 0;
+    for (int32 i = 0; i < ResourceIds.Num(); ++i)
     {
-    case EBiomeType::MixedForest:
-        Water.Direction.Body = 0.50f; Water.Direction.Mind = 0.55f;
-        Water.Direction.Spirit = 0.45f; Water.Direction.Nature = 0.48f;
-        Water.Meta.Purity = 0.75f; Water.Meta.Corruption = 0.22f; Water.Meta.Distortion = 0.28f;
-        break;
-    case EBiomeType::Swamp:
-        Water.Direction.Body = 0.35f; Water.Direction.Mind = 0.35f;
-        Water.Direction.Spirit = 0.65f; Water.Direction.Nature = 0.65f;
-        Water.Meta.Purity = 0.25f; Water.Meta.Corruption = 0.75f; Water.Meta.Distortion = 0.75f;
-        break;
-    case EBiomeType::Steppe:
-        Water.Direction.Body = 0.65f; Water.Direction.Mind = 0.60f;
-        Water.Direction.Spirit = 0.30f; Water.Direction.Nature = 0.35f;
-        Water.Meta.Purity = 0.50f; Water.Meta.Corruption = 0.42f; Water.Meta.Distortion = 0.38f;
-        break;
-    case EBiomeType::Floodplain:
-        Water.Direction.Body = 0.45f; Water.Direction.Mind = 0.45f;
-        Water.Direction.Spirit = 0.55f; Water.Direction.Nature = 0.55f;
-        Water.Meta.Purity = 0.55f; Water.Meta.Corruption = 0.45f; Water.Meta.Distortion = 0.50f;
-        break;
-    default:
-        Water.Direction.Body = Water.Direction.Mind = Water.Direction.Spirit = Water.Direction.Nature = 0.25f;
-        Water.Meta.Purity = 0.5f; Water.Meta.Corruption = 0.5f; Water.Meta.Distortion = 0.5f;
-        break;
+        Accum += Weights[i];
+        if (Roll <= Accum)
+        {
+            const FResourceBalanceRow* Row = Manager->GetResourceBalanceRow(ResourceIds[i]);
+            if (Row) return Row->ResourceType;   // теперь поле ResourceType существует
+            break;
+        }
     }
-
-    Water.Meta.Potency = 0.5f;
-    Water.Meta.Stability = 0.6f;
-    Water.Meta.Resonance = 0.5f;
-
-    Water.Direction.NormalizeSum();
-    return Water;
+    return EResourceType::Nettle;
 }

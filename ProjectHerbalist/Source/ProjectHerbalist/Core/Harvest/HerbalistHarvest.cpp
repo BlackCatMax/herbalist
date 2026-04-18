@@ -1,88 +1,56 @@
 // HerbalistHarvest.cpp
 #include "HerbalistHarvest.h"
 #include "ProjectHerbalist.h"
-#include "Core/Types/HerbalistCoreTypes.h"
-#include "Math/UnrealMathUtility.h"
+#include "Core/Data/ResourceDataManager.h"
+#include "Core/Types/HerbalistItemData.h"
 
 static constexpr float k_biome = 0.6f;
 static constexpr float k_condition = 0.4f;
 
 FRealState FHerbalistHarvest::GetBaseResourceParams(EResourceType Type)
 {
-    FRealState R;
-    switch (Type)
+    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
+    if (!Manager)
     {
-    case EResourceType::Nettle:
-        R.Magnitude = 0.55f;
-        R.Direction.Body = 0.50f; R.Direction.Mind = 0.30f; R.Direction.Spirit = 0.40f; R.Direction.Nature = 0.80f;
-        R.Meta.Distortion = 0.30f; R.Meta.Stability = 0.50f; R.Meta.Purity = 0.60f;
-        R.Meta.Potency = 0.50f; R.Meta.Resonance = 0.60f; R.Meta.Corruption = 0.30f;
-        break;
-    case EResourceType::Fern:
-        R.Magnitude = 0.65f;
-        R.Direction.Body = 0.30f; R.Direction.Mind = 0.30f; R.Direction.Spirit = 0.70f; R.Direction.Nature = 0.70f;
-        R.Meta.Distortion = 0.60f; R.Meta.Stability = 0.35f; R.Meta.Purity = 0.40f;
-        R.Meta.Potency = 0.70f; R.Meta.Resonance = 0.80f; R.Meta.Corruption = 0.50f;
-        break;
-    case EResourceType::Mushroom:
-        R.Magnitude = 0.70f;
-        R.Direction.Body = 0.40f; R.Direction.Mind = 0.80f; R.Direction.Spirit = 0.60f; R.Direction.Nature = 0.20f;
-        R.Meta.Distortion = 0.85f; R.Meta.Stability = 0.25f; R.Meta.Purity = 0.30f;
-        R.Meta.Potency = 0.75f; R.Meta.Resonance = 0.85f; R.Meta.Corruption = 0.80f;
-        break;
-    case EResourceType::BirchBark:
-        R.Magnitude = 0.50f;
-        R.Direction.Body = 0.60f; R.Direction.Mind = 0.50f; R.Direction.Spirit = 0.40f; R.Direction.Nature = 0.50f;
-        R.Meta.Distortion = 0.25f; R.Meta.Stability = 0.65f; R.Meta.Purity = 0.70f;
-        R.Meta.Potency = 0.45f; R.Meta.Resonance = 0.50f; R.Meta.Corruption = 0.20f;
-        break;
-    case EResourceType::Moss:
-        R.Magnitude = 0.50f;
-        R.Direction.Body = 0.30f; R.Direction.Mind = 0.30f; R.Direction.Spirit = 0.60f; R.Direction.Nature = 0.80f;
-        R.Meta.Distortion = 0.35f; R.Meta.Stability = 0.55f; R.Meta.Purity = 0.65f;
-        R.Meta.Potency = 0.50f; R.Meta.Resonance = 0.65f; R.Meta.Corruption = 0.30f;
-        break;
-    case EResourceType::Cranberry:
-        R.Magnitude = 0.55f;
-        R.Direction.Body = 0.40f; R.Direction.Mind = 0.30f; R.Direction.Spirit = 0.60f; R.Direction.Nature = 0.70f;
-        R.Meta.Distortion = 0.50f; R.Meta.Stability = 0.45f; R.Meta.Purity = 0.60f;
-        R.Meta.Potency = 0.50f; R.Meta.Resonance = 0.65f; R.Meta.Corruption = 0.45f;
-        break;
-    case EResourceType::BogOre:
-        R.Magnitude = 0.60f;
-        R.Direction.Body = 0.80f; R.Direction.Mind = 0.20f; R.Direction.Spirit = 0.30f; R.Direction.Nature = 0.70f;
-        R.Meta.Distortion = 0.75f; R.Meta.Stability = 0.40f; R.Meta.Purity = 0.35f;
-        R.Meta.Potency = 0.55f; R.Meta.Resonance = 0.65f; R.Meta.Corruption = 0.70f;
-        break;
-    case EResourceType::Water:
-        R.Magnitude = 0.5f;
-        R.Direction.Body = R.Direction.Mind = R.Direction.Spirit = R.Direction.Nature = 0.25f;
-        R.Meta.Potency = 0.5f; R.Meta.Purity = 0.5f; R.Meta.Stability = 0.5f;
-        R.Meta.Resonance = 0.5f; R.Meta.Corruption = 0.0f; R.Meta.Distortion = 0.0f;
-        break;
-    default:
-        R.Magnitude = 0.5f;
-        R.Direction.Body = R.Direction.Mind = R.Direction.Spirit = R.Direction.Nature = 0.5f;
-        R.Meta.Distortion = 0.0f; R.Meta.Stability = 0.5f; R.Meta.Purity = 0.5f;
-        R.Meta.Potency = 0.5f; R.Meta.Resonance = 0.5f; R.Meta.Corruption = 0.5f;
-        break;
+        UE_LOG(LogHerbalist, Error, TEXT("ResourceDataManager not initialized!"));
+        return FRealState();
     }
-    R.Direction.NormalizeSum();
-    R.Meta.Distortion = FMath::Clamp(R.Meta.Distortion, 0.0f, 1.0f);
-    R.Meta.Stability = FMath::Clamp(R.Meta.Stability, 0.0f, 1.0f);
-    R.Meta.Purity = FMath::Clamp(R.Meta.Purity, 0.0f, 1.0f);
-    R.Meta.Potency = FMath::Clamp(R.Meta.Potency, 0.0f, 1.0f);
-    R.Meta.Resonance = FMath::Clamp(R.Meta.Resonance, 0.0f, 1.0f);
-    R.Meta.Corruption = FMath::Clamp(R.Meta.Corruption, 0.0f, 1.0f);
-    R.Magnitude = FMath::Clamp(R.Magnitude, 0.0f, 1.0f);
-    return R;
+
+    // Получаем строку баланса по типу (нужно преобразовать EResourceType в PrimaryAssetId)
+    // Упрощённо: предполагаем, что PrimaryAssetId совпадает с именем enum (Nettle, Fern...)
+    FName AssetId = UEnum::GetValueAsName(Type); // "EResourceType::Nettle" -> "Nettle"
+    const FResourceBalanceRow* BalanceRow = Manager->GetResourceBalanceRow(AssetId);
+    if (!BalanceRow)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No balance row for resource type %d"), (int32)Type);
+        return FRealState();
+    }
+
+    UHerbalistItemData* ItemData = Manager->GetItemData(AssetId);
+    if (!ItemData)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No ItemData for asset %s"), *AssetId.ToString());
+        return FRealState();
+    }
+
+    // Копируем базовое состояние из ассета
+    FRealState State = ItemData->BaseState;
+    State.Direction.NormalizeSum();
+    return State;
 }
 
 FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& BiomeState, const FConditionModifier& Conditions)
 {
     FRealState Base = GetBaseResourceParams(Type);
+    if (Base.Magnitude < 0.01f && Base.Meta.Distortion < 0.01f)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: invalid base params for type %d"), (int32)Type);
+        return FRealState();
+    }
+
     const FRealState& S0 = FAlatyr::S0;
 
+    // Вычисляем дельту биома относительно эталона
     FRealState BiomeDelta;
     BiomeDelta.Direction.Body = BiomeState.Direction.Body - S0.Direction.Body;
     BiomeDelta.Direction.Mind = BiomeState.Direction.Mind - S0.Direction.Mind;
@@ -96,6 +64,7 @@ FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& Biom
     BiomeDelta.Meta.Resonance = BiomeState.Meta.Resonance - S0.Meta.Resonance;
     BiomeDelta.Meta.Corruption = BiomeState.Meta.Corruption - S0.Meta.Corruption;
 
+    // Результат = база + влияние биома + влияние условий
     FRealState Result;
     Result.Direction.Body = Base.Direction.Body + k_biome * BiomeDelta.Direction.Body + k_condition * Conditions.DeltaDirection.Body;
     Result.Direction.Mind = Base.Direction.Mind + k_biome * BiomeDelta.Direction.Mind + k_condition * Conditions.DeltaDirection.Mind;
@@ -118,24 +87,22 @@ FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& Biom
     Result.Meta.Resonance = FMath::Clamp(Result.Meta.Resonance, 0.0f, 1.0f);
     Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption, 0.0f, 1.0f);
 
-    UE_LOG(LogHerbalist, Log, TEXT("[HARVEST] Type=%d Mag=%.3f Dist=%.3f Stab=%.3f Pur=%.3f Pot=%.3f Res=%.3f Cor=%.3f"),
-        (int32)Type, Result.Magnitude, Result.Meta.Distortion, Result.Meta.Stability, Result.Meta.Purity,
-        Result.Meta.Potency, Result.Meta.Resonance, Result.Meta.Corruption);
+    UE_LOG(LogHerbalist, Log, TEXT("[HARVEST] Type=%d Mag=%.3f Dist=%.3f Stab=%.3f Pur=%.3f"),
+        (int32)Type, Result.Magnitude, Result.Meta.Distortion, Result.Meta.Stability, Result.Meta.Purity);
     return Result;
 }
 
 FString FHerbalistHarvest::GetResourceName(EResourceType Type, bool bEnglish)
 {
-    switch (Type)
-    {
-    case EResourceType::Nettle:      return bEnglish ? TEXT("Nettle") : TEXT("Крапива");
-    case EResourceType::Fern:        return bEnglish ? TEXT("Fern") : TEXT("Папоротник");
-    case EResourceType::Mushroom:    return bEnglish ? TEXT("Mushroom") : TEXT("Мухомор");
-    case EResourceType::BirchBark:   return bEnglish ? TEXT("Birch Bark") : TEXT("Кора берёзы");
-    case EResourceType::Moss:        return bEnglish ? TEXT("Moss") : TEXT("Мох");
-    case EResourceType::Cranberry:   return bEnglish ? TEXT("Cranberry") : TEXT("Клюква");
-    case EResourceType::BogOre:      return bEnglish ? TEXT("Bog Ore") : TEXT("Болотная руда");
-    case EResourceType::Water:       return bEnglish ? TEXT("Water") : TEXT("Вода");
-    default: return TEXT("Unknown");
-    }
+    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
+    if (!Manager) return TEXT("Unknown");
+
+    FName AssetId = UEnum::GetValueAsName(Type);
+    UHerbalistItemData* ItemData = Manager->GetItemData(AssetId);
+    if (!ItemData) return TEXT("Unknown");
+
+    if (bEnglish)
+        return AssetId.ToString();
+    else
+        return ItemData->DisplayName.ToString();
 }

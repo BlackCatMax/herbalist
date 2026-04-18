@@ -25,6 +25,7 @@ public class ProjectHerbalist : ModuleRules
             "ProjectHerbalist",
             "ProjectHerbalist/Core",
             "ProjectHerbalist/Core/Types",
+			"ProjectHerbalist/Core/Data",
             "ProjectHerbalist/Core/Pipeline",
             "ProjectHerbalist/Core/World",
             "ProjectHerbalist/Core/Harvest",
@@ -32,7 +33,7 @@ public class ProjectHerbalist : ModuleRules
             "ProjectHerbalist/Core/Alchemy",
             "ProjectHerbalist/Core/Storage",
             "ProjectHerbalist/Player",
-            "ProjectHerbalist/UI"  // добавить путь к UI
+            "ProjectHerbalist/UI"
         });
     }
 }

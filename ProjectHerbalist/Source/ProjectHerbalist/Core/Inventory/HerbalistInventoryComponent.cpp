@@ -1,6 +1,5 @@
-// Copyright Project Herbalist. All Rights Reserved.
-
-#include "Core/Inventory/HerbalistInventoryComponent.h"
+// HerbalistInventoryComponent.cpp
+#include "HerbalistInventoryComponent.h"
 #include "ProjectHerbalist.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
@@ -8,61 +7,121 @@ UHerbalistInventoryComponent::UHerbalistInventoryComponent()
     PrimaryComponentTick.bCanEverTick = false;
 }
 
-bool UHerbalistInventoryComponent::AddItem(const FRealState& State, EResourceType Type)
+bool UHerbalistInventoryComponent::AddItem(const FInventoryItem& Item, int32 Amount)
 {
-    UE_LOG(LogHerbalist, Log, TEXT("AddItem called: Type=%d, Mag=%.2f, Dist=%.2f"), (int32)Type, State.Magnitude, State.Meta.Distortion);
-
-    if (State.Magnitude < 0.01f || State.Meta.Distortion < 0.01f)
+    if (Amount <= 0 || Item.Type == EResourceType::None || Item.Count <= 0)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Rejected corrupted or empty resource: Mag=%.2f"), State.Magnitude);
+        UE_LOG(LogHerbalist, Warning, TEXT("AddItem: invalid parameters"));
         return false;
     }
 
-    if (Items.Num() >= MaxSlots)
+    int32 Remaining = Amount;
+
+    // 1. Пытаемся дополнить существующие стаки того же типа
+    while (Remaining > 0)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Inventory full (%d/%d), cannot add item"), Items.Num(), MaxSlots);
-        return false;
+        int32 SlotIndex = FindStackableSlot(Item.Type);
+        if (SlotIndex == INDEX_NONE) break;
+
+        FInventoryItem& Slot = Items[SlotIndex];
+        int32 Space = MAX_STACK_SIZE - Slot.Count;
+        int32 ToAdd = FMath::Min(Remaining, Space);
+        Slot.Count += ToAdd;
+        Remaining -= ToAdd;
     }
 
-    FInventoryItem NewItem;
-    NewItem.Type = Type;
-    NewItem.State = State;
-    Items.Add(NewItem);
+    // 2. Если остались предметы, создаём новые слоты
+    while (Remaining > 0)
+    {
+        if (Items.Num() >= MaxSlots)
+        {
+            UE_LOG(LogHerbalist, Warning, TEXT("AddItem: inventory full, %d items not added"), Remaining);
+            break;
+        }
 
-    UE_LOG(LogHerbalist, Log, TEXT("Added to inventory, count=%d, Mag=%.2f, Type=%d"), Items.Num(), State.Magnitude, (int32)Type);
+        FInventoryItem NewSlot = Item;
+        NewSlot.Count = FMath::Min(Remaining, MAX_STACK_SIZE);
+        Items.Add(NewSlot);
+        Remaining -= NewSlot.Count;
+    }
+
+    if (Amount != Remaining)
+    {
+        OnInventoryChanged.Broadcast();
+        return true;
+    }
+    return false;
+}
+
+bool UHerbalistInventoryComponent::RemoveItem(int32 Index, int32 Amount)
+{
+    if (!Items.IsValidIndex(Index) || Amount <= 0) return false;
+
+    FInventoryItem& Slot = Items[Index];
+    if (Slot.Count < Amount) return false;
+
+    Slot.Count -= Amount;
+    if (Slot.Count <= 0)
+    {
+        Items.RemoveAt(Index);
+    }
+
     OnInventoryChanged.Broadcast();
     return true;
 }
 
-void UHerbalistInventoryComponent::RemoveItem(int32 Index)
+bool UHerbalistInventoryComponent::TransferOneItem(int32 SourceIndex, int32 TargetIndex)
 {
-    UE_LOG(LogHerbalist, Log, TEXT("RemoveItem called: index %d, current count=%d"), Index, Items.Num());
-    if (Items.IsValidIndex(Index))
+    if (!Items.IsValidIndex(SourceIndex) || !Items.IsValidIndex(TargetIndex)) return false;
+
+    FInventoryItem& Source = Items[SourceIndex];
+    FInventoryItem& Target = Items[TargetIndex];
+
+    if (Source.Count <= 0) return false;
+
+    // Если целевой слот пуст
+    if (Target.Type == EResourceType::None || Target.Count == 0)
     {
-        FInventoryItem Removed = Items[Index];
-        Items.RemoveAt(Index);
-        UE_LOG(LogHerbalist, Log, TEXT("Removed from inventory, count=%d, removed type=%d"), Items.Num(), (int32)Removed.Type);
+        Target = Source;
+        Target.Count = 1;
+        Source.Count -= 1;
+        if (Source.Count <= 0)
+            Items.RemoveAt(SourceIndex);
         OnInventoryChanged.Broadcast();
+        return true;
     }
-    else
+
+    // Если типы совпадают и в целевом слоте есть место
+    if (Target.Type == Source.Type && Target.Count < MAX_STACK_SIZE)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("RemoveItem: invalid index %d"), Index);
+        Target.Count += 1;
+        Source.Count -= 1;
+        if (Source.Count <= 0)
+            Items.RemoveAt(SourceIndex);
+        OnInventoryChanged.Broadcast();
+        return true;
     }
+
+    return false;
+}
+
+const FInventoryItem* UHerbalistInventoryComponent::GetSlot(int32 Index) const
+{
+    return Items.IsValidIndex(Index) ? &Items[Index] : nullptr;
 }
 
 void UHerbalistInventoryComponent::Clear()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("Clear inventory, %d items removed"), Items.Num());
     Items.Empty();
     OnInventoryChanged.Broadcast();
 }
 
-void UHerbalistInventoryComponent::SwapItems(int32 IndexA, int32 IndexB)
+int32 UHerbalistInventoryComponent::FindStackableSlot(EResourceType Type) const
 {
-    if (Items.IsValidIndex(IndexA) && Items.IsValidIndex(IndexB) && IndexA != IndexB)
+    for (int32 i = 0; i < Items.Num(); ++i)
     {
-        Items.Swap(IndexA, IndexB);
-        UE_LOG(LogHerbalist, Log, TEXT("Swapped items %d and %d"), IndexA, IndexB);
-        OnInventoryChanged.Broadcast();
+        if (Items[i].Type == Type && Items[i].Count < MAX_STACK_SIZE)
+            return i;
     }
+    return INDEX_NONE;
 }

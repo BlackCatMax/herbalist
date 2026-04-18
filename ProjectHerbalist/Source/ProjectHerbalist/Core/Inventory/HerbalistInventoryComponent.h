@@ -1,5 +1,4 @@
-// Copyright Project Herbalist. All Rights Reserved.
-
+// HerbalistInventoryComponent.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -9,21 +8,7 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
 
-USTRUCT(BlueprintType)
-struct FInventoryItem
-{
-    GENERATED_BODY()
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    EResourceType Type = EResourceType::None;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    FRealState State;
-
-    // В будущем добавим LastUpdateTime для порчи
-};
-
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTHERBALIST_API UHerbalistInventoryComponent : public UActorComponent
 {
     GENERATED_BODY()
@@ -31,35 +16,36 @@ class PROJECTHERBALIST_API UHerbalistInventoryComponent : public UActorComponent
 public:
     UHerbalistInventoryComponent();
 
-    // Максимальное количество слотов
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
     int32 MaxSlots = 20;
 
-    // Добавить предмет
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    bool AddItem(const FRealState& State, EResourceType Type);
+    static constexpr int32 MAX_STACK_SIZE = 9;
 
-    // Удалить по индексу
     UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void RemoveItem(int32 Index);
+    bool AddItem(const FInventoryItem& Item, int32 Amount = 1);
 
-    // Добавить в public секцию после RemoveItem
     UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void SwapItems(int32 IndexA, int32 IndexB);
+    bool RemoveItem(int32 Index, int32 Amount = 1);
 
-    // Получить копию всех предметов
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    bool TransferOneItem(int32 SourceIndex, int32 TargetIndex);
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     TArray<FInventoryItem> GetItems() const { return Items; }
 
-    // Очистить инвентарь
+    int32 GetNumSlots() const { return Items.Num(); }
+
+    const FInventoryItem* GetSlot(int32 Index) const;
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void Clear();
 
-    // Событие изменения инвентаря (для виджета)
     UPROPERTY(BlueprintAssignable, Category = "Inventory")
     FOnInventoryChanged OnInventoryChanged;
 
 protected:
     UPROPERTY()
     TArray<FInventoryItem> Items;
+
+    int32 FindStackableSlot(EResourceType Type) const;
 };
