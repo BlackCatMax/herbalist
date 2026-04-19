@@ -6,7 +6,9 @@
 #include "DrawDebugHelpers.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/Storage/StorageContainer.h"
+#include "Core/Storage/AlchemyTableActor.h"
 #include "UI/InventoryWidget.h"
+#include "UI/AlchemyTransferWidget.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 
@@ -40,6 +42,7 @@ void AHerbalistPlayerController::SetupInputComponent()
         EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Inventory);
         EnhancedInputComponent->BindAction(ApplyAlchemyAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::ApplyAlchemy);
         EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Interact);
+        EnhancedInputComponent->BindAction(UsePotionAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::OnUsePotion);
     }
 }
 
@@ -74,6 +77,14 @@ void AHerbalistPlayerController::CloseAnyWidget()
         InventoryWidgetInstance = nullptr;
         UE_LOG(LogHerbalist, Log, TEXT("Inventory widget removed"));
     }
+    
+    if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
+    {
+        CurrentAlchemyWidget->RemoveFromParent();
+        CurrentAlchemyWidget = nullptr;
+        CurrentAlchemyTable = nullptr;
+        UE_LOG(LogHerbalist, Log, TEXT("Alchemy widget removed"));
+    }
 
     bShowMouseCursor = false;
     FInputModeGameOnly GameMode;
@@ -89,7 +100,6 @@ void AHerbalistPlayerController::Inventory()
     UE_LOG(LogHerbalist, Log, TEXT("Inventory() called, bIsAnyWidgetOpen=%d, InventoryWidgetInstance=%p"),
         bIsAnyWidgetOpen, InventoryWidgetInstance);
 
-    // Если виджет открыт – закрываем его
     if (bIsAnyWidgetOpen && InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
     {
         UE_LOG(LogHerbalist, Log, TEXT("Inventory widget is open, closing"));
@@ -97,7 +107,6 @@ void AHerbalistPlayerController::Inventory()
         return;
     }
 
-    // Если открыт другой виджет (например, сундук) – не открываем инвентарь
     if (bIsAnyWidgetOpen)
     {
         UE_LOG(LogHerbalist, Log, TEXT("Inventory: another widget is open, ignoring"));
@@ -236,6 +245,14 @@ void AHerbalistPlayerController::Interact()
             Storage->OnInteract(this);
             return;
         }
+        
+        AAlchemyTableActor* AlchemyTable = Cast<AAlchemyTableActor>(HitActor);
+        if (AlchemyTable)
+        {
+            UE_LOG(LogHerbalist, Log, TEXT("Alchemy table detected, calling OnInteract"));
+            AlchemyTable->OnInteract(this);
+            return;
+        }
 
         // Иначе – сбор ресурса (не мешаем виджетам)
         AGridWorldManager* WorldManager = nullptr;
@@ -281,4 +298,53 @@ void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
     for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
     if (WorldManager) WorldManager->MassHarvestTest(X, Y, Count);
     else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
+}
+
+void AHerbalistPlayerController::OnUsePotion()
+{
+    UsePotion();
+}
+
+void AHerbalistPlayerController::UsePotion()
+{
+    if (!InventoryComponent) return;
+
+    // Найти WorldManager
+    AGridWorldManager* WorldManager = nullptr;
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        WorldManager = *It;
+        break;
+    }
+    if (!WorldManager) return;
+
+    int32 PotionSlotIndex = -1;
+    FInventoryItem PotionItem;
+    const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
+    for (int32 i = 0; i < Items.Num(); ++i)
+    {
+        if (Items[i].Type == EResourceType::Potion && Items[i].Count > 0)
+        {
+            PotionSlotIndex = i;
+            PotionItem = Items[i];
+            break;
+        }
+    }
+
+    if (PotionSlotIndex == -1)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No potion in inventory"));
+        return;
+    }
+
+    FHitResult Hit;
+    if (!GetHitResultFromCamera(Hit)) return;
+
+    FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
+    int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
+    int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
+    if (!WorldManager->GetCell(X, Y)) return;
+
+    WorldManager->ApplyPotionToCell(X, Y, PotionItem.State);
+    InventoryComponent->RemoveItem(PotionSlotIndex, 1);
 }

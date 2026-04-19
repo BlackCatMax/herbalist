@@ -5,7 +5,7 @@
 #include "Core/Types/HerbalistItemData.h"
 
 static constexpr float k_biome = 0.6f;
-static constexpr float k_condition = 0.4f;
+const float k_condition = 0.4f;
 
 // Вспомогательная функция: преобразует EResourceType в FName (без префикса)
 static FName GetAssetIdFromResourceType(EResourceType Type)

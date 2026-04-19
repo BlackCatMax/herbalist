@@ -29,7 +29,8 @@ enum class EResourceType : uint8
     Moss,
     Cranberry,
     BogOre,
-    Water
+    Water,
+    Potion       // добавлено для зелий
 };
 
 // ========== Базовые структуры ==========
@@ -174,7 +175,7 @@ struct PROJECTHERBALIST_API FAlatyr
     static const FRealState S0;
 };
 
-// ========== FInventoryItem (добавлен Count) ==========
+// ========== FInventoryItem (с полем Count) ==========
 USTRUCT(BlueprintType)
 struct PROJECTHERBALIST_API FInventoryItem
 {

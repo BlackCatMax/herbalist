@@ -6,6 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Player/HerbalistPlayerController.h"
 #include "UI/InventoryTransferWidget.h"
+#include "UI/AlchemyTransferWidget.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
@@ -26,17 +27,7 @@ void UInventorySlotWidget::UpdateDisplay()
     }
 
     FString Name = FHerbalistHarvest::GetResourceName(CachedItem.Type, false);
-    UE_LOG(LogHerbalist, Log, TEXT("UpdateDisplay: Slot %d, Type=%d, Name='%s', Count=%d"),
-        SlotIndex, (int32)CachedItem.Type, *Name, CachedItem.Count);
-
-    if (ItemNameText)
-    {
-        ItemNameText->SetText(FText::FromString(Name));
-    }
-    else
-    {
-        UE_LOG(LogHerbalist, Error, TEXT("UpdateDisplay: ItemNameText is NULL for slot %d!"), SlotIndex);
-    }
+    if (ItemNameText) ItemNameText->SetText(FText::FromString(Name));
 
     if (CountText)
     {
@@ -47,12 +38,51 @@ void UInventorySlotWidget::UpdateDisplay()
     }
 }
 
+int32 UInventorySlotWidget::FindRealIndex() const
+{
+    if (!InventoryComponent) return -1;
+    const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
+    for (int32 i = 0; i < Items.Num(); ++i)
+    {
+        const FInventoryItem& Item = Items[i];
+        if (Item.Type == CachedItem.Type &&
+            FMath::IsNearlyEqual(Item.State.Magnitude, CachedItem.State.Magnitude, 0.01f) &&
+            FMath::IsNearlyEqual(Item.State.Meta.Distortion, CachedItem.State.Meta.Distortion, 0.01f))
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
 bool UInventorySlotWidget::TryMoveToOtherInventory()
 {
     if (!InventoryComponent) return false;
 
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
-    if (!PC || !PC->CurrentTransferWidget || !PC->CurrentTransferWidget->IsInViewport())
+    if (!PC) return false;
+
+    // 1. Алхимический виджет
+    if (PC->CurrentAlchemyWidget && PC->CurrentAlchemyWidget->IsInViewport())
+    {
+        UAlchemyTransferWidget* AlchemyWidget = Cast<UAlchemyTransferWidget>(PC->CurrentAlchemyWidget);
+        if (AlchemyWidget)
+        {
+            FInventoryItem ItemToAdd = CachedItem;
+            ItemToAdd.Count = 1;
+            if (AlchemyWidget->TryAddItemToSlot(ItemToAdd))
+            {
+                int32 RealIndex = FindRealIndex();
+                if (RealIndex != -1)
+                    InventoryComponent->RemoveItem(RealIndex, 1);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 2. Трансфер между инвентарями (сундук)
+    if (!PC->CurrentTransferWidget || !PC->CurrentTransferWidget->IsInViewport())
         return false;
 
     UHerbalistInventoryComponent* Source = InventoryComponent;
@@ -67,23 +97,9 @@ bool UInventorySlotWidget::TryMoveToOtherInventory()
 
     if (!Target) return false;
 
-    // Найти реальный индекс предмета в источнике
-    int32 RealIndex = -1;
-    TArray<FInventoryItem> SourceItems = Source->GetItems();
-    for (int32 i = 0; i < SourceItems.Num(); ++i)
-    {
-        const FInventoryItem& Item = SourceItems[i];
-        if (Item.Type == CachedItem.Type &&
-            FMath::IsNearlyEqual(Item.State.Magnitude, CachedItem.State.Magnitude, 0.01f) &&
-            FMath::IsNearlyEqual(Item.State.Meta.Distortion, CachedItem.State.Meta.Distortion, 0.01f))
-        {
-            RealIndex = i;
-            break;
-        }
-    }
+    int32 RealIndex = FindRealIndex();
     if (RealIndex == -1) return false;
 
-    // Создаём предмет для добавления (копия State, Count=1)
     FInventoryItem ItemToAdd = CachedItem;
     ItemToAdd.Count = 1;
 

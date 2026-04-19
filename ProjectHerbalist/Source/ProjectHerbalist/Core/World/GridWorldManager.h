@@ -78,6 +78,8 @@ public:
     FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
     FRealState HarvestFromCellSimple(int32 X, int32 Y);
 
+    void ApplyPotionToCell(int32 X, int32 Y, const FRealState& PotionState);
+
     // Отладка и тесты
     void SelectCell(int32 X, int32 Y);
     FString GetSelectedCellInfo() const;

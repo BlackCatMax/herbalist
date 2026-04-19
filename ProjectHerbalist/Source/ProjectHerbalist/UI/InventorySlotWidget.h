@@ -30,6 +30,7 @@ protected:
     UTextBlock* CountText;
 
 private:
+	int32 FindRealIndex() const;
     int32 SlotIndex = -1;
     UPROPERTY()
     UHerbalistInventoryComponent* InventoryComponent = nullptr;

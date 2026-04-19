@@ -8,10 +8,12 @@
 #include "EnhancedInputSubsystems.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "UI/InventoryWidget.h"
+#include "UI/AlchemyTransferWidget.h"
 #include "HerbalistPlayerController.generated.h"
 
 class AStorageContainer;
 class UInventoryTransferWidget;
+class AAlchemyTableActor;
 
 UCLASS()
 class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
@@ -32,7 +34,7 @@ public:
 
     // Текущий открытый виджет сундука (для двойного клика)
     UPROPERTY()
-    class UInventoryTransferWidget* CurrentTransferWidget = nullptr;
+    UInventoryTransferWidget* CurrentTransferWidget = nullptr;
 
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
@@ -45,26 +47,38 @@ public:
     void ShowInventory();
     UFUNCTION(Exec)
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
+    
+    // Текущий открытый виджет алхимии (исправлен тип)
+    UPROPERTY()
+    UAlchemyTransferWidget* CurrentAlchemyWidget = nullptr;
+    
+    // Текущий алхимический стол
+    UPROPERTY()
+    AAlchemyTableActor* CurrentAlchemyTable = nullptr;
+    
+    // Применить зелье на клетку
+    UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
+    void UsePotion();
 
 protected:
     // Input mapping
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputMappingContext* DefaultMappingContext;
+    UInputMappingContext* DefaultMappingContext;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* MoveAction;
+    UInputAction* MoveAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* LookAction;
+    UInputAction* LookAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* HarvestAction;
+    UInputAction* HarvestAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* InfoAction;
+    UInputAction* InfoAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* InventoryAction;
+    UInputAction* InventoryAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* ApplyAlchemyAction;
+    UInputAction* ApplyAlchemyAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    class UInputAction* InteractAction;
+    UInputAction* InteractAction;
 
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UInventoryWidget> InventoryWidgetClass;
@@ -81,6 +95,12 @@ protected:
     void OnLeftClick();
     void OnRightClick();
     void OnApplyAlchemyKey();
+    
+    void OnUsePotion();
+    
+    // Добавить в секцию UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    UInputAction* UsePotionAction;
 
 private:
     UPROPERTY()

@@ -191,3 +191,24 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
     UE_LOG(LogHerbalist, Log, TEXT("Applied alchemy to (%d,%d) and consumed two resources"), X, Y);
 }
+
+void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& PotionState)
+{
+    FGridCell* Cell = GetCell(X, Y);
+    if (!Cell) return;
+    
+    // Создаём ингредиент-зелье
+    FInventoryItem PotionItem;
+    PotionItem.Type = EResourceType::Potion;
+    PotionItem.State = PotionState;
+    PotionItem.Count = 1;
+    TArray<FInventoryItem> Ingredients = { PotionItem };
+    
+    FIntent Intent;
+    Intent.Coherence = 0.5f;
+    FRngState Rng;
+    Rng.Seed = FMath::Rand();
+    
+    // Применяем алхимию к клетке
+    ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
+}
