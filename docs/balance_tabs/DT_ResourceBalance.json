@@ -1,0 +1,107 @@
+[
+  {
+    "Name": "Nettle",
+    "PrimaryAssetId": "Nettle",
+    "ResourceType": "Nettle",
+    "RarityWeight": 35,
+    "AllowedBiomes": ["MixedForest", "BroadleafForest", "ForestSteppe", "Steppe", "Floodplain"],
+    "SeasonMask": 0,
+    "TimeOfDayMask": 0,
+    "WeatherModifiers": {
+      "Rain": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Thunderstorm": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Fog": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Clear": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0}
+    }
+  },
+  {
+    "Name": "Fern",
+    "PrimaryAssetId": "Fern",
+    "ResourceType": "Fern",
+    "RarityWeight": 20,
+    "AllowedBiomes": ["MixedForest", "BroadleafForest", "ForestSteppe", "Floodplain"],
+    "SeasonMask": 0,
+    "TimeOfDayMask": 0,
+    "WeatherModifiers": {
+      "Rain": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Thunderstorm": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Fog": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Clear": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0}
+    }
+  },
+  {
+    "Name": "Mushroom",
+    "PrimaryAssetId": "Mushroom",
+    "ResourceType": "Mushroom",
+    "RarityWeight": 15,
+    "AllowedBiomes": ["MixedForest", "BroadleafForest", "Bog"],
+    "SeasonMask": 0,
+    "TimeOfDayMask": 0,
+    "WeatherModifiers": {
+      "Rain": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Thunderstorm": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Fog": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Clear": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0}
+    }
+  },
+  {
+    "Name": "BirchBark",
+    "PrimaryAssetId": "BirchBark",
+    "ResourceType": "BirchBark",
+    "RarityWeight": 15,
+    "AllowedBiomes": ["Taiga", "MixedForest", "BroadleafForest", "ForestSteppe", "Steppe", "Floodplain"],
+    "SeasonMask": 0,
+    "TimeOfDayMask": 0,
+    "WeatherModifiers": {
+      "Rain": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Thunderstorm": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Fog": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Clear": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0}
+    }
+  },
+  {
+    "Name": "Moss",
+    "PrimaryAssetId": "Moss",
+    "ResourceType": "Moss",
+    "RarityWeight": 15,
+    "AllowedBiomes": ["MixedForest", "BroadleafForest", "Bog"],
+    "SeasonMask": 0,
+    "TimeOfDayMask": 0,
+    "WeatherModifiers": {
+      "Rain": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Thunderstorm": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Fog": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Clear": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0}
+    }
+  },
+  {
+    "Name": "Cranberry",
+    "PrimaryAssetId": "Cranberry",
+    "ResourceType": "Cranberry",
+    "RarityWeight": 10,
+    "AllowedBiomes": ["Tundra", "Taiga", "Bog"],
+    "SeasonMask": 0,
+    "TimeOfDayMask": 0,
+    "WeatherModifiers": {
+      "Rain": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Thunderstorm": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Fog": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Clear": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0}
+    }
+  },
+  {
+    "Name": "BogOre",
+    "PrimaryAssetId": "BogOre",
+    "ResourceType": "BogOre",
+    "RarityWeight": 10,
+    "AllowedBiomes": ["Floodplain", "Bog"],
+    "SeasonMask": 0,
+    "TimeOfDayMask": 0,
+    "WeatherModifiers": {
+      "Rain": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Thunderstorm": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Fog": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0},
+      "Clear": {"DeltaDirection": {"Body":0,"Mind":0,"Spirit":0,"Nature":0}, "DeltaMagnitude":0, "DeltaDistortion":0, "DeltaStability":0, "DeltaPurity":0, "DeltaPotency":0, "DeltaResonance":0, "DeltaCorruption":0}
+    }
+  }
+]

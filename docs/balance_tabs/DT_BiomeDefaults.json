@@ -1,0 +1,82 @@
+[
+  {
+    "Name": "Tundra",
+    "DisplayName": "Тундра",
+    "Direction": {"Body": 0.4, "Mind": 0.4, "Spirit": 0.6, "Nature": 0.6},
+    "Magnitude": 0.45,
+    "Meta": {"Distortion": 0.35, "Stability": 0.5, "Purity": 0.65, "Potency": 0.55, "Resonance": 0.55, "Corruption": 0.25},
+    "Environment": {"Toxicity": 0.2, "Fertility": 0.3, "Moisture": 0.4},
+    "EntityActivityBase": 0.2,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.4, "Mind": 0.4, "Spirit": 0.6, "Nature": 0.6}, "Meta": {"Distortion": 0.3, "Stability": 0.5, "Purity": 0.7, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.2}}
+  },
+  {
+    "Name": "Taiga",
+    "DisplayName": "Тайга",
+    "Direction": {"Body": 0.5, "Mind": 0.45, "Spirit": 0.55, "Nature": 0.5},
+    "Magnitude": 0.55,
+    "Meta": {"Distortion": 0.28, "Stability": 0.65, "Purity": 0.7, "Potency": 0.6, "Resonance": 0.5, "Corruption": 0.22},
+    "Environment": {"Toxicity": 0.18, "Fertility": 0.5, "Moisture": 0.55},
+    "EntityActivityBase": 0.3,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.5, "Mind": 0.45, "Spirit": 0.55, "Nature": 0.5}, "Meta": {"Distortion": 0.28, "Stability": 0.65, "Purity": 0.75, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.2}}
+  },
+  {
+    "Name": "MixedForest",
+    "DisplayName": "Смешанный лес",
+    "Direction": {"Body": 0.5, "Mind": 0.55, "Spirit": 0.45, "Nature": 0.48},
+    "Magnitude": 0.65,
+    "Meta": {"Distortion": 0.28, "Stability": 0.65, "Purity": 0.7, "Potency": 0.58, "Resonance": 0.55, "Corruption": 0.25},
+    "Environment": {"Toxicity": 0.3, "Fertility": 0.7, "Moisture": 0.6},
+    "EntityActivityBase": 0.35,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.5, "Mind": 0.55, "Spirit": 0.45, "Nature": 0.48}, "Meta": {"Distortion": 0.28, "Stability": 0.65, "Purity": 0.75, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.22}}
+  },
+  {
+    "Name": "BroadleafForest",
+    "DisplayName": "Широколиственный лес",
+    "Direction": {"Body": 0.52, "Mind": 0.55, "Spirit": 0.42, "Nature": 0.48},
+    "Magnitude": 0.7,
+    "Meta": {"Distortion": 0.3, "Stability": 0.6, "Purity": 0.68, "Potency": 0.65, "Resonance": 0.58, "Corruption": 0.3},
+    "Environment": {"Toxicity": 0.3, "Fertility": 0.75, "Moisture": 0.55},
+    "EntityActivityBase": 0.4,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.52, "Mind": 0.55, "Spirit": 0.42, "Nature": 0.48}, "Meta": {"Distortion": 0.3, "Stability": 0.6, "Purity": 0.7, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.28}}
+  },
+  {
+    "Name": "ForestSteppe",
+    "DisplayName": "Лесостепь",
+    "Direction": {"Body": 0.58, "Mind": 0.58, "Spirit": 0.38, "Nature": 0.42},
+    "Magnitude": 0.55,
+    "Meta": {"Distortion": 0.35, "Stability": 0.55, "Purity": 0.6, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.35},
+    "Environment": {"Toxicity": 0.35, "Fertility": 0.55, "Moisture": 0.4},
+    "EntityActivityBase": 0.3,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.58, "Mind": 0.58, "Spirit": 0.38, "Nature": 0.42}, "Meta": {"Distortion": 0.35, "Stability": 0.55, "Purity": 0.6, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.35}}
+  },
+  {
+    "Name": "Steppe",
+    "DisplayName": "Степь",
+    "Direction": {"Body": 0.65, "Mind": 0.6, "Spirit": 0.3, "Nature": 0.35},
+    "Magnitude": 0.45,
+    "Meta": {"Distortion": 0.38, "Stability": 0.5, "Purity": 0.55, "Potency": 0.4, "Resonance": 0.45, "Corruption": 0.4},
+    "Environment": {"Toxicity": 0.4, "Fertility": 0.45, "Moisture": 0.3},
+    "EntityActivityBase": 0.2,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.65, "Mind": 0.6, "Spirit": 0.3, "Nature": 0.35}, "Meta": {"Distortion": 0.38, "Stability": 0.5, "Purity": 0.5, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.42}}
+  },
+  {
+    "Name": "Floodplain",
+    "DisplayName": "Пойма",
+    "Direction": {"Body": 0.45, "Mind": 0.45, "Spirit": 0.55, "Nature": 0.55},
+    "Magnitude": 0.75,
+    "Meta": {"Distortion": 0.5, "Stability": 0.45, "Purity": 0.5, "Potency": 0.7, "Resonance": 0.7, "Corruption": 0.45},
+    "Environment": {"Toxicity": 0.45, "Fertility": 0.8, "Moisture": 0.8},
+    "EntityActivityBase": 0.6,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.45, "Mind": 0.45, "Spirit": 0.55, "Nature": 0.55}, "Meta": {"Distortion": 0.5, "Stability": 0.45, "Purity": 0.55, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.45}}
+  },
+  {
+    "Name": "Bog",
+    "DisplayName": "Болото",
+    "Direction": {"Body": 0.35, "Mind": 0.35, "Spirit": 0.65, "Nature": 0.65},
+    "Magnitude": 0.7,
+    "Meta": {"Distortion": 0.75, "Stability": 0.25, "Purity": 0.25, "Potency": 0.7, "Resonance": 0.8, "Corruption": 0.7},
+    "Environment": {"Toxicity": 0.8, "Fertility": 0.4, "Moisture": 0.85},
+    "EntityActivityBase": 0.7,
+    "DefaultWaterState": {"Magnitude": 0.5, "Direction": {"Body": 0.35, "Mind": 0.35, "Spirit": 0.65, "Nature": 0.65}, "Meta": {"Distortion": 0.75, "Stability": 0.25, "Purity": 0.25, "Potency": 0.5, "Resonance": 0.5, "Corruption": 0.75}}
+  }
+]

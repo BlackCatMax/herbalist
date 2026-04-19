@@ -7,33 +7,42 @@
 static constexpr float k_biome = 0.6f;
 static constexpr float k_condition = 0.4f;
 
+// Вспомогательная функция: преобразует EResourceType в FName (без префикса)
+static FName GetAssetIdFromResourceType(EResourceType Type)
+{
+    FString TypeString = UEnum::GetValueAsString(Type); // "EResourceType::Nettle"
+    int32 ColonIndex;
+    if (TypeString.FindLastChar(':', ColonIndex))
+        TypeString = TypeString.Mid(ColonIndex + 1); // "Nettle"
+    return FName(*TypeString);
+}
+
 FRealState FHerbalistHarvest::GetBaseResourceParams(EResourceType Type)
 {
     UResourceDataManager* Manager = UResourceDataManager::GetInstance();
     if (!Manager)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("ResourceDataManager not initialized!"));
+        UE_LOG(LogHerbalist, Error, TEXT("GetBaseResourceParams: ResourceDataManager not initialized!"));
         return FRealState();
     }
 
-    // Получаем строку баланса по типу (нужно преобразовать EResourceType в PrimaryAssetId)
-    // Упрощённо: предполагаем, что PrimaryAssetId совпадает с именем enum (Nettle, Fern...)
-    FName AssetId = UEnum::GetValueAsName(Type); // "EResourceType::Nettle" -> "Nettle"
+    FName AssetId = GetAssetIdFromResourceType(Type);
+    UE_LOG(LogHerbalist, Log, TEXT("GetBaseResourceParams: Type=%d, AssetId=%s"), (int32)Type, *AssetId.ToString());
+
     const FResourceBalanceRow* BalanceRow = Manager->GetResourceBalanceRow(AssetId);
     if (!BalanceRow)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("No balance row for resource type %d"), (int32)Type);
+        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: No balance row for AssetId '%s' (Type=%d)"), *AssetId.ToString(), (int32)Type);
         return FRealState();
     }
 
     UHerbalistItemData* ItemData = Manager->GetItemData(AssetId);
     if (!ItemData)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("No ItemData for asset %s"), *AssetId.ToString());
+        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: No ItemData for AssetId '%s' (check if DataAsset exists at /Game/Data/Items/%s)"), *AssetId.ToString(), *AssetId.ToString());
         return FRealState();
     }
 
-    // Копируем базовое состояние из ассета
     FRealState State = ItemData->BaseState;
     State.Direction.NormalizeSum();
     return State;
@@ -44,13 +53,12 @@ FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& Biom
     FRealState Base = GetBaseResourceParams(Type);
     if (Base.Magnitude < 0.01f && Base.Meta.Distortion < 0.01f)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: invalid base params for type %d"), (int32)Type);
+        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: invalid base params for type %d, aborting"), (int32)Type);
         return FRealState();
     }
 
     const FRealState& S0 = FAlatyr::S0;
 
-    // Вычисляем дельту биома относительно эталона
     FRealState BiomeDelta;
     BiomeDelta.Direction.Body = BiomeState.Direction.Body - S0.Direction.Body;
     BiomeDelta.Direction.Mind = BiomeState.Direction.Mind - S0.Direction.Mind;
@@ -64,7 +72,6 @@ FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& Biom
     BiomeDelta.Meta.Resonance = BiomeState.Meta.Resonance - S0.Meta.Resonance;
     BiomeDelta.Meta.Corruption = BiomeState.Meta.Corruption - S0.Meta.Corruption;
 
-    // Результат = база + влияние биома + влияние условий
     FRealState Result;
     Result.Direction.Body = Base.Direction.Body + k_biome * BiomeDelta.Direction.Body + k_condition * Conditions.DeltaDirection.Body;
     Result.Direction.Mind = Base.Direction.Mind + k_biome * BiomeDelta.Direction.Mind + k_condition * Conditions.DeltaDirection.Mind;
@@ -95,11 +102,19 @@ FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& Biom
 FString FHerbalistHarvest::GetResourceName(EResourceType Type, bool bEnglish)
 {
     UResourceDataManager* Manager = UResourceDataManager::GetInstance();
-    if (!Manager) return TEXT("Unknown");
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("GetResourceName: No ResourceDataManager"));
+        return TEXT("Unknown");
+    }
 
-    FName AssetId = UEnum::GetValueAsName(Type);
+    FName AssetId = GetAssetIdFromResourceType(Type);
     UHerbalistItemData* ItemData = Manager->GetItemData(AssetId);
-    if (!ItemData) return TEXT("Unknown");
+    if (!ItemData)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("GetResourceName: No ItemData for %s (type %d)"), *AssetId.ToString(), (int32)Type);
+        return TEXT("Unknown");
+    }
 
     if (bEnglish)
         return AssetId.ToString();

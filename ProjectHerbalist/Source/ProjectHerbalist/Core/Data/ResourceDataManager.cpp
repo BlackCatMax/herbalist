@@ -67,8 +67,21 @@ const FBiomeRow* UResourceDataManager::GetBiomeRow(EBiomeType Biome) const
 
 UHerbalistItemData* UResourceDataManager::GetItemData(FName PrimaryAssetId) const
 {
-    FSoftObjectPath AssetPath = PrimaryAssetId.ToString();
-    return Cast<UHerbalistItemData>(AssetPath.TryLoad());
+    if (PrimaryAssetId == NAME_None) return nullptr;
+
+    FString AssetName = PrimaryAssetId.ToString();
+    FString Path = FString::Printf(TEXT("/Game/Data/Items/%s.%s"), *AssetName, *AssetName);
+    UHerbalistItemData* Asset = LoadObject<UHerbalistItemData>(nullptr, *Path);
+
+    if (!Asset)
+    {
+        UE_LOG(LogResourceData, Warning, TEXT("GetItemData: Failed to load '%s' from '%s'"), *AssetName, *Path);
+    }
+    else
+    {
+        UE_LOG(LogResourceData, Log, TEXT("GetItemData: Loaded '%s'"), *AssetName);
+    }
+    return Asset;
 }
 
 void UResourceDataManager::GetSpawnableResources(

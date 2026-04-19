@@ -26,7 +26,17 @@ void UInventorySlotWidget::UpdateDisplay()
     }
 
     FString Name = FHerbalistHarvest::GetResourceName(CachedItem.Type, false);
-    if (ItemNameText) ItemNameText->SetText(FText::FromString(Name));
+    UE_LOG(LogHerbalist, Log, TEXT("UpdateDisplay: Slot %d, Type=%d, Name='%s', Count=%d"),
+        SlotIndex, (int32)CachedItem.Type, *Name, CachedItem.Count);
+
+    if (ItemNameText)
+    {
+        ItemNameText->SetText(FText::FromString(Name));
+    }
+    else
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("UpdateDisplay: ItemNameText is NULL for slot %d!"), SlotIndex);
+    }
 
     if (CountText)
     {
