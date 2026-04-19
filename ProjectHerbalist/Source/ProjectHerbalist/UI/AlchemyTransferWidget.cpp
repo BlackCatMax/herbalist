@@ -6,6 +6,12 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
 
+UAlchemyTransferWidget::UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
+{
+    bIsFocusable = true;
+}
+
 void UAlchemyTransferWidget::BindInventory(UHerbalistInventoryComponent* InPlayerInventory)
 {
     PlayerInventoryComponent = InPlayerInventory;
@@ -40,6 +46,8 @@ void UAlchemyTransferWidget::NativeConstruct()
     IngredientSlot2->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     IngredientSlot3->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     ResultSlot->InitializeSlot(EAlchemySlotType::Result, 1);
+
+    SetKeyboardFocus();
 }
 
 void UAlchemyTransferWidget::NativeDestruct()
@@ -54,22 +62,22 @@ void UAlchemyTransferWidget::NativeDestruct()
 void UAlchemyTransferWidget::OnMixClicked()
 {
     if (bIsMixing) return;
-    
+
     if (ResultSlot->GetItem() && ResultSlot->GetCount() > 0)
     {
         SetStatusMessage(TEXT("Сначала заберите готовое зелье."));
         return;
     }
-    
+
     TArray<FInventoryItem> Ingredients;
     if (!CollectIngredients(Ingredients) || Ingredients.Num() == 0)
     {
         SetStatusMessage(TEXT("Нет ингредиентов."));
         return;
     }
-    
+
     bIsMixing = true;
-    
+
     APlayerController* PC = GetOwningPlayer();
     AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
     if (!HPC)
@@ -78,13 +86,13 @@ void UAlchemyTransferWidget::OnMixClicked()
         bIsMixing = false;
         return;
     }
-    
+
     const FRealState& BiomeState = FAlatyr::S0;
     FIntent DefaultIntent;
     DefaultIntent.Coherence = 0.5f;
     FRngState Rng;
     Rng.Seed = FMath::Rand();
-    
+
     FRealState ResultState = HerbalistCore::Pipeline::ApplyMorok(
         Ingredients,
         BiomeState,
@@ -93,16 +101,16 @@ void UAlchemyTransferWidget::OnMixClicked()
         DefaultIntent,
         Rng
     );
-    
+
     FInventoryItem Potion;
     Potion.Type = EResourceType::Potion;
     Potion.State = ResultState;
     Potion.Count = 1;
-    
+
     ResultSlot->AddItem(Potion, 1);
     ClearIngredientSlots();
     SetStatusMessage(TEXT("Зелье готово."));
-    
+
     bIsMixing = false;
 }
 
@@ -137,4 +145,19 @@ void UAlchemyTransferWidget::SetStatusMessage(const FString& Message)
 {
     if (StatusText)
         StatusText->SetText(FText::FromString(Message));
+}
+
+FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+    if (InKeyEvent.GetKey() == EKeys::E)
+    {
+        APlayerController* PC = GetOwningPlayer();
+        AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
+        if (HPC)
+        {
+            HPC->CloseAnyWidget();
+            return FReply::Handled();
+        }
+    }
+    return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }

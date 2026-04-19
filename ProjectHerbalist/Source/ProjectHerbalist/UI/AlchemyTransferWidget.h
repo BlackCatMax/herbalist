@@ -18,48 +18,49 @@ class PROJECTHERBALIST_API UAlchemyTransferWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
+    UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer);
+
     void BindInventory(UHerbalistInventoryComponent* InPlayerInventory);
-    
-    // Попытка добавить предмет из инвентаря в подходящий слот
     bool TryAddItemToSlot(const FInventoryItem& Item);
-    
+
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
+    virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
 protected:
     UPROPERTY(meta = (BindWidget))
     UInventoryWidget* PlayerInventory;
-    
+
     UPROPERTY(meta = (BindWidget))
     UAlchemySlotWidget* WaterSlot;
-    
+
     UPROPERTY(meta = (BindWidget))
     UAlchemySlotWidget* IngredientSlot1;
-    
+
     UPROPERTY(meta = (BindWidget))
     UAlchemySlotWidget* IngredientSlot2;
-    
+
     UPROPERTY(meta = (BindWidget))
     UAlchemySlotWidget* IngredientSlot3;
-    
+
     UPROPERTY(meta = (BindWidget))
     UAlchemySlotWidget* ResultSlot;
-    
+
     UPROPERTY(meta = (BindWidget))
     UButton* MixButton;
-    
+
     UPROPERTY(meta = (BindWidget))
     UTextBlock* StatusText;
-    
+
     UFUNCTION()
     void OnMixClicked();
-    
+
     UPROPERTY()
     UHerbalistInventoryComponent* PlayerInventoryComponent;
-    
+
     bool CollectIngredients(TArray<FInventoryItem>& OutIngredients);
     void ClearIngredientSlots();
     void SetStatusMessage(const FString& Message);
-    
+
     bool bIsMixing = false;
 };

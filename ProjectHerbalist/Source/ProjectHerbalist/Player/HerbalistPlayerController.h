@@ -36,6 +36,14 @@ public:
     UPROPERTY()
     UInventoryTransferWidget* CurrentTransferWidget = nullptr;
 
+    // Текущий открытый виджет алхимии
+    UPROPERTY()
+    UAlchemyTransferWidget* CurrentAlchemyWidget = nullptr;
+
+    // Текущий алхимический стол
+    UPROPERTY()
+    AAlchemyTableActor* CurrentAlchemyTable = nullptr;
+
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
 
@@ -47,15 +55,7 @@ public:
     void ShowInventory();
     UFUNCTION(Exec)
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
-    
-    // Текущий открытый виджет алхимии (исправлен тип)
-    UPROPERTY()
-    UAlchemyTransferWidget* CurrentAlchemyWidget = nullptr;
-    
-    // Текущий алхимический стол
-    UPROPERTY()
-    AAlchemyTableActor* CurrentAlchemyTable = nullptr;
-    
+
     // Применить зелье на клетку
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();
@@ -95,10 +95,9 @@ protected:
     void OnLeftClick();
     void OnRightClick();
     void OnApplyAlchemyKey();
-    
+
     void OnUsePotion();
-    
-    // Добавить в секцию UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UsePotionAction;
 

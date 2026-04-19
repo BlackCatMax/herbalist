@@ -1,3 +1,4 @@
+// AlchemyTableActor.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -5,6 +6,7 @@
 #include "AlchemyTableActor.generated.h"
 
 class UBoxComponent;
+class UAlchemyTransferWidget;
 
 UCLASS()
 class PROJECTHERBALIST_API AAlchemyTableActor : public AActor
@@ -20,12 +22,15 @@ public:
 protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     UStaticMeshComponent* Mesh;
-    
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     UBoxComponent* InteractionBox;
-    
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-    TSubclassOf<class UAlchemyTransferWidget> AlchemyWidgetClass;
-    
+    TSubclassOf<UAlchemyTransferWidget> AlchemyWidgetClass;
+
+    UPROPERTY()
+    UAlchemyTransferWidget* AlchemyWidgetInstance = nullptr;
+
     FIntPoint GridCoords;
 };

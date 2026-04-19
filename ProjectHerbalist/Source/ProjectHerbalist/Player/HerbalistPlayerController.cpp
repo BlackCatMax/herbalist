@@ -9,6 +9,7 @@
 #include "Core/Storage/AlchemyTableActor.h"
 #include "UI/InventoryWidget.h"
 #include "UI/AlchemyTransferWidget.h"
+#include "UI/InventoryTransferWidget.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 
@@ -77,13 +78,20 @@ void AHerbalistPlayerController::CloseAnyWidget()
         InventoryWidgetInstance = nullptr;
         UE_LOG(LogHerbalist, Log, TEXT("Inventory widget removed"));
     }
-    
+
     if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
     {
         CurrentAlchemyWidget->RemoveFromParent();
         CurrentAlchemyWidget = nullptr;
         CurrentAlchemyTable = nullptr;
         UE_LOG(LogHerbalist, Log, TEXT("Alchemy widget removed"));
+    }
+
+    if (CurrentTransferWidget && CurrentTransferWidget->IsInViewport())
+    {
+        CurrentTransferWidget->RemoveFromParent();
+        CurrentTransferWidget = nullptr;
+        UE_LOG(LogHerbalist, Log, TEXT("Transfer widget removed"));
     }
 
     bShowMouseCursor = false;
@@ -232,6 +240,13 @@ void AHerbalistPlayerController::Interact()
 {
     UE_LOG(LogHerbalist, Log, TEXT("Interact() called (E key), bIsAnyWidgetOpen=%d"), bIsAnyWidgetOpen);
 
+    // Если открыт алхимический виджет – закрываем его
+    if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
+    {
+        CloseAnyWidget();
+        return;
+    }
+
     FHitResult Hit;
     if (GetHitResultFromCamera(Hit))
     {
@@ -241,31 +256,31 @@ void AHerbalistPlayerController::Interact()
         AStorageContainer* Storage = Cast<AStorageContainer>(HitActor);
         if (Storage)
         {
-            UE_LOG(LogHerbalist, Log, TEXT("Storage detected, calling OnInteract"));
             Storage->OnInteract(this);
             return;
         }
-        
+
         AAlchemyTableActor* AlchemyTable = Cast<AAlchemyTableActor>(HitActor);
         if (AlchemyTable)
         {
-            UE_LOG(LogHerbalist, Log, TEXT("Alchemy table detected, calling OnInteract"));
             AlchemyTable->OnInteract(this);
             return;
         }
 
-        // Иначе – сбор ресурса (не мешаем виджетам)
-        AGridWorldManager* WorldManager = nullptr;
-        for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-        if (WorldManager)
+        if (!bIsAnyWidgetOpen)
         {
-            FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-            int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-            int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-            if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
+            AGridWorldManager* WorldManager = nullptr;
+            for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
+            if (WorldManager)
             {
-                DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Cyan, false, 1.0f, 0, 2.0f);
-                HarvestTest(X, Y);
+                FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
+                int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
+                int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
+                if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
+                {
+                    DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Cyan, false, 1.0f, 0, 2.0f);
+                    HarvestTest(X, Y);
+                }
             }
         }
     }
@@ -309,7 +324,6 @@ void AHerbalistPlayerController::UsePotion()
 {
     if (!InventoryComponent) return;
 
-    // Найти WorldManager
     AGridWorldManager* WorldManager = nullptr;
     for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
     {

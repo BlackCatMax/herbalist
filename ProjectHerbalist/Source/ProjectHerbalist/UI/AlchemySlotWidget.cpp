@@ -25,8 +25,11 @@ bool UAlchemySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
 
 bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
 {
-    if (!CanAcceptItem(Item) || Amount <= 0) return false;
-    
+    // Для ResultSlot пропускаем проверку CanAcceptItem (добавляем только из кода)
+    if (SlotType != EAlchemySlotType::Result && !CanAcceptItem(Item))
+        return false;
+    if (Amount <= 0) return false;
+
     if (!bHasItem)
     {
         StoredItem = Item;
@@ -45,7 +48,7 @@ bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
 bool UAlchemySlotWidget::RemoveItem(int32 Amount)
 {
     if (!bHasItem || Amount <= 0) return false;
-    
+
     Count -= Amount;
     if (Count <= 0)
     {
@@ -68,7 +71,7 @@ void UAlchemySlotWidget::Clear()
 
 FReply UAlchemySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-    if (bHasItem && SlotType != EAlchemySlotType::Result)
+    if (bHasItem)
     {
         APlayerController* PC = GetOwningPlayer();
         AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
@@ -87,7 +90,6 @@ FReply UAlchemySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeo
 
 bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
 {
-    // Для простоты пока не реализуем перетаскивание, только двойной клик
     return false;
 }
 
@@ -102,16 +104,17 @@ void UAlchemySlotWidget::UpdateDisplay()
     if (!bHasItem || Count == 0)
     {
         if (IconImage) IconImage->SetVisibility(ESlateVisibility::Hidden);
+        if (ItemNameText) ItemNameText->SetText(FText::GetEmpty());
         if (CountText) CountText->SetText(FText::GetEmpty());
         return;
     }
-    
-    if (IconImage)
+
+    if (IconImage) IconImage->SetVisibility(ESlateVisibility::Visible);
+    if (ItemNameText)
     {
-        IconImage->SetVisibility(ESlateVisibility::Visible);
-        // TODO: установить иконку из DataAsset (через FHerbalistHarvest::GetResourceName или прямой доступ)
+        FString Name = FHerbalistHarvest::GetResourceName(StoredItem.Type, false);
+        ItemNameText->SetText(FText::FromString(Name));
     }
-    
     if (CountText)
     {
         if (Count > 1)
