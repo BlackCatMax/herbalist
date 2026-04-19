@@ -9,7 +9,7 @@
 UAlchemyTransferWidget::UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
 {
-    bIsFocusable = true;
+    SetIsFocusable(true);
 }
 
 void UAlchemyTransferWidget::BindInventory(UHerbalistInventoryComponent* InPlayerInventory)

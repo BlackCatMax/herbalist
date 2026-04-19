@@ -1,4 +1,3 @@
-// HerbalistInventoryComponent.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -31,6 +30,13 @@ public:
     bool TransferOneItem(int32 SourceIndex, int32 TargetIndex);
 
     UFUNCTION(BlueprintCallable, Category = "Inventory")
+    bool TransferItemTo(int32 SourceIndex, UHerbalistInventoryComponent* TargetInventory);
+
+    // Разделить стопку
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    bool SplitStack(int32 Index, int32 Amount, FInventoryItem& OutItem);
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
     TArray<FInventoryItem> GetItems() const { return Items; }
 
     int32 GetNumSlots() const { return Items.Num(); }
@@ -47,5 +53,7 @@ protected:
     UPROPERTY()
     TArray<FInventoryItem> Items;
 
-    int32 FindStackableSlot(EResourceType Type) const;
+    int32 FindStackableSlot(const FInventoryItem& Item) const;
+    bool AreItemsStackable(const FInventoryItem& A, const FInventoryItem& B) const;
+    void MergeStack(FInventoryItem& Target, const FInventoryItem& Source, int32 AddedCount);
 };

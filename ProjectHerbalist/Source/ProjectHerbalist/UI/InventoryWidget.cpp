@@ -3,11 +3,11 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Harvest/HerbalistHarvest.h"
 #include "UI/InventorySlotWidget.h"
+#include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Components/VerticalBox.h"
 
 void UInventoryWidget::BindInventory(UHerbalistInventoryComponent* InInventory)
 {
-    UE_LOG(LogHerbalist, Log, TEXT("BindInventory called, InInventory=%s"), InInventory ? TEXT("valid") : TEXT("null"));
     if (InventoryComponent)
     {
         InventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UInventoryWidget::OnInventoryChanged);
@@ -18,21 +18,20 @@ void UInventoryWidget::BindInventory(UHerbalistInventoryComponent* InInventory)
         InventoryComponent->OnInventoryChanged.AddDynamic(this, &UInventoryWidget::OnInventoryChanged);
         RefreshInventoryDisplay();
     }
-    else
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("BindInventory: InventoryComponent is null"));
-    }
+}
+
+void UInventoryWidget::SetOtherInventory(UHerbalistInventoryComponent* InOther)
+{
+    OtherInventory = InOther;
 }
 
 void UInventoryWidget::NativeConstruct()
 {
     Super::NativeConstruct();
-    UE_LOG(LogHerbalist, Log, TEXT("UInventoryWidget::NativeConstruct"));
 }
 
 void UInventoryWidget::NativeDestruct()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("UInventoryWidget::NativeDestruct"));
     if (InventoryComponent)
     {
         InventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UInventoryWidget::OnInventoryChanged);
@@ -42,52 +41,26 @@ void UInventoryWidget::NativeDestruct()
 
 void UInventoryWidget::OnInventoryChanged()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("OnInventoryChanged triggered"));
     RefreshInventoryDisplay();
 }
 
 void UInventoryWidget::RefreshInventoryDisplay()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("RefreshInventoryDisplay called"));
-    if (!InventoryComponent)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("RefreshInventoryDisplay: InventoryComponent is null"));
+    if (!InventoryComponent || !SlotContainer || !SlotWidgetClass)
         return;
-    }
-    if (!SlotContainer)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("RefreshInventoryDisplay: SlotContainer is null (BindWidget failed)"));
-        return;
-    }
-    if (!SlotWidgetClass)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("RefreshInventoryDisplay: SlotWidgetClass is null (not set in Blueprint)"));
-        return;
-    }
 
     ClearSlots();
 
     TArray<FInventoryItem> Items = InventoryComponent->GetItems();
-    UE_LOG(LogHerbalist, Log, TEXT("RefreshInventoryDisplay: %d items in inventory"), Items.Num());
-
-    Items.Sort([](const FInventoryItem& A, const FInventoryItem& B) {
-        FString NameA = FHerbalistHarvest::GetResourceName(A.Type, false);
-        FString NameB = FHerbalistHarvest::GetResourceName(B.Type, false);
-        return NameA < NameB;
-        });
 
     for (int32 i = 0; i < Items.Num(); ++i)
     {
         UInventorySlotWidget* NewSlot = CreateWidget<UInventorySlotWidget>(GetWorld(), SlotWidgetClass);
         if (NewSlot)
         {
-            UE_LOG(LogHerbalist, Log, TEXT("Creating slot %d, item type=%d"), i, (int32)Items[i].Type);
             NewSlot->InitializeSlot(i, Items[i], InventoryComponent);
+            NewSlot->SetOtherInventory(OtherInventory);
             SlotContainer->AddChildToVerticalBox(NewSlot);
-        }
-        else
-        {
-            UE_LOG(LogHerbalist, Error, TEXT("Failed to create slot widget for index %d"), i);
         }
     }
 }
@@ -96,8 +69,30 @@ void UInventoryWidget::ClearSlots()
 {
     if (SlotContainer)
     {
-        int32 ChildCount = SlotContainer->GetChildrenCount();
-        UE_LOG(LogHerbalist, Log, TEXT("ClearSlots: removing %d children"), ChildCount);
         SlotContainer->ClearChildren();
     }
+}
+
+bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+{
+    UInventoryDragDropOperation* DragOp = Cast<UInventoryDragDropOperation>(InOperation);
+    if (!DragOp || !InventoryComponent)
+        return false;
+
+    if (DragOp->bIsSplit)
+    {
+        if (InventoryComponent->AddItem(DragOp->SplitItem, DragOp->SplitItem.Count))
+        {
+            DragOp->bIsSplit = false;
+            return true;
+        }
+        return false;
+    }
+
+    if (DragOp->SourceInventory && DragOp->SourceInventory != InventoryComponent)
+    {
+        return DragOp->SourceInventory->TransferItemTo(DragOp->SourceIndex, InventoryComponent);
+    }
+
+    return false;
 }

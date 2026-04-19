@@ -77,6 +77,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     Delta.Meta.Corruption = NewState.Meta.Corruption - OldState.Meta.Corruption;
 
     SetTargetState(X, Y, NewState);
+
     PropagateToNeighbors(X, Y, Delta, 0.5f, PropagationDepth);
 }
 

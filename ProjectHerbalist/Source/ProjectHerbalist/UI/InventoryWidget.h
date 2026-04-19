@@ -6,7 +6,7 @@
 #include "InventoryWidget.generated.h"
 
 class UInventorySlotWidget;
-class UVerticalBox;
+class UVerticalBox; // или UVerticalBox, замените при необходимости
 
 UCLASS()
 class PROJECTHERBALIST_API UInventoryWidget : public UUserWidget
@@ -16,10 +16,12 @@ class PROJECTHERBALIST_API UInventoryWidget : public UUserWidget
 public:
     void BindInventory(UHerbalistInventoryComponent* InInventory);
     UHerbalistInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
+    void SetOtherInventory(UHerbalistInventoryComponent* InOther);
 
 protected:
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
+    virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 
     UFUNCTION()
     void OnInventoryChanged();
@@ -33,6 +35,9 @@ protected:
 private:
     UPROPERTY()
     UHerbalistInventoryComponent* InventoryComponent = nullptr;
+
+    UPROPERTY()
+    UHerbalistInventoryComponent* OtherInventory = nullptr;
 
     void RefreshInventoryDisplay();
     void ClearSlots();

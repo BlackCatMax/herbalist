@@ -10,8 +10,8 @@ void AGridWorldManager::Tick(float DeltaTime)
     // Восстановление стресса
     if (bEnableRecovery && StressCells.Num() > 0)
     {
-        TSet<int32> ProcessedStress = StressCells;
-        for (int32 Idx : ProcessedStress)
+        TArray<int32> StressIndices = StressCells.Array();
+        for (int32 Idx : StressIndices)
         {
             int32 X = Idx % GridSizeX;
             int32 Y = Idx / GridSizeX;
@@ -26,63 +26,73 @@ void AGridWorldManager::Tick(float DeltaTime)
                 MarkDirty(X, Y);
             }
             if (Cell->HarvestStress <= 0.0f)
+            {
                 StressCells.Remove(Idx);
+            }
         }
     }
 
     // Регенерация ресурсов
-    TSet<int32> ProcessedRegrow = RegrowingCells;
-    for (int32 Idx : ProcessedRegrow)
+    if (RegrowingCells.Num() > 0)
     {
-        int32 X = Idx % GridSizeX;
-        int32 Y = Idx / GridSizeX;
-        FGridCell* Cell = GetCell(X, Y);
-        if (!Cell) continue;
-
-        Cell->ResourceRegrowthTimer -= DeltaTime;
-        if (Cell->ResourceRegrowthTimer <= 0.0f)
+        TArray<int32> RegrowIndices = RegrowingCells.Array();
+        for (int32 Idx : RegrowIndices)
         {
-            RegenerateCellResource(*Cell);
-            UnmarkRegrowing(X, Y);
-            UE_LOG(LogHerbalist, Log, TEXT("Cell (%d,%d) resource regenerated"), X, Y);
+            int32 X = Idx % GridSizeX;
+            int32 Y = Idx / GridSizeX;
+            FGridCell* Cell = GetCell(X, Y);
+            if (!Cell) continue;
+
+            Cell->ResourceRegrowthTimer -= DeltaTime;
+            if (Cell->ResourceRegrowthTimer <= 0.0f)
+            {
+                RegenerateCellResource(*Cell);
+                UnmarkRegrowing(X, Y);
+                UE_LOG(LogHerbalist, Log, TEXT("Cell (%d,%d) resource regenerated"), X, Y);
+            }
         }
     }
 
     // Интерполяция грязных клеток
-    TSet<int32> ProcessedDirty = DirtyCells;
-    for (int32 Idx : ProcessedDirty)
+    if (DirtyCells.Num() > 0)
     {
-        int32 X = Idx % GridSizeX;
-        int32 Y = Idx / GridSizeX;
-        FGridCell* Cell = GetCell(X, Y);
-        if (!Cell) continue;
-
-        bool bStateNear =
-            FMath::IsNearlyEqual(Cell->State.Magnitude, Cell->TargetState.Magnitude, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Meta.Distortion, Cell->TargetState.Meta.Distortion, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Meta.Stability, Cell->TargetState.Meta.Stability, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Meta.Purity, Cell->TargetState.Meta.Purity, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Meta.Potency, Cell->TargetState.Meta.Potency, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Meta.Resonance, Cell->TargetState.Meta.Resonance, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Meta.Corruption, Cell->TargetState.Meta.Corruption, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Direction.Body, Cell->TargetState.Direction.Body, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Direction.Mind, Cell->TargetState.Direction.Mind, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Direction.Spirit, Cell->TargetState.Direction.Spirit, 0.001f) &&
-            FMath::IsNearlyEqual(Cell->State.Direction.Nature, Cell->TargetState.Direction.Nature, 0.001f);
-
-        if (!bStateNear)
+        TArray<int32> DirtyIndices = DirtyCells.Array();
+        for (int32 Idx : DirtyIndices)
         {
-            InterpolateCell(*Cell, DeltaTime);
-            UpdateMemory(Cell->Memory, Cell->State, 0.05f * DeltaTime);
-        }
-        else
-        {
-            Cell->State = Cell->TargetState;
-            UpdateMemory(Cell->Memory, Cell->State, 0.1f);
-            DirtyCells.Remove(Idx);
+            int32 X = Idx % GridSizeX;
+            int32 Y = Idx / GridSizeX;
+            FGridCell* Cell = GetCell(X, Y);
+            if (!Cell) continue;
+
+            // Проверка, насколько текущее состояние близко к целевому
+            bool bStateNear =
+                FMath::IsNearlyEqual(Cell->State.Magnitude, Cell->TargetState.Magnitude, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Meta.Distortion, Cell->TargetState.Meta.Distortion, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Meta.Stability, Cell->TargetState.Meta.Stability, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Meta.Purity, Cell->TargetState.Meta.Purity, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Meta.Potency, Cell->TargetState.Meta.Potency, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Meta.Resonance, Cell->TargetState.Meta.Resonance, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Meta.Corruption, Cell->TargetState.Meta.Corruption, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Direction.Body, Cell->TargetState.Direction.Body, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Direction.Mind, Cell->TargetState.Direction.Mind, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Direction.Spirit, Cell->TargetState.Direction.Spirit, 0.001f) &&
+                FMath::IsNearlyEqual(Cell->State.Direction.Nature, Cell->TargetState.Direction.Nature, 0.001f);
+
+            if (!bStateNear)
+            {
+                InterpolateCell(*Cell, DeltaTime);
+                UpdateMemory(Cell->Memory, Cell->State, 0.05f * DeltaTime);
+            }
+            else
+            {
+                Cell->State = Cell->TargetState;
+                UpdateMemory(Cell->Memory, Cell->State, 0.1f);
+                DirtyCells.Remove(Idx);
+            }
         }
     }
 
+    // Управление активностью тика
     bool bShouldTick = (DirtyCells.Num() > 0) || (RegrowingCells.Num() > 0) || (StressCells.Num() > 0);
     if (bInterpolationActive != bShouldTick)
     {

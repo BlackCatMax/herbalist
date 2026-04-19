@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/DragDropOperation.h"
+#include "Core/Types/HerbalistCoreTypes.h"
 #include "InventoryDragDropOperation.generated.h"
 
 class UHerbalistInventoryComponent;
@@ -13,6 +14,14 @@ class PROJECTHERBALIST_API UInventoryDragDropOperation : public UDragDropOperati
 
 public:
     int32 SourceIndex = -1;
+
     UPROPERTY()
     UHerbalistInventoryComponent* SourceInventory = nullptr;
+
+    // Для разделения стопки
+    UPROPERTY()
+    bool bIsSplit = false;
+
+    UPROPERTY()
+    FInventoryItem SplitItem;
 };

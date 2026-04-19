@@ -44,13 +44,13 @@ public:
 
 protected:
     UPROPERTY()
-    UDataTable* ResourceBalanceTable = nullptr;
+    TObjectPtr<UDataTable> ResourceBalanceTable = nullptr;
 
     UPROPERTY()
-    UDataTable* BiomeTable = nullptr;
+    TObjectPtr<UDataTable> BiomeTable = nullptr;
 
     UPROPERTY()
-    UDataTable* WaterTable = nullptr;
+    TObjectPtr<UDataTable> WaterTable = nullptr;
 
     TMap<EBiomeType, const FBiomeRow*> BiomeRowCache;
 
