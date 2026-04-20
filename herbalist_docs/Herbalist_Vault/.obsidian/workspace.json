@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Herbalist_Vault/03_Techical/Current/Inventory_Current.md",
+                "file": "02_GDD/13_World_Pipeline.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Inventory_Current"
+              "title": "13_World_Pipeline"
             }
           }
         ]
@@ -185,6 +185,11 @@
   },
   "active": "94569282ba265bb2",
   "lastOpenFiles": [
+    "02_GDD/12_Biome_Change.md",
+    "02_GDD/11_Intent_Evolution.md",
+    "02_GDD/09_Entities.md",
+    "02_GDD/08_Content.md",
+    "02_GDD/10_Biomes_Reference.md",
     "Herbalist_Vault/03_Techical/Current/Core_Current.md",
     "Herbalist_Vault/03_Techical/Current/Inventory_Current.md",
     "03_Technical/Current/Inventory_Current.md",
@@ -208,11 +213,6 @@
     "Herbalist_Vault/02_GDD/11_Biome_Change.md",
     "Herbalist_Vault/02_GDD/10_Intent_Evolution.md",
     "Herbalist_Vault/02_GDD/09_Entities.md",
-    "Herbalist_Vault/02_GDD/08_Content.md",
-    "Herbalist_Vault/02_GDD/07_UX.md",
-    "Herbalist_Vault/02_GDD/05_Systems.md",
-    "Herbalist_Vault/02_GDD/04_Game_Loop.md",
-    "Herbalist_Vault/02_GDD/03_Narrative.md",
     "Base.base",
     "Herbalist_Vault/Без названия.base",
     "Herbalist_Vault/03_Techical/Future",
