@@ -1,0 +1,225 @@
+{
+  "main": {
+    "id": "48cfde38419576b6",
+    "type": "split",
+    "children": [
+      {
+        "id": "2b300d2eb6901931",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "94569282ba265bb2",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Herbalist_Vault/03_Techical/Current/Inventory_Current.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Inventory_Current"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "70b2a9a496703600",
+    "type": "split",
+    "children": [
+      {
+        "id": "705d0fff72cff383",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "61b27a8ddd6c5086",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Файловый менеджер"
+            }
+          },
+          {
+            "id": "88c2e0df3ac91bae",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Поиск"
+            }
+          },
+          {
+            "id": "be9173a73c150958",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Закладки"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "f7e8cd25ffd5eed5",
+    "type": "split",
+    "children": [
+      {
+        "id": "30fa4a39b24928d9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3e4134bdb932be72",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Herbalist_Vault/03_Techical/Current/UI_Current.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Обратные ссылки для UI_Current"
+            }
+          },
+          {
+            "id": "02611f5d138d5a63",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Herbalist_Vault/03_Techical/Current/UI_Current.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Исходящие ссылки из UI_Current"
+            }
+          },
+          {
+            "id": "7c5bd9cb4e23f46d",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Теги"
+            }
+          },
+          {
+            "id": "e96dba483d3780a4",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Все свойства"
+            }
+          },
+          {
+            "id": "6b9cc471b2c670aa",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Herbalist_Vault/03_Techical/Current/UI_Current.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Структура UI_Current"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Меню быстрого перехода": false,
+      "graph:Граф": false,
+      "canvas:Создать новый холст": false,
+      "daily-notes:Сегодняшняя заметка": false,
+      "templates:Вставить шаблон": false,
+      "command-palette:Открыть палитру команд": false,
+      "bases:Создать новую базу": false
+    }
+  },
+  "active": "94569282ba265bb2",
+  "lastOpenFiles": [
+    "Herbalist_Vault/03_Techical/Current/Core_Current.md",
+    "Herbalist_Vault/03_Techical/Current/Inventory_Current.md",
+    "03_Technical/Current/Inventory_Current.md",
+    "Главная.md",
+    "03_Technical/Current",
+    "03_Technical",
+    "Herbalist_Vault/02_GDD/06_Progression.md",
+    "Herbalist_Vault/02_GDD/01_Introduction.md",
+    "Herbalist_Vault/01_Glossary/_Index.md",
+    "Herbalist_Vault/01_Glossary/Alchemy.md",
+    "Herbalist_Vault/01_Glossary/Corruption.md",
+    "Herbalist_Vault/01_Glossary/Body.md",
+    "Herbalist_Vault/01_Glossary/Bifurcation.md",
+    "Herbalist_Vault/02_GDD/00_Core_Lock.md",
+    "Herbalist_Vault/03_Techical/Future/technical_full.md",
+    "glossary_full.md",
+    "design_full.md",
+    "Herbalist_Vault/03_Techical/Current/UI_Current.md",
+    "Herbalist_Vault/03_Techical/Current/Alchemy_Current.md",
+    "Herbalist_Vault/02_GDD/12_World_Pipeline.md",
+    "Herbalist_Vault/02_GDD/11_Biome_Change.md",
+    "Herbalist_Vault/02_GDD/10_Intent_Evolution.md",
+    "Herbalist_Vault/02_GDD/09_Entities.md",
+    "Herbalist_Vault/02_GDD/08_Content.md",
+    "Herbalist_Vault/02_GDD/07_UX.md",
+    "Herbalist_Vault/02_GDD/05_Systems.md",
+    "Herbalist_Vault/02_GDD/04_Game_Loop.md",
+    "Herbalist_Vault/02_GDD/03_Narrative.md",
+    "Base.base",
+    "Herbalist_Vault/Без названия.base",
+    "Herbalist_Vault/03_Techical/Future",
+    "Herbalist_Vault/03_Techical/Current",
+    "Herbalist_Vault/04_Assets",
+    "Herbalist_Vault/00_Meta/Templates",
+    "Herbalist_Vault/00_Meta",
+    "Herbalist_Vault"
+  ]
+}

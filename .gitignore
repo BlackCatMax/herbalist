@@ -36,3 +36,10 @@ Intermediate/
 Binaries/
 Saved/
 DerivedDataCache/
+
+# Obsidian
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/
+.obsidian/themes/
+.trash/
