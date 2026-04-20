@@ -1,21 +1,3 @@
----
-id: boloto_belokrylnik
-name: Белокрыльник
-biome: Болото
-type: Цветок
-d_base: [0.5, 0.5, 0.5, 0.5]
-m_base: 0.5
-potency: 0.5
-purity: 0.5
-stability: 0.5
-resonance: 0.5
-corruption: 0.3
-distortion: 0.3
-element: Земля
-tags: [boloto, tsvetok]
-image: "Белокрыльник.png"
----
-
 # Белокрыльник
 
 ![[../../../05_Assets/ingredients/boloto/belokrylnik.png]]
