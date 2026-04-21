@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "93e3efb960aa2501",
+        "id": "bdf29822773e90e4",
         "type": "tabs",
         "children": [
           {
-            "id": "b03542b483c6e43d",
+            "id": "d344dfee6a5c0c12",
             "type": "leaf",
             "state": {
               "type": "empty",
@@ -180,8 +180,9 @@
       "markdown-importer:Импорт Markdown-файлов": false
     }
   },
-  "active": "61b27a8ddd6c5086",
+  "active": "d344dfee6a5c0c12",
   "lastOpenFiles": [
+    "02_GDD/14_Biome_Graph.md",
     "01_Glossary/BiomeState.md",
     "Map of Content.md",
     "04_Compendium/Бестиарий/Нечисть (повсеместная)/Вурдалаки.md",
@@ -211,7 +212,6 @@
     "03_Technical/Current/Core_Current.md",
     "03_Technical/Current/Alchemy_Current.md",
     "01_Glossary/S_perceived.md",
-    "04_Compendium/Биомы/Лесостепь.md",
     "04_Compendium/Растительность/Тундра",
     "04_Compendium/Растительность/Тайга",
     "04_Compendium/Растительность/Степь",
