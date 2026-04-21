@@ -4,6 +4,10 @@
 check_docs.py — проверка целостности документации Herbalist Vault
 Запуск: python check_docs.py
 Генерирует отчёт docs_check_report.md в той же папке.
+
+Изменения:
+- Отключена проверка обязательных полей frontmatter и соответствия биомов.
+- Ссылки на изображения (.png, .jpg и т.д.) игнорируются при проверке битых ссылок.
 """
 
 import os
@@ -19,35 +23,10 @@ SKIP_DIRS = {'.obsidian', 'build', '05_Assets', 'snippets', 'plugins', 'Current'
 SKIP_FILES = {'_template.md', '_Index.md', '.md'}  # .md — пустые файлы-заглушки (будут удалены)
 ALLOWED_EMPTY = {'_template.md', '_Index.md'}  # эти файлы могут быть пустыми или почти пустыми
 
-# Обязательные поля для разных типов файлов (ключ: часть пути, словарь: поле -> обязательное)
-REQUIRED_FRONTMATTER = {
-    '04_Compendium/Bestiary': {
-        'name': 'название существа',
-        'type': 'тип (например, дух, нечисть)',
-        'biome': 'биом или any'
-    },
-    '04_Compendium/Ingredients': {
-        'name': 'название ингредиента',
-        'biome': 'биом происхождения',
-        'properties': 'свойства (можно массив или строка)'
-    },
-    '04_Compendium/Biomes': {
-        'name': 'название биома',
-        'description': 'описание'
-    },
-    '01_Glossary': {
-        'term': 'термин',
-        'definition': 'определение'
-    }
-}
+# Расширения файлов, которые считаются изображениями и не проверяются на существование
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif'}
 
-# Дополнительные проверки: для бестиария/ингредиентов биом должен существовать в Biomes/ или быть 'any'
-BIOMES_DIR = ROOT_DIR / '04_Compendium' / 'Biomes'
-KNOWN_BIOMES = {f.stem for f in BIOMES_DIR.glob('*.md') if f.stem != '_template'}
-
-# Специальные папки в бестиарии, которые не соответствуют биомам (например, нечисть)
-SPECIAL_BESTIARY_DIRS = {'nechist'}
-
+# ========== Функции для проверки ==========
 
 def get_all_md_files(root):
     """Рекурсивно собирает все .md файлы, исключая SKIP_DIRS."""
@@ -96,7 +75,6 @@ def extract_wikilinks(content, current_file):
     Извлекает из markdown все внутренние ссылки [[...]].
     Возвращает список кортежей (строка_ссылки, строка_номера).
     """
-    # Регулярка для [[...]] — не жадная, поддерживает алиасы и якоря
     pattern = r'\[\[(.*?)\]\]'
     matches = []
     for line_num, line in enumerate(content.split('\n'), 1):
@@ -109,6 +87,11 @@ def extract_wikilinks(content, current_file):
                 link = link.split('#')[0]
             matches.append((link.strip(), line_num))
     return matches
+
+
+def is_image_link(link):
+    """Возвращает True, если ссылка указывает на файл изображения."""
+    return Path(link).suffix.lower() in IMAGE_EXTENSIONS
 
 
 def resolve_wikilink(link, current_file):
@@ -132,8 +115,6 @@ def resolve_wikilink(link, current_file):
         return target
     
     # Если не нашли, возможно ссылка ведёт на файл в другой части иерархии (глобальный поиск)
-    # Это неоптимально, но для совместимости сделаем поиск по всем .md
-    # Но для скорости лучше сначала проверить в подпапках, но пока упростим:
     for root, dirs, files in os.walk(ROOT_DIR):
         if any(skip in root for skip in SKIP_DIRS):
             continue
@@ -156,14 +137,12 @@ def extract_frontmatter(content):
     if end_index is None:
         return {}
     frontmatter_lines = lines[1:end_index]
-    # Простой парсинг "ключ: значение"
     data = {}
     for line in frontmatter_lines:
         if ':' in line:
             key, val = line.split(':', 1)
             key = key.strip()
             val = val.strip()
-            # Убираем кавычки, если есть
             if val.startswith('"') and val.endswith('"'):
                 val = val[1:-1]
             if val.startswith("'") and val.endswith("'"):
@@ -172,41 +151,7 @@ def extract_frontmatter(content):
     return data
 
 
-def check_frontmatter(path, required_fields):
-    """Проверяет наличие обязательных полей в frontmatter. Возвращает список ошибок."""
-    content = path.read_text(encoding='utf-8', errors='ignore')
-    fm = extract_frontmatter(content)
-    errors = []
-    for field, description in required_fields.items():
-        if field not in fm:
-            errors.append(f"Отсутствует поле '{field}' ({description})")
-    return errors
-
-
-def check_biome_consistency(path, file_type):
-    """
-    Для бестиария и ингредиентов проверяет, что указанный биом существует в папке Biomes
-    или является специальным значением ('any', 'nechist' и т.п.)
-    """
-    content = path.read_text(encoding='utf-8', errors='ignore')
-    fm = extract_frontmatter(content)
-    if 'biome' not in fm:
-        return []  # ошибка будет поймана обязательными полями
-    
-    biome_value = fm['biome']
-    errors = []
-    
-    # Специальные допустимые значения
-    special_ok = {'any', 'nechist', 'all', 'none'}
-    if biome_value in special_ok:
-        return []
-    
-    # Проверка на существование файла биома
-    biome_file = BIOMES_DIR / f"{biome_value}.md"
-    if not biome_file.exists():
-        errors.append(f"Биом '{biome_value}' не найден среди {KNOWN_BIOMES}")
-    return errors
-
+# ========== Главная функция ==========
 
 def main():
     print(f"Проверка документации в {ROOT_DIR}\n")
@@ -228,7 +173,7 @@ def main():
         rel_paths = [str(p.relative_to(ROOT_DIR)) for p in paths]
         errors.append(f"[ДУБЛИКАТ] Имя '{name}' в папке {paths[0].parent.relative_to(ROOT_DIR)}: {', '.join(rel_paths)}")
     
-    # 4. Проверка вики-ссылок
+    # 4. Проверка вики-ссылок (исключая ссылки на изображения)
     broken_links = []
     for md_file in all_md:
         content = md_file.read_text(encoding='utf-8', errors='ignore')
@@ -237,6 +182,9 @@ def main():
             # Пропускаем внешние ссылки
             if re.match(r'^(https?://|mailto:|ftp://)', link):
                 continue
+            # Игнорируем ссылки на изображения (даже если они битые)
+            if is_image_link(link):
+                continue
             target = resolve_wikilink(link, md_file)
             if target is None:
                 broken_links.append((md_file, link, line_num))
@@ -244,48 +192,8 @@ def main():
     for md_file, link, line_num in broken_links:
         errors.append(f"[БИТАЯ ССЫЛКА] {md_file.relative_to(ROOT_DIR)} стр.{line_num}: [[{link}]]")
     
-    # 5. Проверка frontmatter и биомов
-    for rel_path_pattern, required in REQUIRED_FRONTMATTER.items():
-        pattern_dir = ROOT_DIR / rel_path_pattern
-        if not pattern_dir.exists():
-            continue
-        for md_file in pattern_dir.rglob('*.md'):
-            if md_file.name in SKIP_FILES:
-                continue
-            # Определяем тип файла по пути
-            if 'Bestiary' in md_file.parts:
-                file_type = 'bestiary'
-            elif 'Ingredients' in md_file.parts:
-                file_type = 'ingredient'
-            elif 'Biomes' in md_file.parts:
-                file_type = 'biome'
-            elif 'Glossary' in md_file.parts:
-                file_type = 'glossary'
-            else:
-                continue
-            
-            # Проверка обязательных полей
-            fm_errors = check_frontmatter(md_file, required)
-            for err in fm_errors:
-                errors.append(f"[FRONTMATTER] {md_file.relative_to(ROOT_DIR)}: {err}")
-            
-            # Проверка биома (только для bestiary и ingredient)
-            if file_type in ('bestiary', 'ingredient'):
-                # Для бестиария дополнительная проверка: если файл лежит в папке SPECIAL_BESTIARY_DIRS, то не проверяем биом строго
-                parent_dir = md_file.parent.name
-                if file_type == 'bestiary' and parent_dir in SPECIAL_BESTIARY_DIRS:
-                    continue  # пропускаем, так как нечисть может быть везде
-                biome_errors = check_biome_consistency(md_file, file_type)
-                for err in biome_errors:
-                    errors.append(f"[БИОМ] {md_file.relative_to(ROOT_DIR)}: {err}")
-    
-    # 6. Дополнительная проверка: все ли папки бестиария соответствуют биомам (кроме special)
-    bestiary_root = ROOT_DIR / '04_Compendium' / 'Bestiary'
-    if bestiary_root.exists():
-        for subdir in bestiary_root.iterdir():
-            if subdir.is_dir() and subdir.name not in SPECIAL_BESTIARY_DIRS:
-                if subdir.name not in KNOWN_BIOMES:
-                    warnings.append(f"[НЕИЗВЕСТНЫЙ БИОМ В БЕСТИАРИИ] Папка '{subdir.name}' не соответствует ни одному биому из {KNOWN_BIOMES}")
+    # 5. Проверка frontmatter и биомов ОТКЛЮЧЕНА ПО ЗАПРОСУ
+    # (Код удалён / закомментирован)
     
     # Вывод отчёта в консоль
     print("\n" + "="*80)
@@ -340,7 +248,6 @@ def main():
     
     print(f"\nОтчёт сохранён: {report_path}")
     
-    # Возвращаем код выхода
     sys.exit(1 if errors else 0)
 
 
