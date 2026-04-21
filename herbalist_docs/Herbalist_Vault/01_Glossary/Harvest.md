@@ -1,20 +1,17 @@
 ---
-tags: [glossary, mechanic, implemented]
+tags: [glossary, mechanic]
 status: ✅
 ---
 
-# Harvest (Сбор)
+# Harvest
 
-**GDD:** Извлечение локальной конфигурации состояния из среды.
+**GDD:** Сбор — извлечение локальной конфигурации состояния из среды. Ресурс формируется в момент взаимодействия, а не существует заранее.
 
-**Tech:** `FHerbalistHarvest::Harvest`:
-- `Base =` из DataAsset
-- `+ k_biome * (BiomeState - S₀)`
-- `+ k_condition * ConditionModifier`
-- Нормализация по сумме, клиппинг.
+**Tech:** `FHerbalistHarvest::Harvest`: `Base` из DataAsset + `k_biome * (BiomeState - S₀)` + `k_condition * ConditionModifier`. Нормализация по сумме, клиппинг. Увеличивает `HarvestStress` клетки.
 
-Увеличивает `HarvestStress` клетки.
+**Восприятие:** Одинаковые ресурсы в разных местах и условиях дают разный результат. Игрок учится выбирать «правильные» места и время.
 
 **Связи:**
-- Использует [[S0]]
-- Влияет на [[GridWorldManager]]
+- [[S0]]
+- [[GridWorldManager]]
+- [[Environment]]

@@ -4,39 +4,20 @@
     "type": "split",
     "children": [
       {
-        "id": "2b300d2eb6901931",
+        "id": "93e3efb960aa2501",
         "type": "tabs",
         "children": [
           {
-            "id": "fbdda37b1a22b7a5",
+            "id": "b03542b483c6e43d",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "01_Glossary/BiomeState.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "BiomeState"
-            }
-          },
-          {
-            "id": "376a82a868091bc7",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "04_Compendium/Bestiary/Лесостепь/Гамаюн.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "Гамаюн"
+              "title": "Новая вкладка"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "vertical"
@@ -199,44 +180,44 @@
       "markdown-importer:Импорт Markdown-файлов": false
     }
   },
-  "active": "376a82a868091bc7",
+  "active": "61b27a8ddd6c5086",
   "lastOpenFiles": [
-    "04_Compendium/Bestiary/Болото/Болотные огни.md",
-    "04_Compendium/Bestiary/Болото/Болотник.md",
-    "04_Compendium/Растительность/Болото/Пушица.md",
-    "04_Compendium/Растительность/Болото/Багульник.md",
-    "04_Compendium/Bestiary/Болото/Гнильники.md",
-    "04_Compendium/Bestiary/Тундра/Дух Предка.md",
-    "04_Compendium/Bestiary/Тундра/Хозяин Севера.md",
-    "04_Compendium/Bestiary/Тундра/Волот.md",
-    "04_Compendium/Bestiary/Тундра/Метельники.md",
-    "04_Compendium/Bestiary/Тундра/Сирин.md",
-    "04_Compendium/Биомы/Тундра.md",
-    "04_Compendium/Bestiary/Смешанный лес/Луговой.md",
-    "04_Compendium/Bestiary/Степь/Суховейки.md",
-    "04_Compendium/Биомы/Степь.md",
-    "04_Compendium/Биомы/Тайга.md",
-    "04_Compendium/Биомы/Смешанный лес.md",
-    "04_Compendium/Биомы/Речная пойма.md",
-    "01_Glossary/Mind.md",
-    "04_Compendium/Биомы/Лесостепь.md",
+    "01_Glossary/BiomeState.md",
+    "Map of Content.md",
+    "04_Compendium/Бестиарий/Нечисть (повсеместная)/Вурдалаки.md",
+    "04_Compendium/Растительность/Лесостепь/Василек.md",
+    "fix_double_brackets.ps1",
+    "Текстовый документ.txt",
+    "04_Compendium/Растительность/Лесостепь/Горицвет.md",
     "04_Compendium/Биомы/Болото.md",
-    "04_Compendium/Bestiary/Широколиственный лес/Злыдни.md",
-    "04_Compendium/Bestiary/Широколиственный лес/Жердяи.md",
-    "04_Compendium/Bestiary/Широколиственный лес/Стукачи.md",
-    "04_Compendium/Bestiary/Широколиственный лес/Подпольники.md",
-    "04_Compendium/Bestiary/Широколиственный лес/Овинник.md",
-    "04_Compendium/Bestiary/Широколиственный лес/Кикимора-владычица.md",
+    "02_GDD/08_Content.md",
+    "wikilinks.py",
+    "01_Glossary/Interaction Rules.md",
+    "01_Glossary/_Index.md",
+    "01_Glossary/Alchemy.md",
+    "01_Glossary/Огонь.md",
+    "01_Glossary/Земля.md",
+    "01_Glossary/Воздух.md",
+    "01_Glossary/Вода.md",
+    "01_Glossary/Bifurcation.md",
+    "00_Meta/Templates/Glossary_Term.md",
+    "unify_glossary.py",
+    "00_Meta/Templates/GDD_Section.md",
+    "03_Technical/Future/technical_full.md",
+    "02_GDD/09_Entities.md",
+    "02_GDD/10_Biomes_Reference.md",
+    "04_Compendium/Растительность.md",
+    "02_GDD/00_Core_Lock.md",
+    "03_Technical/Current/Core_Current.md",
+    "03_Technical/Current/Alchemy_Current.md",
+    "01_Glossary/S_perceived.md",
+    "04_Compendium/Биомы/Лесостепь.md",
     "04_Compendium/Растительность/Тундра",
     "04_Compendium/Растительность/Тайга",
     "04_Compendium/Растительность/Степь",
     "04_Compendium/Растительность/Широколиственный лес",
     "04_Compendium/Растительность/Смешанный лес",
     "04_Compendium/Растительность/Речная пойма",
-    "04_Compendium/Растительность/Лесостепь",
-    "04_Compendium/Растительность/Болото",
-    "transliterate_filenames.py",
-    "Текстовый документ.txt",
     "Без названия.canvas",
     "05_Assets/ingredients/tundra/yagel.jpeg",
     "04_Assets/ingredients/tundra/yagel.jpeg",

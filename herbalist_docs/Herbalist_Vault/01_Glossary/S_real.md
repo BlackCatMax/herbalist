@@ -1,20 +1,25 @@
 ---
-tags: [glossary, core, implemented]
+tags: [glossary, core]
 status: ✅
 ---
 
 # S_real
 
-**GDD:** Реальное (объективное) состояние мира, недоступное игроку напрямую.
+**GDD:** Реальное (объективное) состояние мира, недоступное игроку напрямую. Все объекты, биомы и сущности обладают S_real, которое определяет их истинные свойства и поведение.
 
 **Tech:** `FRealState` в коде:
-- `Magnitude` (float)
-- `Direction` ([[Body]], [[Mind]], [[Spirit]], [[Nature]])
-- `Meta` ([[Distortion]], [[Stability]], [[Purity]], [[Potency]], [[Resonance]], [[Corruption]])
+- `Magnitude` (float) — общая сила
+- `Direction` ([[Body]], [[Mind]], [[Spirit]], [[Nature]]) — качественная направленность
+- `Meta` ([[Distortion]], [[Stability]], [[Purity]], [[Potency]], [[Resonance]], [[Corruption]]) — количественные модификаторы
 
 Нормализация [[Direction]] выполняется методом `NormalizeSum()` — деление на сумму компонент после обрезания отрицательных значений.
 
-Используется в:
-- [[Harvest]]
-- [[Alchemy]]
-- [[GridWorldManager]]
+Используется в [[Harvest]], [[Alchemy]], [[GridWorldManager]].
+
+**Восприятие:** Игрок никогда не видит S_real напрямую. Все его наблюдения — это [[S_perceived]], искажённая версия реальности.
+
+**Связи:**
+- [[S_perceived]]
+- [[S0]]
+- [[Direction]]
+- [[Meta]]

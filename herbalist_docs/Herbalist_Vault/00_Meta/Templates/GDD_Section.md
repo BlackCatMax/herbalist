@@ -9,4 +9,4 @@ status: draft
 
 ## Связи
 - [[00_Core_Lock]]
-- [[03_Technical/Current/Core_Current]]
+- [[03_Technical/Current/Core_Current|Техническая документация]]Core_Current]]

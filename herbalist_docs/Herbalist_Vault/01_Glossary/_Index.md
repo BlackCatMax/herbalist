@@ -1,3 +1,7 @@
+---
+tags: [glossary, index]
+---
+
 # Глоссарий
 
 ## Состояние
@@ -22,10 +26,24 @@
 
 ## Контекст
 - [[Environment]] ✅
-- [[MemoryState]] ✅
+- [[MemoryState]] ⚠️ (частично)
 - [[Intent]] ⚠️ (только Coherence)
 - [[RngState]] ✅
 
 ## Механики
 - [[Inventory]] ✅
 - [[Alchemy]] ✅
+- [[Harvest]] ✅
+- [[Fold]] ✅
+- [[Bifurcation]] ✅
+- [[Interaction Rules]] 📐
+
+## Системы
+- [[GridWorldManager]] ✅
+- [[BiomeState]] ❌ (не реализовано)
+
+## Стихии
+- [[Вода]]
+- [[Огонь]]
+- [[Земля]]
+- [[Воздух]]

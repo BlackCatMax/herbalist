@@ -62,7 +62,7 @@ struct FIntent {
 
 `FRngState` содержит `int32 Seed`. Генератор — линейный конгруэнтный (`Seed = Seed * 196314165 + 907633515`).
 
-## Эталонное состояние `S₀` (Алатырь)
+## Эталонное состояние `S₀` ([[S0|Алатырь]])
 
 static const FRealState S0 = []{
     FRealState S;
