@@ -2,6 +2,7 @@
 #include "GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 
 void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng)
@@ -75,6 +76,15 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     Delta.Meta.Potency = NewState.Meta.Potency - OldState.Meta.Potency;
     Delta.Meta.Resonance = NewState.Meta.Resonance - OldState.Meta.Resonance;
     Delta.Meta.Corruption = NewState.Meta.Corruption - OldState.Meta.Corruption;
+
+    if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
+    {
+        FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
+        float MorokImpact = Delta.Meta.Distortion;
+        float ZaryanaImpact = 1.f - Delta.Meta.Distortion;
+        FVector4 AxisDelta(Delta.Direction.Body, Delta.Direction.Mind, Delta.Direction.Spirit, Delta.Direction.Nature);
+        Graph->RecordFootprint(BiomeID, MorokImpact, ZaryanaImpact, AxisDelta, 1.0f);
+    }
 
     SetTargetState(X, Y, NewState);
 

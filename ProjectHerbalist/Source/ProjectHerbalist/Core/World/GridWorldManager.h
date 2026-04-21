@@ -7,6 +7,7 @@
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Math/RandomStream.h"
+#include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "GridWorldManager.generated.h"
 
 UCLASS()
@@ -94,6 +95,33 @@ public:
     void ApplyTest(int32 X, int32 Y);
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowInventory();
+	
+	#if WITH_EDITOR
+    bool bShowBiomeGraph = false;
+    bool bShowCellDistortion = false;
+    bool bShowCellInfluence = false;
+	#endif
+
+    void DrawBiomeGraphDebug();
+
+    // Контракт для Biome Graph
+    TArray<FGridBiomeSample> GetBiomeSamples() const;
+    TMap<FName, FVector> GetBiomeCenters() const;
+    void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale);
+
+    template<typename TFunc>
+    void ForEachCell(TFunc&& Func)
+    {
+        for (FGridCell& Cell : Cells) Func(Cell);
+    }
+
+    template<typename TFunc>
+    void ForEachCell(TFunc&& Func) const
+    {
+        for (const FGridCell& Cell : Cells) Func(Cell);
+    }
+
+    FVector GetCellWorldPosition(int32 X, int32 Y) const;
 
 protected:
     TArray<FGridCell> Cells;

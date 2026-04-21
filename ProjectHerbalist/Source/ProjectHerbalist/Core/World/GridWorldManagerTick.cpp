@@ -2,10 +2,16 @@
 #include "GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "DrawDebugHelpers.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 
 void AGridWorldManager::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
+    {
+        Graph->StepSimulation(DeltaTime);
+    }
 
     // Восстановление стресса
     if (bEnableRecovery && StressCells.Num() > 0)

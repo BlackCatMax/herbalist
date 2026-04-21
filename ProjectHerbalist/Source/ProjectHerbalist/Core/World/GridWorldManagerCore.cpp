@@ -5,6 +5,133 @@
 #include "Core/Harvest/HerbalistHarvest.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "GridWorldManager.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "DrawDebugHelpers.h"
+
+FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
+{
+    return GetActorLocation() + FVector(X * CellSize, Y * CellSize, CellHeight / 2.0f);
+}
+
+TArray<FGridBiomeSample> AGridWorldManager::GetBiomeSamples() const
+{
+    TArray<FGridBiomeSample> Samples;
+    for (const FGridCell& Cell : Cells)
+    {
+        FGridBiomeSample Sample;
+        Sample.BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
+        Sample.MorokValue = Cell.State.Meta.Distortion;
+        Sample.ZaryanaValue = 1.f - Cell.State.Meta.Distortion; // упрощённо
+        Samples.Add(Sample);
+    }
+    return Samples;
+}
+
+TMap<FName, FVector> AGridWorldManager::GetBiomeCenters() const
+{
+    TMap<FName, FVector> Centers;
+    TMap<FName, int32> Counts;
+
+    for (const FGridCell& Cell : Cells)
+    {
+        FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
+        FVector Pos = GetCellWorldPosition(Cell.X, Cell.Y);
+        Centers.FindOrAdd(BiomeID) += Pos;
+        Counts.FindOrAdd(BiomeID)++;
+    }
+
+    for (auto& Pair : Centers)
+    {
+        int32 Count = Counts[Pair.Key];
+        if (Count > 0) Pair.Value /= Count;
+    }
+    return Centers;
+}
+
+void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale)
+{
+    for (FGridCell& Cell : Cells)
+    {
+        FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
+        const float* MorokField = MorokFields.Find(BiomeID);
+        const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
+        if (!MorokField || !ZaryanaField) continue;
+
+        float TargetDistortion = *MorokField;
+        Cell.TargetState.Meta.Distortion = FMath::Lerp(Cell.TargetState.Meta.Distortion, TargetDistortion, 0.2f * GlobalScale);
+        Cell.TargetState.Meta.Distortion = FMath::Clamp(Cell.TargetState.Meta.Distortion, 0.f, 1.f);
+
+        float ZaryanaInfluence = *ZaryanaField * 0.1f * GlobalScale;
+        Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
+        Cell.TargetState.Meta.Purity = FMath::Clamp(Cell.TargetState.Meta.Purity + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+    }
+}
+
+#if WITH_EDITOR
+void AGridWorldManager::DrawBiomeGraphDebug()
+{
+    if (!bShowBiomeGraph && !bShowCellDistortion && !bShowCellInfluence) return;
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!Graph) return;
+
+    if (bShowBiomeGraph)
+    {
+        const TMap<FName, FVector>& Centers = Graph->GetCachedBiomeCenters();
+        const TArray<FBiomeGraphEdge>& Edges = Graph->GetEdges();
+        const TMap<FName, FBiomeGraphNode>& Nodes = Graph->GetNodes();
+
+        for (const FBiomeGraphEdge& Edge : Edges)
+        {
+            const FVector* FromPos = Centers.Find(Edge.FromBiome);
+            const FVector* ToPos = Centers.Find(Edge.ToBiome);
+            if (FromPos && ToPos)
+            {
+                float Thickness = FMath::Lerp(1.f, 5.f, Edge.MorokLeak);
+                FColor Color = Edge.MorokLeak > 0.1f ? FColor::Red : (Edge.ZaryanaFlow > 0.1f ? FColor::Blue : FColor::White);
+                DrawDebugLine(World, *FromPos, *ToPos, Color, false, World->DeltaTimeSeconds * 1.1f, 0, Thickness);
+            }
+        }
+
+        for (const auto& Pair : Nodes)
+        {
+            const FVector* Pos = Centers.Find(Pair.Key);
+            if (Pos)
+            {
+                const FBiomeGraphNode& Node = Pair.Value;
+                FColor Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Node.MorokField).ToFColor(false);
+                float Size = FMath::Lerp(30.f, 80.f, Node.Memory.Instability);
+                DrawDebugSphere(World, *Pos, Size, 12, Color, false, World->DeltaTimeSeconds * 1.1f, 0, 2.f);
+                DrawDebugString(World, *Pos + FVector(0, 0, Size + 20), Pair.Key.ToString(), nullptr, FColor::White, World->DeltaTimeSeconds * 1.1f, true, 1.2f);
+            }
+        }
+    }
+
+    if (bShowCellDistortion || bShowCellInfluence)
+    {
+        float Lifetime = World->DeltaTimeSeconds * 1.1f;
+        for (const FGridCell& Cell : Cells)
+        {
+            FVector Pos = GetCellWorldPosition(Cell.X, Cell.Y);
+            if (bShowCellDistortion)
+            {
+                FColor Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Cell.State.Meta.Distortion).ToFColor(false);
+                DrawDebugString(World, Pos + FVector(0, 0, 30), FString::Printf(TEXT("%.2f"), Cell.State.Meta.Distortion), nullptr, Color, Lifetime, true);
+            }
+            if (bShowCellInfluence)
+            {
+                float Influence = Cell.TargetState.Meta.Distortion - Cell.State.Meta.Distortion;
+                FColor Color = Influence > 0 ? FColor::Red : (Influence < 0 ? FColor::Blue : FColor::White);
+                DrawDebugString(World, Pos + FVector(0, 0, 50), FString::Printf(TEXT("Δ%.2f"), Influence), nullptr, Color, Lifetime, true);
+            }
+        }
+    }
+}
+#endif
 
 AGridWorldManager::AGridWorldManager()
 {

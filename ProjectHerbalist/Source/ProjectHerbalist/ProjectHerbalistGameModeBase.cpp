@@ -4,6 +4,8 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/Data/ResourceDataManager.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "Core/BiomeGraph/BiomeGraphAsset.h"
 #include "Engine/World.h"
 
 AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
@@ -18,6 +20,23 @@ AProjectHerbalistGameModeBase::~AProjectHerbalistGameModeBase()
 void AProjectHerbalistGameModeBase::BeginPlay()
 {
     Super::BeginPlay();
+
+    if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
+    {
+        if (!Graph->IsInitialized())
+        {
+            UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+            if (Asset)
+            {
+                Graph->InitializeFromAsset(Asset);
+                UE_LOG(LogTemp, Log, TEXT("BiomeGraph initialized from DA_BiomeGraph"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("DA_BiomeGraph not found at /Game/Data/DA_BiomeGraph"));
+            }
+        }
+    }
 
     // Инициализация ResourceDataManager
     UDataTable* ResourceBalanceTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_ResourceBalance"));
