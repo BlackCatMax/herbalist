@@ -23,8 +23,7 @@ tags:
   - холод
 image: "![[yagel.jpeg]]"
 ---
-
-# Ягель
+# Name
 
 ![[yagel.jpeg|697]]
 
@@ -36,14 +35,19 @@ image: "![[yagel.jpeg]]"
 
 - **Оси:** выраженные [[Spirit]] (0.60) и [[Nature]] (0.70), слабые [[Body]] и [[Mind]].
 - **Мета-параметры:** высокая [[Purity]] (0.65) и [[Resonance]] (0.60), низкая [[Corruption]] (0.20).
-- **Стихия:** <span style="background-color: #5D4037; color: #f0e6d2; padding: 2px 12px; border-radius: 20px; font-size: 0.9em;">🪨 Земля</span> – придаёт зельям устойчивость, замедление, защитные свойства.
+- **Стихия:** [[Земля]] – придаёт зельям устойчивость, замедление, защитные свойства.
+
 
 ```chart
 type: radar
+width: 70%
 labels: [Body, Mind, Spirit, Nature]
 series:
   - title: Оси
-    data: [0.3, 0.25, 0.6, 0.7]
+    data: [0.55, 0.40, 0.55, 0.50]
+beginAtZero: true
+fill: true
+tension: 0.1
 options:
   scale:
     min: 0
