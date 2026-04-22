@@ -4,6 +4,7 @@
 #include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
+#include "Core/HerbalistSettings.h"
 
 void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng)
 {
@@ -40,8 +41,10 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     );
 
     // Бифуркация (катастрофа / очищение)
-    constexpr float BifurcationThreshold = 0.85f;
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float BifurcationThreshold = Settings ? Settings->BifurcationThreshold : 0.85f;
     constexpr float MaxDistortion = 1.0f;
+
     if (NewState.Meta.Distortion > BifurcationThreshold)
     {
         float Excess = (NewState.Meta.Distortion - BifurcationThreshold) / (MaxDistortion - BifurcationThreshold);
@@ -227,7 +230,6 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
 
-    // Создаём ингредиент-зелье
     FInventoryItem PotionItem;
     PotionItem.Type = EResourceType::Potion;
     PotionItem.State = PotionState;
@@ -239,6 +241,5 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FRngState Rng;
     Rng.Seed = FMath::Rand();
 
-    // Применяем алхимию к клетке
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
 }

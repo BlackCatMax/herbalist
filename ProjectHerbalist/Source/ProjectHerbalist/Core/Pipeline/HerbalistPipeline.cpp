@@ -4,6 +4,7 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Math/UnrealMathUtility.h"
+#include "Core/HerbalistSettings.h"
 
 namespace HerbalistCore
 {
@@ -25,8 +26,9 @@ namespace HerbalistCore
     {
         if (Inputs.Num() == 0) return FRealState();
 
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
         float Weight = 1.0f;
-        const float WeightDecay = 0.8f;
+        const float WeightDecay = Settings ? Settings->FoldWeightDecay : 0.8f;
         float TotalWeight = 0.0f;
 
         FRealState Accumulated;
@@ -165,14 +167,13 @@ namespace HerbalistCore
         AvgWater.Meta.Potency /= Count;
         AvgWater.Direction.NormalizeSum();
 
-        // Кипячение: повышаем чистоту и стабильность, снижаем искажение и порчу
+        // Кипячение
         AvgWater.Magnitude = FMath::Clamp(AvgWater.Magnitude * 0.8f, 0.0f, 1.0f);
         AvgWater.Meta.Purity = FMath::Clamp(AvgWater.Meta.Purity + 0.2f, 0.0f, 1.0f);
         AvgWater.Meta.Stability = FMath::Clamp(AvgWater.Meta.Stability + 0.1f, 0.0f, 1.0f);
         AvgWater.Meta.Distortion = FMath::Clamp(AvgWater.Meta.Distortion - 0.2f, 0.0f, 1.0f);
         AvgWater.Meta.Corruption = FMath::Clamp(AvgWater.Meta.Corruption - 0.1f, 0.0f, 1.0f);
 
-        // Направление слегка к центру
         FVector4 DirVec(AvgWater.Direction.Body, AvgWater.Direction.Mind, AvgWater.Direction.Spirit, AvgWater.Direction.Nature);
         FVector4 Center(0.25f, 0.25f, 0.25f, 0.25f);
         DirVec = FMath::Lerp(DirVec, Center, 0.2f);
@@ -216,7 +217,6 @@ namespace HerbalistCore
         WaterAggregated.Direction.Spirit = 0.0f; WaterAggregated.Direction.Nature = 0.0f;
         WaterAggregated.Meta.Purity = 0.0f; WaterAggregated.Meta.Stability = 0.0f;
         WaterAggregated.Meta.Corruption = 0.0f; WaterAggregated.Meta.Potency = 0.0f;
-        // resonance, distortion не суммируем
 
         for (const FRealState& W : WaterStates)
         {
@@ -252,12 +252,15 @@ namespace HerbalistCore
         int32 NonWaterCount,
         int32 WaterCount)
     {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float MaxWaterRatio = Settings ? Settings->MaxWaterRatio : 0.8f;
+        const float WaterDilutionPenalty = Settings ? Settings->WaterDilutionPenalty : 0.2f;
+
         float TotalNonWaterVolume = (float)NonWaterCount;
         float TotalWaterVolume = (float)WaterCount;
         float WaterRatio = TotalWaterVolume / (TotalWaterVolume + TotalNonWaterVolume);
-        const float MaxWaterRatio = 0.8f;
         float EffectiveWaterRatio = FMath::Min(WaterRatio, MaxWaterRatio);
-        float DilutionPenalty = (WaterRatio > MaxWaterRatio) ? 0.2f : 1.0f;
+        float DilutionPenalty = (WaterRatio > MaxWaterRatio) ? WaterDilutionPenalty : 1.0f;
 
         const float NonWaterWeight = 1.0f - EffectiveWaterRatio;
         const float WaterWeight = EffectiveWaterRatio;
@@ -276,11 +279,9 @@ namespace HerbalistCore
         Aggregated.Meta.Stability = NonWaterAggregated.Meta.Stability * NonWaterWeight + WaterAggregated.Meta.Stability * WaterWeight;
         Aggregated.Meta.Corruption = NonWaterAggregated.Meta.Corruption * NonWaterWeight + WaterAggregated.Meta.Corruption * WaterWeight;
         Aggregated.Meta.Potency = NonWaterAggregated.Meta.Potency * NonWaterWeight + WaterAggregated.Meta.Potency * WaterWeight;
-        // resonance и distortion не зависят от воды
         Aggregated.Meta.Resonance = NonWaterAggregated.Meta.Resonance;
         Aggregated.Meta.Distortion = NonWaterAggregated.Meta.Distortion;
 
-        // Клиппинг
         Aggregated.Meta.Purity = FMath::Clamp(Aggregated.Meta.Purity, 0.0f, 1.0f);
         Aggregated.Meta.Stability = FMath::Clamp(Aggregated.Meta.Stability, 0.0f, 1.0f);
         Aggregated.Meta.Corruption = FMath::Clamp(Aggregated.Meta.Corruption, 0.0f, 1.0f);
@@ -293,7 +294,10 @@ namespace HerbalistCore
 
     float Pipeline::ComputeBaseDistortion(const FEnvironment& Env, const FMemoryState& Memory)
     {
-        float EnvDist = Env.Toxicity * 0.5f;
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float ToxWeight = Settings ? Settings->EnvironmentToxicityWeight : 0.5f;
+
+        float EnvDist = Env.Toxicity * ToxWeight;
         float MemoryDist = Memory.AccumulatedDistortion;
         float Distortion = 1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
         Distortion = FMath::Clamp(Distortion, 0.0f, 0.95f);
@@ -308,19 +312,21 @@ namespace HerbalistCore
         float BiomeZaryanaField,
         const FVector4& BiomeAxisDrift)
     {
-        // Увеличиваем Distortion от поля Morok биома
-        InOutDistortion = FMath::Clamp(InOutDistortion + BiomeMorokField * 0.3f, 0.0f, 0.95f);
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float MorokInfluence = Settings ? Settings->BiomeMorokInfluence : 0.3f;
+        const float ZaryanaInfluence = Settings ? Settings->BiomeZaryanaInfluence : 0.3f;
+        const float DriftWeight = Settings ? Settings->BiomeAxisDriftWeight : 0.1f;
+
+        InOutDistortion = FMath::Clamp(InOutDistortion + BiomeMorokField * MorokInfluence, 0.0f, 0.95f);
         UE_LOG(LogHerbalist, Warning, TEXT("[BIOME CONTEXT] MorokField=%.3f -> Distortion=%.3f"), BiomeMorokField, InOutDistortion);
 
-        // Увеличиваем ZaryanaStrength от поля Zaryana биома
-        InOutZaryanaStrength = FMath::Clamp(InOutZaryanaStrength + BiomeZaryanaField * 0.3f, 0.0f, 1.0f);
+        InOutZaryanaStrength = FMath::Clamp(InOutZaryanaStrength + BiomeZaryanaField * ZaryanaInfluence, 0.0f, 1.0f);
         UE_LOG(LogHerbalist, Warning, TEXT("[BIOME CONTEXT] ZaryanaField=%.3f -> ZaryanaStrength=%.3f"), BiomeZaryanaField, InOutZaryanaStrength);
 
-        // Добавляем дрейф осей из памяти биома к дельте направления
-        InOutDelta.Direction.Body += BiomeAxisDrift.X * 0.1f;
-        InOutDelta.Direction.Mind += BiomeAxisDrift.Y * 0.1f;
-        InOutDelta.Direction.Spirit += BiomeAxisDrift.Z * 0.1f;
-        InOutDelta.Direction.Nature += BiomeAxisDrift.W * 0.1f;
+        InOutDelta.Direction.Body += BiomeAxisDrift.X * DriftWeight;
+        InOutDelta.Direction.Mind += BiomeAxisDrift.Y * DriftWeight;
+        InOutDelta.Direction.Spirit += BiomeAxisDrift.Z * DriftWeight;
+        InOutDelta.Direction.Nature += BiomeAxisDrift.W * DriftWeight;
         UE_LOG(LogHerbalist, Warning, TEXT("[BIOME AXIS DRIFT] Applied: (%.3f, %.3f, %.3f, %.3f)"),
             BiomeAxisDrift.X, BiomeAxisDrift.Y, BiomeAxisDrift.Z, BiomeAxisDrift.W);
     }
@@ -358,11 +364,14 @@ namespace HerbalistCore
         float Distortion,
         FRngState& Rng)
     {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float MixStrengthFactor = Settings ? Settings->MorokMixStrengthFactor : 0.5f;
+
         float NoiseMagnitude = RandomRange(Rng, 0.0f, Distortion);
         float NoiseDirection = RandomRange(Rng, -1.0f, 1.0f);
         float RawNoise = NoiseMagnitude * NoiseDirection;
         float Nonlinear = FMath::Tanh(RawNoise * 2.0f);
-        float MixStrength = Distortion * 0.5f;
+        float MixStrength = Distortion * MixStrengthFactor;
 
         FRealState OriginalDelta = InOutDelta;
         InOutDelta.Direction.Body = OriginalDelta.Direction.Body * (1.0f - MixStrength) +
@@ -390,10 +399,14 @@ namespace HerbalistCore
         float ZaryanaStrength,
         float Distortion)
     {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float BoostFactor = Settings ? Settings->ZaryanaBoostFactor : 0.5f;
+        const float SuppressFactor = Settings ? Settings->ZaryanaSuppressFactor : 0.3f;
+
         float AvgDir = (InOutDelta.Direction.Body + InOutDelta.Direction.Mind +
             InOutDelta.Direction.Spirit + InOutDelta.Direction.Nature) / 4.0f;
-        float Boost = 1.0f + ZaryanaStrength * 0.5f;
-        float Suppress = 1.0f - ZaryanaStrength * 0.3f;
+        float Boost = 1.0f + ZaryanaStrength * BoostFactor;
+        float Suppress = 1.0f - ZaryanaStrength * SuppressFactor;
 
         InOutDelta.Direction.Body = (InOutDelta.Direction.Body > AvgDir) ? InOutDelta.Direction.Body * Boost : InOutDelta.Direction.Body * Suppress;
         InOutDelta.Direction.Mind = (InOutDelta.Direction.Mind > AvgDir) ? InOutDelta.Direction.Mind * Boost : InOutDelta.Direction.Mind * Suppress;
@@ -466,7 +479,7 @@ namespace HerbalistCore
     }
 
     // =========================
-    // ГЛАВНЫЙ ПАЙПЛАЙН (ТЕПЕРЬ КОРОТКИЙ И ЧИТАЕМЫЙ)
+    // ГЛАВНЫЙ ПАЙПЛАЙН
     // =========================
     FRealState Pipeline::ApplyMorok(
         const TArray<FInventoryItem>& Inputs,
