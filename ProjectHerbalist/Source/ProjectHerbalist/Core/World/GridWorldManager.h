@@ -95,12 +95,12 @@ public:
     void ApplyTest(int32 X, int32 Y);
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowInventory();
-	
-	#if WITH_EDITOR
+
+#if WITH_EDITOR
     bool bShowBiomeGraph = false;
     bool bShowCellDistortion = false;
     bool bShowCellInfluence = false;
-	#endif
+#endif
 
     void DrawBiomeGraphDebug();
 

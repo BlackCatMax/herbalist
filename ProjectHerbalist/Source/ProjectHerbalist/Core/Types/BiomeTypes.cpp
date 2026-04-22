@@ -1,11 +1,26 @@
 // BiomeTypes.cpp
 #include "BiomeTypes.h"
 #include "ProjectHerbalist.h"
-#include "Core/Data/ResourceDataManager.h"
+#include "Core/Types/HerbalistIngredient.h"
 #include "Core/Types/BiomeRow.h"
-#include "Core/Types/ResourceBalanceRow.h"
+#include "Engine/DataTable.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Engine/AssetManager.h"
 
-// BiomeTypes.cpp (фрагмент с маппингом)
+static UDataTable* BiomeDataTable = nullptr;
+
+void FBiomeDefaults::SetBiomeTable(UDataTable* InTable)
+{
+    BiomeDataTable = InTable;
+}
+
+const FBiomeRow* FBiomeDefaults::GetBiomeRow(EBiomeType Biome)
+{
+    if (!BiomeDataTable) return nullptr;
+    FName RowName = BiomeTypeToName(Biome);
+    return BiomeDataTable->FindRow<FBiomeRow>(RowName, TEXT("GetBiomeRow"));
+}
+
 static const TMap<EBiomeType, FName> BiomeToNameMap = {
     { EBiomeType::Tundra,          TEXT("Tundra") },
     { EBiomeType::Taiga,           TEXT("Taiga") },
@@ -48,10 +63,7 @@ TArray<EBiomeType> FBiomeDefaults::GetAllBiomeTypes()
 
 FRealState FBiomeDefaults::GetDefaultState(EBiomeType Biome)
 {
-    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
-    if (!Manager) return FRealState();
-
-    const FBiomeRow* Row = Manager->GetBiomeRow(Biome);
+    const FBiomeRow* Row = GetBiomeRow(Biome);
     if (!Row) return FRealState();
 
     FRealState State;
@@ -59,7 +71,6 @@ FRealState FBiomeDefaults::GetDefaultState(EBiomeType Biome)
     State.Magnitude = Row->Magnitude;
     State.Meta = Row->Meta;
     State.Direction.NormalizeSum();
-    // клиппинг
     State.Magnitude = FMath::Clamp(State.Magnitude, 0.0f, 1.0f);
     State.Meta.Distortion = FMath::Clamp(State.Meta.Distortion, 0.0f, 1.0f);
     State.Meta.Stability = FMath::Clamp(State.Meta.Stability, 0.0f, 1.0f);
@@ -72,49 +83,71 @@ FRealState FBiomeDefaults::GetDefaultState(EBiomeType Biome)
 
 FEnvironment FBiomeDefaults::GetDefaultEnvironment(EBiomeType Biome)
 {
-    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
-    if (!Manager) return FEnvironment();
-    const FBiomeRow* Row = Manager->GetBiomeRow(Biome);
+    const FBiomeRow* Row = GetBiomeRow(Biome);
     if (!Row) return FEnvironment();
     return Row->Environment;
 }
 
 FRealState FBiomeDefaults::GetDefaultWaterState(EBiomeType Biome)
 {
-    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
-    if (!Manager) return FRealState();
-    const FBiomeRow* Row = Manager->GetBiomeRow(Biome);
+    const FBiomeRow* Row = GetBiomeRow(Biome);
     if (!Row) return FRealState();
     return Row->DefaultWaterState;
 }
 
-EResourceType FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng,
-    ESeasonMask Season, ETimeOfDayMask TimeOfDay)
+FName FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng)
 {
-    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
-    if (!Manager) return EResourceType::Nettle;
+    // Получаем все ассеты UHerbalistIngredient через AssetRegistry
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+    IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
 
-    TArray<FName> ResourceIds;
-    TArray<int32> Weights;
-    Manager->GetSpawnableResources(Biome, Season, TimeOfDay, ResourceIds, Weights);
+    FARFilter Filter;
+    Filter.ClassPaths.Add(UHerbalistIngredient::StaticClass()->GetClassPathName());
+    Filter.bRecursiveClasses = true;
 
-    if (ResourceIds.Num() == 0) return EResourceType::Nettle;
+    TArray<FAssetData> AssetDataList;
+    AssetRegistry.GetAssets(Filter, AssetDataList);
 
+    // Собираем ингредиенты, подходящие под биом
+    struct FWeightedIngredient
+    {
+        FName IngredientID;
+        int32 Weight;
+    };
+    TArray<FWeightedIngredient> Candidates;
+
+    for (const FAssetData& AssetData : AssetDataList)
+    {
+        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(AssetData.GetAsset());
+        if (!Ingredient) continue;
+
+        // Проверяем биом
+        if (!Ingredient->AllowedBiomes.Contains(Biome)) continue;
+
+        // Добавляем кандидата
+        Candidates.Add({ Ingredient->IngredientID, Ingredient->RarityWeight });
+    }
+
+    if (Candidates.Num() == 0)
+    {
+        return NAME_None;
+    }
+
+    // Выбираем случайный ингредиент с учётом веса
     int32 TotalWeight = 0;
-    for (int32 w : Weights) TotalWeight += w;
-    if (TotalWeight <= 0) return EResourceType::Nettle;
+    for (const auto& C : Candidates)
+        TotalWeight += C.Weight;
+
+    if (TotalWeight <= 0) return Candidates[0].IngredientID;
 
     int32 Roll = Rng.RandRange(1, TotalWeight);
     int32 Accum = 0;
-    for (int32 i = 0; i < ResourceIds.Num(); ++i)
+    for (const auto& C : Candidates)
     {
-        Accum += Weights[i];
+        Accum += C.Weight;
         if (Roll <= Accum)
-        {
-            const FResourceBalanceRow* Row = Manager->GetResourceBalanceRow(ResourceIds[i]);
-            if (Row) return Row->ResourceType;   // теперь поле ResourceType существует
-            break;
-        }
+            return C.IngredientID;
     }
-    return EResourceType::Nettle;
+
+    return Candidates.Last().IngredientID;
 }

@@ -13,6 +13,9 @@
 #include "InventoryDragDropOperation.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "UI/InventoryDragDropController.h"
+#include "Core/Types/HerbalistIngredient.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
@@ -39,7 +42,7 @@ int32 UInventorySlotWidget::FindRealIndex() const
     for (int32 i = 0; i < Items.Num(); ++i)
     {
         const FInventoryItem& Item = Items[i];
-        if (Item.Type != CachedItem.Type) continue;
+        if (Item.IngredientID != CachedItem.IngredientID) continue;
         if (HerbalistCore::Math::AreStatesSimilar(Item.State, CachedItem.State))
         {
             return i;
@@ -58,8 +61,31 @@ void UInventorySlotWidget::UpdateDisplay()
         return;
     }
 
-    FString Name = FHerbalistHarvest::GetResourceName(CachedItem.Type, false);
-    if (ItemNameText) ItemNameText->SetText(FText::FromString(Name));
+    FString DisplayName = CachedItem.IngredientID.ToString();
+
+    // Загружаем ассет ингредиента синхронно
+    if (CachedItem.IngredientID != FName(TEXT("Potion")) &&
+        CachedItem.IngredientID != FName(TEXT("Water")) &&
+        !CachedItem.IngredientID.IsNone())
+    {
+        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), CachedItem.IngredientID);
+        FSoftObjectPath AssetPath = UAssetManager::Get().GetPrimaryAssetPath(AssetId);
+        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(AssetPath.TryLoad());
+        if (Ingredient)
+        {
+            DisplayName = Ingredient->DisplayName.ToString();
+        }
+    }
+    else if (CachedItem.IngredientID == FName(TEXT("Potion")))
+    {
+        DisplayName = TEXT("Зелье");
+    }
+    else if (CachedItem.IngredientID == FName(TEXT("Water")))
+    {
+        DisplayName = TEXT("Вода");
+    }
+
+    if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));
 
     if (CountText)
     {

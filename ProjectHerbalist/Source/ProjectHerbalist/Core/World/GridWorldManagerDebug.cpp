@@ -22,7 +22,7 @@ FString AGridWorldManager::GetSelectedCellInfo() const
 {
     const FGridCell* Cell = GetCellConst(SelectedX, SelectedY);
     if (!Cell) return TEXT("No cell selected");
-    FString ResourceStr = Cell->bIsWater ? TEXT("Water") : FString::Printf(TEXT("%d"), (int32)Cell->AvailableResource);
+    FString ResourceStr = Cell->bIsWater ? TEXT("Water") : Cell->AvailableIngredientID.ToString();
     return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, Resource=%s, Regrowth=%.1f"),
         SelectedX, SelectedY,
         Cell->State.Magnitude,
@@ -44,7 +44,7 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
             if (Cell->bIsWater)
                 ResourceName = TEXT("Вода");
             else
-                ResourceName = FHerbalistHarvest::GetResourceName(Cell->AvailableResource, false);
+                ResourceName = Cell->AvailableIngredientID.ToString();
             RegrowthTimer = Cell->ResourceRegrowthTimer;
             Distortion = Cell->State.Meta.Distortion;
             HarvestStress = Cell->HarvestStress;
@@ -72,7 +72,7 @@ void AGridWorldManager::ShowInventory()
     {
         const FInventoryItem& Item = Inventory[i];
         const FRealState& Res = Item.State;
-        FString Name = FHerbalistHarvest::GetResourceName(Item.Type, false);
+        FString Name = FHerbalistHarvest::GetResourceName(Item.IngredientID, false);
         UE_LOG(LogHerbalist, Log, TEXT("[%d] %s x%d: Mag=%.2f, Dist=%.2f, Pot=%.2f Res=%.2f Cor=%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
             i, *Name, Item.Count, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
             Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);

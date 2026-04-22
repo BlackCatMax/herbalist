@@ -3,10 +3,11 @@
 #include "ProjectHerbalist.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/World/GridWorldManager.h"
-#include "Core/Data/ResourceDataManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
+#include "Core/Types/BiomeTypes.h"
 #include "Engine/World.h"
+#include "Engine/DataTable.h"
 
 AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
 {
@@ -21,6 +22,7 @@ void AProjectHerbalistGameModeBase::BeginPlay()
 {
     Super::BeginPlay();
 
+    // Инициализация Biome Graph
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
     {
         if (!Graph->IsInitialized())
@@ -29,29 +31,25 @@ void AProjectHerbalistGameModeBase::BeginPlay()
             if (Asset)
             {
                 Graph->InitializeFromAsset(Asset);
-                UE_LOG(LogTemp, Log, TEXT("BiomeGraph initialized from DA_BiomeGraph"));
+                UE_LOG(LogHerbalist, Log, TEXT("BiomeGraph initialized from DA_BiomeGraph"));
             }
             else
             {
-                UE_LOG(LogTemp, Warning, TEXT("DA_BiomeGraph not found at /Game/Data/DA_BiomeGraph"));
+                UE_LOG(LogHerbalist, Warning, TEXT("DA_BiomeGraph not found at /Game/Data/DA_BiomeGraph"));
             }
         }
     }
 
-    // Инициализация ResourceDataManager
-    UDataTable* ResourceBalanceTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_ResourceBalance"));
+    // Инициализация таблицы биомов
     UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults"));
-    UDataTable* WaterTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_WaterTypes")); // опционально
-
-    if (!ResourceBalanceTable || !BiomeTable)
+    if (BiomeTable)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("Failed to load required DataTables! Game may not work correctly."));
+        FBiomeDefaults::SetBiomeTable(BiomeTable);
+        UE_LOG(LogHerbalist, Log, TEXT("Biome table initialized successfully."));
     }
     else
     {
-        UResourceDataManager* Manager = NewObject<UResourceDataManager>(this);
-        Manager->Initialize(ResourceBalanceTable, BiomeTable, WaterTable);
-        UE_LOG(LogHerbalist, Log, TEXT("ResourceDataManager initialized successfully."));
+        UE_LOG(LogHerbalist, Error, TEXT("Failed to load DT_BiomeDefaults! Biomes will not work correctly."));
     }
 
     SpawnWorldManager();

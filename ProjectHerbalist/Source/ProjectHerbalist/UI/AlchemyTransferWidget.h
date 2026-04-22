@@ -18,11 +18,11 @@ class PROJECTHERBALIST_API UAlchemyTransferWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-	UAlchemySlotWidget* FindSuitableSlot(const FInventoryItem& Item) const;
     UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer);
 
     void BindInventory(UHerbalistInventoryComponent* InPlayerInventory);
     bool TryAddItemToSlot(const FInventoryItem& Item);
+    UAlchemySlotWidget* FindSuitableSlot(const FInventoryItem& Item) const;
 
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;

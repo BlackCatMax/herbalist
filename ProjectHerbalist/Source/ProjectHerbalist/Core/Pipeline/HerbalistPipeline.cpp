@@ -5,9 +5,30 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Math/UnrealMathUtility.h"
 #include "Core/HerbalistSettings.h"
+#include "Core/Types/HerbalistIngredient.h"
+#include "Engine/AssetManager.h"
 
 namespace HerbalistCore
 {
+    // Вспомогательная функция загрузки ингредиента
+    static UHerbalistIngredient* LoadIngredientAsset(FName IngredientID)
+    {
+        if (IngredientID.IsNone()) return nullptr;
+        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), IngredientID);
+        return Cast<UHerbalistIngredient>(UAssetManager::Get().GetPrimaryAssetObject(AssetId));
+    }
+
+    // Вспомогательная функция проверки, является ли ингредиент водой
+    static bool IsWaterIngredient(FName IngredientID)
+    {
+        // Специальный случай: зелье не является водой
+        if (IngredientID == FName(TEXT("Potion"))) return false;
+        // Если это вода из клетки (ID "Water")
+        if (IngredientID == FName(TEXT("Water"))) return true;
+        UHerbalistIngredient* Ingredient = LoadIngredientAsset(IngredientID);
+        return Ingredient && Ingredient->bIsWater;
+    }
+
     float Random01(FRngState& Rng)
     {
         Rng.Seed = (Rng.Seed * 196314165) + 907633515;
@@ -127,7 +148,7 @@ namespace HerbalistCore
         OutWater.Empty();
         for (const FInventoryItem& Item : Inputs)
         {
-            if (Item.Type == EResourceType::Water)
+            if (IsWaterIngredient(Item.IngredientID))
                 OutWater.Add(Item.State);
             else
                 OutNonWater.Add(Item.State);

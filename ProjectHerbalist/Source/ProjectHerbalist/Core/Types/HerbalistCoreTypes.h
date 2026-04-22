@@ -18,20 +18,7 @@ enum class EBiomeType : uint8
     Bog
 };
 
-UENUM(BlueprintType)
-enum class EResourceType : uint8
-{
-    None = 0,
-    Nettle,
-    Fern,
-    Mushroom,
-    BirchBark,
-    Moss,
-    Cranberry,
-    BogOre,
-    Water,
-    Potion       // добавлено для зелий
-};
+// EResourceType удалён, заменён на FName IngredientID
 
 // ========== Базовые структуры ==========
 USTRUCT(BlueprintType)
@@ -142,7 +129,7 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMemoryState Memory;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float HarvestStress = 0.0f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEntityTriggered = false;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) EResourceType AvailableResource = EResourceType::None;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FName AvailableIngredientID;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float ResourceRegrowthTimer = 0.0f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsWater = false;
 };
@@ -175,14 +162,15 @@ struct PROJECTHERBALIST_API FAlatyr
     static const FRealState S0;
 };
 
-// ========== FInventoryItem (с полем Count) ==========
+// ========== FInventoryItem ==========
 USTRUCT(BlueprintType)
 struct PROJECTHERBALIST_API FInventoryItem
 {
     GENERATED_BODY()
 
+    // Идентификатор ингредиента (соответствует UHerbalistIngredient::IngredientID)
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    EResourceType Type = EResourceType::None;
+    FName IngredientID = NAME_None;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FRealState State;
@@ -190,6 +178,7 @@ struct PROJECTHERBALIST_API FInventoryItem
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     int32 Count = 1;
 
-    bool IsEmpty() const { return Type == EResourceType::None || Count <= 0; }
-    void Clear() { Type = EResourceType::None; State = FRealState(); Count = 0; }
+    bool IsEmpty() const { return IngredientID.IsNone() || Count <= 0; }
+    void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; }
+    bool IsValid() const { return !IngredientID.IsNone() && Count > 0; }
 };

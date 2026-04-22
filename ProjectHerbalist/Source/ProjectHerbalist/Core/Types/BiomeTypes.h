@@ -3,17 +3,21 @@
 
 #include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
-#include "Core/Types/ResourceBalanceRow.h"
 #include "Math/RandomStream.h"
 
-struct PROJECTHERBALIST_API FBiomeDefaults
+struct FBiomeRow;
+
+class PROJECTHERBALIST_API FBiomeDefaults
 {
+public:
+    static void SetBiomeTable(UDataTable* InTable);
+    static const FBiomeRow* GetBiomeRow(EBiomeType Biome);
+
     static FRealState GetDefaultState(EBiomeType Biome);
     static FEnvironment GetDefaultEnvironment(EBiomeType Biome);
     static FRealState GetDefaultWaterState(EBiomeType Biome);
 
-    static EResourceType GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng,
-        ESeasonMask Season = ESeasonMask::Summer, ETimeOfDayMask TimeOfDay = ETimeOfDayMask::Day);
+    static FName GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng);
 
     static FName BiomeTypeToName(EBiomeType Biome);
     static EBiomeType NameToBiomeType(FName Name);

@@ -160,7 +160,6 @@ void AGridWorldManager::InitializeCells()
     TArray<EBiomeType> AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
     if (AllBiomes.Num() == 0)
     {
-        // fallback
         AllBiomes = {
             EBiomeType::Tundra,
             EBiomeType::Taiga,
@@ -194,7 +193,7 @@ void AGridWorldManager::InitializeCells()
             Cells[Index].Y = Y;
             Cells[Index].HarvestStress = 0.0f;
             Cells[Index].bEntityTriggered = false;
-            Cells[Index].AvailableResource = FBiomeDefaults::GetRandomResourceForBiome(biome, WorldRNG, ESeasonMask::Summer, ETimeOfDayMask::Day);
+            Cells[Index].AvailableIngredientID = FBiomeDefaults::GetRandomResourceForBiome(biome, WorldRNG);
             Cells[Index].ResourceRegrowthTimer = 0.0f;
             Cells[Index].bIsWater = false;
         }
@@ -213,7 +212,7 @@ void AGridWorldManager::InitializeCells()
             {
                 FGridCell& Cell = Cells[Index];
                 Cell.bIsWater = true;
-                Cell.AvailableResource = EResourceType::None;
+                Cell.AvailableIngredientID = NAME_None;
                 FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
                 Cell.State = waterState;
                 Cell.TargetState = waterState;
@@ -226,7 +225,7 @@ void AGridWorldManager::InitializeCells()
 
 void AGridWorldManager::RegenerateCellResource(FGridCell& Cell)
 {
-    Cell.AvailableResource = FBiomeDefaults::GetRandomResourceForBiome(Cell.Biome, WorldRNG, ESeasonMask::Summer, ETimeOfDayMask::Day);
+    Cell.AvailableIngredientID = FBiomeDefaults::GetRandomResourceForBiome(Cell.Biome, WorldRNG);
     Cell.ResourceRegrowthTimer = 0.0f;
 }
 

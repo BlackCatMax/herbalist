@@ -7,8 +7,8 @@
 #include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
-#include "Core/Storage/AlchemyTableActor.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Storage/AlchemyTableActor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -38,6 +38,15 @@ bool UAlchemyTransferWidget::TryAddItemToSlot(const FInventoryItem& Item)
     if (IngredientSlot3->CanAcceptItem(Item) && IngredientSlot3->AddItem(Item, 1))
         return true;
     return false;
+}
+
+UAlchemySlotWidget* UAlchemyTransferWidget::FindSuitableSlot(const FInventoryItem& Item) const
+{
+    if (WaterSlot && WaterSlot->CanAcceptItem(Item)) return WaterSlot;
+    if (IngredientSlot1 && IngredientSlot1->CanAcceptItem(Item)) return IngredientSlot1;
+    if (IngredientSlot2 && IngredientSlot2->CanAcceptItem(Item)) return IngredientSlot2;
+    if (IngredientSlot3 && IngredientSlot3->CanAcceptItem(Item)) return IngredientSlot3;
+    return nullptr;
 }
 
 void UAlchemyTransferWidget::NativeConstruct()
@@ -157,7 +166,7 @@ void UAlchemyTransferWidget::OnMixClicked()
     );
 
     FInventoryItem Potion;
-    Potion.Type = EResourceType::Potion;
+    Potion.IngredientID = FName(TEXT("Potion"));
     Potion.State = ResultState;
     Potion.Count = 1;
 
@@ -214,13 +223,4 @@ FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
         }
     }
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
-}
-
-UAlchemySlotWidget* UAlchemyTransferWidget::FindSuitableSlot(const FInventoryItem& Item) const
-{
-    if (WaterSlot && WaterSlot->CanAcceptItem(Item)) return WaterSlot;
-    if (IngredientSlot1 && IngredientSlot1->CanAcceptItem(Item)) return IngredientSlot1;
-    if (IngredientSlot2 && IngredientSlot2->CanAcceptItem(Item)) return IngredientSlot2;
-    if (IngredientSlot3 && IngredientSlot3->CanAcceptItem(Item)) return IngredientSlot3;
-    return nullptr;
 }

@@ -6,6 +6,8 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Harvest/HerbalistHarvest.h"
+#include "Core/Types/HerbalistIngredient.h"
+#include "Engine/AssetManager.h"
 
 void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCount)
 {
@@ -18,14 +20,30 @@ bool UAlchemySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
 {
     if (bHasItem && Count >= MaxCount) return false;
     if (SlotType == EAlchemySlotType::Result) return false;
-    if (SlotType == EAlchemySlotType::Water && Item.Type != EResourceType::Water) return false;
-    if (SlotType == EAlchemySlotType::Ingredient && Item.Type == EResourceType::Water) return false;
+
+    // Проверяем, является ли предмет водой
+    bool bItemIsWater = false;
+    if (Item.IngredientID == FName(TEXT("Water")))
+    {
+        bItemIsWater = true;
+    }
+    else if (Item.IngredientID != FName(TEXT("Potion")) && !Item.IngredientID.IsNone())
+    {
+        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), Item.IngredientID);
+        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(UAssetManager::Get().GetPrimaryAssetObject(AssetId));
+        if (Ingredient)
+        {
+            bItemIsWater = Ingredient->bIsWater;
+        }
+    }
+
+    if (SlotType == EAlchemySlotType::Water && !bItemIsWater) return false;
+    if (SlotType == EAlchemySlotType::Ingredient && bItemIsWater) return false;
     return true;
 }
 
 bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
 {
-    // Для ResultSlot пропускаем проверку CanAcceptItem (добавляем только из кода)
     if (SlotType != EAlchemySlotType::Result && !CanAcceptItem(Item))
         return false;
     if (Amount <= 0) return false;
@@ -38,7 +56,7 @@ bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
     }
     else
     {
-        if (StoredItem.Type != Item.Type) return false;
+        if (StoredItem.IngredientID != Item.IngredientID) return false;
         Count = FMath::Min(Count + Amount, MaxCount);
     }
     UpdateDisplay();
@@ -110,11 +128,32 @@ void UAlchemySlotWidget::UpdateDisplay()
     }
 
     if (IconImage) IconImage->SetVisibility(ESlateVisibility::Visible);
-    if (ItemNameText)
+
+    FString DisplayName;
+    if (StoredItem.IngredientID == FName(TEXT("Potion")))
     {
-        FString Name = FHerbalistHarvest::GetResourceName(StoredItem.Type, false);
-        ItemNameText->SetText(FText::FromString(Name));
+        DisplayName = TEXT("Зелье");
     }
+    else if (StoredItem.IngredientID == FName(TEXT("Water")))
+    {
+        DisplayName = TEXT("Вода");
+    }
+    else
+    {
+        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), StoredItem.IngredientID);
+        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(UAssetManager::Get().GetPrimaryAssetObject(AssetId));
+        if (Ingredient)
+        {
+            DisplayName = Ingredient->DisplayName.ToString();
+        }
+        else
+        {
+            DisplayName = StoredItem.IngredientID.ToString();
+        }
+    }
+
+    if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));
+
     if (CountText)
     {
         if (Count > 1)

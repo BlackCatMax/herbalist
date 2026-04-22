@@ -10,7 +10,7 @@ UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 
 bool UHerbalistInventoryComponent::AddItem(const FInventoryItem& Item, int32 Amount)
 {
-    if (Amount <= 0 || Item.Type == EResourceType::None || Item.Count <= 0)
+    if (Amount <= 0 || Item.IngredientID.IsNone() || Item.Count <= 0)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("AddItem: invalid parameters"));
         return false;
@@ -80,7 +80,7 @@ bool UHerbalistInventoryComponent::TransferOneItem(int32 SourceIndex, int32 Targ
 
     if (Source.Count <= 0) return false;
 
-    if (Target.Type == EResourceType::None || Target.Count == 0)
+    if (Target.IngredientID.IsNone() || Target.Count == 0)
     {
         Target = Source;
         Target.Count = 1;
@@ -91,7 +91,7 @@ bool UHerbalistInventoryComponent::TransferOneItem(int32 SourceIndex, int32 Targ
         return true;
     }
 
-    if (Target.Type == Source.Type && Target.Count < MAX_STACK_SIZE && AreItemsStackable(Target, Source))
+    if (Target.IngredientID == Source.IngredientID && Target.Count < MAX_STACK_SIZE && AreItemsStackable(Target, Source))
     {
         int32 Space = MAX_STACK_SIZE - Target.Count;
         int32 ToAdd = FMath::Min(1, Space);
@@ -164,7 +164,7 @@ int32 UHerbalistInventoryComponent::FindStackableSlot(const FInventoryItem& Item
     for (int32 i = 0; i < Items.Num(); ++i)
     {
         const FInventoryItem& Slot = Items[i];
-        if (Slot.Type == Item.Type && Slot.Count < MAX_STACK_SIZE && AreItemsStackable(Slot, Item))
+        if (Slot.IngredientID == Item.IngredientID && Slot.Count < MAX_STACK_SIZE && AreItemsStackable(Slot, Item))
             return i;
     }
     return INDEX_NONE;
@@ -172,7 +172,7 @@ int32 UHerbalistInventoryComponent::FindStackableSlot(const FInventoryItem& Item
 
 bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, const FInventoryItem& B) const
 {
-    if (A.Type != B.Type) return false;
+    if (A.IngredientID != B.IngredientID) return false;
     return HerbalistCore::Math::AreStatesSimilar(A.State, B.State);
 }
 

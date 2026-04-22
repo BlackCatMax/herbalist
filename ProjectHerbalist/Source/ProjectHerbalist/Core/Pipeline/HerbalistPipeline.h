@@ -43,7 +43,7 @@ namespace HerbalistCore
             TArray<FRealState>& OutWater
         );
 
-        // Обработка случая "только вода" -> кипяченая вода
+        // Обработка случая "только вода" -> варёная вода
         static FRealState ProcessWaterOnly(const TArray<FRealState>& WaterStates);
 
         // Обработка случая "нет воды" -> зола

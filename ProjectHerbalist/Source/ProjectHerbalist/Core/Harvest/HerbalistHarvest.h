@@ -7,9 +7,14 @@
 class PROJECTHERBALIST_API FHerbalistHarvest
 {
 public:
-    static FRealState GetBaseResourceParams(EResourceType Type);
-    static FRealState Harvest(EResourceType Type, const FRealState& BiomeState, const FConditionModifier& Conditions = FConditionModifier());
-    static FString GetResourceName(EResourceType Type, bool bEnglish = false);
+    // Получить базовые параметры ингредиента по его ID (FName)
+    static FRealState GetBaseResourceParams(FName IngredientID);
+
+    // Собрать ресурс с учётом состояния биома и условий
+    static FRealState Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions = FConditionModifier());
+
+    // Получить отображаемое имя ингредиента
+    static FString GetResourceName(FName IngredientID, bool bEnglish = false);
 };
 
 // Глобальная константа, используемая в нескольких файлах

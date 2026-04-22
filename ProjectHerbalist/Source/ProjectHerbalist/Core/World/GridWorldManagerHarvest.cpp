@@ -5,9 +5,6 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Player/HerbalistPlayerController.h"
 
-// используем глобальную k_condition из HerbalistHarvest.cpp
-// (она объявлена extern в HerbalistHarvest.h)
-
 FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions)
 {
     FGridCell* Cell = GetCell(X, Y);
@@ -45,7 +42,14 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
         return FRealState();
     }
 
-    FRealState Resource = FHerbalistHarvest::Harvest(Cell->AvailableResource, Cell->State, Conditions);
+    FName IngredientID = Cell->AvailableIngredientID;
+    if (IngredientID.IsNone())
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("Cell (%d,%d) has no available resource"), X, Y);
+        return FRealState();
+    }
+
+    FRealState Resource = FHerbalistHarvest::Harvest(IngredientID, Cell->State, Conditions);
     Cell->ResourceRegrowthTimer = ResourceRegrowthTime;
     MarkRegrowing(X, Y);
     if (bHarvestAffectsBiome)
@@ -90,11 +94,11 @@ void AGridWorldManager::HarvestTest(int32 X, int32 Y)
         FGridCell* Cell = GetCell(X, Y);
         if (Cell)
         {
-            EResourceType Type = Cell->bIsWater ? EResourceType::Water : Cell->AvailableResource;
-            if (Type != EResourceType::None)
+            FName IngredientID = Cell->bIsWater ? FName(TEXT("Water")) : Cell->AvailableIngredientID;
+            if (!IngredientID.IsNone())
             {
                 FInventoryItem Item;
-                Item.Type = Type;
+                Item.IngredientID = IngredientID;
                 Item.State = Res;
                 Item.Count = 1;
                 PC->InventoryComponent->AddItem(Item, 1);
@@ -102,7 +106,7 @@ void AGridWorldManager::HarvestTest(int32 X, int32 Y)
         }
     }
     FGridCell* Cell = GetCell(X, Y);
-    FString ResourceName = Cell ? (Cell->bIsWater ? TEXT("Water") : FHerbalistHarvest::GetResourceName(Cell->AvailableResource, false)) : TEXT("None");
+    FString ResourceName = Cell ? (Cell->bIsWater ? TEXT("Water") : Cell->AvailableIngredientID.ToString()) : TEXT("None");
     UE_LOG(LogHerbalist, Log, TEXT("Harvested from (%d,%d): Mag=%.2f Dist=%.2f Stress=%.3f Resource=%s"),
         X, Y, Res.Magnitude, Res.Meta.Distortion, Cell ? Cell->HarvestStress : -1.0f, *ResourceName);
 }

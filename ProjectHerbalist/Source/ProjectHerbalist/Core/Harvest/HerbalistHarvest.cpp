@@ -1,59 +1,71 @@
 // HerbalistHarvest.cpp
 #include "HerbalistHarvest.h"
 #include "ProjectHerbalist.h"
-#include "Core/Data/ResourceDataManager.h"
-#include "Core/Types/HerbalistItemData.h"
+#include "Core/Types/HerbalistIngredient.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Engine/AssetManager.h"
 
 static constexpr float k_biome = 0.6f;
 const float k_condition = 0.4f;
 
-// Вспомогательная функция: преобразует EResourceType в FName (без префикса)
-static FName GetAssetIdFromResourceType(EResourceType Type)
+// Загружает ассет ингредиента по его IngredientID, ищет во всём проекте
+static UHerbalistIngredient* LoadIngredientAsset(FName IngredientID)
 {
-    FString TypeString = UEnum::GetValueAsString(Type); // "EResourceType::Nettle"
-    int32 ColonIndex;
-    if (TypeString.FindLastChar(':', ColonIndex))
-        TypeString = TypeString.Mid(ColonIndex + 1); // "Nettle"
-    return FName(*TypeString);
+    if (IngredientID.IsNone()) return nullptr;
+
+    // Сначала пробуем прямой путь (для быстрой загрузки, если ассеты лежат плоско)
+    FString DirectPath = FString::Printf(TEXT("/Game/Data/Ingredients/%s.%s"), *IngredientID.ToString(), *IngredientID.ToString());
+    if (UHerbalistIngredient* DirectAsset = LoadObject<UHerbalistIngredient>(nullptr, *DirectPath))
+    {
+        return DirectAsset;
+    }
+
+    // Если не нашли, ищем через AssetRegistry
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+    IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+    FARFilter Filter;
+    Filter.ClassPaths.Add(UHerbalistIngredient::StaticClass()->GetClassPathName());
+    Filter.bRecursivePaths = true;
+    Filter.PackagePaths.Add(FName("/Game/Data/Ingredients"));
+    Filter.bRecursivePaths = true;
+
+    TArray<FAssetData> AssetDataList;
+    AssetRegistry.GetAssets(Filter, AssetDataList);
+
+    for (const FAssetData& AssetData : AssetDataList)
+    {
+        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(AssetData.GetAsset());
+        if (Ingredient && Ingredient->IngredientID == IngredientID)
+        {
+            return Ingredient;
+        }
+    }
+
+    UE_LOG(LogHerbalist, Warning, TEXT("LoadIngredientAsset: Failed to find ingredient with ID '%s'"), *IngredientID.ToString());
+    return nullptr;
 }
 
-FRealState FHerbalistHarvest::GetBaseResourceParams(EResourceType Type)
+FRealState FHerbalistHarvest::GetBaseResourceParams(FName IngredientID)
 {
-    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
-    if (!Manager)
+    UHerbalistIngredient* Ingredient = LoadIngredientAsset(IngredientID);
+    if (!Ingredient)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("GetBaseResourceParams: ResourceDataManager not initialized!"));
+        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: Ingredient asset not found for ID '%s'"), *IngredientID.ToString());
         return FRealState();
     }
 
-    FName AssetId = GetAssetIdFromResourceType(Type);
-    UE_LOG(LogHerbalist, Log, TEXT("GetBaseResourceParams: Type=%d, AssetId=%s"), (int32)Type, *AssetId.ToString());
-
-    const FResourceBalanceRow* BalanceRow = Manager->GetResourceBalanceRow(AssetId);
-    if (!BalanceRow)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: No balance row for AssetId '%s' (Type=%d)"), *AssetId.ToString(), (int32)Type);
-        return FRealState();
-    }
-
-    UHerbalistItemData* ItemData = Manager->GetItemData(AssetId);
-    if (!ItemData)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: No ItemData for AssetId '%s' (check if DataAsset exists at /Game/Data/Items/%s)"), *AssetId.ToString(), *AssetId.ToString());
-        return FRealState();
-    }
-
-    FRealState State = ItemData->BaseState;
+    FRealState State = Ingredient->BaseState;
     State.Direction.NormalizeSum();
     return State;
 }
 
-FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& BiomeState, const FConditionModifier& Conditions)
+FRealState FHerbalistHarvest::Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions)
 {
-    FRealState Base = GetBaseResourceParams(Type);
+    FRealState Base = GetBaseResourceParams(IngredientID);
     if (Base.Magnitude < 0.01f && Base.Meta.Distortion < 0.01f)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: invalid base params for type %d, aborting"), (int32)Type);
+        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: invalid base params for '%s', aborting"), *IngredientID.ToString());
         return FRealState();
     }
 
@@ -94,30 +106,28 @@ FRealState FHerbalistHarvest::Harvest(EResourceType Type, const FRealState& Biom
     Result.Meta.Resonance = FMath::Clamp(Result.Meta.Resonance, 0.0f, 1.0f);
     Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption, 0.0f, 1.0f);
 
-    UE_LOG(LogHerbalist, Log, TEXT("[HARVEST] Type=%d Mag=%.3f Dist=%.3f Stab=%.3f Pur=%.3f"),
-        (int32)Type, Result.Magnitude, Result.Meta.Distortion, Result.Meta.Stability, Result.Meta.Purity);
+    UE_LOG(LogHerbalist, Log, TEXT("[HARVEST] ID=%s Mag=%.3f Dist=%.3f Stab=%.3f Pur=%.3f"),
+        *IngredientID.ToString(), Result.Magnitude, Result.Meta.Distortion, Result.Meta.Stability, Result.Meta.Purity);
     return Result;
 }
 
-FString FHerbalistHarvest::GetResourceName(EResourceType Type, bool bEnglish)
+FString FHerbalistHarvest::GetResourceName(FName IngredientID, bool bEnglish)
 {
-    UResourceDataManager* Manager = UResourceDataManager::GetInstance();
-    if (!Manager)
+    if (IngredientID == FName(TEXT("Potion")))
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetResourceName: No ResourceDataManager"));
-        return TEXT("Unknown");
+        return bEnglish ? TEXT("Potion") : TEXT("Зелье");
+    }
+    if (IngredientID == FName(TEXT("Water")))
+    {
+        return bEnglish ? TEXT("Water") : TEXT("Вода");
     }
 
-    FName AssetId = GetAssetIdFromResourceType(Type);
-    UHerbalistItemData* ItemData = Manager->GetItemData(AssetId);
-    if (!ItemData)
+    UHerbalistIngredient* Ingredient = LoadIngredientAsset(IngredientID);
+    if (!Ingredient)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetResourceName: No ItemData for %s (type %d)"), *AssetId.ToString(), (int32)Type);
-        return TEXT("Unknown");
+        UE_LOG(LogHerbalist, Warning, TEXT("GetResourceName: Ingredient asset not found for ID '%s'"), *IngredientID.ToString());
+        return IngredientID.ToString();
     }
 
-    if (bEnglish)
-        return AssetId.ToString();
-    else
-        return ItemData->DisplayName.ToString();
+    return bEnglish ? IngredientID.ToString() : Ingredient->DisplayName.ToString();
 }

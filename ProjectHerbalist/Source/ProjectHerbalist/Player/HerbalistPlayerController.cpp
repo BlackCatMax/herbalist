@@ -337,7 +337,7 @@ void AHerbalistPlayerController::UsePotion()
     const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
     for (int32 i = 0; i < Items.Num(); ++i)
     {
-        if (Items[i].Type == EResourceType::Potion && Items[i].Count > 0)
+        if (Items[i].IngredientID == FName(TEXT("Potion")) && Items[i].Count > 0)
         {
             PotionSlotIndex = i;
             PotionItem = Items[i];

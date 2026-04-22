@@ -119,7 +119,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
     for (const FRealState& State : Ingredients)
     {
         FInventoryItem Item;
-        Item.Type = EResourceType::None;
+        Item.IngredientID = NAME_None;
         Item.State = State;
         Item.Count = 1;
         Items.Add(Item);
@@ -230,8 +230,9 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
 
+    // Создаём ингредиент-зелье
     FInventoryItem PotionItem;
-    PotionItem.Type = EResourceType::Potion;
+    PotionItem.IngredientID = FName(TEXT("Potion"));
     PotionItem.State = PotionState;
     PotionItem.Count = 1;
     TArray<FInventoryItem> Ingredients = { PotionItem };
@@ -241,5 +242,6 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FRngState Rng;
     Rng.Seed = FMath::Rand();
 
+    // Применяем алхимию к клетке
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
 }

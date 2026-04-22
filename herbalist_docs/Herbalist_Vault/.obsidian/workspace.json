@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "01_Glossary/Morok Field.md",
+                "file": "04_Compendium/Растительность/Болото/Белокрыльник.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Morok Field"
+              "title": "Белокрыльник"
             }
           },
           {
@@ -200,6 +200,7 @@
   },
   "active": "d344dfee6a5c0c12",
   "lastOpenFiles": [
+    "01_Glossary/Morok Field.md",
     "01_Glossary/Morok.md",
     "01_Glossary/Zaryana Field.md",
     "01_Glossary/Zaryana.md",
@@ -208,7 +209,6 @@
     "01_Glossary/Biome Memory.md",
     "01_Glossary/Biome Graph.md",
     "01_Glossary/GridBiomeSample.md",
-    "01_Glossary/Morok Field.md",
     "01_Glossary/_Index.md",
     "01_Glossary/BiomeState.md",
     "01_Glossary/Toxicity.md",

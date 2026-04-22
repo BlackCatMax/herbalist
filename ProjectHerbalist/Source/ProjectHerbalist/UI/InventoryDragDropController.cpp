@@ -6,7 +6,7 @@
 #include "Core/Types/HerbalistCoreMath.h"
 
 bool UInventoryDragDropController::TryTransferItem(UHerbalistInventoryComponent* SourceInventory, int32 SourceIndex,
-                                                   UHerbalistInventoryComponent* TargetInventory)
+    UHerbalistInventoryComponent* TargetInventory)
 {
     if (!SourceInventory || !TargetInventory) return false;
     if (!SourceInventory->GetSlot(SourceIndex)) return false;
@@ -15,9 +15,9 @@ bool UInventoryDragDropController::TryTransferItem(UHerbalistInventoryComponent*
 }
 
 bool UInventoryDragDropController::TryAddSplitItem(const FInventoryItem& SplitItem,
-                                                   UHerbalistInventoryComponent* SourceInventory,
-                                                   UHerbalistInventoryComponent* TargetInventory,
-                                                   UInventoryDragDropOperation* DragOp)
+    UHerbalistInventoryComponent* SourceInventory,
+    UHerbalistInventoryComponent* TargetInventory,
+    UInventoryDragDropOperation* DragOp)
 {
     if (!TargetInventory) return false;
     if (TargetInventory->AddItem(SplitItem, SplitItem.Count))
@@ -32,7 +32,7 @@ bool UInventoryDragDropController::TryAddSplitItem(const FInventoryItem& SplitIt
 }
 
 bool UInventoryDragDropController::TryAddToAlchemySlot(const FInventoryItem& Item, UAlchemySlotWidget* Slot,
-                                                       UHerbalistInventoryComponent* PlayerInventory)
+    UHerbalistInventoryComponent* PlayerInventory)
 {
     if (!Slot || !PlayerInventory) return false;
     if (!Slot->CanAcceptItem(Item)) return false;
@@ -42,7 +42,7 @@ bool UInventoryDragDropController::TryAddToAlchemySlot(const FInventoryItem& Ite
     int32 FoundIndex = INDEX_NONE;
     for (int32 i = 0; i < Items.Num(); ++i)
     {
-        if (Items[i].Type == Item.Type &&
+        if (Items[i].IngredientID == Item.IngredientID &&
             HerbalistCore::Math::AreStatesSimilar(Items[i].State, Item.State))
         {
             FoundIndex = i;
