@@ -18,6 +18,7 @@ class PROJECTHERBALIST_API UAlchemyTransferWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
+	UAlchemySlotWidget* FindSuitableSlot(const FInventoryItem& Item) const;
     UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer);
 
     void BindInventory(UHerbalistInventoryComponent* InPlayerInventory);

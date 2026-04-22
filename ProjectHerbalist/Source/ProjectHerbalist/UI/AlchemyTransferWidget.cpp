@@ -215,3 +215,12 @@ FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
     }
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
+
+UAlchemySlotWidget* UAlchemyTransferWidget::FindSuitableSlot(const FInventoryItem& Item) const
+{
+    if (WaterSlot && WaterSlot->CanAcceptItem(Item)) return WaterSlot;
+    if (IngredientSlot1 && IngredientSlot1->CanAcceptItem(Item)) return IngredientSlot1;
+    if (IngredientSlot2 && IngredientSlot2->CanAcceptItem(Item)) return IngredientSlot2;
+    if (IngredientSlot3 && IngredientSlot3->CanAcceptItem(Item)) return IngredientSlot3;
+    return nullptr;
+}

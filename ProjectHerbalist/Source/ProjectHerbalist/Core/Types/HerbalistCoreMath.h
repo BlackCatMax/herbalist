@@ -1,18 +1,19 @@
+// HerbalistCoreMath.h
 #pragma once
 
+#include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
-#include <cmath>
 
 namespace HerbalistCore::Math
 {
     inline float Clamp01(float v)
     {
-        return std::fmax(0.f, std::fmin(1.f, v));
+        return FMath::Clamp(v, 0.0f, 1.0f);
     }
 
-    inline float Clamp(float v, float min, float max)
+    inline float Clamp(float v, float Min, float Max)
     {
-        return std::fmax(min, std::fmin(max, v));
+        return FMath::Clamp(v, Min, Max);
     }
 
     inline float Dot(const FDirection& A, const FDirection& B)
@@ -29,7 +30,14 @@ namespace HerbalistCore::Math
         float dy = A.Mind - B.Mind;
         float dz = A.Spirit - B.Spirit;
         float dw = A.Nature - B.Nature;
-
-        return std::sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+        return FMath::Sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
     }
+
+    // Сравнение двух состояний с заданными допусками
+    bool AreStatesSimilar(const FRealState& A, const FRealState& B,
+        float MagnitudeThreshold = 0.15f,
+        float DistortionThreshold = 0.2f,
+        float PurityThreshold = 0.2f,
+        float StabilityThreshold = 0.2f,
+        float DirectionThreshold = 0.15f);
 }

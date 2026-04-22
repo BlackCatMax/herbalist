@@ -1,3 +1,4 @@
+// ProjectHerbalist.Build.cs
 using UnrealBuildTool;
 
 public class ProjectHerbalist : ModuleRules
@@ -13,9 +14,10 @@ public class ProjectHerbalist : ModuleRules
             "Engine",
             "InputCore",
             "EnhancedInput",
-            "UMG",         // для UUserWidget
-            "Slate",       // для FSlateDrawElement
-            "SlateCore"    // для FSlateDrawElement::MakeLines и др.
+            "UMG",
+            "Slate",
+            "SlateCore",
+            "DeveloperSettings"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -25,12 +27,11 @@ public class ProjectHerbalist : ModuleRules
             "ProjectHerbalist",
             "ProjectHerbalist/Core",
             "ProjectHerbalist/Core/Types",
-			"ProjectHerbalist/Core/Data",
+            "ProjectHerbalist/Core/Data",
             "ProjectHerbalist/Core/Pipeline",
             "ProjectHerbalist/Core/World",
             "ProjectHerbalist/Core/Harvest",
             "ProjectHerbalist/Core/Inventory",
-            "ProjectHerbalist/Core/Alchemy",
             "ProjectHerbalist/Core/Storage",
             "ProjectHerbalist/Player",
             "ProjectHerbalist/UI"

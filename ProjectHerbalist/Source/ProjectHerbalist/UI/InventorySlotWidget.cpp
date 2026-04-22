@@ -1,3 +1,4 @@
+// InventorySlotWidget.cpp
 #include "InventorySlotWidget.h"
 #include "ProjectHerbalist.h"
 #include "Core/Harvest/HerbalistHarvest.h"
@@ -10,6 +11,8 @@
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Input/Reply.h"
 #include "InventoryDragDropOperation.h"
+#include "Core/Types/HerbalistCoreMath.h"
+#include "UI/InventoryDragDropController.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
@@ -37,20 +40,10 @@ int32 UInventorySlotWidget::FindRealIndex() const
     {
         const FInventoryItem& Item = Items[i];
         if (Item.Type != CachedItem.Type) continue;
-        const FRealState& S1 = Item.State;
-        const FRealState& S2 = CachedItem.State;
-        if (FMath::Abs(S1.Magnitude - S2.Magnitude) > 0.01f) continue;
-        if (FMath::Abs(S1.Meta.Distortion - S2.Meta.Distortion) > 0.01f) continue;
-        if (FMath::Abs(S1.Meta.Purity - S2.Meta.Purity) > 0.01f) continue;
-        if (FMath::Abs(S1.Meta.Stability - S2.Meta.Stability) > 0.01f) continue;
-        if (FMath::Abs(S1.Meta.Potency - S2.Meta.Potency) > 0.01f) continue;
-        if (FMath::Abs(S1.Meta.Resonance - S2.Meta.Resonance) > 0.01f) continue;
-        if (FMath::Abs(S1.Meta.Corruption - S2.Meta.Corruption) > 0.01f) continue;
-        if (FMath::Abs(S1.Direction.Body - S2.Direction.Body) > 0.01f) continue;
-        if (FMath::Abs(S1.Direction.Mind - S2.Direction.Mind) > 0.01f) continue;
-        if (FMath::Abs(S1.Direction.Spirit - S2.Direction.Spirit) > 0.01f) continue;
-        if (FMath::Abs(S1.Direction.Nature - S2.Direction.Nature) > 0.01f) continue;
-        return i;
+        if (HerbalistCore::Math::AreStatesSimilar(Item.State, CachedItem.State))
+        {
+            return i;
+        }
     }
     return -1;
 }
@@ -93,7 +86,7 @@ bool UInventorySlotWidget::TryMoveToOtherInventory()
     int32 RealIndex = FindRealIndex();
     if (RealIndex == -1) return false;
 
-    // 1. Алхимический виджет
+    // Если открыт алхимический виджет
     if (PC->CurrentAlchemyWidget && PC->CurrentAlchemyWidget->IsInViewport())
     {
         UAlchemyTransferWidget* AlchemyWidget = Cast<UAlchemyTransferWidget>(PC->CurrentAlchemyWidget);
@@ -101,32 +94,30 @@ bool UInventorySlotWidget::TryMoveToOtherInventory()
         {
             FInventoryItem ItemToAdd = CachedItem;
             ItemToAdd.Count = 1;
-            if (AlchemyWidget->TryAddItemToSlot(ItemToAdd))
+            UAlchemySlotWidget* TargetSlot = AlchemyWidget->FindSuitableSlot(ItemToAdd);
+            if (UInventoryDragDropController::TryAddToAlchemySlot(ItemToAdd, TargetSlot, PC->InventoryComponent))
             {
-                InventoryComponent->RemoveItem(RealIndex, 1);
                 return true;
             }
         }
         return false;
     }
 
-    // 2. Трансфер между инвентарями
+    // Если открыт трансферный виджет
     if (!PC->CurrentTransferWidget || !PC->CurrentTransferWidget->IsInViewport())
         return false;
 
-    UHerbalistInventoryComponent* Source = InventoryComponent;
-    UHerbalistInventoryComponent* Target = nullptr;
-
-    if (Source == PC->InventoryComponent)
-        Target = PC->CurrentTransferWidget->GetRightInventory();
-    else if (Source == PC->CurrentTransferWidget->GetLeftInventory() || Source == PC->CurrentTransferWidget->GetRightInventory())
-        Target = PC->InventoryComponent;
+    UHerbalistInventoryComponent* TargetInventory = nullptr;
+    if (InventoryComponent == PC->InventoryComponent)
+        TargetInventory = PC->CurrentTransferWidget->GetRightInventory();
+    else if (InventoryComponent == PC->CurrentTransferWidget->GetLeftInventory() || InventoryComponent == PC->CurrentTransferWidget->GetRightInventory())
+        TargetInventory = PC->InventoryComponent;
     else
         return false;
 
-    if (!Target) return false;
+    if (!TargetInventory) return false;
 
-    return Source->TransferItemTo(RealIndex, Target);
+    return UInventoryDragDropController::TryTransferItem(InventoryComponent, RealIndex, TargetInventory);
 }
 
 FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -182,17 +173,12 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDrag
 
     if (DragOp->bIsSplit)
     {
-        if (InventoryComponent->AddItem(DragOp->SplitItem, DragOp->SplitItem.Count))
-        {
-            DragOp->bIsSplit = false;
-            return true;
-        }
-        return false;
+        return UInventoryDragDropController::TryAddSplitItem(DragOp->SplitItem, DragOp->SourceInventory, InventoryComponent, DragOp);
     }
 
     if (DragOp->SourceInventory != InventoryComponent)
     {
-        return DragOp->SourceInventory->TransferItemTo(DragOp->SourceIndex, InventoryComponent);
+        return UInventoryDragDropController::TryTransferItem(DragOp->SourceInventory, DragOp->SourceIndex, InventoryComponent);
     }
 
     return false;

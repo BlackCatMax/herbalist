@@ -1,5 +1,7 @@
+// HerbalistInventoryComponent.cpp
 #include "HerbalistInventoryComponent.h"
 #include "ProjectHerbalist.h"
+#include "Core/Types/HerbalistCoreMath.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 {
@@ -171,30 +173,7 @@ int32 UHerbalistInventoryComponent::FindStackableSlot(const FInventoryItem& Item
 bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, const FInventoryItem& B) const
 {
     if (A.Type != B.Type) return false;
-
-    const FRealState& SA = A.State;
-    const FRealState& SB = B.State;
-
-    const float MagnitudeThreshold = 0.15f;
-    const float DistortionThreshold = 0.2f;
-    const float PurityThreshold = 0.2f;
-    const float StabilityThreshold = 0.2f;
-    const float DirectionThreshold = 0.15f;
-
-    if (FMath::Abs(SA.Magnitude - SB.Magnitude) > MagnitudeThreshold) return false;
-    if (FMath::Abs(SA.Meta.Distortion - SB.Meta.Distortion) > DistortionThreshold) return false;
-    if (FMath::Abs(SA.Meta.Purity - SB.Meta.Purity) > PurityThreshold) return false;
-    if (FMath::Abs(SA.Meta.Stability - SB.Meta.Stability) > StabilityThreshold) return false;
-
-    float DirDiff = FMath::Sqrt(
-        FMath::Square(SA.Direction.Body - SB.Direction.Body) +
-        FMath::Square(SA.Direction.Mind - SB.Direction.Mind) +
-        FMath::Square(SA.Direction.Spirit - SB.Direction.Spirit) +
-        FMath::Square(SA.Direction.Nature - SB.Direction.Nature)
-    );
-    if (DirDiff > DirectionThreshold * 2.0f) return false;
-
-    return true;
+    return HerbalistCore::Math::AreStatesSimilar(A.State, B.State);
 }
 
 void UHerbalistInventoryComponent::MergeStack(FInventoryItem& Target, const FInventoryItem& Source, int32 AddedCount)
