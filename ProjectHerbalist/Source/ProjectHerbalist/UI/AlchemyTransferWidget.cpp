@@ -5,6 +5,12 @@
 #include "Components/TextBlock.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
+#include "Core/World/GridWorldManager.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "Core/Storage/AlchemyTableActor.h"
+#include "Core/Types/BiomeTypes.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 
 UAlchemyTransferWidget::UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -87,7 +93,52 @@ void UAlchemyTransferWidget::OnMixClicked()
         return;
     }
 
-    const FRealState& BiomeState = FAlatyr::S0;
+    // Получаем GridWorldManager
+    AGridWorldManager* WorldManager = nullptr;
+    UWorld* World = GetWorld();
+    if (World)
+    {
+        for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+        {
+            WorldManager = *It;
+            break;
+        }
+    }
+
+    // Получаем координаты алхимического стола
+    FIntPoint TableCoords = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : FIntPoint(-1, -1);
+
+    // Определяем состояние биома и контекст графа
+    FRealState CurrentBiomeState = FAlatyr::S0;
+    FEnvironment Env;
+    FMemoryState Memory;
+    float BiomeMorokField = 0.0f;
+    float BiomeZaryanaField = 0.0f;
+    FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
+
+    if (WorldManager && TableCoords.X >= 0 && TableCoords.Y >= 0)
+    {
+        FGridCell* Cell = WorldManager->GetCell(TableCoords.X, TableCoords.Y);
+        if (Cell)
+        {
+            CurrentBiomeState = Cell->State;
+            Env = Cell->Environment;
+            Memory = Cell->Memory;
+
+            // Получаем контекст биома из графа
+            if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
+            {
+                FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
+                if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
+                {
+                    BiomeMorokField = Node->MorokField;
+                    BiomeZaryanaField = Node->ZaryanaField;
+                    BiomeAxisDrift = Node->Memory.AxisDrift;
+                }
+            }
+        }
+    }
+
     FIntent DefaultIntent;
     DefaultIntent.Coherence = 0.5f;
     FRngState Rng;
@@ -95,11 +146,14 @@ void UAlchemyTransferWidget::OnMixClicked()
 
     FRealState ResultState = HerbalistCore::Pipeline::ApplyMorok(
         Ingredients,
-        BiomeState,
-        FEnvironment(),
-        FMemoryState(),
+        CurrentBiomeState,
+        Env,
+        Memory,
         DefaultIntent,
-        Rng
+        Rng,
+        BiomeMorokField,
+        BiomeZaryanaField,
+        BiomeAxisDrift
     );
 
     FInventoryItem Potion;

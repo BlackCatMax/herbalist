@@ -121,7 +121,10 @@ namespace HerbalistCore
         const FEnvironment& Env,
         const FMemoryState& Memory,
         const FIntent& Intent,
-        FRngState& Rng)
+        FRngState& Rng,
+        float BiomeMorokField,
+        float BiomeZaryanaField,
+        const FVector4& BiomeAxisDrift)
     {
         // Разделяем воду и не-воду
         TArray<FRealState> NonWaterStates;
@@ -286,7 +289,7 @@ namespace HerbalistCore
         Aggregated.Meta.Resonance = FMath::Clamp(Aggregated.Meta.Resonance, 0.0f, 1.0f);
         Aggregated.Meta.Distortion = FMath::Clamp(Aggregated.Meta.Distortion, 0.0f, 1.0f);
 
-        // ===== ДАЛЬНЕЙШИЙ ПАЙПЛАЙН (без изменений, используем Aggregated) =====
+        // ===== ДАЛЬНЕЙШИЙ ПАЙПЛАЙН =====
         UE_LOG(LogHerbalist, Warning, TEXT("[FOLD] Mag: %.3f | Dir: (%.2f, %.2f, %.2f, %.2f) | Dist:%.3f Stab:%.3f Pur:%.3f Pot:%.3f Res:%.3f Cor:%.3f"),
             Aggregated.Magnitude,
             Aggregated.Direction.Body, Aggregated.Direction.Mind,
@@ -308,12 +311,17 @@ namespace HerbalistCore
         float MemoryDist = Memory.AccumulatedDistortion;
         float Distortion = 1.0f - (1.0f - EnvDist) * (1.0f - MemoryDist);
         Distortion = FMath::Clamp(Distortion, 0.0f, 0.95f);
-        UE_LOG(LogHerbalist, Warning, TEXT("[DIST] Env: %.3f Mem: %.3f -> %.3f"), EnvDist, MemoryDist, Distortion);
 
-        // 4. ZaryanaStrength
+        // --- BIOME CONTEXT INJECTION ---
+        // Увеличиваем Distortion от поля Morok биома
+        Distortion = FMath::Clamp(Distortion + BiomeMorokField * 0.3f, 0.0f, 0.95f);
+        UE_LOG(LogHerbalist, Warning, TEXT("[BIOME CONTEXT] MorokField=%.3f -> Distortion=%.3f"), BiomeMorokField, Distortion);
+
+        // 4. ZaryanaStrength (базовая)
         float ZaryanaStrength = Intent.Coherence * (1.0f - Distortion);
-        ZaryanaStrength = FMath::Clamp(ZaryanaStrength, 0.0f, 1.0f);
-        UE_LOG(LogHerbalist, Warning, TEXT("[ZARYANA] Strength: %.3f"), ZaryanaStrength);
+        // Увеличиваем от поля Zaryana биома
+        ZaryanaStrength = FMath::Clamp(ZaryanaStrength + BiomeZaryanaField * 0.3f, 0.0f, 1.0f);
+        UE_LOG(LogHerbalist, Warning, TEXT("[BIOME CONTEXT] ZaryanaField=%.3f -> ZaryanaStrength=%.3f"), BiomeZaryanaField, ZaryanaStrength);
 
         // 5. Влияние Intent на Delta
         float IntentFactor = 0.5f + Intent.Coherence;
@@ -345,6 +353,15 @@ namespace HerbalistCore
 
         UE_LOG(LogHerbalist, Warning, TEXT("[POTENCY] Scale=%.3f | [RESONANCE] Factor=%.3f | [CORRUPTION] AddDist=%.3f"),
             PotencyScale, ResonanceFactor, Aggregated.Meta.Corruption * 0.1f);
+
+        // --- BIOME AXIS DRIFT ---
+        // Добавляем дрейф осей из памяти биома к дельте направления (с малым весом)
+        Delta.Direction.Body += BiomeAxisDrift.X * 0.1f;
+        Delta.Direction.Mind += BiomeAxisDrift.Y * 0.1f;
+        Delta.Direction.Spirit += BiomeAxisDrift.Z * 0.1f;
+        Delta.Direction.Nature += BiomeAxisDrift.W * 0.1f;
+        UE_LOG(LogHerbalist, Warning, TEXT("[BIOME AXIS DRIFT] Applied: (%.3f, %.3f, %.3f, %.3f)"),
+            BiomeAxisDrift.X, BiomeAxisDrift.Y, BiomeAxisDrift.Z, BiomeAxisDrift.W);
 
         // 7. Morok (нелинейное искажение)
         float NoiseMagnitude = RandomRange(Rng, 0.0f, Distortion);

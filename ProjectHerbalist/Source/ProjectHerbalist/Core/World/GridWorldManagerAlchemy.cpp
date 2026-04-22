@@ -10,6 +10,22 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
 
+    // Получаем контекст биома из графа
+    float BiomeMorokField = 0.0f;
+    float BiomeZaryanaField = 0.0f;
+    FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
+
+    if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
+    {
+        FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
+        if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
+        {
+            BiomeMorokField = Node->MorokField;
+            BiomeZaryanaField = Node->ZaryanaField;
+            BiomeAxisDrift = Node->Memory.AxisDrift;
+        }
+    }
+
     FRealState OldState = Cell->State;
     FRealState NewState = HerbalistCore::Pipeline::ApplyMorok(
         Ingredients,
@@ -17,7 +33,10 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         Cell->Environment,
         Cell->Memory,
         Intent,
-        Rng
+        Rng,
+        BiomeMorokField,
+        BiomeZaryanaField,
+        BiomeAxisDrift
     );
 
     // Бифуркация (катастрофа / очищение)
@@ -207,19 +226,19 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
 {
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
-    
+
     // Создаём ингредиент-зелье
     FInventoryItem PotionItem;
     PotionItem.Type = EResourceType::Potion;
     PotionItem.State = PotionState;
     PotionItem.Count = 1;
     TArray<FInventoryItem> Ingredients = { PotionItem };
-    
+
     FIntent Intent;
     Intent.Coherence = 0.5f;
     FRngState Rng;
     Rng.Seed = FMath::Rand();
-    
+
     // Применяем алхимию к клетке
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
 }

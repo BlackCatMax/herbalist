@@ -26,7 +26,11 @@ namespace HerbalistCore
             const FEnvironment& Env,
             const FMemoryState& Memory,
             const FIntent& Intent,
-            FRngState& Rng
+            FRngState& Rng,
+            // Параметры контекста биома из графа
+            float BiomeMorokField = 0.0f,
+            float BiomeZaryanaField = 0.0f,
+            const FVector4& BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f)
         );
     };
 }
