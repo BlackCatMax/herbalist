@@ -8,7 +8,7 @@
 #include "Core/Harvest/HarvestService.h"
 #include "Math/UnrealMathUtility.h"
 #include "Math/Vector4.h"
-#include "PipelineMeta.h"   // <-- добавлено
+#include "PipelineMeta.h"
 
 namespace HerbalistCore
 {
@@ -23,7 +23,7 @@ namespace HerbalistCore
         float BiomeZaryanaField,
         const FVector4& BiomeAxisDrift)
     {
-        // 1. Разделение ингредиентов
+        // 1. Разделение ингредиентов на воду и не-воду
         TArray<FRealState> NonWater, Water;
         SeparateWaterAndIngredients(Inputs, NonWater, Water);
 
@@ -31,23 +31,32 @@ namespace HerbalistCore
         if (NonWater.Num() == 0 && Water.Num() > 0)
         {
             FRealState Result = ProcessWaterOnly(Water);
-            // ... лог ...
+            UE_LOG(LogHerbalist, Log, TEXT("ALCHEMY_RESULT|WaterOnly|Mag=%.3f|Body=%.2f|Mind=%.2f|Spirit=%.2f|Nature=%.2f|Dist=%.3f|Stab=%.3f|Pur=%.3f|Pot=%.3f|Res=%.3f|Cor=%.3f"),
+                Result.Magnitude, Result.Direction.Body, Result.Direction.Mind, Result.Direction.Spirit, Result.Direction.Nature,
+                Result.Meta.Distortion, Result.Meta.Stability, Result.Meta.Purity, Result.Meta.Potency, Result.Meta.Resonance, Result.Meta.Corruption);
             return Result;
         }
         if (Water.Num() == 0)
         {
             FRealState Result = ProcessNoWater();
-            // ... лог ...
+            UE_LOG(LogHerbalist, Log, TEXT("ALCHEMY_RESULT|Ash|Mag=%.3f|Body=%.2f|Mind=%.2f|Spirit=%.2f|Nature=%.2f|Dist=%.3f|Stab=%.3f|Pur=%.3f|Pot=%.3f|Res=%.3f|Cor=%.3f"),
+                Result.Magnitude, Result.Direction.Body, Result.Direction.Mind, Result.Direction.Spirit, Result.Direction.Nature,
+                Result.Meta.Distortion, Result.Meta.Stability, Result.Meta.Purity, Result.Meta.Potency, Result.Meta.Resonance, Result.Meta.Corruption);
             return Result;
         }
 
-        // 3. Агрегация
+        // 3. Агрегация не-воды
         FAggregatedState NonWaterAgg = Fold(NonWater, Rng);
+
+        // 4. Агрегация воды
         FRealState WaterAggregated = AggregateWater(Water);
+
+        // 5. Смешивание воды и не-воды (разбавление)
         FRealState NonWaterL1;
         NonWaterL1.Direction = NonWaterAgg.Dir.ToL1();
         NonWaterL1.Magnitude = NonWaterAgg.Magnitude;
         NonWaterL1.Meta = NonWaterAgg.Meta;
+
         FRealState AggregatedL1 = BlendWaterAndNonWater(NonWaterL1, WaterAggregated, NonWater.Num(), Water.Num());
 
         // ============================================================
@@ -79,7 +88,7 @@ namespace HerbalistCore
             BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift);
 
         // ============================================================
-        // ФАЗА 3: Morok Transform (только Meta)
+        // ФАЗА 3: Morok Transform (насыщающая формула)
         // ============================================================
         const UHerbalistSettings* Settings = GetHerbalistSettings();
         float MorokFactor = Distortion * (Settings ? Settings->MorokMixStrengthFactor : 0.5f);
@@ -87,7 +96,7 @@ namespace HerbalistCore
         float Noise = MorokFactor * (1.0f - CoreMeta.Stability);
 
         FMeta MorokMeta = CoreMeta;
-        MorokMeta.Distortion = BaseDist + Noise * (1.0f - BaseDist); // насыщение к 1
+        MorokMeta.Distortion = BaseDist + Noise * (1.0f - BaseDist);
         MorokMeta.Distortion = FMath::Clamp(MorokMeta.Distortion, 0.0f, 1.0f);
 
         MorokMeta.Corruption = FMath::Clamp(
@@ -125,14 +134,11 @@ namespace HerbalistCore
             0.0f, 1.0f);
 
         // ============================================================
-        // ФАЗА 6: Direction и Magnitude (с Morok, Zaryana и EnvBias)
+        // ФАЗА 6: Direction и Magnitude
         // ============================================================
-        // Матричный Morok для направления
         ApplyMorokDistortion(DeltaDir, Distortion, Rng);
-        // Zaryana структурирование
         ApplyZaryanaStructuring(DeltaDir, ZaryanaStrength, Distortion, Rng);
 
-        // Мягкий энвайронментальный дрейф
         FL2Direction EnvDirBias;
         EnvDirBias.Body = BiomeAxisDrift.X * 0.2f;
         EnvDirBias.Mind = BiomeAxisDrift.Y * 0.2f;

@@ -2,6 +2,11 @@
 #include "GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
+#include "Core/Pipeline/AlchemySemantics.h"
+#include "Core/Pipeline/AlchemySemanticResolver.h"
+#include "Core/Pipeline/AlchemyPhysicsPipeline.h"
+#include "Core/Pipeline/AlchemyWorldStateApplier.h"
+#include "Core/Pipeline/AlchemyTypes.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/HerbalistSettings.h"
@@ -12,11 +17,17 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
 
-    // Получаем контекст биома из графа
-    float BiomeMorokField = 0.0f;
-    float BiomeZaryanaField = 0.0f;
-    FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
+    // 1. Конвертация в атомы (единственный asset lookup на входе)
+    TArray<FAlchemyAtom> Atoms;
+    for (const FInventoryItem& Item : Ingredients)
+        Atoms.Add(FAlchemyAtom(Item, FBiomeDefaults::BiomeTypeToName(Cell->Biome)));
 
+    // 2. Семантическое разрешение
+    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms);
+
+    // 3. Биомный контекст
+    float BiomeMorokField = 0.0f, BiomeZaryanaField = 0.0f;
+    FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
     {
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
@@ -28,71 +39,24 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         }
     }
 
+    // 4. Запуск физики
+    TArray<FRealState> IngredientStates, WaterStates;
+    for (const FAlchemyAtom& A : Semantic.IngredientAtoms) IngredientStates.Add(A.State);
+    for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
+
+    FAlchemyPhysicsResult Physics = FAlchemyPhysicsPipeline::Run(
+        IngredientStates, WaterStates,
+        Cell->State, Cell->Environment, Cell->Memory,
+        Intent, Rng,
+        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift);
+
+    // 5. Применение результата к миру
     FRealState OldState = Cell->State;
+    FRealState NewState = FAlchemyWorldStateApplier::Apply(Semantic, Physics, Rng);
 
-    FRealState NewState = HerbalistCore::Pipeline::ApplyMorok(
-        Ingredients,
-        Cell->State,
-        Cell->Environment,
-        Cell->Memory,
-        Intent,
-        Rng,
-        BiomeMorokField,
-        BiomeZaryanaField,
-        BiomeAxisDrift
-    );
+    UE_LOG(LogHerbalist, Log, TEXT("Alchemy outcome: %d"), (int32)Semantic.Outcome);
 
-    UE_LOG(LogHerbalist, Log, TEXT("Alchemy: pipeline applied."));
-
-    // Бифуркация (катастрофа / очищение)
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float BifurcationThreshold = 0.92f;   // повышен, чтобы события были реже
-    constexpr float MaxDistortion = 1.0f;
-
-    if (NewState.Meta.Distortion > BifurcationThreshold)
-    {
-        float Excess = (NewState.Meta.Distortion - BifurcationThreshold) / (MaxDistortion - BifurcationThreshold);
-        float BaseChance = FMath::Pow(Excess, 1.5f);
-        float Instability = (1.0f - NewState.Meta.Stability) * (1.0f - NewState.Meta.Purity);
-        float InstabilityFactor = FMath::Lerp(0.5f, 1.0f, Instability);
-        float MemoryFactor = 1.0f - Cell->Memory.StabilityMemory * 0.7f;
-        float EventChance = BaseChance * InstabilityFactor * MemoryFactor;
-        EventChance = FMath::Clamp(EventChance, 0.0f, 0.95f);
-
-        if (HerbalistCore::Random01(Rng) < EventChance)
-        {
-            bool bCollapse = HerbalistCore::Random01(Rng) < 0.5f;
-            if (bCollapse)
-            {
-                // Мягкий коллапс: Distortion не обнуляется, а сжимается
-                NewState.Meta.Distortion = FMath::Clamp(NewState.Meta.Distortion * 0.3f, 0.1f, 0.4f);
-                NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability + 0.1f, 0.0f, 1.0f);
-                NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, 0.25f, 0.1f);
-                NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, 0.25f, 0.1f);
-                NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, 0.25f, 0.1f);
-                NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, 0.25f, 0.1f);
-                NewState.Direction.NormalizeSum();
-                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] COLLAPSE! Distortion reduced to %.2f, Stability+0.1"), NewState.Meta.Distortion);
-            }
-            else
-            {
-                // Очищение: Distortion сжимается до умеренного уровня
-                NewState.Meta.Distortion = FMath::Clamp(NewState.Meta.Distortion * 0.6f, 0.3f, 0.5f);
-                float Boost = 0.3f * (1.0f - NewState.Meta.Stability);
-                NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability + Boost, 0.0f, 1.0f);
-                NewState.Meta.Purity = FMath::Clamp(NewState.Meta.Purity + Boost * 0.8f, 0.0f, 1.0f);
-                NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, 0.25f, 0.2f);
-                NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, 0.25f, 0.2f);
-                NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, 0.25f, 0.2f);
-                NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, 0.25f, 0.2f);
-                NewState.Direction.NormalizeSum();
-                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] PURIFICATION! Distortion %.2f, Stability+%.2f, Purity+%.2f"),
-                    NewState.Meta.Distortion, Boost, Boost * 0.8f);
-            }
-        }
-    }
-
-    // Вычисляем дельту для распространения и записи следа
+    // 6. Дельта и след
     FRealState Delta;
     Delta.Magnitude = NewState.Magnitude - OldState.Magnitude;
     Delta.Direction.Body = NewState.Direction.Body - OldState.Direction.Body;
@@ -115,6 +79,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         Graph->RecordFootprint(BiomeID, MorokImpact, ZaryanaImpact, AxisDelta, 1.0f);
     }
 
+    // 7. Применение к сетке
     SetTargetState(X, Y, NewState);
     PropagateToNeighbors(X, Y, Delta, 0.5f, PropagationDepth);
 }

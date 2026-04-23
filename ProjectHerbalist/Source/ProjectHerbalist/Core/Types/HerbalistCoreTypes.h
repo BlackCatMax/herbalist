@@ -1,4 +1,4 @@
-// HerbalistCoreTypes.h
+// HerbalistCoreTypes.h (полный файл с добавленным EAlchemyOutcome)
 #pragma once
 
 #include "CoreMinimal.h"
@@ -17,6 +17,15 @@ enum class EBiomeType : uint8
     Steppe,
     Floodplain,
     Bog
+};
+
+UENUM(BlueprintType)
+enum class EAlchemyOutcome : uint8
+{
+    Valid,
+    BoiledWater,
+    Ash,
+    Catastrophe
 };
 
 // ========== Базовые структуры ==========
