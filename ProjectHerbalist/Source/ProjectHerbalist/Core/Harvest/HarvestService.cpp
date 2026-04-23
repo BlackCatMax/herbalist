@@ -94,12 +94,21 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     Result.Direction.Spirit = Base.Direction.Spirit + k_biome * BiomeDelta.Direction.Spirit + k_condition * Conditions.DeltaDirection.Spirit;
     Result.Direction.Nature = Base.Direction.Nature + k_biome * BiomeDelta.Direction.Nature + k_condition * Conditions.DeltaDirection.Nature;
     Result.Magnitude = Base.Magnitude + k_biome * BiomeDelta.Magnitude + k_condition * Conditions.DeltaMagnitude;
-    Result.Meta.Distortion = Base.Meta.Distortion + k_biome * BiomeDelta.Meta.Distortion + k_condition * Conditions.DeltaDistortion;
     Result.Meta.Stability = Base.Meta.Stability + k_biome * BiomeDelta.Meta.Stability + k_condition * Conditions.DeltaStability;
     Result.Meta.Purity = Base.Meta.Purity + k_biome * BiomeDelta.Meta.Purity + k_condition * Conditions.DeltaPurity;
     Result.Meta.Potency = Base.Meta.Potency + k_biome * BiomeDelta.Meta.Potency + k_condition * Conditions.DeltaPotency;
     Result.Meta.Resonance = Base.Meta.Resonance + k_biome * BiomeDelta.Meta.Resonance + k_condition * Conditions.DeltaResonance;
     Result.Meta.Corruption = Base.Meta.Corruption + k_biome * BiomeDelta.Meta.Corruption + k_condition * Conditions.DeltaCorruption;
+
+    // Мягкое накопление Distortion (нелинейное)
+    float BaseDist = Base.Meta.Distortion;
+    float BiomeDist = BiomeState.Meta.Distortion;
+    float CondDist  = Conditions.DeltaDistortion;
+    float P_Base  = 1.0f - BaseDist;
+    float P_Biome = 1.0f - BiomeDist * k_biome;
+    float P_Cond  = 1.0f - FMath::Clamp(CondDist * k_condition, -1.0f, 1.0f);
+    float CombinedPurity = P_Base * P_Biome * P_Cond;
+    Result.Meta.Distortion = 1.0f - FMath::Clamp(CombinedPurity, 0.0f, 1.0f);
 
     Result.Direction.NormalizeSum();
     Result.Magnitude = FMath::Clamp(Result.Magnitude, 0.0f, 1.0f);

@@ -46,7 +46,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
 
     // Бифуркация (катастрофа / очищение)
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float BifurcationThreshold = Settings ? Settings->BifurcationThreshold : 0.85f;
+    const float BifurcationThreshold = 0.92f;   // повышен, чтобы события были реже
     constexpr float MaxDistortion = 1.0f;
 
     if (NewState.Meta.Distortion > BifurcationThreshold)
@@ -64,18 +64,20 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
             bool bCollapse = HerbalistCore::Random01(Rng) < 0.5f;
             if (bCollapse)
             {
-                NewState.Meta.Distortion = 0.2f;
+                // Мягкий коллапс: Distortion не обнуляется, а сжимается
+                NewState.Meta.Distortion = FMath::Clamp(NewState.Meta.Distortion * 0.3f, 0.1f, 0.4f);
                 NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability + 0.1f, 0.0f, 1.0f);
                 NewState.Direction.Body = FMath::Lerp(NewState.Direction.Body, 0.25f, 0.1f);
                 NewState.Direction.Mind = FMath::Lerp(NewState.Direction.Mind, 0.25f, 0.1f);
                 NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, 0.25f, 0.1f);
                 NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, 0.25f, 0.1f);
                 NewState.Direction.NormalizeSum();
-                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] COLLAPSE! Distortion reset to 0.2, Stability+0.1"));
+                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] COLLAPSE! Distortion reduced to %.2f, Stability+0.1"), NewState.Meta.Distortion);
             }
             else
             {
-                NewState.Meta.Distortion = 0.4f;
+                // Очищение: Distortion сжимается до умеренного уровня
+                NewState.Meta.Distortion = FMath::Clamp(NewState.Meta.Distortion * 0.6f, 0.3f, 0.5f);
                 float Boost = 0.3f * (1.0f - NewState.Meta.Stability);
                 NewState.Meta.Stability = FMath::Clamp(NewState.Meta.Stability + Boost, 0.0f, 1.0f);
                 NewState.Meta.Purity = FMath::Clamp(NewState.Meta.Purity + Boost * 0.8f, 0.0f, 1.0f);
@@ -84,7 +86,8 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
                 NewState.Direction.Spirit = FMath::Lerp(NewState.Direction.Spirit, 0.25f, 0.2f);
                 NewState.Direction.Nature = FMath::Lerp(NewState.Direction.Nature, 0.25f, 0.2f);
                 NewState.Direction.NormalizeSum();
-                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] PURIFICATION! Distortion reset to 0.4, Stability+%.2f, Purity+%.2f"), Boost, Boost * 0.8f);
+                UE_LOG(LogHerbalist, Warning, TEXT("[CATASTROPHE] PURIFICATION! Distortion %.2f, Stability+%.2f, Purity+%.2f"),
+                    NewState.Meta.Distortion, Boost, Boost * 0.8f);
             }
         }
     }
