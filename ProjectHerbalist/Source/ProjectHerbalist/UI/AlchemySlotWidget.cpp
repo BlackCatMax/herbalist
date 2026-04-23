@@ -5,9 +5,8 @@
 #include "Components/Border.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Harvest/HerbalistHarvest.h"
+#include "Core/Harvest/HarvestService.h"
 #include "Core/Types/HerbalistIngredient.h"
-#include "Engine/AssetManager.h"
 
 void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCount)
 {
@@ -29,8 +28,7 @@ bool UAlchemySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
     }
     else if (Item.IngredientID != FName(TEXT("Potion")) && !Item.IngredientID.IsNone())
     {
-        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), Item.IngredientID);
-        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(UAssetManager::Get().GetPrimaryAssetObject(AssetId));
+        UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(Item.IngredientID);
         if (Ingredient)
         {
             bItemIsWater = Ingredient->bIsWater;
@@ -140,8 +138,7 @@ void UAlchemySlotWidget::UpdateDisplay()
     }
     else
     {
-        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), StoredItem.IngredientID);
-        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(UAssetManager::Get().GetPrimaryAssetObject(AssetId));
+        UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(StoredItem.IngredientID);
         if (Ingredient)
         {
             DisplayName = Ingredient->DisplayName.ToString();

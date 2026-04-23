@@ -2,7 +2,7 @@
 #include "GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "Core/Types/BiomeTypes.h"
-#include "Core/Harvest/HerbalistHarvest.h"
+#include "Core/Harvest/HarvestService.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "GridWorldManager.h"
@@ -143,6 +143,10 @@ void AGridWorldManager::BeginPlay()
 {
     Super::BeginPlay();
     WorldRNG.Initialize(12345);
+    
+    // Создаём сервис сбора
+    HarvestService = NewObject<UHarvestService>(this);
+    
     InitializeCells();
     if (bEnableDebugDraw)
     {

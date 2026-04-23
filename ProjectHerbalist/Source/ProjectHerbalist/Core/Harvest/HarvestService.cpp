@@ -1,26 +1,25 @@
-// HerbalistHarvest.cpp
-#include "HerbalistHarvest.h"
+// HarvestService.cpp
+#include "HarvestService.h"
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/AssetManager.h"
 
 static constexpr float k_biome = 0.6f;
-const float k_condition = 0.4f;
+static constexpr float k_condition = 0.4f;
 
-// Загружает ассет ингредиента по его IngredientID, ищет во всём проекте
-static UHerbalistIngredient* LoadIngredientAsset(FName IngredientID)
+UHerbalistIngredient* UHarvestService::LoadIngredientAssetStatic(FName IngredientID)
 {
     if (IngredientID.IsNone()) return nullptr;
 
-    // Сначала пробуем прямой путь (для быстрой загрузки, если ассеты лежат плоско)
+    // Прямой путь (если ассеты лежат в корне папки Ingredients)
     FString DirectPath = FString::Printf(TEXT("/Game/Data/Ingredients/%s.%s"), *IngredientID.ToString(), *IngredientID.ToString());
     if (UHerbalistIngredient* DirectAsset = LoadObject<UHerbalistIngredient>(nullptr, *DirectPath))
     {
         return DirectAsset;
     }
 
-    // Если не нашли, ищем через AssetRegistry
+    // Поиск через AssetRegistry по всем подпапкам
     FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
     IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
 
@@ -42,11 +41,16 @@ static UHerbalistIngredient* LoadIngredientAsset(FName IngredientID)
         }
     }
 
-    UE_LOG(LogHerbalist, Warning, TEXT("LoadIngredientAsset: Failed to find ingredient with ID '%s'"), *IngredientID.ToString());
+    UE_LOG(LogHerbalist, Warning, TEXT("LoadIngredientAssetStatic: Failed to find ingredient with ID '%s'"), *IngredientID.ToString());
     return nullptr;
 }
 
-FRealState FHerbalistHarvest::GetBaseResourceParams(FName IngredientID)
+UHerbalistIngredient* UHarvestService::LoadIngredientAsset(FName IngredientID) const
+{
+    return LoadIngredientAssetStatic(IngredientID);
+}
+
+FRealState UHarvestService::GetBaseResourceParams(FName IngredientID) const
 {
     UHerbalistIngredient* Ingredient = LoadIngredientAsset(IngredientID);
     if (!Ingredient)
@@ -54,13 +58,13 @@ FRealState FHerbalistHarvest::GetBaseResourceParams(FName IngredientID)
         UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: Ingredient asset not found for ID '%s'"), *IngredientID.ToString());
         return FRealState();
     }
-
+    
     FRealState State = Ingredient->BaseState;
     State.Direction.NormalizeSum();
     return State;
 }
 
-FRealState FHerbalistHarvest::Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions)
+FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions) const
 {
     FRealState Base = GetBaseResourceParams(IngredientID);
     if (Base.Magnitude < 0.01f && Base.Meta.Distortion < 0.01f)
@@ -111,23 +115,28 @@ FRealState FHerbalistHarvest::Harvest(FName IngredientID, const FRealState& Biom
     return Result;
 }
 
-FString FHerbalistHarvest::GetResourceName(FName IngredientID, bool bEnglish)
+FRealState UHarvestService::HarvestWater(const FRealState& WaterState, const FConditionModifier& Conditions) const
 {
-    if (IngredientID == FName(TEXT("Potion")))
-    {
-        return bEnglish ? TEXT("Potion") : TEXT("Зелье");
-    }
-    if (IngredientID == FName(TEXT("Water")))
-    {
-        return bEnglish ? TEXT("Water") : TEXT("Вода");
-    }
+    FRealState Water = WaterState;
+    Water.Magnitude += k_condition * Conditions.DeltaMagnitude;
+    Water.Direction.Body += k_condition * Conditions.DeltaDirection.Body;
+    Water.Direction.Mind += k_condition * Conditions.DeltaDirection.Mind;
+    Water.Direction.Spirit += k_condition * Conditions.DeltaDirection.Spirit;
+    Water.Direction.Nature += k_condition * Conditions.DeltaDirection.Nature;
+    Water.Meta.Distortion += k_condition * Conditions.DeltaDistortion;
+    Water.Meta.Stability += k_condition * Conditions.DeltaStability;
+    Water.Meta.Purity += k_condition * Conditions.DeltaPurity;
+    Water.Meta.Potency += k_condition * Conditions.DeltaPotency;
+    Water.Meta.Resonance += k_condition * Conditions.DeltaResonance;
+    Water.Meta.Corruption += k_condition * Conditions.DeltaCorruption;
 
-    UHerbalistIngredient* Ingredient = LoadIngredientAsset(IngredientID);
-    if (!Ingredient)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetResourceName: Ingredient asset not found for ID '%s'"), *IngredientID.ToString());
-        return IngredientID.ToString();
-    }
-
-    return bEnglish ? IngredientID.ToString() : Ingredient->DisplayName.ToString();
+    Water.Direction.NormalizeSum();
+    Water.Magnitude = FMath::Clamp(Water.Magnitude, 0.0f, 1.0f);
+    Water.Meta.Distortion = FMath::Clamp(Water.Meta.Distortion, 0.0f, 1.0f);
+    Water.Meta.Stability = FMath::Clamp(Water.Meta.Stability, 0.0f, 1.0f);
+    Water.Meta.Purity = FMath::Clamp(Water.Meta.Purity, 0.0f, 1.0f);
+    Water.Meta.Potency = FMath::Clamp(Water.Meta.Potency, 0.0f, 1.0f);
+    Water.Meta.Resonance = FMath::Clamp(Water.Meta.Resonance, 0.0f, 1.0f);
+    Water.Meta.Corruption = FMath::Clamp(Water.Meta.Corruption, 0.0f, 1.0f);
+    return Water;
 }

@@ -1,7 +1,6 @@
 #include "UI/InventoryWidget.h"
 #include "ProjectHerbalist.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Harvest/HerbalistHarvest.h"
 #include "UI/InventorySlotWidget.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Components/VerticalBox.h"

@@ -6,18 +6,10 @@
 #include "Math/UnrealMathUtility.h"
 #include "Core/HerbalistSettings.h"
 #include "Core/Types/HerbalistIngredient.h"
-#include "Engine/AssetManager.h"
+#include "Core/Harvest/HarvestService.h"
 
 namespace HerbalistCore
 {
-    // Вспомогательная функция загрузки ингредиента
-    static UHerbalistIngredient* LoadIngredientAsset(FName IngredientID)
-    {
-        if (IngredientID.IsNone()) return nullptr;
-        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), IngredientID);
-        return Cast<UHerbalistIngredient>(UAssetManager::Get().GetPrimaryAssetObject(AssetId));
-    }
-
     // Вспомогательная функция проверки, является ли ингредиент водой
     static bool IsWaterIngredient(FName IngredientID)
     {
@@ -25,7 +17,7 @@ namespace HerbalistCore
         if (IngredientID == FName(TEXT("Potion"))) return false;
         // Если это вода из клетки (ID "Water")
         if (IngredientID == FName(TEXT("Water"))) return true;
-        UHerbalistIngredient* Ingredient = LoadIngredientAsset(IngredientID);
+        UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(IngredientID);
         return Ingredient && Ingredient->bIsWater;
     }
 
@@ -344,8 +336,8 @@ namespace HerbalistCore
         InOutZaryanaStrength = FMath::Clamp(InOutZaryanaStrength + BiomeZaryanaField * ZaryanaInfluence, 0.0f, 1.0f);
         UE_LOG(LogHerbalist, Warning, TEXT("[BIOME CONTEXT] ZaryanaField=%.3f -> ZaryanaStrength=%.3f"), BiomeZaryanaField, InOutZaryanaStrength);
 
-        InOutDelta.Direction.Body += BiomeAxisDrift.X * DriftWeight;
-        InOutDelta.Direction.Mind += BiomeAxisDrift.Y * DriftWeight;
+        InOutDelta.Direction.Body   += BiomeAxisDrift.X * DriftWeight;
+        InOutDelta.Direction.Mind   += BiomeAxisDrift.Y * DriftWeight;
         InOutDelta.Direction.Spirit += BiomeAxisDrift.Z * DriftWeight;
         InOutDelta.Direction.Nature += BiomeAxisDrift.W * DriftWeight;
         UE_LOG(LogHerbalist, Warning, TEXT("[BIOME AXIS DRIFT] Applied: (%.3f, %.3f, %.3f, %.3f)"),

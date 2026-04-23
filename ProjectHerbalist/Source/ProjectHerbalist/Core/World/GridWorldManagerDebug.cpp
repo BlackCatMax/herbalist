@@ -1,7 +1,8 @@
 // GridWorldManagerDebug.cpp
 #include "GridWorldManager.h"
 #include "ProjectHerbalist.h"
-#include "Core/Harvest/HerbalistHarvest.h"
+#include "Core/Harvest/HarvestService.h"
+#include "Core/Types/HerbalistIngredient.h"
 #include "Player/HerbalistPlayerController.h"
 
 void AGridWorldManager::SelectCell(int32 X, int32 Y)
@@ -42,9 +43,21 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
         if (Cell)
         {
             if (Cell->bIsWater)
+            {
                 ResourceName = TEXT("Вода");
+            }
             else
-                ResourceName = Cell->AvailableIngredientID.ToString();
+            {
+                // Загружаем ассет, чтобы получить отображаемое имя
+                if (UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(Cell->AvailableIngredientID))
+                {
+                    ResourceName = Ingredient->DisplayName.ToString();
+                }
+                else
+                {
+                    ResourceName = Cell->AvailableIngredientID.ToString();
+                }
+            }
             RegrowthTimer = Cell->ResourceRegrowthTimer;
             Distortion = Cell->State.Meta.Distortion;
             HarvestStress = Cell->HarvestStress;
@@ -72,7 +85,23 @@ void AGridWorldManager::ShowInventory()
     {
         const FInventoryItem& Item = Inventory[i];
         const FRealState& Res = Item.State;
-        FString Name = FHerbalistHarvest::GetResourceName(Item.IngredientID, false);
+        FString Name;
+        if (Item.IngredientID == FName(TEXT("Potion")))
+        {
+            Name = TEXT("Зелье");
+        }
+        else if (Item.IngredientID == FName(TEXT("Water")))
+        {
+            Name = TEXT("Вода");
+        }
+        else if (UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(Item.IngredientID))
+        {
+            Name = Ingredient->DisplayName.ToString();
+        }
+        else
+        {
+            Name = Item.IngredientID.ToString();
+        }
         UE_LOG(LogHerbalist, Log, TEXT("[%d] %s x%d: Mag=%.2f, Dist=%.2f, Pot=%.2f Res=%.2f Cor=%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
             i, *Name, Item.Count, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
             Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);

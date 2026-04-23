@@ -10,6 +10,8 @@
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "GridWorldManager.generated.h"
 
+class UHarvestService;
+
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
 {
@@ -95,7 +97,7 @@ public:
     void ApplyTest(int32 X, int32 Y);
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowInventory();
-
+	
 #if WITH_EDITOR
     bool bShowBiomeGraph = false;
     bool bShowCellDistortion = false;
@@ -134,6 +136,9 @@ protected:
 
     TMap<int32, float> LastHarvestTimeMap;
     const float HarvestCooldown = 0.2f;
+
+    UPROPERTY()
+    UHarvestService* HarvestService;
 
     void InitializeCells();
     void RegenerateCellResource(FGridCell& Cell);

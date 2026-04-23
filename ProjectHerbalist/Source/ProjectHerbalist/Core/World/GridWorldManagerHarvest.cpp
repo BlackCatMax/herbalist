@@ -1,7 +1,7 @@
 // GridWorldManagerHarvest.cpp
 #include "GridWorldManager.h"
 #include "ProjectHerbalist.h"
-#include "Core/Harvest/HerbalistHarvest.h"
+#include "Core/Harvest/HarvestService.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Player/HerbalistPlayerController.h"
 
@@ -12,28 +12,7 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
 
     if (Cell->bIsWater)
     {
-        FRealState Water = Cell->State;
-        Water.Magnitude += k_condition * Conditions.DeltaMagnitude;
-        Water.Direction.Body += k_condition * Conditions.DeltaDirection.Body;
-        Water.Direction.Mind += k_condition * Conditions.DeltaDirection.Mind;
-        Water.Direction.Spirit += k_condition * Conditions.DeltaDirection.Spirit;
-        Water.Direction.Nature += k_condition * Conditions.DeltaDirection.Nature;
-        Water.Meta.Distortion += k_condition * Conditions.DeltaDistortion;
-        Water.Meta.Stability += k_condition * Conditions.DeltaStability;
-        Water.Meta.Purity += k_condition * Conditions.DeltaPurity;
-        Water.Meta.Potency += k_condition * Conditions.DeltaPotency;
-        Water.Meta.Resonance += k_condition * Conditions.DeltaResonance;
-        Water.Meta.Corruption += k_condition * Conditions.DeltaCorruption;
-
-        Water.Direction.NormalizeSum();
-        Water.Magnitude = FMath::Clamp(Water.Magnitude, 0.0f, 1.0f);
-        Water.Meta.Distortion = FMath::Clamp(Water.Meta.Distortion, 0.0f, 1.0f);
-        Water.Meta.Stability = FMath::Clamp(Water.Meta.Stability, 0.0f, 1.0f);
-        Water.Meta.Purity = FMath::Clamp(Water.Meta.Purity, 0.0f, 1.0f);
-        Water.Meta.Potency = FMath::Clamp(Water.Meta.Potency, 0.0f, 1.0f);
-        Water.Meta.Resonance = FMath::Clamp(Water.Meta.Resonance, 0.0f, 1.0f);
-        Water.Meta.Corruption = FMath::Clamp(Water.Meta.Corruption, 0.0f, 1.0f);
-        return Water;
+        return HarvestService->HarvestWater(Cell->State, Conditions);
     }
 
     if (Cell->ResourceRegrowthTimer > 0.0f)
@@ -49,7 +28,7 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
         return FRealState();
     }
 
-    FRealState Resource = FHerbalistHarvest::Harvest(IngredientID, Cell->State, Conditions);
+    FRealState Resource = HarvestService->Harvest(IngredientID, Cell->State, Conditions);
     Cell->ResourceRegrowthTimer = ResourceRegrowthTime;
     MarkRegrowing(X, Y);
     if (bHarvestAffectsBiome)

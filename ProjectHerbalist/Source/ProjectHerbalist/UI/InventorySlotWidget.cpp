@@ -1,7 +1,6 @@
 // InventorySlotWidget.cpp
 #include "InventorySlotWidget.h"
 #include "ProjectHerbalist.h"
-#include "Core/Harvest/HerbalistHarvest.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Player/HerbalistPlayerController.h"
