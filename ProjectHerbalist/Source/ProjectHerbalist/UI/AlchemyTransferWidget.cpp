@@ -10,7 +10,12 @@
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Storage/AlchemyTableActor.h"
 #include "Core/Pipeline/IntentResolver.h"
+#include "Core/Pipeline/AlchemySemantics.h"
+#include "Core/Pipeline/AlchemySemanticResolver.h"
+#include "Core/Pipeline/AlchemyPhysicsPipeline.h"
+#include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Pipeline/AlchemyTypes.h"
+#include "Core/Harvest/HarvestService.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -150,59 +155,69 @@ void UAlchemyTransferWidget::OnMixClicked()
         }
     }
 
-    // Вычисляем Coherence из ингредиентов (порядок слотов: Water, Ingredient1, Ingredient2, Ingredient3)
-    TArray<FAlchemyAtom> AllAtoms;
-    auto AddSlotAtoms = [&](UAlchemySlotWidget* InSlot)
+    // 1. Конвертируем ингредиенты в атомы
+    TArray<FAlchemyAtom> Atoms;
+    for (const FInventoryItem& Item : Ingredients)
     {
-        if (InSlot && InSlot->GetItem() && InSlot->GetCount() > 0)
-        {
-            FInventoryItem Item = *InSlot->GetItem();
-            Item.Count = InSlot->GetCount();
-            AllAtoms.Add(FAlchemyAtom(Item, TEXT("AlchemyTable")));
-        }
-    };
-    AddSlotAtoms(WaterSlot);
-    AddSlotAtoms(IngredientSlot1);
-    AddSlotAtoms(IngredientSlot2);
-    AddSlotAtoms(IngredientSlot3);
-
-    TArray<FAlchemyAtom> OrderedNonWater;
-    TArray<FAlchemyAtom> OrderedWater;
-    for (const FAlchemyAtom& Atom : AllAtoms)
-    {
-        if (Atom.bIsWater)
-            OrderedWater.Add(Atom);
-        else
-            OrderedNonWater.Add(Atom);
+        Atoms.Add(FAlchemyAtom(Item, FBiomeDefaults::BiomeTypeToName(
+            WorldManager ? WorldManager->GetCell(TableCoords.X, TableCoords.Y) ? 
+                WorldManager->GetCell(TableCoords.X, TableCoords.Y)->Biome : EBiomeType::MixedForest : EBiomeType::MixedForest)));
     }
 
-    float Coherence = HerbalistCore::ComputeIntentCoherence(OrderedNonWater, OrderedWater);
+    // 2. Семантическое разрешение
+    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms);
 
-    FIntent ComputedIntent;
-    ComputedIntent.Coherence = Coherence;
+    // 3. Готовим Rng
     FRngState Rng;
     Rng.Seed = FMath::Rand();
 
-    FRealState ResultState = HerbalistCore::Pipeline::ApplyMorok(
-        Ingredients,
-        CurrentBiomeState,
-        Env,
-        Memory,
-        ComputedIntent,
-        Rng,
-        BiomeMorokField,
-        BiomeZaryanaField,
-        BiomeAxisDrift
-    );
+    // 4. Запуск физики (только для Valid)
+    FRealState ResultState;
+    FName ResultID;
+
+    if (Semantic.Outcome == EAlchemyOutcome::Valid)
+    {
+        // Запуск физики с вычисленной Coherence
+        TArray<FRealState> IngredientStates, WaterStates;
+        for (const FAlchemyAtom& A : Semantic.IngredientAtoms) IngredientStates.Add(A.State);
+        for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
+
+        FAlchemyPhysicsResult Physics = FAlchemyPhysicsPipeline::Run(
+            IngredientStates, WaterStates,
+            CurrentBiomeState, Env, Memory,
+            Semantic.Coherence,
+            Rng, BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift);
+
+        ResultState = Physics.State;
+        if (Physics.bCatastropheTriggered)
+        {
+            ResultState = HerbalistCore::ApplyCatastropheTransform(ResultState, Physics.bCollapse, Rng);
+            Semantic.Outcome = EAlchemyOutcome::Catastrophe;
+        }
+        ResultID = FName(TEXT("Potion"));
+    }
+    else if (Semantic.Outcome == EAlchemyOutcome::BoiledWater)
+    {
+        TArray<FRealState> WaterStates;
+        for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
+        ResultState = HerbalistCore::ApplyBoiledWaterTransform(WaterStates);
+        ResultID = FName(TEXT("BoiledWater"));
+    }
+    else // Ash
+    {
+        FMeta CoreMeta;
+        ResultState = HerbalistCore::ApplyAshTransform(CoreMeta);
+        ResultID = FName(TEXT("Ash"));
+    }
 
     FInventoryItem Potion;
-    Potion.IngredientID = FName(TEXT("Potion"));
+    Potion.IngredientID = ResultID;
     Potion.State = ResultState;
     Potion.Count = 1;
 
     ResultSlot->AddItem(Potion, 1);
     ClearIngredientSlots();
-    SetStatusMessage(TEXT("Зелье готово."));
+    SetStatusMessage(TEXT("Готово."));
 
     bIsMixing = false;
 }

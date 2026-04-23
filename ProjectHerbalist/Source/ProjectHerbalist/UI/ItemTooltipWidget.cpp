@@ -13,7 +13,6 @@ float PerceiveValue(float RealValue, float Distortion, FRandomStream& Random)
 
 FText GeneratePotionName(const FRealState& State)
 {
-    // Ищем доминирующую ось без сортировки
     struct FAxisInfo { FString Name; float Value; };
     FAxisInfo Axes[] = {
         {TEXT("Телесное"), State.Direction.Body},
@@ -47,13 +46,18 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
 {
     if (Item.IsEmpty()) return;
 
-    TArray<FInventoryItem> DummyInput = { Item };
-    EAlchemyOutcome Outcome = HerbalistCore::ClassifyOutcome(DummyInput);
-
     FString Name;
     if (Item.IngredientID == FName(TEXT("Potion")))
     {
         Name = GeneratePotionName(Item.State).ToString();
+    }
+    else if (Item.IngredientID == FName(TEXT("Ash")))
+    {
+        Name = TEXT("Зола");
+    }
+    else if (Item.IngredientID == FName(TEXT("BoiledWater")))
+    {
+        Name = TEXT("Кипячёная вода");
     }
     else if (Item.IngredientID == FName(TEXT("Water")))
     {
@@ -63,12 +67,13 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
     {
         Name = Item.IngredientID.ToString();
     }
-    if (NameText) NameText->SetText(FText::FromString(Name));
 
+    if (NameText) NameText->SetText(FText::FromString(Name));
     if (TypeText) TypeText->SetText(FText::FromString(Item.IngredientID.ToString()));
 
     FRandomStream Random(Item.State.Meta.Distortion * 1000.0f + Item.State.Magnitude * 500.0f);
 
+    // Возвращаем отладочные скобки с истинным значением
     auto SetDistortedText = [&](UTextBlock* TextBlock, float RealValue, const FString& Label)
     {
         if (!TextBlock) return;

@@ -6,9 +6,9 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Data/IngredientRegistry.h"
-#include "UI/ItemTooltipWidget.h" // Для GeneratePotionName, если она объявлена в заголовке
+#include "UI/ItemTooltipWidget.h"
+#include "Core/Inventory/InventoryDragDropOperation.h"   // <-- добавлено
 
-// Вспомогательная функция (можно вынести в общий заголовок, если ещё не вынесена)
 extern FText GeneratePotionName(const FRealState& State);
 
 void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCount)
@@ -20,10 +20,11 @@ void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCoun
 
 bool UAlchemySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
 {
-    if (bHasItem && Count >= MaxCount) return false;
+    // Если слот полон (не Result) – предмет не влезает
+    if (SlotType != EAlchemySlotType::Result && bHasItem && Count >= MaxCount) return false;
     if (SlotType == EAlchemySlotType::Result) return false;
 
-    // Проверяем, является ли предмет водой – теперь через реестр
+    // Вода?
     bool bItemIsWater = FIngredientRegistry::IsWater(Item.IngredientID);
     if (Item.IngredientID == FName(TEXT("Potion"))) bItemIsWater = false;
 
@@ -98,7 +99,51 @@ FReply UAlchemySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeo
 
 bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
 {
+    UInventoryDragDropOperation* DragOp = Cast<UInventoryDragDropOperation>(InOperation);
+    if (!DragOp || !DragOp->SourceInventory)
+        return false;
+
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (!HPC || !HPC->InventoryComponent)
+        return false;
+
+    // Строим предмет для переноса (одна единица)
+    FInventoryItem ItemToMove;
+    if (DragOp->bIsSplit)
+    {
+        ItemToMove = DragOp->SplitItem;
+    }
+    else
+    {
+        const FInventoryItem* SourceItem = DragOp->SourceInventory->GetSlot(DragOp->SourceIndex);
+        if (!SourceItem) return false;
+        ItemToMove = *SourceItem;
+        ItemToMove.Count = 1;
+    }
+
+    if (!CanAcceptItem(ItemToMove))
+        return false;
+
+    // Пытаемся добавить в этот слот
+    if (AddItem(ItemToMove, 1))
+    {
+        // Удаляем из исходного инвентаря
+        if (DragOp->bIsSplit)
+        {
+            DragOp->bIsSplit = false; // сплит-предмет уже перенесён
+        }
+        else
+        {
+            DragOp->SourceInventory->RemoveItem(DragOp->SourceIndex, 1);
+        }
+        return true;
+    }
     return false;
+}
+
+void UAlchemySlotWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+{
+    // Ничего не делаем
 }
 
 void UAlchemySlotWidget::NativeConstruct()
@@ -122,8 +167,15 @@ void UAlchemySlotWidget::UpdateDisplay()
     FString DisplayName;
     if (StoredItem.IngredientID == FName(TEXT("Potion")))
     {
-        // Генерируем динамическое имя для зелья
         DisplayName = GeneratePotionName(StoredItem.State).ToString();
+    }
+    else if (StoredItem.IngredientID == FName(TEXT("Ash")))
+    {
+        DisplayName = TEXT("Зола");
+    }
+    else if (StoredItem.IngredientID == FName(TEXT("BoiledWater")))
+    {
+        DisplayName = TEXT("Кипячёная вода");
     }
     else if (StoredItem.IngredientID == FName(TEXT("Water")))
     {
@@ -131,7 +183,6 @@ void UAlchemySlotWidget::UpdateDisplay()
     }
     else
     {
-        // Для ингредиентов используем ID (ассеты не загружаем)
         DisplayName = StoredItem.IngredientID.ToString();
     }
 
