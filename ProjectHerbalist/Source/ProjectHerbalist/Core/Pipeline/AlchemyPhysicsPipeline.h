@@ -21,7 +21,7 @@ public:
         const FRealState& CellState,
         const FEnvironment& Env,
         const FMemoryState& Memory,
-        const FIntent& Intent,
+        float Coherence,
         FRngState& Rng,
         float MorokField,
         float ZaryanaField,

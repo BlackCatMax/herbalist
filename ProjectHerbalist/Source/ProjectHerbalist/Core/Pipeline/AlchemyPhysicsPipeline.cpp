@@ -1,6 +1,7 @@
 // AlchemyPhysicsPipeline.cpp
 #include "AlchemyPhysicsPipeline.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
+#include "Core/Pipeline/AlchemyTypes.h"
 
 FAlchemyPhysicsResult FAlchemyPhysicsPipeline::Run(
     const TArray<FRealState>& IngredientStates,
@@ -8,7 +9,7 @@ FAlchemyPhysicsResult FAlchemyPhysicsPipeline::Run(
     const FRealState& CellState,
     const FEnvironment& Env,
     const FMemoryState& Memory,
-    const FIntent& Intent,
+    float Coherence,
     FRngState& Rng,
     float MorokField,
     float ZaryanaField,
@@ -31,6 +32,10 @@ FAlchemyPhysicsResult FAlchemyPhysicsPipeline::Run(
         Item.IngredientID = FName(TEXT("Water"));
         Items.Add(Item);
     }
+
+    // Создаём Intent из вычисленной Coherence
+    FIntent Intent;
+    Intent.Coherence = Coherence;
 
     Result.State = HerbalistCore::Pipeline::ApplyMorok(
         Items,

@@ -7,6 +7,7 @@
 #include "Core/Pipeline/AlchemyPhysicsPipeline.h"
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Pipeline/AlchemyTypes.h"
+#include "Core/Pipeline/IntentResolver.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/HerbalistSettings.h"
@@ -22,7 +23,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     for (const FInventoryItem& Item : Ingredients)
         Atoms.Add(FAlchemyAtom(Item, FBiomeDefaults::BiomeTypeToName(Cell->Biome)));
 
-    // 2. Семантическое разрешение
+    // 2. Семантическое разрешение (считает и Coherence)
     FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms);
 
     // 3. Биомный контекст
@@ -39,7 +40,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         }
     }
 
-    // 4. Запуск физики
+    // 4. Запуск физики с вычисленной Coherence
     TArray<FRealState> IngredientStates, WaterStates;
     for (const FAlchemyAtom& A : Semantic.IngredientAtoms) IngredientStates.Add(A.State);
     for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
@@ -47,7 +48,8 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     FAlchemyPhysicsResult Physics = FAlchemyPhysicsPipeline::Run(
         IngredientStates, WaterStates,
         Cell->State, Cell->Environment, Cell->Memory,
-        Intent, Rng,
+        Semantic.Coherence,      // Используем рассчитанную Coherence
+        Rng,
         BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift);
 
     // 5. Применение результата к миру
@@ -189,7 +191,7 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
 
     TArray<FInventoryItem> Ingredients = { Ingredient1, Ingredient2 };
     FIntent Intent;
-    Intent.Coherence = 0.5f;
+    Intent.Coherence = 0.5f;  // ApplyTest использует старый статичный Intent
     FRngState Rng;
     Rng.Seed = 12345;
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
@@ -208,7 +210,7 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     TArray<FInventoryItem> Ingredients = { PotionItem };
 
     FIntent Intent;
-    Intent.Coherence = 0.5f;
+    Intent.Coherence = 0.5f;  // Применение зелья к клетке использует статичный Intent
     FRngState Rng;
     Rng.Seed = FMath::Rand();
 

@@ -9,6 +9,8 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Storage/AlchemyTableActor.h"
+#include "Core/Pipeline/IntentResolver.h"
+#include "Core/Pipeline/AlchemyTypes.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -148,8 +150,36 @@ void UAlchemyTransferWidget::OnMixClicked()
         }
     }
 
-    FIntent DefaultIntent;
-    DefaultIntent.Coherence = 0.5f;
+    // Вычисляем Coherence из ингредиентов (порядок слотов: Water, Ingredient1, Ingredient2, Ingredient3)
+    TArray<FAlchemyAtom> AllAtoms;
+    auto AddSlotAtoms = [&](UAlchemySlotWidget* InSlot)
+    {
+        if (InSlot && InSlot->GetItem() && InSlot->GetCount() > 0)
+        {
+            FInventoryItem Item = *InSlot->GetItem();
+            Item.Count = InSlot->GetCount();
+            AllAtoms.Add(FAlchemyAtom(Item, TEXT("AlchemyTable")));
+        }
+    };
+    AddSlotAtoms(WaterSlot);
+    AddSlotAtoms(IngredientSlot1);
+    AddSlotAtoms(IngredientSlot2);
+    AddSlotAtoms(IngredientSlot3);
+
+    TArray<FAlchemyAtom> OrderedNonWater;
+    TArray<FAlchemyAtom> OrderedWater;
+    for (const FAlchemyAtom& Atom : AllAtoms)
+    {
+        if (Atom.bIsWater)
+            OrderedWater.Add(Atom);
+        else
+            OrderedNonWater.Add(Atom);
+    }
+
+    float Coherence = HerbalistCore::ComputeIntentCoherence(OrderedNonWater, OrderedWater);
+
+    FIntent ComputedIntent;
+    ComputedIntent.Coherence = Coherence;
     FRngState Rng;
     Rng.Seed = FMath::Rand();
 
@@ -158,7 +188,7 @@ void UAlchemyTransferWidget::OnMixClicked()
         CurrentBiomeState,
         Env,
         Memory,
-        DefaultIntent,
+        ComputedIntent,
         Rng,
         BiomeMorokField,
         BiomeZaryanaField,
@@ -181,14 +211,14 @@ bool UAlchemyTransferWidget::CollectIngredients(TArray<FInventoryItem>& OutIngre
 {
     OutIngredients.Empty();
     auto AddIfPresent = [&](UAlchemySlotWidget* InSlot)
+    {
+        if (InSlot && InSlot->GetItem() && InSlot->GetCount() > 0)
         {
-            if (InSlot && InSlot->GetItem() && InSlot->GetCount() > 0)
-            {
-                FInventoryItem Item = *InSlot->GetItem();
-                Item.Count = InSlot->GetCount();
-                OutIngredients.Add(Item);
-            }
-        };
+            FInventoryItem Item = *InSlot->GetItem();
+            Item.Count = InSlot->GetCount();
+            OutIngredients.Add(Item);
+        }
+    };
     AddIfPresent(WaterSlot);
     AddIfPresent(IngredientSlot1);
     AddIfPresent(IngredientSlot2);

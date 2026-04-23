@@ -6,6 +6,7 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Data/IngredientRegistry.h"
 #include "Engine/World.h"
 #include "Engine/DataTable.h"
 
@@ -21,6 +22,9 @@ AProjectHerbalistGameModeBase::~AProjectHerbalistGameModeBase()
 void AProjectHerbalistGameModeBase::BeginPlay()
 {
     Super::BeginPlay();
+
+    // Инициализация статического реестра ингредиентов (должна быть до любого использования)
+    FIngredientRegistry::Initialize();
 
     // Инициализация Biome Graph
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())

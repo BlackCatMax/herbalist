@@ -10,13 +10,6 @@
 
 namespace HerbalistCore
 {
-    // Вспомогательная функция — теперь использует статический реестр
-    static bool IsWaterIngredient(FName IngredientID)
-    {
-        if (IngredientID == FName(TEXT("Potion"))) return false;
-        return FIngredientRegistry::IsWater(IngredientID);
-    }
-
     void Pipeline::SeparateWaterAndIngredients(
         const TArray<FInventoryItem>& Inputs,
         TArray<FRealState>& OutNonWater,
@@ -26,7 +19,14 @@ namespace HerbalistCore
         OutWater.Empty();
         for (const FInventoryItem& Item : Inputs)
         {
-            if (IsWaterIngredient(Item.IngredientID))
+            // Проверяем воду через реестр
+            bool bIsWater = false;
+            if (Item.IngredientID != FName(TEXT("Potion")))
+            {
+                bIsWater = FIngredientRegistry::IsWater(Item.IngredientID);
+            }
+
+            if (bIsWater)
                 OutWater.Add(Item.State);
             else
                 OutNonWater.Add(Item.State);
