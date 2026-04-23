@@ -6,8 +6,8 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 
 // Forward declarations
-struct FAggregatedL2;
-struct FDeltaL2;
+struct FAggregatedState;
+struct FDeltaState;
 
 namespace HerbalistCore
 {
@@ -28,13 +28,7 @@ namespace HerbalistCore
     public:
         // ========== Основной публичный API ==========
 
-        // Агрегация списка ресурсов (Fold) - L1 версия
-        static FRealState Fold(const TArray<FRealState>& Inputs);
-
-        // Вычисление дельты между агрегированным состоянием и текущим состоянием биома - L1 версия
-        static FRealState ComputeDelta(const FRealState& Aggregated, const FRealState& CurrentBiomeState);
-
-        // Основной пайплайн - L1 версия (старая)
+        // Основной пайплайн с матричным Morok и векторной геометрией
         static FRealState ApplyMorok(
             const TArray<FInventoryItem>& Inputs,
             const FRealState& CurrentBiomeState,
@@ -47,20 +41,7 @@ namespace HerbalistCore
             const FVector4& BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f)
         );
 
-        // Основной пайплайн - L2 версия (новая)
-        static FRealState ApplyMorokL2(
-            const TArray<FInventoryItem>& Inputs,
-            const FRealState& CurrentBiomeState,
-            const FEnvironment& Env,
-            const FMemoryState& Memory,
-            const FIntent& Intent,
-            FRngState& Rng,
-            float BiomeMorokField = 0.0f,
-            float BiomeZaryanaField = 0.0f,
-            const FVector4& BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f)
-        );
-
-        // ========== Вспомогательные функции (публичные для тестирования) ==========
+        // ========== Вспомогательные функции ==========
 
         // Разделение ингредиентов на воду и не-воду
         static void SeparateWaterAndIngredients(
@@ -88,59 +69,23 @@ namespace HerbalistCore
 
         // Вычисление базового Distortion из среды и памяти клетки
         static float ComputeBaseDistortion(const FEnvironment& Env, const FMemoryState& Memory);
-
-        // Внедрение контекста биома (поля графа) в Distortion, ZaryanaStrength и Delta (L1 версия)
-        static void ApplyBiomeContext(
-            float& InOutDistortion,
-            float& InOutZaryanaStrength,
-            FRealState& InOutDelta,
-            float BiomeMorokField,
-            float BiomeZaryanaField,
-            const FVector4& BiomeAxisDrift
-        );
-
-        // Применение Potency, Resonance, Corruption к Delta (L1 версия)
-        static void ApplyPotencyResonanceCorruption(
-            FRealState& InOutDelta,
-            const FMeta& Meta
-        );
-
-        // Нелинейное искажение Morok (L1 версия)
-        static void ApplyMorokDistortion(
-            FRealState& InOutDelta,
-            float Distortion,
-            FRngState& Rng
-        );
-
-        // Структурирование Zaryana (L1 версия)
-        static void ApplyZaryanaStructuring(
-            FRealState& InOutDelta,
-            float ZaryanaStrength,
-            float Distortion
-        );
-
-        // Финальное применение дельты к состоянию с интерполяцией и клиппингом (L1 версия)
-        static FRealState FinalizeState(
-            const FRealState& CurrentBiomeState,
-            const FRealState& Delta
-        );
     };
 
-    // ========== Свободные функции для L2 пайплайна ==========
+    // ========== Свободные функции пайплайна ==========
 
-    // Агрегация в L2
-    FAggregatedL2 FoldL2(const TArray<FRealState>& Inputs, FRngState& Rng);
+    // Агрегация ингредиентов
+    FAggregatedState Fold(const TArray<FRealState>& Inputs, FRngState& Rng);
 
-    // Вычисление дельты в L2
-    FDeltaL2 ComputeDeltaL2(const FAggregatedL2& Aggregated, const FRealState& CurrentBiomeState, FRngState& Rng);
+    // Вычисление дельты
+    FDeltaState ComputeDelta(const FAggregatedState& Aggregated, const FRealState& CurrentBiomeState, FRngState& Rng);
 
-    // Применение Morok матрицы к L2 направлению
-    void ApplyMorokMatrix(FL2Direction& Dir, float Distortion, FRngState& Rng);
+    // Матричное искажение Morok
+    void ApplyMorokDistortion(FL2Direction& Dir, float Distortion, FRngState& Rng);
 
-    // Применение Zaryana структурирования к L2 направлению
+    // Структурирование Zaryana
     void ApplyZaryanaStructuring(FL2Direction& Dir, float ZaryanaStrength, float Distortion, FRngState& Rng);
 
-    // Внедрение контекста биома для L2
+    // Внедрение контекста биома
     void ApplyBiomeContext(
         float& InOutDistortion,
         float& InOutZaryanaStrength,

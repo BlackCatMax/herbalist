@@ -7,15 +7,6 @@
 #include "Core/HerbalistSettings.h"
 #include "Core/Types/BiomeTypes.h"
 
-// Консольная переменная для переключения между L1 и L2 пайплайнами
-static bool bUseL2Pipeline = false;
-FAutoConsoleVariableRef CVarUseL2Pipeline(
-    TEXT("Herbalist.UseL2Pipeline"),
-    bUseL2Pipeline,
-    TEXT("Use L2 vector space pipeline (Matrix Morok) or legacy L1 simplex pipeline."),
-    ECVF_Default
-);
-
 void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng)
 {
     FGridCell* Cell = GetCell(X, Y);
@@ -38,42 +29,22 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     }
 
     FRealState OldState = Cell->State;
-    FRealState NewState;
 
-    // Выбор пайплайна в зависимости от консольной переменной
-    if (bUseL2Pipeline)
-    {
-        NewState = HerbalistCore::Pipeline::ApplyMorokL2(
-            Ingredients,
-            Cell->State,
-            Cell->Environment,
-            Cell->Memory,
-            Intent,
-            Rng,
-            BiomeMorokField,
-            BiomeZaryanaField,
-            BiomeAxisDrift
-        );
-        UE_LOG(LogHerbalist, Log, TEXT("Alchemy: L2 pipeline used."));
-    }
-    else
-    {
-        NewState = HerbalistCore::Pipeline::ApplyMorok(
-            Ingredients,
-            Cell->State,
-            Cell->Environment,
-            Cell->Memory,
-            Intent,
-            Rng,
-            BiomeMorokField,
-            BiomeZaryanaField,
-            BiomeAxisDrift
-        );
-        UE_LOG(LogHerbalist, Log, TEXT("Alchemy: L1 pipeline used."));
-    }
+    FRealState NewState = HerbalistCore::Pipeline::ApplyMorok(
+        Ingredients,
+        Cell->State,
+        Cell->Environment,
+        Cell->Memory,
+        Intent,
+        Rng,
+        BiomeMorokField,
+        BiomeZaryanaField,
+        BiomeAxisDrift
+    );
 
-    // Бифуркация (катастрофа / очищение) - применяется только для L1,
-    // в L2 бифуркация встроена в пайплайн или не требуется на этом уровне.
+    UE_LOG(LogHerbalist, Log, TEXT("Alchemy: pipeline applied."));
+
+    // Бифуркация (катастрофа / очищение)
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float BifurcationThreshold = Settings ? Settings->BifurcationThreshold : 0.85f;
     constexpr float MaxDistortion = 1.0f;

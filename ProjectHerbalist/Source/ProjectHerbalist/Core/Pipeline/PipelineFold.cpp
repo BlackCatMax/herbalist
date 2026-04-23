@@ -8,84 +8,11 @@
 namespace HerbalistCore
 {
     // =========================================================================
-    // L1 Агрегация (старая версия)
+    // Агрегация ингредиентов
     // =========================================================================
-    FRealState Pipeline::Fold(const TArray<FRealState>& Inputs)
+    FAggregatedState Fold(const TArray<FRealState>& Inputs, FRngState& Rng)
     {
-        if (Inputs.Num() == 0) return FRealState();
-
-        const UHerbalistSettings* Settings = GetHerbalistSettings();
-        float Weight = 1.0f;
-        const float WeightDecay = Settings ? Settings->FoldWeightDecay : 0.8f;
-        float TotalWeight = 0.0f;
-
-        FRealState Accumulated;
-        Accumulated.Magnitude = 0.0f;
-        Accumulated.Direction.Body = 0.0f;
-        Accumulated.Direction.Mind = 0.0f;
-        Accumulated.Direction.Spirit = 0.0f;
-        Accumulated.Direction.Nature = 0.0f;
-        Accumulated.Meta.Distortion = 0.0f;
-        Accumulated.Meta.Stability = 0.0f;
-        Accumulated.Meta.Purity = 0.0f;
-        Accumulated.Meta.Potency = 0.0f;
-        Accumulated.Meta.Resonance = 0.0f;
-        Accumulated.Meta.Corruption = 0.0f;
-
-        for (const FRealState& Res : Inputs)
-        {
-            float w = Weight;
-            TotalWeight += w;
-
-            Accumulated.Magnitude += Res.Magnitude * w;
-            Accumulated.Direction.Body += Res.Direction.Body * w;
-            Accumulated.Direction.Mind += Res.Direction.Mind * w;
-            Accumulated.Direction.Spirit += Res.Direction.Spirit * w;
-            Accumulated.Direction.Nature += Res.Direction.Nature * w;
-            Accumulated.Meta.Distortion += Res.Meta.Distortion * w;
-            Accumulated.Meta.Stability += Res.Meta.Stability * w;
-            Accumulated.Meta.Purity += Res.Meta.Purity * w;
-            Accumulated.Meta.Potency += Res.Meta.Potency * w;
-            Accumulated.Meta.Resonance += Res.Meta.Resonance * w;
-            Accumulated.Meta.Corruption += Res.Meta.Corruption * w;
-
-            Weight *= WeightDecay;
-        }
-
-        if (TotalWeight > KINDA_SMALL_NUMBER)
-        {
-            Accumulated.Magnitude /= TotalWeight;
-            Accumulated.Direction.Body /= TotalWeight;
-            Accumulated.Direction.Mind /= TotalWeight;
-            Accumulated.Direction.Spirit /= TotalWeight;
-            Accumulated.Direction.Nature /= TotalWeight;
-            Accumulated.Meta.Distortion /= TotalWeight;
-            Accumulated.Meta.Stability /= TotalWeight;
-            Accumulated.Meta.Purity /= TotalWeight;
-            Accumulated.Meta.Potency /= TotalWeight;
-            Accumulated.Meta.Resonance /= TotalWeight;
-            Accumulated.Meta.Corruption /= TotalWeight;
-        }
-
-        Accumulated.Direction.NormalizeSum();
-
-        Accumulated.Magnitude = FMath::Clamp(Accumulated.Magnitude, 0.0f, 1.0f);
-        Accumulated.Meta.Distortion = FMath::Clamp(Accumulated.Meta.Distortion, 0.0f, 1.0f);
-        Accumulated.Meta.Stability = FMath::Clamp(Accumulated.Meta.Stability, 0.0f, 1.0f);
-        Accumulated.Meta.Purity = FMath::Clamp(Accumulated.Meta.Purity, 0.0f, 1.0f);
-        Accumulated.Meta.Potency = FMath::Clamp(Accumulated.Meta.Potency, 0.0f, 1.0f);
-        Accumulated.Meta.Resonance = FMath::Clamp(Accumulated.Meta.Resonance, 0.0f, 1.0f);
-        Accumulated.Meta.Corruption = FMath::Clamp(Accumulated.Meta.Corruption, 0.0f, 1.0f);
-
-        return Accumulated;
-    }
-
-    // =========================================================================
-    // L2 Агрегация (новая версия)
-    // =========================================================================
-    FAggregatedL2 FoldL2(const TArray<FRealState>& Inputs, FRngState& Rng)
-    {
-        FAggregatedL2 Result;
+        FAggregatedState Result;
         if (Inputs.Num() == 0)
         {
             Result.Dir = FL2Direction();
@@ -108,18 +35,18 @@ namespace HerbalistCore
             TotalWeight += w;
 
             FL2Direction L2 = ToL2(Res.Direction, Rng);
-            AccumDir.Body   += L2.Body * w;
-            AccumDir.Mind   += L2.Mind * w;
+            AccumDir.Body += L2.Body * w;
+            AccumDir.Mind += L2.Mind * w;
             AccumDir.Spirit += L2.Spirit * w;
             AccumDir.Nature += L2.Nature * w;
 
             AccumMag += Res.Magnitude * w;
 
             AccumMeta.Distortion += Res.Meta.Distortion * w;
-            AccumMeta.Stability  += Res.Meta.Stability * w;
-            AccumMeta.Purity     += Res.Meta.Purity * w;
-            AccumMeta.Potency    += Res.Meta.Potency * w;
-            AccumMeta.Resonance  += Res.Meta.Resonance * w;
+            AccumMeta.Stability += Res.Meta.Stability * w;
+            AccumMeta.Purity += Res.Meta.Purity * w;
+            AccumMeta.Potency += Res.Meta.Potency * w;
+            AccumMeta.Resonance += Res.Meta.Resonance * w;
             AccumMeta.Corruption += Res.Meta.Corruption * w;
 
             Weight *= WeightDecay;
@@ -127,17 +54,17 @@ namespace HerbalistCore
 
         if (TotalWeight > KINDA_SMALL_NUMBER)
         {
-            AccumDir.Body   /= TotalWeight;
-            AccumDir.Mind   /= TotalWeight;
+            AccumDir.Body /= TotalWeight;
+            AccumDir.Mind /= TotalWeight;
             AccumDir.Spirit /= TotalWeight;
             AccumDir.Nature /= TotalWeight;
-            AccumMag        /= TotalWeight;
+            AccumMag /= TotalWeight;
 
             AccumMeta.Distortion /= TotalWeight;
-            AccumMeta.Stability  /= TotalWeight;
-            AccumMeta.Purity     /= TotalWeight;
-            AccumMeta.Potency    /= TotalWeight;
-            AccumMeta.Resonance  /= TotalWeight;
+            AccumMeta.Stability /= TotalWeight;
+            AccumMeta.Purity /= TotalWeight;
+            AccumMeta.Potency /= TotalWeight;
+            AccumMeta.Resonance /= TotalWeight;
             AccumMeta.Corruption /= TotalWeight;
         }
 
@@ -150,7 +77,7 @@ namespace HerbalistCore
     }
 
     // =========================================================================
-    // Агрегация воды (L1)
+    // Агрегация воды
     // =========================================================================
     FRealState Pipeline::AggregateWater(const TArray<FRealState>& WaterStates)
     {
@@ -196,7 +123,7 @@ namespace HerbalistCore
     }
 
     // =========================================================================
-    // Смешивание воды и не-воды (L1)
+    // Смешивание воды и не-воды
     // =========================================================================
     FRealState Pipeline::BlendWaterAndNonWater(
         const FRealState& NonWaterAggregated,
