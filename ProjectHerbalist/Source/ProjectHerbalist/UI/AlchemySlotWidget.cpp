@@ -5,8 +5,11 @@
 #include "Components/Border.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Harvest/HarvestService.h"
-#include "Core/Types/HerbalistIngredient.h"
+#include "Core/Data/IngredientRegistry.h"
+#include "UI/ItemTooltipWidget.h" // Для GeneratePotionName, если она объявлена в заголовке
+
+// Вспомогательная функция (можно вынести в общий заголовок, если ещё не вынесена)
+extern FText GeneratePotionName(const FRealState& State);
 
 void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCount)
 {
@@ -20,20 +23,9 @@ bool UAlchemySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
     if (bHasItem && Count >= MaxCount) return false;
     if (SlotType == EAlchemySlotType::Result) return false;
 
-    // Проверяем, является ли предмет водой
-    bool bItemIsWater = false;
-    if (Item.IngredientID == FName(TEXT("Water")))
-    {
-        bItemIsWater = true;
-    }
-    else if (Item.IngredientID != FName(TEXT("Potion")) && !Item.IngredientID.IsNone())
-    {
-        UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(Item.IngredientID);
-        if (Ingredient)
-        {
-            bItemIsWater = Ingredient->bIsWater;
-        }
-    }
+    // Проверяем, является ли предмет водой – теперь через реестр
+    bool bItemIsWater = FIngredientRegistry::IsWater(Item.IngredientID);
+    if (Item.IngredientID == FName(TEXT("Potion"))) bItemIsWater = false;
 
     if (SlotType == EAlchemySlotType::Water && !bItemIsWater) return false;
     if (SlotType == EAlchemySlotType::Ingredient && bItemIsWater) return false;
@@ -130,7 +122,8 @@ void UAlchemySlotWidget::UpdateDisplay()
     FString DisplayName;
     if (StoredItem.IngredientID == FName(TEXT("Potion")))
     {
-        DisplayName = TEXT("Зелье");
+        // Генерируем динамическое имя для зелья
+        DisplayName = GeneratePotionName(StoredItem.State).ToString();
     }
     else if (StoredItem.IngredientID == FName(TEXT("Water")))
     {
@@ -138,15 +131,8 @@ void UAlchemySlotWidget::UpdateDisplay()
     }
     else
     {
-        UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(StoredItem.IngredientID);
-        if (Ingredient)
-        {
-            DisplayName = Ingredient->DisplayName.ToString();
-        }
-        else
-        {
-            DisplayName = StoredItem.IngredientID.ToString();
-        }
+        // Для ингредиентов используем ID (ассеты не загружаем)
+        DisplayName = StoredItem.IngredientID.ToString();
     }
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));

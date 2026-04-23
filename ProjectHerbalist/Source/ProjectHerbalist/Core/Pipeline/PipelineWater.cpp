@@ -5,19 +5,16 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Types/HerbalistIngredient.h"
+#include "Core/Data/IngredientRegistry.h"
 #include "Math/UnrealMathUtility.h"
 
 namespace HerbalistCore
 {
-    // Вспомогательная функция проверки, является ли ингредиент водой
+    // Вспомогательная функция — теперь использует статический реестр
     static bool IsWaterIngredient(FName IngredientID)
     {
-        // Специальный случай: зелье не является водой
         if (IngredientID == FName(TEXT("Potion"))) return false;
-        // Если это вода из клетки (ID "Water")
-        if (IngredientID == FName(TEXT("Water"))) return true;
-        UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(IngredientID);
-        return Ingredient && Ingredient->bIsWater;
+        return FIngredientRegistry::IsWater(IngredientID);
     }
 
     void Pipeline::SeparateWaterAndIngredients(
