@@ -1,17 +1,16 @@
 // AlchemySemantics.cpp
 #include "AlchemySemantics.h"
 #include "ProjectHerbalist.h"
-#include "Core/Types/HerbalistIngredient.h"
-#include "Core/Harvest/HarvestService.h"
+#include "Core/Data/IngredientRegistry.h"   // <-- добавлено
 
 namespace HerbalistCore
 {
     static bool IsWaterIngredient(FName IngredientID)
     {
+        // Хардкод-исключения для Potion
         if (IngredientID == FName(TEXT("Potion"))) return false;
-        if (IngredientID == FName(TEXT("Water"))) return true;
-        UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(IngredientID);
-        return Ingredient && Ingredient->bIsWater;
+        // Всё остальное — через реестр
+        return FIngredientRegistry::IsWater(IngredientID);
     }
 
     EAlchemyOutcome ClassifyOutcome(const TArray<FInventoryItem>& Inputs)
