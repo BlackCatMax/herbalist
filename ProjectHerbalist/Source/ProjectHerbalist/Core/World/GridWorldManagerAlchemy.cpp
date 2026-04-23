@@ -5,6 +5,16 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/HerbalistSettings.h"
+#include "Core/Types/BiomeTypes.h"
+
+// Консольная переменная для переключения между L1 и L2 пайплайнами
+static bool bUseL2Pipeline = false;
+FAutoConsoleVariableRef CVarUseL2Pipeline(
+    TEXT("Herbalist.UseL2Pipeline"),
+    bUseL2Pipeline,
+    TEXT("Use L2 vector space pipeline (Matrix Morok) or legacy L1 simplex pipeline."),
+    ECVF_Default
+);
 
 void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng)
 {
@@ -28,19 +38,42 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     }
 
     FRealState OldState = Cell->State;
-    FRealState NewState = HerbalistCore::Pipeline::ApplyMorok(
-        Ingredients,
-        Cell->State,
-        Cell->Environment,
-        Cell->Memory,
-        Intent,
-        Rng,
-        BiomeMorokField,
-        BiomeZaryanaField,
-        BiomeAxisDrift
-    );
+    FRealState NewState;
 
-    // Бифуркация (катастрофа / очищение)
+    // Выбор пайплайна в зависимости от консольной переменной
+    if (bUseL2Pipeline)
+    {
+        NewState = HerbalistCore::Pipeline::ApplyMorokL2(
+            Ingredients,
+            Cell->State,
+            Cell->Environment,
+            Cell->Memory,
+            Intent,
+            Rng,
+            BiomeMorokField,
+            BiomeZaryanaField,
+            BiomeAxisDrift
+        );
+        UE_LOG(LogHerbalist, Log, TEXT("Alchemy: L2 pipeline used."));
+    }
+    else
+    {
+        NewState = HerbalistCore::Pipeline::ApplyMorok(
+            Ingredients,
+            Cell->State,
+            Cell->Environment,
+            Cell->Memory,
+            Intent,
+            Rng,
+            BiomeMorokField,
+            BiomeZaryanaField,
+            BiomeAxisDrift
+        );
+        UE_LOG(LogHerbalist, Log, TEXT("Alchemy: L1 pipeline used."));
+    }
+
+    // Бифуркация (катастрофа / очищение) - применяется только для L1,
+    // в L2 бифуркация встроена в пайплайн или не требуется на этом уровне.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float BifurcationThreshold = Settings ? Settings->BifurcationThreshold : 0.85f;
     constexpr float MaxDistortion = 1.0f;
@@ -85,7 +118,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         }
     }
 
-    // Вычисляем дельту
+    // Вычисляем дельту для распространения и записи следа
     FRealState Delta;
     Delta.Magnitude = NewState.Magnitude - OldState.Magnitude;
     Delta.Direction.Body = NewState.Direction.Body - OldState.Direction.Body;
@@ -109,7 +142,6 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     }
 
     SetTargetState(X, Y, NewState);
-
     PropagateToNeighbors(X, Y, Delta, 0.5f, PropagationDepth);
 }
 
@@ -230,7 +262,6 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
 
-    // Создаём ингредиент-зелье
     FInventoryItem PotionItem;
     PotionItem.IngredientID = FName(TEXT("Potion"));
     PotionItem.State = PotionState;
@@ -242,6 +273,5 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FRngState Rng;
     Rng.Seed = FMath::Rand();
 
-    // Применяем алхимию к клетке
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
 }

@@ -29,6 +29,7 @@ public class ProjectHerbalist : ModuleRules
             "ProjectHerbalist/Core/Types",
             "ProjectHerbalist/Core/Data",
             "ProjectHerbalist/Core/Pipeline",
+			"ProjectHerbalist/Core/BiomeGraph",
             "ProjectHerbalist/Core/World",
             "ProjectHerbalist/Core/Harvest",
             "ProjectHerbalist/Core/Inventory",

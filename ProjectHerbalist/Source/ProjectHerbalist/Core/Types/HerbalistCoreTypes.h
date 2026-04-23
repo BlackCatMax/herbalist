@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Math/UnrealMathUtility.h"
 #include "HerbalistCoreTypes.generated.h"
 
 // ========== Enum'ы ==========
@@ -17,8 +18,6 @@ enum class EBiomeType : uint8
     Floodplain,
     Bog
 };
-
-// EResourceType удалён, заменён на FName IngredientID
 
 // ========== Базовые структуры ==========
 USTRUCT(BlueprintType)
@@ -168,7 +167,6 @@ struct PROJECTHERBALIST_API FInventoryItem
 {
     GENERATED_BODY()
 
-    // Идентификатор ингредиента (соответствует UHerbalistIngredient::IngredientID)
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FName IngredientID = NAME_None;
 
@@ -182,3 +180,91 @@ struct PROJECTHERBALIST_API FInventoryItem
     void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; }
     bool IsValid() const { return !IngredientID.IsNone() && Count > 0; }
 };
+
+// ========== L2 Vector Direction ==========
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FL2Direction
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Body = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Mind = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Spirit = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float Nature = 0.0f;
+
+    void NormalizeL2(FRngState& Rng)
+    {
+        float LenSq = Body*Body + Mind*Mind + Spirit*Spirit + Nature*Nature;
+        if (LenSq > KINDA_SMALL_NUMBER)
+        {
+            float InvLen = FMath::InvSqrt(LenSq);
+            Body   *= InvLen;
+            Mind   *= InvLen;
+            Spirit *= InvLen;
+            Nature *= InvLen;
+        }
+        else
+        {
+            float x1, x2, x3, x4, s;
+            do {
+                x1 = FMath::FRand() * 2.0f - 1.0f;
+                x2 = FMath::FRand() * 2.0f - 1.0f;
+                x3 = FMath::FRand() * 2.0f - 1.0f;
+                x4 = FMath::FRand() * 2.0f - 1.0f;
+                s = x1*x1 + x2*x2 + x3*x3 + x4*x4;
+            } while (s > 1.0f || s < KINDA_SMALL_NUMBER);
+            
+            float InvLen = FMath::InvSqrt(s);
+            Body   = x1 * InvLen;
+            Mind   = x2 * InvLen;
+            Spirit = x3 * InvLen;
+            Nature = x4 * InvLen;
+        }
+    }
+
+    FDirection ToL1() const
+    {
+        FDirection Result;
+        Result.Body   = FMath::Max(0.0f, Body);
+        Result.Mind   = FMath::Max(0.0f, Mind);
+        Result.Spirit = FMath::Max(0.0f, Spirit);
+        Result.Nature = FMath::Max(0.0f, Nature);
+        
+        float Sum = Result.Body + Result.Mind + Result.Spirit + Result.Nature;
+        if (Sum > KINDA_SMALL_NUMBER)
+        {
+            Result.Body   /= Sum;
+            Result.Mind   /= Sum;
+            Result.Spirit /= Sum;
+            Result.Nature /= Sum;
+        }
+        else
+        {
+            Result.Body = Result.Mind = Result.Spirit = Result.Nature = 0.25f;
+        }
+        return Result;
+    }
+
+    float Length() const
+    {
+        return FMath::Sqrt(Body*Body + Mind*Mind + Spirit*Spirit + Nature*Nature);
+    }
+};
+
+inline FL2Direction ToL2(const FDirection& L1, FRngState& Rng)
+{
+    FL2Direction Result;
+    Result.Body   = L1.Body;
+    Result.Mind   = L1.Mind;
+    Result.Spirit = L1.Spirit;
+    Result.Nature = L1.Nature;
+    Result.NormalizeL2(Rng);
+    return Result;
+}
