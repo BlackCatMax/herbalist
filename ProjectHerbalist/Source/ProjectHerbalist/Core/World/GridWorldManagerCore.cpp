@@ -1,13 +1,13 @@
 // GridWorldManagerCore.cpp
 #include "GridWorldManager.h"
-#include "ProjectHerbalist.h"
-#include "Core/Types/BiomeTypes.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Harvest/HarvestService.h"
+#include "Core/Pipeline/AlchemyWorldStateApplier.h"
+#include "Core/Types/BiomeTypes.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
-#include "GridWorldManager.h"
-#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "DrawDebugHelpers.h"
+#include "ProjectHerbalist.h"
 
 FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
 {
@@ -264,20 +264,51 @@ void AGridWorldManager::SetTargetState(int32 X, int32 Y, const FRealState& NewSt
 
 void AGridWorldManager::UpdateMemory(FMemoryState& Memory, const FRealState& NewState, float Rate)
 {
-    Memory.AccumulatedDistortion += (NewState.Meta.Distortion - Memory.AccumulatedDistortion) * Rate;
+    const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+
+    // Distortion: применять через ApplyDistortionDelta для непрерывности
+    {
+        const float TargetDistortion = NewState.Meta.Distortion;
+        const float Delta = (TargetDistortion - Memory.AccumulatedDistortion) * Rate;
+        FAlchemyWorldStateApplier::ApplyDistortionDelta(Memory, Delta, CurrentTime);
+    }
+
+    // Stability: остаётся с Lerp (не требует saturation)
     Memory.StabilityMemory += (NewState.Meta.Stability - Memory.StabilityMemory) * Rate;
-    Memory.HistoryPurity += (NewState.Meta.Purity - Memory.HistoryPurity) * Rate;
-    Memory.AccumulatedDistortion = FMath::Clamp(Memory.AccumulatedDistortion, 0.0f, 1.0f);
     Memory.StabilityMemory = FMath::Clamp(Memory.StabilityMemory, 0.0f, 1.0f);
+
+    // Purity: остаётся с Lerp
+    Memory.HistoryPurity += (NewState.Meta.Purity - Memory.HistoryPurity) * Rate;
     Memory.HistoryPurity = FMath::Clamp(Memory.HistoryPurity, 0.0f, 1.0f);
 }
 
 void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
 {
-    float t = FMath::Clamp((Cell.HarvestStress - HarvestStressThreshold) / (1.0f - HarvestStressThreshold), 0.0f, 1.0f);
-    float DistortionIncrease = t * MaxHarvestImpactOnDistortion;
-    float MagnitudeDecrease = t * MaxHarvestImpactOnMagnitude;
-    Cell.TargetState.Meta.Distortion = FMath::Clamp(Cell.State.Meta.Distortion + DistortionIncrease, 0.0f, 1.0f);
-    Cell.TargetState.Magnitude = FMath::Clamp(Cell.TargetState.Magnitude - MagnitudeDecrease, 0.0f, 1.0f);
+    const float t = FMath::Clamp(
+        (Cell.HarvestStress - HarvestStressThreshold) / (1.0f - HarvestStressThreshold),
+        0.0f, 1.0f
+    );
+
+    const float DistortionIncrease = t * MaxHarvestImpactOnDistortion;
+    const float MagnitudeDecrease = t * MaxHarvestImpactOnMagnitude;
+
+    const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+
+    // Distortion: через ApplyDistortionDelta (непрерывность)
+    FAlchemyWorldStateApplier::ApplyDistortionDelta(
+        Cell.Memory,
+        DistortionIncrease,
+        CurrentTime
+    );
+
+    // TargetState подтягивается к Memory
+    Cell.TargetState.Meta.Distortion = Cell.Memory.AccumulatedDistortion;
+
+    // Magnitude: остаётся прямым
+    Cell.TargetState.Magnitude = FMath::Clamp(
+        Cell.TargetState.Magnitude - MagnitudeDecrease,
+        0.0f, 1.0f
+    );
+
     MarkDirty(Cell.X, Cell.Y);
 }

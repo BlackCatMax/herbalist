@@ -94,9 +94,28 @@ USTRUCT(BlueprintType)
 struct PROJECTHERBALIST_API FMemoryState
 {
     GENERATED_BODY()
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) float AccumulatedDistortion = 0.f;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) float StabilityMemory = 0.f;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) float HistoryPurity = 0.f;
+
+    /** Накопленное искажение клетки (основной параметр Distortion). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
+    float AccumulatedDistortion = 0.0f;
+
+    /** Память стабильности. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
+    float StabilityMemory = 0.0f;
+
+    /** История чистоты. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
+    float HistoryPurity = 0.0f;
+
+    // --- Фаза 2: Continuous Distortion ---
+
+    /** Скорость изменения Distortion (для непрерывности). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
+    float DistortionVelocity = 0.0f;
+
+    /** Игровое время последнего изменения Distortion. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
+    float TimeOfLastDistortionChange = 0.0f;
 };
 
 USTRUCT(BlueprintType)

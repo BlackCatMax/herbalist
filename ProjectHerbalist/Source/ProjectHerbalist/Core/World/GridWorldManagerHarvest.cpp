@@ -1,9 +1,9 @@
 // GridWorldManagerHarvest.cpp
 #include "GridWorldManager.h"
-#include "ProjectHerbalist.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Player/HerbalistPlayerController.h"
+#include "ProjectHerbalist.h"
 
 FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions)
 {
@@ -31,6 +31,7 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
     FRealState Resource = HarvestService->Harvest(IngredientID, Cell->State, Conditions);
     Cell->ResourceRegrowthTimer = ResourceRegrowthTime;
     MarkRegrowing(X, Y);
+
     if (bHarvestAffectsBiome)
     {
         Cell->HarvestStress += HarvestStressIncrement;
@@ -43,6 +44,7 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
             SetActorTickEnabled(true);
         }
     }
+
     return Resource;
 }
 
@@ -84,10 +86,18 @@ void AGridWorldManager::HarvestTest(int32 X, int32 Y)
             }
         }
     }
+
     FGridCell* Cell = GetCell(X, Y);
     FString ResourceName = Cell ? (Cell->bIsWater ? TEXT("Water") : Cell->AvailableIngredientID.ToString()) : TEXT("None");
     UE_LOG(LogHerbalist, Log, TEXT("Harvested from (%d,%d): Mag=%.2f Dist=%.2f Stress=%.3f Resource=%s"),
         X, Y, Res.Magnitude, Res.Meta.Distortion, Cell ? Cell->HarvestStress : -1.0f, *ResourceName);
+
+    // Фаза 2: состояние Distortion клетки после сбора
+    if (Cell)
+    {
+        UE_LOG(LogHerbalist, Log, TEXT("[DISTORTION] Cell(%d,%d): Accumulated=%.4f Velocity=%.4f Stress=%.3f"),
+            X, Y, Cell->Memory.AccumulatedDistortion, Cell->Memory.DistortionVelocity, Cell->HarvestStress);
+    }
 }
 
 void AGridWorldManager::MassHarvestTest(int32 X, int32 Y, int32 Count)
