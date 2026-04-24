@@ -232,7 +232,14 @@ void UInventorySlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const
 
     if (ActiveTooltip)
     {
-        ActiveTooltip->SetItem(CachedItem);
+        float GlobalDistortion = 0.3f;
+        if (AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
+        {
+            GlobalDistortion = HPC->CurrentGlobalDistortion;
+        }
+
+        ActiveTooltip->SetItem(CachedItem, GlobalDistortion);
+
         FVector2D MousePos = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorld());
         ActiveTooltip->SetPositionInViewport(MousePos + FVector2D(15, 15));
         ActiveTooltip->AddToViewport();

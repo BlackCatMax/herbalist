@@ -2,14 +2,9 @@
 #include "UI/ItemTooltipWidget.h"
 #include "Components/TextBlock.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Pipeline/Perception.h"
 #include "Core/Pipeline/AlchemySemantics.h"
 #include "Core/Data/IngredientRegistry.h"
-
-float PerceiveValue(float RealValue, float Distortion, FRandomStream& Random)
-{
-    float Noise = (Random.FRand() - 0.5f) * 2.0f * Distortion * 0.3f;
-    return FMath::Clamp(RealValue + Noise, 0.0f, 1.0f);
-}
 
 FText GeneratePotionName(const FRealState& State)
 {
@@ -42,9 +37,12 @@ FText GeneratePotionName(const FRealState& State)
     return FText::FromString(FString::Printf(TEXT("%s %s зелье"), *Quality, *MainAxis));
 }
 
-void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
+void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistortion)
 {
     if (Item.IsEmpty()) return;
+
+    // Детерминированный seed: стабильное восприятие в рамках сессии
+	FRandomStream Random(GetTypeHash(Item.IngredientID) ^ static_cast<int32>(GlobalDistortion * 1000.0f));
 
     FString Name;
     if (Item.IngredientID == FName(TEXT("Potion")))
@@ -65,32 +63,56 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
     }
     else
     {
-        Name = Item.IngredientID.ToString();
+        // Искажение класса
+        EIngredientClass RealClass = FIngredientRegistry::Classify(Item.IngredientID);
+        EIngredientClass PerceivedClass = Perception::PerceiveClass(RealClass, GlobalDistortion, Random);
+        
+        if (PerceivedClass != RealClass)
+        {
+            // Показываем искажённое имя
+            Name = FString::Printf(TEXT("%s?"), *Item.IngredientID.ToString());
+        }
+        else
+        {
+            Name = Item.IngredientID.ToString();
+        }
     }
 
     if (NameText) NameText->SetText(FText::FromString(Name));
-    if (TypeText) TypeText->SetText(FText::FromString(Item.IngredientID.ToString()));
 
-    FRandomStream Random(Item.State.Meta.Distortion * 1000.0f + Item.State.Magnitude * 500.0f);
+    // Класс ингредиента
+    EIngredientClass IngClass = FIngredientRegistry::Classify(Item.IngredientID);
+    FString ClassName;
+    switch (IngClass)
+    {
+    case EIngredientClass::Water:    ClassName = TEXT("Вода"); break;
+    case EIngredientClass::Plant:    ClassName = TEXT("Растение"); break;
+    case EIngredientClass::Mineral:  ClassName = TEXT("Минерал"); break;
+    case EIngredientClass::Fungus:   ClassName = TEXT("Гриб"); break;
+    case EIngredientClass::Catalyst: ClassName = TEXT("Катализатор"); break;
+    case EIngredientClass::Essence:  ClassName = TEXT("Эссенция"); break;
+    default:                         ClassName = TEXT("Неизвестное"); break;
+    }
+    if (TypeText) TypeText->SetText(FText::FromString(ClassName));
 
-    // Возвращаем отладочные скобки с истинным значением
+    // Отображаем искажённые значения + реальные в скобках
     auto SetDistortedText = [&](UTextBlock* TextBlock, float RealValue, const FString& Label)
     {
         if (!TextBlock) return;
-        float Perceived = PerceiveValue(RealValue, Item.State.Meta.Distortion, Random);
+        float Perceived = Perception::PerceiveValue(RealValue, GlobalDistortion, Random);
         TextBlock->SetText(FText::FromString(FString::Printf(TEXT("%s: %.3f (%.3f)"), *Label, Perceived, RealValue)));
     };
 
-    SetDistortedText(MagnitudeText, Item.State.Magnitude, TEXT("Сила"));
-    SetDistortedText(DistortionText, Item.State.Meta.Distortion, TEXT("Искажение"));
-    SetDistortedText(PurityText, Item.State.Meta.Purity, TEXT("Чистота"));
-    SetDistortedText(StabilityText, Item.State.Meta.Stability, TEXT("Стабильность"));
-    SetDistortedText(PotencyText, Item.State.Meta.Potency, TEXT("Мощность"));
-    SetDistortedText(ResonanceText, Item.State.Meta.Resonance, TEXT("Резонанс"));
-    SetDistortedText(CorruptionText, Item.State.Meta.Corruption, TEXT("Порча"));
+    SetDistortedText(MagnitudeText,        Item.State.Magnitude,          TEXT("Сила"));
+    SetDistortedText(DistortionText,       Item.State.Meta.Distortion,    TEXT("Искажение"));
+    SetDistortedText(PurityText,           Item.State.Meta.Purity,        TEXT("Чистота"));
+    SetDistortedText(StabilityText,        Item.State.Meta.Stability,     TEXT("Стабильность"));
+    SetDistortedText(PotencyText,          Item.State.Meta.Potency,       TEXT("Мощность"));
+    SetDistortedText(ResonanceText,        Item.State.Meta.Resonance,     TEXT("Резонанс"));
+    SetDistortedText(CorruptionText,       Item.State.Meta.Corruption,    TEXT("Порча"));
 
-    SetDistortedText(DirectionBodyText, Item.State.Direction.Body, TEXT("Тело"));
-    SetDistortedText(DirectionMindText, Item.State.Direction.Mind, TEXT("Разум"));
-    SetDistortedText(DirectionSpiritText, Item.State.Direction.Spirit, TEXT("Дух"));
-    SetDistortedText(DirectionNatureText, Item.State.Direction.Nature, TEXT("Природа"));
+    SetDistortedText(DirectionBodyText,    Item.State.Direction.Body,     TEXT("Тело"));
+    SetDistortedText(DirectionMindText,    Item.State.Direction.Mind,     TEXT("Разум"));
+    SetDistortedText(DirectionSpiritText,  Item.State.Direction.Spirit,   TEXT("Дух"));
+    SetDistortedText(DirectionNatureText,  Item.State.Direction.Nature,   TEXT("Природа"));
 }

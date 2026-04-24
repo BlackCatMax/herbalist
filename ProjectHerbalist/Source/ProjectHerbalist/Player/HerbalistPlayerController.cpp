@@ -185,6 +185,12 @@ void AHerbalistPlayerController::OnLeftClick()
             int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
             if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
             {
+                // Обновляем глобальный Distortion из клетки
+                if (FGridCell* Cell = WorldManager->GetCell(X, Y))
+                {
+                    CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+                }
+
                 DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Yellow, false, 1.0f, 0, 2.0f);
                 HarvestTest(X, Y);
             }
@@ -206,6 +212,12 @@ void AHerbalistPlayerController::OnRightClick()
             int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
             if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
             {
+                // Обновляем глобальный Distortion из клетки
+                if (FGridCell* Cell = WorldManager->GetCell(X, Y))
+                {
+                    CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+                }
+
                 DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Red, false, 1.0f, 0, 2.0f);
                 WorldManager->SelectCell(X, Y);
                 FString Info = WorldManager->GetSelectedCellInfo();
@@ -278,6 +290,12 @@ void AHerbalistPlayerController::Interact()
                 int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
                 if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
                 {
+                    // Обновляем глобальный Distortion из клетки
+                    if (FGridCell* Cell = WorldManager->GetCell(X, Y))
+                    {
+                        CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+                    }
+
                     DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Cyan, false, 1.0f, 0, 2.0f);
                     HarvestTest(X, Y);
                 }

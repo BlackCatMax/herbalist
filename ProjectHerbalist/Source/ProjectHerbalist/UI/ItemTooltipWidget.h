@@ -13,7 +13,7 @@ class PROJECTHERBALIST_API UItemTooltipWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-    void SetItem(const FInventoryItem& Item);
+    void SetItem(const FInventoryItem& Item, float GlobalDistortion);
 
 protected:
     UPROPERTY(meta = (BindWidget))

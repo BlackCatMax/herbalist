@@ -43,6 +43,10 @@ public:
     // Текущий алхимический стол
     UPROPERTY()
     AAlchemyTableActor* CurrentAlchemyTable = nullptr;
+	
+	/** Текущий глобальный Distortion из Memory клетки под игроком. */
+	UPROPERTY(BlueprintReadOnly, Category = "Alchemy")
+	float CurrentGlobalDistortion = 0.3f;
 
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
