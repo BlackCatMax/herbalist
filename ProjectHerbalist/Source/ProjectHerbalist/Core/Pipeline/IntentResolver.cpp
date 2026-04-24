@@ -5,7 +5,8 @@
 namespace HerbalistCore
 {
     float ComputeIntentCoherence(const TArray<FAlchemyAtom>& OrderedNonWaterAtoms,
-                                 const TArray<FAlchemyAtom>& WaterAtoms)
+                                 const TArray<FAlchemyAtom>& WaterAtoms,
+                                 float GlobalDistortion)
     {
         const int32 N = OrderedNonWaterAtoms.Num();
         if (N == 0) return 0.5f; // нет ингредиентов — нейтральное намерение
@@ -27,7 +28,6 @@ namespace HerbalistCore
         // Шаг 2: Доминантные оси и взвешенное согласие
         TMap<FString, float> AxisWeightMap;
 
-        // Для оси-доминанты используем лёгкую метку
         auto GetDominantAxisName = [](const FRealState& State) -> FString
         {
             const FDirection& Dir = State.Direction;
@@ -46,7 +46,6 @@ namespace HerbalistCore
             AxisWeightMap.FindOrAdd(AxisName) += Weights[i];
         }
 
-        // Находим максимальный вес среди осей
         float MaxAxisWeight = 0.0f;
         for (auto& Pair : AxisWeightMap)
         {
@@ -54,7 +53,6 @@ namespace HerbalistCore
                 MaxAxisWeight = Pair.Value;
         }
 
-        // AxisAgreement — доля веса доминирующей оси от общего веса
         float AxisAgreement = (TotalWeight > KINDA_SMALL_NUMBER) ? (MaxAxisWeight / TotalWeight) : 0.0f;
 
         // Шаг 3: Взвешенные средние Purity и Stability не-водных ингредиентов
@@ -69,7 +67,25 @@ namespace HerbalistCore
         WeightedStability /= TotalWeight;
         const float IngredientQuality = (WeightedPurity + WeightedStability) * 0.5f;
 
-        // Шаг 4: Бонус воды (если есть)
+        // Шаг 3.5: Модификаторы классов ингредиентов
+        float ClassModifier = 1.0f;
+        int32 CatalystCount = 0, UnknownCount = 0, EssenceCount = 0;
+        for (int32 i = 0; i < N; ++i)
+        {
+            switch (OrderedNonWaterAtoms[i].Class)
+            {
+            case EIngredientClass::Catalyst: CatalystCount++; break;
+            case EIngredientClass::Unknown:  UnknownCount++;  break;
+            case EIngredientClass::Essence:  EssenceCount++;  break;
+            default: break;
+            }
+        }
+        if (CatalystCount > 0) ClassModifier += CatalystCount * 0.1f;
+        if (UnknownCount > 0)  ClassModifier -= UnknownCount * 0.15f;
+        if (EssenceCount > 0)  ClassModifier += EssenceCount * 0.05f;
+        ClassModifier = FMath::Clamp(ClassModifier, 0.5f, 1.5f);
+
+        // Шаг 4: Бонус воды
         float WaterBonus = 0.0f;
         if (WaterAtoms.Num() > 0)
         {
@@ -77,11 +93,18 @@ namespace HerbalistCore
             for (const FAlchemyAtom& Atom : WaterAtoms)
                 AvgWaterPurity += Atom.State.Meta.Purity;
             AvgWaterPurity /= WaterAtoms.Num();
-            WaterBonus = AvgWaterPurity * 0.2f; // до 0.2
+            WaterBonus = AvgWaterPurity * 0.2f;
         }
 
-        // Шаг 5: Сборка Coherence
-        float Coherence = FMath::Lerp(AxisAgreement, IngredientQuality, 0.5f) + WaterBonus;
+        // Шаг 5: Сборка с классовым модификатором
+        float Coherence = FMath::Lerp(AxisAgreement, IngredientQuality, 0.5f) * ClassModifier + WaterBonus;
+
+        // Шаг 6: Штраф глобального Distortion
+        float DistortionPenalty = 1.0f - GlobalDistortion * 0.5f;
+        Coherence *= DistortionPenalty;
+		
+		// IntentResolver.cpp — добавить перед return
+
         return FMath::Clamp(Coherence, 0.0f, 1.0f);
     }
 }

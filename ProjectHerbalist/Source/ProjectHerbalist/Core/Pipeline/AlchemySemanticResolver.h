@@ -10,11 +10,11 @@ struct FAlchemySemanticResult
     EAlchemyOutcome Outcome = EAlchemyOutcome::Ash;
     TArray<FAlchemyAtom> WaterAtoms;
     TArray<FAlchemyAtom> IngredientAtoms;
-    float Coherence = 0.5f;  // вычисляется при Resolve
+    float Coherence = 0.5f;
 };
 
 class FAlchemySemanticResolver
 {
 public:
-    static FAlchemySemanticResult Resolve(const TArray<FAlchemyAtom>& Atoms);
+    static FAlchemySemanticResult Resolve(const TArray<FAlchemyAtom>& Atoms, float GlobalDistortion);
 };

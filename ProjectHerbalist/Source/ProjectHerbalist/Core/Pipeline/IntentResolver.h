@@ -6,9 +6,12 @@
 
 namespace HerbalistCore
 {
-    // Вычисляет Coherence (0-1) на основе порядка ингредиентов, их осей и чистоты.
+    // Вычисляет Coherence (0-1) на основе порядка ингредиентов, их осей, чистоты,
+    // классов ингредиентов и глобального Distortion.
     // OrderedNonWaterAtoms — ингредиенты в порядке добавления в котёл (без воды).
-    // WaterAtoms — вода, даёт небольшой бонус к чистоте, но не обязательна.
+    // WaterAtoms — вода, даёт небольшой бонус к чистоте.
+    // GlobalDistortion — AccumulatedDistortion из Memory клетки.
     float ComputeIntentCoherence(const TArray<FAlchemyAtom>& OrderedNonWaterAtoms,
-                                 const TArray<FAlchemyAtom>& WaterAtoms);
+                                 const TArray<FAlchemyAtom>& WaterAtoms,
+                                 float GlobalDistortion);
 }

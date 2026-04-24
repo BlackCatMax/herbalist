@@ -2,7 +2,7 @@
 #include "AlchemySemanticResolver.h"
 #include "Core/Pipeline/IntentResolver.h"
 
-FAlchemySemanticResult FAlchemySemanticResolver::Resolve(const TArray<FAlchemyAtom>& Atoms)
+FAlchemySemanticResult FAlchemySemanticResolver::Resolve(const TArray<FAlchemyAtom>& Atoms, float GlobalDistortion)
 {
     FAlchemySemanticResult Result;
 
@@ -26,10 +26,10 @@ FAlchemySemanticResult FAlchemySemanticResolver::Resolve(const TArray<FAlchemyAt
     else if (!bHasIngredient) Result.Outcome = EAlchemyOutcome::BoiledWater;
     else Result.Outcome = EAlchemyOutcome::Valid;
 
-    // Вычисляем Coherence на основе порядка и качества ингредиентов
     Result.Coherence = HerbalistCore::ComputeIntentCoherence(
         Result.IngredientAtoms,
-        Result.WaterAtoms);
+        Result.WaterAtoms,
+        GlobalDistortion);
 
     return Result;
 }

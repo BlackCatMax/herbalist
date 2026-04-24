@@ -35,7 +35,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     }
 
     // 2. Семантическое разрешение (считает и Coherence)
-    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms);
+	FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms, Cell->Memory.AccumulatedDistortion);
 
     // 3. Биомный контекст
     float BiomeMorokField = 0.0f, BiomeZaryanaField = 0.0f;

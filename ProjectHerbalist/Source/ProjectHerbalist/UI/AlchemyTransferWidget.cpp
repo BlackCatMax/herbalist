@@ -172,7 +172,8 @@ void UAlchemyTransferWidget::OnMixClicked()
     }
 
     // 2. Семантическое разрешение
-    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms);
+	float GlobalD = HPC ? HPC->CurrentGlobalDistortion : 0.3f;
+	FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms, GlobalD);
 
     // 3. Готовим Rng
     FRngState Rng;
