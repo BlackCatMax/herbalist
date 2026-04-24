@@ -1,17 +1,53 @@
 // AlchemySemantics.cpp
 #include "AlchemySemantics.h"
 #include "ProjectHerbalist.h"
-#include "Core/Data/IngredientRegistry.h"   // <-- добавлено
+#include "Core/Data/IngredientRegistry.h"
 
 namespace HerbalistCore
 {
-    static bool IsWaterIngredient(FName IngredientID)
+    // --- Классификаторы через реестр ---
+
+    bool IsWaterIngredient(FName IngredientName)
     {
-        // Хардкод-исключения для Potion
-        if (IngredientID == FName(TEXT("Potion"))) return false;
-        // Всё остальное — через реестр
-        return FIngredientRegistry::IsWater(IngredientID);
+        return FIngredientRegistry::IsWater(IngredientName);
     }
+
+    bool IsPlantIngredient(FName IngredientName)
+    {
+        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Plant;
+    }
+
+    bool IsMineralIngredient(FName IngredientName)
+    {
+        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Mineral;
+    }
+
+    bool IsFungusIngredient(FName IngredientName)
+    {
+        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Fungus;
+    }
+
+    bool IsCatalystIngredient(FName IngredientName)
+    {
+        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Catalyst;
+    }
+
+    bool IsEssenceIngredient(FName IngredientName)
+    {
+        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Essence;
+    }
+
+    bool IsKnownIngredient(FName IngredientName)
+    {
+        return FIngredientRegistry::IsKnown(IngredientName);
+    }
+
+    EIngredientClass GetIngredientClass(FName IngredientName)
+    {
+        return FIngredientRegistry::Classify(IngredientName);
+    }
+
+    // --- Исходные функции (без изменений) ---
 
     EAlchemyOutcome ClassifyOutcome(const TArray<FInventoryItem>& Inputs)
     {

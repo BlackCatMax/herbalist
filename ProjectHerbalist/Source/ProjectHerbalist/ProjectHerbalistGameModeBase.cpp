@@ -23,9 +23,6 @@ void AProjectHerbalistGameModeBase::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Инициализация статического реестра ингредиентов (должна быть до любого использования)
-    FIngredientRegistry::Initialize();
-
     // Инициализация Biome Graph
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
     {

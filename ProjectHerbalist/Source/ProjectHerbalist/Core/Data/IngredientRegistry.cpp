@@ -1,38 +1,81 @@
 #include "IngredientRegistry.h"
+#include "Engine/DataTable.h"
 
-TMap<FName, EIngredientClass> FIngredientRegistry::Registry;
+TMap<FName, EIngredientClass> FIngredientRegistry::IngredientMap;
+bool FIngredientRegistry::bIsInitialized = false;
 
-void FIngredientRegistry::Initialize()
+void FIngredientRegistry::Initialize(UDataTable* IngredientTable)
 {
-    Registry.Empty();
+    if (bIsInitialized)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Herbalist] FIngredientRegistry already initialized, skipping"));
+        return;
+    }
 
-    // Вода
-    Registry.Add(FName(TEXT("Water")), EIngredientClass::Water);
+    if (!IngredientTable)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FIngredientRegistry: IngredientTable is null. Registry will be empty. All Classify calls will return Unknown."));
+        bIsInitialized = true;
+        return;
+    }
 
-    // Болотные травы
-    Registry.Add(FName(TEXT("bol_01")), EIngredientClass::Herb);   // Багульник
-    Registry.Add(FName(TEXT("bol_02")), EIngredientClass::Herb);   // Белокрыльник
-    Registry.Add(FName(TEXT("bol_04")), EIngredientClass::Herb);   // Трифоль (Вахта)
-    Registry.Add(FName(TEXT("bol_08")), EIngredientClass::Herb);   // Резун (Осока)
-    Registry.Add(FName(TEXT("bol_09")), EIngredientClass::Herb);   // Пухлянка (Пушица)
-    Registry.Add(FName(TEXT("bol_10")), EIngredientClass::Herb);   // Царевы очи (Росянка)
-    Registry.Add(FName(TEXT("bol_11")), EIngredientClass::Herb);   // Девятисил (Сабельник)
+    if (IngredientTable->GetRowStruct() != FIngredientTableRow::StaticStruct())
+    {
+        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FIngredientRegistry: DataTable row structure mismatch. Expected FIngredientTableRow, got %s. Registry will be empty."),
+            *IngredientTable->GetRowStruct()->GetName());
+        bIsInitialized = true;
+        return;
+    }
 
-    // Болотные ягоды
-    Registry.Add(FName(TEXT("bol_05")), EIngredientClass::Berry);  // Гонобобель (Голубика)
-    Registry.Add(FName(TEXT("bol_06")), EIngredientClass::Berry);  // Журавина (Клюква)
+    const FString ContextStr(TEXT("FIngredientRegistry::Initialize"));
+    TArray<FName> RowNames = IngredientTable->GetRowNames();
 
-    // Болотные мхи
-    Registry.Add(FName(TEXT("bol_12")), EIngredientClass::Moss);   // Бѣлый мохъ (Сфагновые мхи)
+    for (const FName& RowName : RowNames)
+    {
+        if (const FIngredientTableRow* Row = IngredientTable->FindRow<FIngredientTableRow>(RowName, ContextStr))
+        {
+            IngredientMap.Add(RowName, Row->Class);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Herbalist] FIngredientRegistry: Failed to read row '%s', skipping"), *RowName.ToString());
+        }
+    }
 
-    // Болотные деревья
-    Registry.Add(FName(TEXT("bol_03")), EIngredientClass::Wood);   // Берёза пушистая
-    Registry.Add(FName(TEXT("bol_07")), EIngredientClass::Wood);   // Елха чёрная (Ольха чёрная)
+    bIsInitialized = true;
+    UE_LOG(LogTemp, Log, TEXT("[Herbalist] FIngredientRegistry initialized with %d ingredients"), IngredientMap.Num());
 }
 
-EIngredientClass FIngredientRegistry::GetClass(FName IngredientID)
+EIngredientClass FIngredientRegistry::Classify(FName IngredientName)
 {
-    if (const EIngredientClass* Found = Registry.Find(IngredientID))
-        return *Found;
-    return EIngredientClass::Unknown;
+    if (!bIsInitialized)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FIngredientRegistry::Classify called before Initialize! Returning Unknown."));
+        return EIngredientClass::Unknown;
+    }
+
+    const EIngredientClass* Found = IngredientMap.Find(IngredientName);
+    return Found ? *Found : EIngredientClass::Unknown;
+}
+
+bool FIngredientRegistry::IsWater(FName IngredientName)
+{
+    return Classify(IngredientName) == EIngredientClass::Water;
+}
+
+bool FIngredientRegistry::IsKnown(FName IngredientName)
+{
+    return bIsInitialized && IngredientMap.Contains(IngredientName);
+}
+
+int32 FIngredientRegistry::GetIngredientCount()
+{
+    return IngredientMap.Num();
+}
+
+void FIngredientRegistry::Reset()
+{
+    IngredientMap.Empty();
+    bIsInitialized = false;
+    UE_LOG(LogTemp, Log, TEXT("[Herbalist] FIngredientRegistry reset"));
 }

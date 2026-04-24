@@ -15,6 +15,7 @@
 #include "Core/Pipeline/AlchemyPhysicsPipeline.h"
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Pipeline/AlchemyTypes.h"
+#include "Core/Data/IngredientRegistry.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -159,9 +160,15 @@ void UAlchemyTransferWidget::OnMixClicked()
     TArray<FAlchemyAtom> Atoms;
     for (const FInventoryItem& Item : Ingredients)
     {
-        Atoms.Add(FAlchemyAtom(Item, FBiomeDefaults::BiomeTypeToName(
-            WorldManager ? WorldManager->GetCell(TableCoords.X, TableCoords.Y) ? 
-                WorldManager->GetCell(TableCoords.X, TableCoords.Y)->Biome : EBiomeType::MixedForest : EBiomeType::MixedForest)));
+        FAlchemyAtom Atom(
+            Item.IngredientID,
+            FIngredientRegistry::IsWater(Item.IngredientID),
+            Item.State,
+            EAtomOrigin::Harvest,
+            Memory.AccumulatedDistortion,
+            GetWorld()->GetTimeSeconds()
+        );
+        Atoms.Add(Atom);
     }
 
     // 2. Семантическое разрешение

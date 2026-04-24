@@ -5,7 +5,6 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/HerbalistSettings.h"
-#include "Core/Harvest/HarvestService.h"
 #include "Math/UnrealMathUtility.h"
 #include "Math/Vector4.h"
 #include "PipelineMeta.h"
