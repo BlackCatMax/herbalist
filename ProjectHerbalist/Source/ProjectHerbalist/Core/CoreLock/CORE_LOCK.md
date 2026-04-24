@@ -2,72 +2,48 @@
 
 ## 1. Статус
 
-Core системы зафиксирован.
+Core системы зафиксирован. Фазы 1-4 реализованы и протестированы.
 Дальнейшие изменения вносятся только при обнаружении критических дефектов, подтверждённых тестами.
-
-Любые изменения, влияющие на:
-
-* математическую модель,
-* диапазоны параметров,
-* порядок пайплайна,
-* семантику параметров,
-
-считаются нарушением CORE LOCK.
-
----
 
 ## 2. Область фиксации
 
-Зафиксированы следующие компоненты:
-
 ### 2.1 Типы и базовые структуры
 
-* `FDirection`
-* `FMeta`
-* `FRealState`
-* `FPerceivedState`
-* `FEnvironment`
-* `FBiomeMemory`
-* `FAction`
-* `FIntent`
-* `FRngState`
+- `FDirection`, `FMeta`, `FRealState`
+- `FEnvironment`, `FMemoryState` (включая `DistortionVelocity`, `TimeOfLastDistortionChange`)
+- `FIntent`, `FRngState`
+- `FAlchemyAtom`, `FContributionVector`, `EAtomOrigin`
+- `EIngredientClass` (Water, Plant, Mineral, Fungus, Catalyst, Essence, Unknown)
+- `FInventoryItem`
 
-### 2.2 Математика
+### 2.2 Данные
 
-* Нормализация направления (L2)
-* Distance функции
-* Clamp01 / Clamp
-* DistanceToS0 (взвешенная метрика)
+- `FIngredientRegistry` (data-only реестр ингредиентов)
+- `FIngredientTableRow` (строка DataTable)
 
 ### 2.3 Pipeline
 
 Фиксирован порядок операций:
-
 1. `Fold`
-2. `ApplyContext`
-3. `ComputeDelta`
+2. `ComputeDelta`
+3. `ApplyBiomeContext`
 4. `ApplyMorok`
 5. `ApplyZaryana`
 
 Дополнительно:
-
-* `DistortPerception`
-* `ComputeIntent`
+- `ComputeIntentCoherence` (с учётом классов и GlobalDistortion)
+- `ApplyDistortionDelta` (с saturation curve)
+- `Perception::PerceiveValue`, `Perception::PerceiveClass`
 
 ### 2.4 BiomeState
 
-* Применение дельты через `ApplyDelta`
-* Saturation для Magnitude
-* Meta clamp
-* Memory update через Intent
+- `UpdateMemory` через `ApplyDistortionDelta`
+- `RecalculateDistortionFromHarvestStress` через `ApplyDistortionDelta`
 
-### 2.5 Simulation
+### 2.5 Подсистемы
 
-* `ProcessAction`
-* `Step`
-* `PropagateChanges`
-* `ApplyPendingDeltas`
-* `UpdateGlobalMetrics`
+- `UAlchemySubsystem` (инициализация реестра)
+- `UBiomeGraphSubsystem` (граф биомов)
 
 ---
 
@@ -75,148 +51,61 @@ Core системы зафиксирован.
 
 ### 3.1 Диапазоны
 
-Всегда соблюдаются:
-
-* `Magnitude ∈ [0,1]`
-* Все `Meta ∈ [0,1]`
-* `AccumulatedDistortion ∈ [0,1]`
-* `WorldCoherence ∈ [0,1]`
-* `GlobalMorok ∈ [0,1]`
+- `Magnitude ∈ [0,1]`
+- Все `Meta ∈ [0,1]`
+- `AccumulatedDistortion ∈ [0, 0.95]`
+- `Coherence ∈ [0,1]`
+- `DistortionVelocity` — без ограничений
+- `Perceive(x, D) ∈ [x/K, x*K]`, `K = max(1.0, 1.0 + (D-0.3)*2.0)`
 
 ### 3.2 Direction
 
-* Всегда нормализован (L2)
-* Не допускается нулевой вектор
+- Всегда нормализован (L2 или сумма)
+- Не допускается нулевой вектор
 
 ### 3.3 Стабильность
 
-* Нет NaN / Inf
-* Нет деления на 0
-* Все усреднения защищены от пустых массивов
+- Нет NaN / Inf
+- Нет деления на 0
+- Все усреднения защищены от пустых массивов
 
 ---
 
 ## 4. Семантические гарантии
 
-### 4.1 Saturation
+### 4.1 Saturation (Distortion)
 
-* Magnitude не достигает мгновенно 1.0
-* Рост замедляется при приближении к границе
+- Рост `AccumulatedDistortion` замедляется при >0.8
+- При >0.92 — почти плато (5% дельты)
+- Непрерывность гарантирована `DistortionVelocity`
 
-### 4.2 Morok
+### 4.2 S_perceived
 
-* Усиливается через Corruption и Distortion
-* Вносит шум и смешивание осей
-* Никогда не ломает диапазоны
+- Искажение мультипликативное, bounded
+- Детерминированный seed
+- Подмена класса вероятностная, не чаще 50%
 
-### 4.3 Zaryana
+### 4.3 Coherence
 
-* Усиливает доминирующее направление
-* Повышает Purity и Stability
-* Снижает Corruption
-
-### 4.4 Memory
-
-* Coherent → снижает AccumulatedDistortion
-* Distorted → увеличивает AccumulatedDistortion
-* Memory влияет на Context
-
-### 4.5 Propagation
-
-* Частичное распространение через соседей
-* Не вызывает экспоненциального роста
+- Зависит от порядка, качества, классов, Distortion
+- Catalyst повышает, Unknown понижает
 
 ---
 
 ## 5. Детерминизм
 
 Система детерминирована при фиксированных:
-
-* Seed
-* Порядке действий
-* LogicalTick
-
-Используется:
-
-* `FRngState`
-* `BranchRng`
-* `HashCombine`
-* `Hash32`
+- Seed
+- Порядке ингредиентов
+- GlobalDistortion
 
 ---
 
-## 6. Ограничения изменений
+## 6. Реализованные фазы
 
-Разрешено:
-
-* Оптимизация (без изменения результата)
-* Кэширование
-* Улучшение производительности
-
-Запрещено:
-
-* Изменение формул
-* Изменение коэффициентов
-* Изменение порядка Pipeline
-* Изменение диапазонов
-* Изменение семантики параметров
-
----
-
-## 7. Критерии пересмотра Core
-
-Core может быть изменён только если:
-
-1. Найден воспроизводимый баг
-2. Нарушены инварианты
-3. Один из тестов (Munchkin / WorldBreaker / Perfectionist / Landscape) не проходит
-4. Появляются NaN или выход за диапазоны
-
-Любое изменение должно:
-
-* быть локализовано,
-* сопровождаться тестом,
-* не ломать существующие сценарии.
-
----
-
-## 8. Тестирование
-
-Обязательные тесты:
-
-* Munchkin Alchemist
-* World Breaker
-* Perfectionist
-* Landscape Designer
-
-Core считается стабильным, если:
-
-* нет NaN
-* нет выхода параметров за диапазоны
-* сохраняется вариативность
-* сохраняется обратимость системы
-
----
-
-## 9. API стабильность
-
-Публичный API считается замороженным:
-
-* `Simulation`
-* `Pipeline`
-* `FBiomeState`
-
-Изменения сигнатур запрещены.
-
----
-
-## 10. Следующий этап
-
-После фиксации Core допускается:
-
-* добавление контента
-* балансировка коэффициентов через внешние параметры (не в коде Core)
-* интеграция с UE5
-* построение геймплейных систем поверх Core
-
-Core не должен изменяться при добавлении контента.
+| Фаза | Название | Ключевые файлы |
+|---|---|---|
+| 1 | Data-Only Foundation | `IngredientRegistry`, `AlchemyTypes`, `AlchemySemantics` |
+| 2 | Operational FMemoryState | `AlchemyWorldStateApplier`, `GridWorldManagerCore` |
+| 3 | S_perceived | `Perception`, `ItemTooltipWidget`, `HerbalistPlayerController` |
+| 4 | Динамический Coherence | `IntentResolver`, `AlchemySemanticResolver`, `AlchemyTransferWidget` |

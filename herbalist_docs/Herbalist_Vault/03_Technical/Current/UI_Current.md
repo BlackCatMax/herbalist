@@ -1,7 +1,7 @@
 ---
 tags: [technical, current, ui]
 ---
-# Пользовательский интерфейс — реализация
+# Пользовательский интерфейс — реализация (обновлено: Фазы 1-4)
 ## Виджеты
 ### `UInventoryWidget`
 - Отображает слоты инвентаря в `VerticalBox`.
@@ -17,19 +17,16 @@ tags: [technical, current, ui]
 - Контейнер для двух `UInventoryWidget` (левый и правый).
 - Используется при взаимодействии с `AStorageContainer`.
 ### `UAlchemyTransferWidget`
-- Содержит:
-  - `PlayerInventory` (UInventoryWidget)
-  - Слоты: `WaterSlot` (1), `IngredientSlot1-3` (до 9), `ResultSlot` (1)
-- Кнопка `MixButton` запускает алхимию.
-- При двойном клике по слоту ингредиента предмет возвращается в инвентарь игрока.
-- Результат варки помещается в `ResultSlot`.
+- Coherence вычисляется динамически через `ComputeIntentCoherence`.
+- Глобальный Distortion передаётся из `HPC->CurrentGlobalDistortion`.
 ### `UAlchemySlotWidget`
-- Специализированный слот для алхимического стола.
-- Различает типы: `Water`, `Ingredient`, `Result`.
-- `CanAcceptItem` проверяет соответствие типа.
+- Классификация через `FIngredientRegistry::IsWater`.
 ### `UItemTooltipWidget`
-- Показывает **все числовые параметры** предмета.
-- **Важно:** отображает `S_real`, а не `S_perceived` (нарушает GDD, требуется доработка).
+- Показывает **S_perceived**: искажённые значения параметров + реальные в скобках.
+- Искажение через `Perception::PerceiveValue` (мультипликативное, bounded).
+- Подмена класса через `Perception::PerceiveClass` (вероятностная, при D > 0.5).
+- Глобальный Distortion из `AHerbalistPlayerController::CurrentGlobalDistortion`.
+- Детерминированный seed (нет дрожания).
 ## Управление вводом
 - `AHerbalistPlayerController` использует Enhanced Input.
 - Действия:

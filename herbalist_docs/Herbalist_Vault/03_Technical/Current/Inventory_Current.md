@@ -1,7 +1,7 @@
 ---
 tags: [technical, current, inventory]
 ---
-# Инвентарь — реализация
+# Инвентарь — реализация (обновлено: Фазы 1-4)
 ## Компонент `UHerbalistInventoryComponent`
 - Хранит `TArray<FInventoryItem>`.
 - Максимальный размер стека — `MAX_STACK_SIZE = 9`.
@@ -66,4 +66,4 @@ struct FInventoryItem {
     
 - `UInventorySlotWidget` — отображает иконку, название, количество, обрабатывает drag&drop и тултип.
     
-- `UItemTooltipWidget` — показывает **точные числа** всех параметров (временное решение, должно быть заменено на `S_perceived`).
+- `UItemTooltipWidget` — показывает **[[S_perceived]]** (искажённые значения + реальные в скобках). Использует Perception::PerceiveValue` и `Perception::PerceiveClass. Глобальный Distortion из HerbalistPlayerController::CurrentGlobalDistortion.

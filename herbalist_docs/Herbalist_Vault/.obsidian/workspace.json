@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "04_Compendium/Растительность/Болото/Береза пушистая.md",
+                "file": "03_Technical/Current/UI_Current.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Береза пушистая"
+              "title": "UI_Current"
             }
           },
           {
@@ -200,11 +200,20 @@
   },
   "active": "d344dfee6a5c0c12",
   "lastOpenFiles": [
+    "03_Technical/Current/Inventory_Current.md",
+    "01_Glossary/S_Perceived.md",
+    "01_Glossary/Zaryana.md",
+    "01_Glossary/Coherence.md",
+    "04_Compendium/Растительность/Болото/Береза пушистая.md",
+    "01_Glossary/Perception.md",
+    "01_Glossary/Moisture.md",
+    "01_Glossary/Intent.md",
+    "01_Glossary/MemoryState.md",
+    "01_Glossary/S_real.md",
     "04_Compendium/Растительность/Болото/Белокрыльник.md",
     "01_Glossary/Morok Field.md",
     "01_Glossary/Morok.md",
     "01_Glossary/Zaryana Field.md",
-    "01_Glossary/Zaryana.md",
     "01_Glossary/Propagation.md",
     "01_Glossary/Footprint.md",
     "01_Glossary/Biome Memory.md",
@@ -217,18 +226,9 @@
     "02_GDD/14_Biome_Graph.md",
     "Map of Content.md",
     "04_Compendium/Бестиарий/Нечисть (повсеместная)/Вурдалаки.md",
-    "04_Compendium/Растительность/Лесостепь/Василек.md",
     "fix_double_brackets.ps1",
     "Текстовый документ.txt",
-    "04_Compendium/Растительность/Лесостепь/Горицвет.md",
-    "04_Compendium/Биомы/Болото.md",
-    "02_GDD/08_Content.md",
     "wikilinks.py",
-    "01_Glossary/Interaction Rules.md",
-    "01_Glossary/Alchemy.md",
-    "01_Glossary/Огонь.md",
-    "01_Glossary/Земля.md",
-    "01_Glossary/Воздух.md",
     "unify_glossary.py",
     "04_Compendium/Растительность/Тундра",
     "04_Compendium/Растительность/Тайга",

@@ -15,4 +15,4 @@ status: ✅
 **Связи:**
 - [[Body]], [[Mind]], [[Spirit]], [[Nature]]
 - [[Meta]]
-- [[S_real]], [[S_perceived]]
+- [[S_real]], [[S_Perceived]]

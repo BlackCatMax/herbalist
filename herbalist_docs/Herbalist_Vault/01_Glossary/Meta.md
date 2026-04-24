@@ -14,5 +14,5 @@ status: ✅
 
 **Связи:**
 - [[Direction]]
-- [[S_real]], [[S_perceived]]
+- [[S_real]], [[S_Perceived]]
 - [[Alchemy]]

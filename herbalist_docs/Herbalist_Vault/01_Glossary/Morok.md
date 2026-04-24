@@ -14,5 +14,5 @@ status: ✅
 **Связи:**
 - [[Distortion]]
 - [[Alchemy]]
-- [[S_perceived]]
+- [[S_Perceived]]
 - [[Zaryana]]

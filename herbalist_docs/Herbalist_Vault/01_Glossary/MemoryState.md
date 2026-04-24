@@ -1,13 +1,15 @@
 ---
-tags: [glossary, context]
-status: ⚠️
+tags:
+  - glossary
+  - context
+status: ✅
 ---
 
 # MemoryState
 
 **GDD:** Накопленная история изменений клетки. Мир «помнит» действия игрока.
 
-**Tech:** `FMemoryState` с полями: `AccumulatedDistortion` (используется в [[Alchemy]]), `StabilityMemory` (обновляется, но не влияет), `HistoryPurity` (обновляется, но не используется). Обновляется в `Tick` и при фиксации состояния.
+**Tech:** FMemoryState`: `AccumulatedDistortion`, `StabilityMemory`, `HistoryPurity`, `DistortionVelocity (Фаза 2), TimeOfLastDistortionChange (Фаза 2). Обновляется через ApplyDistortionDelta с saturation curve.
 
 **Восприятие:** Не воспринимается напрямую. Проявляется через изменение поведения знакомых мест со временем.
 
