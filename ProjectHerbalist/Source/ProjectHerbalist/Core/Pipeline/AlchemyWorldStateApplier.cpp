@@ -33,25 +33,15 @@ FRealState FAlchemyWorldStateApplier::Apply(
     }
 }
 
-void FAlchemyWorldStateApplier::ApplyDistortionDelta(
-    FMemoryState& Memory,
-    float Delta,
-    float CurrentTime)
+void FAlchemyWorldStateApplier::ApplyDistortionDelta(FMemoryState& Memory, float Delta, float CurrentTime)
 {
-    if (FMath::IsNearlyZero(Delta))
-    {
-        return;
-    }
+    if (FMath::IsNearlyZero(Delta)) return;
 
     const float CurrentDistortion = Memory.AccumulatedDistortion;
     const float Saturation = GetDistortionSaturation(CurrentDistortion);
     const float EffectiveDelta = Delta * Saturation;
 
-    Memory.AccumulatedDistortion = FMath::Clamp(
-        CurrentDistortion + EffectiveDelta,
-        0.0f,
-        0.95f
-    );
+    Memory.AccumulatedDistortion = FMath::Clamp(CurrentDistortion + EffectiveDelta, 0.0f, 0.95f);
 
     const float DeltaTime = CurrentTime - Memory.TimeOfLastDistortionChange;
     if (DeltaTime > KINDA_SMALL_NUMBER)
@@ -64,16 +54,11 @@ void FAlchemyWorldStateApplier::ApplyDistortionDelta(
 
 float FAlchemyWorldStateApplier::GetDistortionSaturation(float CurrentDistortion)
 {
-    if (CurrentDistortion < 0.8f)
-    {
-        return 1.0f;
-    }
-
+    if (CurrentDistortion < 0.8f) return 1.0f;
     if (CurrentDistortion < 0.92f)
     {
         const float t = (CurrentDistortion - 0.8f) / 0.12f;
         return FMath::Lerp(1.0f, 0.1f, t);
     }
-
     return 0.05f;
 }

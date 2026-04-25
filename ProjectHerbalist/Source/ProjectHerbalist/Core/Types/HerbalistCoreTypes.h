@@ -159,6 +159,8 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FName AvailableIngredientID;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float ResourceRegrowthTimer = 0.0f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsWater = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName WaterTypeID = NAME_None;
 };
 
 USTRUCT(BlueprintType)

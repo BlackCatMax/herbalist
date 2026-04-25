@@ -1,6 +1,7 @@
 // GridWorldManagerCore.cpp
 #include "GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "Core/Data/WaterTypeRegistry.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Types/BiomeTypes.h"
@@ -22,7 +23,7 @@ TArray<FGridBiomeSample> AGridWorldManager::GetBiomeSamples() const
         FGridBiomeSample Sample;
         Sample.BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
         Sample.MorokValue = Cell.State.Meta.Distortion;
-        Sample.ZaryanaValue = 1.f - Cell.State.Meta.Distortion; // упрощённо
+        Sample.ZaryanaValue = 1.f - Cell.State.Meta.Distortion;
         Samples.Add(Sample);
     }
     return Samples;
@@ -136,18 +137,15 @@ void AGridWorldManager::DrawBiomeGraphDebug()
 AGridWorldManager::AGridWorldManager()
 {
     PrimaryActorTick.bCanEverTick = true;
-    PrimaryActorTick.bStartWithTickEnabled = true;
+    PrimaryActorTick.bStartWithTickEnabled = false;
 }
 
 void AGridWorldManager::BeginPlay()
 {
     Super::BeginPlay();
     WorldRNG.Initialize(12345);
-    
-    // Создаём сервис сбора
     HarvestService = NewObject<UHarvestService>(this);
-    
-    InitializeCells();
+
     if (bEnableDebugDraw)
     {
         GetWorldTimerManager().SetTimer(DebugDrawTimer, this, &AGridWorldManager::RedrawDebugBoxes, 0.2f, true);
@@ -165,14 +163,9 @@ void AGridWorldManager::InitializeCells()
     if (AllBiomes.Num() == 0)
     {
         AllBiomes = {
-            EBiomeType::Tundra,
-            EBiomeType::Taiga,
-            EBiomeType::MixedForest,
-            EBiomeType::BroadleafForest,
-            EBiomeType::ForestSteppe,
-            EBiomeType::Steppe,
-            EBiomeType::Floodplain,
-            EBiomeType::Bog
+            EBiomeType::Tundra, EBiomeType::Taiga, EBiomeType::MixedForest,
+            EBiomeType::BroadleafForest, EBiomeType::ForestSteppe,
+            EBiomeType::Steppe, EBiomeType::Floodplain, EBiomeType::Bog
         };
     }
 
@@ -200,6 +193,7 @@ void AGridWorldManager::InitializeCells()
             Cells[Index].AvailableIngredientID = FBiomeDefaults::GetRandomResourceForBiome(biome, WorldRNG);
             Cells[Index].ResourceRegrowthTimer = 0.0f;
             Cells[Index].bIsWater = false;
+            Cells[Index].WaterTypeID = NAME_None;
         }
     }
 
@@ -217,7 +211,19 @@ void AGridWorldManager::InitializeCells()
                 FGridCell& Cell = Cells[Index];
                 Cell.bIsWater = true;
                 Cell.AvailableIngredientID = NAME_None;
+                Cell.WaterTypeID = FWaterTypeRegistry::GetRandomWaterType(Cell.Biome, WorldRNG);
+
                 FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
+
+                if (const FWaterTypeRow* WaterRow = FWaterTypeRegistry::GetWaterType(Cell.WaterTypeID))
+                {
+                    waterState.Meta.Purity = WaterRow->BasePurity;
+                    waterState.Meta.Distortion = WaterRow->BaseDistortion;
+                    waterState.Meta.Stability = WaterRow->BaseStability;
+                    waterState.Meta.Potency = WaterRow->BasePotency;
+                    waterState.Meta.Corruption = WaterRow->BaseCorruption;
+                }
+
                 Cell.State = waterState;
                 Cell.TargetState = waterState;
                 Cell.HarvestStress = 0.0f;
@@ -225,6 +231,8 @@ void AGridWorldManager::InitializeCells()
             }
         }
     }
+
+    SetActorTickEnabled(true);
 }
 
 void AGridWorldManager::RegenerateCellResource(FGridCell& Cell)
@@ -266,18 +274,15 @@ void AGridWorldManager::UpdateMemory(FMemoryState& Memory, const FRealState& New
 {
     const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 
-    // Distortion: применять через ApplyDistortionDelta для непрерывности
     {
         const float TargetDistortion = NewState.Meta.Distortion;
         const float Delta = (TargetDistortion - Memory.AccumulatedDistortion) * Rate;
         FAlchemyWorldStateApplier::ApplyDistortionDelta(Memory, Delta, CurrentTime);
     }
 
-    // Stability: остаётся с Lerp (не требует saturation)
     Memory.StabilityMemory += (NewState.Meta.Stability - Memory.StabilityMemory) * Rate;
     Memory.StabilityMemory = FMath::Clamp(Memory.StabilityMemory, 0.0f, 1.0f);
 
-    // Purity: остаётся с Lerp
     Memory.HistoryPurity += (NewState.Meta.Purity - Memory.HistoryPurity) * Rate;
     Memory.HistoryPurity = FMath::Clamp(Memory.HistoryPurity, 0.0f, 1.0f);
 }
@@ -291,24 +296,11 @@ void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
 
     const float DistortionIncrease = t * MaxHarvestImpactOnDistortion;
     const float MagnitudeDecrease = t * MaxHarvestImpactOnMagnitude;
-
     const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 
-    // Distortion: через ApplyDistortionDelta (непрерывность)
-    FAlchemyWorldStateApplier::ApplyDistortionDelta(
-        Cell.Memory,
-        DistortionIncrease,
-        CurrentTime
-    );
-
-    // TargetState подтягивается к Memory
+    FAlchemyWorldStateApplier::ApplyDistortionDelta(Cell.Memory, DistortionIncrease, CurrentTime);
     Cell.TargetState.Meta.Distortion = Cell.Memory.AccumulatedDistortion;
-
-    // Magnitude: остаётся прямым
-    Cell.TargetState.Magnitude = FMath::Clamp(
-        Cell.TargetState.Magnitude - MagnitudeDecrease,
-        0.0f, 1.0f
-    );
+    Cell.TargetState.Magnitude = FMath::Clamp(Cell.TargetState.Magnitude - MagnitudeDecrease, 0.0f, 1.0f);
 
     MarkDirty(Cell.X, Cell.Y);
 }

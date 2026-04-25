@@ -14,6 +14,7 @@
 class AStorageContainer;
 class UInventoryTransferWidget;
 class AAlchemyTableActor;
+class AGridWorldManager;
 
 UCLASS()
 class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
@@ -63,6 +64,10 @@ public:
     // Применить зелье на клетку
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();
+	
+	AGridWorldManager* FindWorldManager() const;
+	void GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
+	void UpdateDistortionFromCell(int32 X, int32 Y);
 
 protected:
     // Input mapping

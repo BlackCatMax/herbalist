@@ -70,13 +70,10 @@ void AHerbalistPlayerController::ApplyAlchemy() { OnApplyAlchemyKey(); }
 
 void AHerbalistPlayerController::CloseAnyWidget()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("CloseAnyWidget called"));
-
     if (InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
     {
         InventoryWidgetInstance->RemoveFromParent();
         InventoryWidgetInstance = nullptr;
-        UE_LOG(LogHerbalist, Log, TEXT("Inventory widget removed"));
     }
 
     if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
@@ -84,14 +81,12 @@ void AHerbalistPlayerController::CloseAnyWidget()
         CurrentAlchemyWidget->RemoveFromParent();
         CurrentAlchemyWidget = nullptr;
         CurrentAlchemyTable = nullptr;
-        UE_LOG(LogHerbalist, Log, TEXT("Alchemy widget removed"));
     }
 
     if (CurrentTransferWidget && CurrentTransferWidget->IsInViewport())
     {
         CurrentTransferWidget->RemoveFromParent();
         CurrentTransferWidget = nullptr;
-        UE_LOG(LogHerbalist, Log, TEXT("Transfer widget removed"));
     }
 
     bShowMouseCursor = false;
@@ -99,27 +94,17 @@ void AHerbalistPlayerController::CloseAnyWidget()
     SetInputMode(GameMode);
     SetIgnoreLookInput(false);
     bIsAnyWidgetOpen = false;
-
-    UE_LOG(LogHerbalist, Log, TEXT("CloseAnyWidget finished, bIsAnyWidgetOpen=%d"), bIsAnyWidgetOpen);
 }
 
 void AHerbalistPlayerController::Inventory()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("Inventory() called, bIsAnyWidgetOpen=%d, InventoryWidgetInstance=%p"),
-        bIsAnyWidgetOpen, InventoryWidgetInstance);
-
     if (bIsAnyWidgetOpen && InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
     {
-        UE_LOG(LogHerbalist, Log, TEXT("Inventory widget is open, closing"));
         CloseAnyWidget();
         return;
     }
 
-    if (bIsAnyWidgetOpen)
-    {
-        UE_LOG(LogHerbalist, Log, TEXT("Inventory: another widget is open, ignoring"));
-        return;
-    }
+    if (bIsAnyWidgetOpen) return;
 
     if (InventoryWidgetInstance)
     {
@@ -127,24 +112,10 @@ void AHerbalistPlayerController::Inventory()
         InventoryWidgetInstance = nullptr;
     }
 
-    if (!InventoryWidgetClass)
-    {
-        UE_LOG(LogHerbalist, Error, TEXT("InventoryWidgetClass is null"));
-        return;
-    }
+    if (!InventoryWidgetClass || !InventoryComponent) return;
 
     InventoryWidgetInstance = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
-    if (!InventoryWidgetInstance)
-    {
-        UE_LOG(LogHerbalist, Error, TEXT("Failed to create widget"));
-        return;
-    }
-
-    if (!InventoryComponent)
-    {
-        UE_LOG(LogHerbalist, Error, TEXT("InventoryComponent is null"));
-        return;
-    }
+    if (!InventoryWidgetInstance) return;
 
     InventoryWidgetInstance->BindInventory(InventoryComponent);
     InventoryWidgetInstance->AddToViewport();
@@ -155,8 +126,6 @@ void AHerbalistPlayerController::Inventory()
     SetInputMode(InputMode);
     SetIgnoreLookInput(true);
     bIsAnyWidgetOpen = true;
-
-    UE_LOG(LogHerbalist, Log, TEXT("Inventory widget created and opened, bIsAnyWidgetOpen=%d"), bIsAnyWidgetOpen);
 }
 
 bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
@@ -165,94 +134,89 @@ bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
     FRotator CameraRotation;
     GetPlayerViewPoint(CameraLocation, CameraRotation);
     FVector End = CameraLocation + CameraRotation.Vector() * 500.0f;
-    DrawDebugLine(GetWorld(), CameraLocation, End, FColor::Green, false, 0.5f, 0, 1.0f);
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(GetPawn());
     return GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
 }
 
+AGridWorldManager* AHerbalistPlayerController::FindWorldManager() const
+{
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) return *It;
+    return nullptr;
+}
+
+void AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const
+{
+    OutX = -1; OutY = -1;
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
+    int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
+    int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
+    if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
+    {
+        OutX = X;
+        OutY = Y;
+    }
+}
+
+void AHerbalistPlayerController::UpdateDistortionFromCell(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+    if (FGridCell* Cell = WorldManager->GetCell(X, Y))
+    {
+        CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+    }
+}
+
 void AHerbalistPlayerController::OnLeftClick()
 {
     FHitResult Hit;
-    if (GetHitResultFromCamera(Hit))
-    {
-        AGridWorldManager* WorldManager = nullptr;
-        for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-        if (WorldManager)
-        {
-            FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-            int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-            int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-            if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
-            {
-                // Обновляем глобальный Distortion из клетки
-                if (FGridCell* Cell = WorldManager->GetCell(X, Y))
-                {
-                    CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
-                }
+    if (!GetHitResultFromCamera(Hit)) return;
 
-                DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Yellow, false, 1.0f, 0, 2.0f);
-                HarvestTest(X, Y);
-            }
-        }
-    }
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X < 0) return;
+
+    UpdateDistortionFromCell(X, Y);
+    HarvestTest(X, Y);
 }
 
 void AHerbalistPlayerController::OnRightClick()
 {
     FHitResult Hit;
-    if (GetHitResultFromCamera(Hit))
-    {
-        AGridWorldManager* WorldManager = nullptr;
-        for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-        if (WorldManager)
-        {
-            FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-            int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-            int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-            if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
-            {
-                // Обновляем глобальный Distortion из клетки
-                if (FGridCell* Cell = WorldManager->GetCell(X, Y))
-                {
-                    CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
-                }
+    if (!GetHitResultFromCamera(Hit)) return;
 
-                DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Red, false, 1.0f, 0, 2.0f);
-                WorldManager->SelectCell(X, Y);
-                FString Info = WorldManager->GetSelectedCellInfo();
-                UE_LOG(LogHerbalist, Log, TEXT("Cell info: %s"), *Info);
-            }
-        }
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X < 0) return;
+
+    UpdateDistortionFromCell(X, Y);
+
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (WorldManager)
+    {
+        WorldManager->SelectCell(X, Y);
+        UE_LOG(LogHerbalist, Log, TEXT("Cell info: %s"), *WorldManager->GetSelectedCellInfo());
     }
 }
 
 void AHerbalistPlayerController::OnApplyAlchemyKey()
 {
     FHitResult Hit;
-    if (GetHitResultFromCamera(Hit))
-    {
-        AGridWorldManager* WorldManager = nullptr;
-        for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-        if (WorldManager)
-        {
-            FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-            int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-            int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-            if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
-            {
-                DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Blue, false, 1.0f, 0, 2.0f);
-                ApplyTest(X, Y);
-            }
-        }
-    }
+    if (!GetHitResultFromCamera(Hit)) return;
+
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X < 0) return;
+
+    ApplyTest(X, Y);
 }
 
 void AHerbalistPlayerController::Interact()
 {
-    UE_LOG(LogHerbalist, Log, TEXT("Interact() called (E key), bIsAnyWidgetOpen=%d"), bIsAnyWidgetOpen);
-
-    // Если открыт алхимический виджет – закрываем его
     if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
     {
         CloseAnyWidget();
@@ -260,123 +224,77 @@ void AHerbalistPlayerController::Interact()
     }
 
     FHitResult Hit;
-    if (GetHitResultFromCamera(Hit))
+    if (!GetHitResultFromCamera(Hit)) return;
+
+    AActor* HitActor = Hit.GetActor();
+
+    if (AStorageContainer* Storage = Cast<AStorageContainer>(HitActor))
     {
-        AActor* HitActor = Hit.GetActor();
-        UE_LOG(LogHerbalist, Log, TEXT("Hit actor: %s"), HitActor ? *HitActor->GetName() : TEXT("None"));
+        Storage->OnInteract(this);
+        return;
+    }
 
-        AStorageContainer* Storage = Cast<AStorageContainer>(HitActor);
-        if (Storage)
+    if (AAlchemyTableActor* AlchemyTable = Cast<AAlchemyTableActor>(HitActor))
+    {
+        AlchemyTable->OnInteract(this);
+        return;
+    }
+
+    if (!bIsAnyWidgetOpen)
+    {
+        int32 X, Y;
+        GetCellFromHit(Hit, X, Y);
+        if (X >= 0)
         {
-            Storage->OnInteract(this);
-            return;
-        }
-
-        AAlchemyTableActor* AlchemyTable = Cast<AAlchemyTableActor>(HitActor);
-        if (AlchemyTable)
-        {
-            AlchemyTable->OnInteract(this);
-            return;
-        }
-
-        if (!bIsAnyWidgetOpen)
-        {
-            AGridWorldManager* WorldManager = nullptr;
-            for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
-            if (WorldManager)
-            {
-                FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-                int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-                int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-                if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
-                {
-                    // Обновляем глобальный Distortion из клетки
-                    if (FGridCell* Cell = WorldManager->GetCell(X, Y))
-                    {
-                        CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
-                    }
-
-                    DrawDebugLine(GetWorld(), Hit.Location, Hit.Location + FVector(0, 0, 100), FColor::Cyan, false, 1.0f, 0, 2.0f);
-                    HarvestTest(X, Y);
-                }
-            }
+            UpdateDistortionFromCell(X, Y);
+            HarvestTest(X, Y);
         }
     }
 }
 
 void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y)
 {
-    AGridWorldManager* WorldManager = nullptr;
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
+    AGridWorldManager* WorldManager = FindWorldManager();
     if (WorldManager) WorldManager->HarvestTest(X, Y);
-    else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
 }
 
 void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
 {
-    AGridWorldManager* WorldManager = nullptr;
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
+    AGridWorldManager* WorldManager = FindWorldManager();
     if (WorldManager) WorldManager->ApplyTest(X, Y);
-    else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
 }
 
-void AHerbalistPlayerController::ShowInventory()
-{
-    Inventory();
-}
+void AHerbalistPlayerController::ShowInventory() { Inventory(); }
 
 void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
 {
-    AGridWorldManager* WorldManager = nullptr;
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) { WorldManager = *It; break; }
+    AGridWorldManager* WorldManager = FindWorldManager();
     if (WorldManager) WorldManager->MassHarvestTest(X, Y, Count);
-    else UE_LOG(LogHerbalist, Warning, TEXT("No GridWorldManager found"));
 }
 
-void AHerbalistPlayerController::OnUsePotion()
-{
-    UsePotion();
-}
+void AHerbalistPlayerController::OnUsePotion() { UsePotion(); }
 
 void AHerbalistPlayerController::UsePotion()
 {
     if (!InventoryComponent) return;
 
-    AGridWorldManager* WorldManager = nullptr;
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-    {
-        WorldManager = *It;
-        break;
-    }
+    AGridWorldManager* WorldManager = FindWorldManager();
     if (!WorldManager) return;
 
-    int32 PotionSlotIndex = -1;
-    FInventoryItem PotionItem;
     const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
-    for (int32 i = 0; i < Items.Num(); ++i)
-    {
-        if (Items[i].IngredientID == FName(TEXT("Potion")) && Items[i].Count > 0)
-        {
-            PotionSlotIndex = i;
-            PotionItem = Items[i];
-            break;
-        }
-    }
+    int32 PotionIndex = Items.IndexOfByPredicate([](const FInventoryItem& Item) {
+        return Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0;
+    });
 
-    if (PotionSlotIndex == -1)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("No potion in inventory"));
-        return;
-    }
+    if (PotionIndex == INDEX_NONE) return;
 
     FHitResult Hit;
     if (!GetHitResultFromCamera(Hit)) return;
 
-    FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-    int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-    int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-    if (!WorldManager->GetCell(X, Y)) return;
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X < 0 || !WorldManager->GetCell(X, Y)) return;
 
-    WorldManager->ApplyPotionToCell(X, Y, PotionItem.State);
-    InventoryComponent->RemoveItem(PotionSlotIndex, 1);
+    WorldManager->ApplyPotionToCell(X, Y, Items[PotionIndex].State);
+    InventoryComponent->RemoveItem(PotionIndex, 1);
 }

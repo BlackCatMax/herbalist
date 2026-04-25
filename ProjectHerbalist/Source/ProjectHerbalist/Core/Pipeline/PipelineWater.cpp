@@ -1,12 +1,8 @@
 // PipelineWater.cpp
 #include "HerbalistPipeline.h"
-#include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Harvest/HarvestService.h"
-#include "Core/Types/HerbalistIngredient.h"
 #include "Core/Data/IngredientRegistry.h"
-#include "Math/UnrealMathUtility.h"
 
 namespace HerbalistCore
 {
@@ -19,7 +15,6 @@ namespace HerbalistCore
         OutWater.Empty();
         for (const FInventoryItem& Item : Inputs)
         {
-            // Проверяем воду через реестр
             bool bIsWater = false;
             if (Item.IngredientID != FName(TEXT("Potion")))
             {
@@ -36,12 +31,6 @@ namespace HerbalistCore
     FRealState Pipeline::ProcessWaterOnly(const TArray<FRealState>& WaterStates)
     {
         FRealState AvgWater;
-        AvgWater.Magnitude = 0.0f;
-        AvgWater.Direction.Body = 0.0f; AvgWater.Direction.Mind = 0.0f;
-        AvgWater.Direction.Spirit = 0.0f; AvgWater.Direction.Nature = 0.0f;
-        AvgWater.Meta.Purity = 0.0f; AvgWater.Meta.Stability = 0.0f;
-        AvgWater.Meta.Corruption = 0.0f; AvgWater.Meta.Potency = 0.0f;
-
         for (const FRealState& W : WaterStates)
         {
             AvgWater.Magnitude += W.Magnitude;
@@ -56,17 +45,12 @@ namespace HerbalistCore
         }
         float Count = (float)WaterStates.Num();
         AvgWater.Magnitude /= Count;
-        AvgWater.Direction.Body /= Count;
-        AvgWater.Direction.Mind /= Count;
-        AvgWater.Direction.Spirit /= Count;
-        AvgWater.Direction.Nature /= Count;
-        AvgWater.Meta.Purity /= Count;
-        AvgWater.Meta.Stability /= Count;
-        AvgWater.Meta.Corruption /= Count;
-        AvgWater.Meta.Potency /= Count;
+        AvgWater.Direction.Body /= Count; AvgWater.Direction.Mind /= Count;
+        AvgWater.Direction.Spirit /= Count; AvgWater.Direction.Nature /= Count;
+        AvgWater.Meta.Purity /= Count; AvgWater.Meta.Stability /= Count;
+        AvgWater.Meta.Corruption /= Count; AvgWater.Meta.Potency /= Count;
         AvgWater.Direction.NormalizeSum();
 
-        // Кипячение
         AvgWater.Magnitude = FMath::Clamp(AvgWater.Magnitude * 0.8f, 0.0f, 1.0f);
         AvgWater.Meta.Purity = FMath::Clamp(AvgWater.Meta.Purity + 0.2f, 0.0f, 1.0f);
         AvgWater.Meta.Stability = FMath::Clamp(AvgWater.Meta.Stability + 0.1f, 0.0f, 1.0f);
@@ -88,8 +72,6 @@ namespace HerbalistCore
         {
             AvgWater.Direction.Body = AvgWater.Direction.Mind = AvgWater.Direction.Spirit = AvgWater.Direction.Nature = 0.25f;
         }
-
-        UE_LOG(LogHerbalist, Log, TEXT("Boiled water produced: Mag=%.2f Purity=%.2f Dist=%.2f"), AvgWater.Magnitude, AvgWater.Meta.Purity, AvgWater.Meta.Distortion);
         return AvgWater;
     }
 
@@ -104,8 +86,6 @@ namespace HerbalistCore
         Ash.Meta.Resonance = 0.0f;
         Ash.Meta.Corruption = 0.9f;
         Ash.Direction.Body = Ash.Direction.Mind = Ash.Direction.Spirit = Ash.Direction.Nature = 0.25f;
-        UE_LOG(LogHerbalist, Warning, TEXT("No water in ingredients! Produced ash."));
         return Ash;
     }
-
-} // namespace HerbalistCore
+}
