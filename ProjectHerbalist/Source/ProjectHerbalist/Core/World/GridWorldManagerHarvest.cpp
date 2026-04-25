@@ -1,5 +1,5 @@
 // GridWorldManagerHarvest.cpp
-#include "GridWorldManager.h"
+#include "Core/World/GridWorldManager.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Player/HerbalistPlayerController.h"

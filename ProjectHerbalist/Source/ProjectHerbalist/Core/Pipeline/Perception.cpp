@@ -1,6 +1,6 @@
 // Perception.cpp
 #include "Perception.h"
-
+#include "ProjectHerbalist.h"
 float Perception::PerceiveValue(float RealValue, float GlobalDistortion, FRandomStream& Random)
 {
     const float M = 2.0f;

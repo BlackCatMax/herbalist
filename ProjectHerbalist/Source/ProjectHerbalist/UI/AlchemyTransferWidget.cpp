@@ -177,7 +177,14 @@ void UAlchemyTransferWidget::OnMixClicked()
 
     // 3. Готовим Rng
     FRngState Rng;
-    Rng.Seed = FMath::Rand();
+    int32 Seed = 12345; // fallback
+	if (HPC && HPC->CurrentAlchemyTable)
+	{
+		FIntPoint Coords = HPC->CurrentAlchemyTable->GetGridCoords();
+		// Можно также добавить Distortion из мира, если доступно
+		Seed = (Coords.X * 7919) ^ (Coords.Y * 7901);
+	}
+	Rng.Seed = Seed;
 
     // 4. Запуск физики (только для Valid)
     FRealState ResultState;

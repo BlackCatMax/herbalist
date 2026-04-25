@@ -1,7 +1,7 @@
 // BiomeGraphSubsystem.cpp
 #include "BiomeGraphSubsystem.h"
 #include "BiomeGraphAsset.h"
-#include "GridWorldManager.h"
+#include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "ProjectHerbalist.h"

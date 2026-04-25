@@ -1,5 +1,5 @@
 // GridWorldManagerCore.cpp
-#include "GridWorldManager.h"
+#include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Data/WaterTypeRegistry.h"
 #include "Core/Harvest/HarvestService.h"

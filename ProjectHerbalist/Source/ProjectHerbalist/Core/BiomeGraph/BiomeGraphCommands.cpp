@@ -1,7 +1,7 @@
 // BiomeGraphCommands.cpp
 #include "BiomeGraphCommands.h"
 #include "BiomeGraphSubsystem.h"
-#include "GridWorldManager.h"
+#include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"

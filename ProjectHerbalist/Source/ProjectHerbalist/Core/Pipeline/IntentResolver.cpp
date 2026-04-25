@@ -1,18 +1,24 @@
 // IntentResolver.cpp
 #include "IntentResolver.h"
-#include "Core/HerbalistSettings.h"
+#include "AlchemyTypes.h"
 
 namespace HerbalistCore
 {
-    float ComputeIntentCoherence(const TArray<FAlchemyAtom>& OrderedNonWaterAtoms,
-                                 const TArray<FAlchemyAtom>& WaterAtoms,
-                                 float GlobalDistortion)
+    float ComputeIntentCoherence(
+        const TArray<FAlchemyAtom>& OrderedNonWaterAtoms,
+        const TArray<FAlchemyAtom>& WaterAtoms,
+        float GlobalDistortion,
+        float FoldWeightDecay,
+        float CatalystBonus,
+        float UnknownPenalty,
+        float EssenceBonus,
+        float WaterBonusFactor)
     {
         const int32 N = OrderedNonWaterAtoms.Num();
         if (N == 0) return 0.5f;
 
-        const UHerbalistSettings* Settings = GetHerbalistSettings();
-        const float WeightDecay = Settings ? Settings->FoldWeightDecay : 0.8f;
+        // Используем переданный FoldWeightDecay вместо вызова GetHerbalistSettings()
+        const float WeightDecay = FoldWeightDecay;
 
         TArray<float> Weights;
         float TotalWeight = 0.0f;
@@ -69,9 +75,9 @@ namespace HerbalistCore
             default: break;
             }
         }
-        if (CatalystCount > 0) ClassModifier += CatalystCount * 0.1f;
-        if (UnknownCount > 0)  ClassModifier -= UnknownCount * 0.15f;
-        if (EssenceCount > 0)  ClassModifier += EssenceCount * 0.05f;
+        if (CatalystCount > 0) ClassModifier += CatalystCount * CatalystBonus;
+        if (UnknownCount > 0)  ClassModifier -= UnknownCount * UnknownPenalty;
+        if (EssenceCount > 0)  ClassModifier += EssenceCount * EssenceBonus;
         ClassModifier = FMath::Clamp(ClassModifier, 0.5f, 1.5f);
 
         float WaterBonus = 0.0f;
@@ -81,7 +87,7 @@ namespace HerbalistCore
             for (const FAlchemyAtom& Atom : WaterAtoms)
                 AvgWaterPurity += Atom.State.Meta.Purity;
             AvgWaterPurity /= WaterAtoms.Num();
-            WaterBonus = AvgWaterPurity * 0.2f;
+            WaterBonus = AvgWaterPurity * WaterBonusFactor;
         }
 
         float Coherence = FMath::Lerp(AxisAgreement, IngredientQuality, 0.5f) * ClassModifier + WaterBonus;

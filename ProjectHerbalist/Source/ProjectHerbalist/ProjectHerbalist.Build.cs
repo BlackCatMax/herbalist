@@ -20,23 +20,16 @@ public class ProjectHerbalist : ModuleRules
             "DeveloperSettings"
         });
 
-        PrivateDependencyModuleNames.AddRange(new string[] {            "AssetRegistry"});
+        PrivateDependencyModuleNames.AddRange(new string[]
+        {
+            "AssetRegistry"
+        });
 
+        // Оставляем только корневую папку модуля.
+        // Все инклюды в коде должны быть с префиксами, например: #include "Core/Data/IngredientRegistry.h"
         PublicIncludePaths.AddRange(new string[]
         {
-            "ProjectHerbalist",
-            "ProjectHerbalist/Core",
-            "ProjectHerbalist/Core/Types",
-            "ProjectHerbalist/Core/Data",
-            "ProjectHerbalist/Core/Pipeline",
-            "ProjectHerbalist/Core/BiomeGraph",
-            "ProjectHerbalist/Core/Subsystems",
-            "ProjectHerbalist/Core/World",
-            "ProjectHerbalist/Core/Harvest",
-            "ProjectHerbalist/Core/Inventory",
-            "ProjectHerbalist/Core/Storage",
-            "ProjectHerbalist/Player",
-            "ProjectHerbalist/UI"
+            "ProjectHerbalist"
         });
     }
 }

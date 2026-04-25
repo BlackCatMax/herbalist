@@ -1,5 +1,5 @@
 // GridWorldManagerAlchemy.cpp
-#include "GridWorldManager.h"
+#include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/Pipeline/AlchemySemantics.h"
@@ -223,7 +223,10 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FIntent Intent;
     Intent.Coherence = 0.5f;
     FRngState Rng;
-    Rng.Seed = FMath::Rand();
+    // Детерминированный seed на основе координат клетки и текущего Distortion (или памяти)
+	// X, Y – координаты клетки, Cell – указатель на FGridCell
+	int32 Seed = (X * 7919) ^ (Y * 7901) ^ (int32)(Cell->Memory.AccumulatedDistortion * 10000);
+	Rng.Seed = Seed;
 
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
 }
