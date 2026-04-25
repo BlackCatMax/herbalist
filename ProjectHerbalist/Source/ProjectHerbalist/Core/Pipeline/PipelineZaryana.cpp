@@ -41,7 +41,7 @@ namespace HerbalistCore
         // Нормализация на сферу для сохранения единичной длины
         Dir.NormalizeL2(Rng);
 
-        UE_LOG(LogHerbalist, Log, TEXT("[ZARYANA] Strength=%.3f, Scale=%.3f | Dir=(%.3f, %.3f, %.3f, %.3f)"),
+        UE_LOG(LogHerbalist, Verbose, TEXT("[ZARYANA] Strength=%.3f, Scale=%.3f | Dir=(%.3f, %.3f, %.3f, %.3f)"),
             ZaryanaStrength, Scale, Dir.Body, Dir.Mind, Dir.Spirit, Dir.Nature);
     }
 

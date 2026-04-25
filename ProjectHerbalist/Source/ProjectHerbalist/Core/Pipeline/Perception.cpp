@@ -30,6 +30,7 @@ EIngredientClass Perception::PerceiveClass(EIngredientClass RealClass, float Glo
         };
         All.Remove(RealClass);
         return All[Random.RandRange(0, All.Num() - 1)];
+        UE_LOG(LogHerbalist, Verbose, TEXT("Perception: class changed from %d to %d (Distortion=%.2f)"), (int32)RealClass, (int32)All[Random.RandRange(0, All.Num() - 1)], GlobalDistortion);
     }
     return RealClass;
 }

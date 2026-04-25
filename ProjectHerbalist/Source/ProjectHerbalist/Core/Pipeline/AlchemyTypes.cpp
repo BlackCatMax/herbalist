@@ -1,5 +1,6 @@
 #include "AlchemyTypes.h"
 #include "Core/Data/IngredientRegistry.h"
+#include "ProjectHerbalist.h"
 
 FAlchemyAtom::FAlchemyAtom()
     : bIsWater(false)
@@ -26,7 +27,7 @@ FAlchemyAtom::FAlchemyAtom(FName InSourceID, bool bInIsWater, const FRealState& 
 {
     if (Class == EIngredientClass::Unknown)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("[Herbalist] FAlchemyAtom created with Unknown class: '%s' (UID: %s)"),
+        UE_LOG(LogHerbalist, Verbose, TEXT("[Herbalist] FAlchemyAtom created with Unknown class: '%s' (UID: %s)"),
             *InSourceID.ToString(), *AtomUID.ToString());
     }
 }

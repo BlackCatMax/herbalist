@@ -51,7 +51,7 @@ namespace HerbalistCore
             Dir.Nature *= InvScale;
         }
 
-        UE_LOG(LogHerbalist, Log, TEXT("[MOROK] s=%.3f mix=%.3f k=%.3f | Dir=(%.3f, %.3f, %.3f, %.3f)"),
+        UE_LOG(LogHerbalist, Verbose, TEXT("[MOROK] s=%.3f mix=%.3f k=%.3f | Dir=(%.3f, %.3f, %.3f, %.3f)"),
             s, mix, k, Dir.Body, Dir.Mind, Dir.Spirit, Dir.Nature);
     }
 

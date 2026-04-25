@@ -1,5 +1,6 @@
 #include "WaterTypeRegistry.h"
 #include "Engine/DataTable.h"
+#include "ProjectHerbalist.h"
 
 TMap<FName, FWaterTypeRow> FWaterTypeRegistry::WaterTypeMap;
 bool FWaterTypeRegistry::bIsInitialized = false;
@@ -8,20 +9,20 @@ void FWaterTypeRegistry::Initialize(UDataTable* WaterTypeTable)
 {
     if (bIsInitialized)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Herbalist] FWaterTypeRegistry already initialized"));
+        UE_LOG(LogHerbalist, Warning, TEXT("[Herbalist] FWaterTypeRegistry already initialized"));
         return;
     }
 
     if (!WaterTypeTable)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FWaterTypeRegistry: WaterTypeTable is null"));
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FWaterTypeRegistry: WaterTypeTable is null"));
         bIsInitialized = true;
         return;
     }
 
     if (WaterTypeTable->GetRowStruct() != FWaterTypeRow::StaticStruct())
     {
-        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FWaterTypeRegistry: Row structure mismatch"));
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FWaterTypeRegistry: Row structure mismatch"));
         bIsInitialized = true;
         return;
     }
@@ -38,14 +39,14 @@ void FWaterTypeRegistry::Initialize(UDataTable* WaterTypeTable)
     }
 
     bIsInitialized = true;
-    UE_LOG(LogTemp, Log, TEXT("[Herbalist] FWaterTypeRegistry initialized with %d water types"), WaterTypeMap.Num());
+    UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] FWaterTypeRegistry initialized with %d water types"), WaterTypeMap.Num());
 }
 
 const FWaterTypeRow* FWaterTypeRegistry::GetWaterType(FName WaterTypeID)
 {
     if (!bIsInitialized)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FWaterTypeRegistry::GetWaterType called before Initialize!"));
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FWaterTypeRegistry::GetWaterType called before Initialize!"));
         return nullptr;
     }
 

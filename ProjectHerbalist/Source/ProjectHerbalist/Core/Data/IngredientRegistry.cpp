@@ -1,5 +1,6 @@
 #include "IngredientRegistry.h"
 #include "Engine/DataTable.h"
+#include "ProjectHerbalist.h"
 
 TMap<FName, EIngredientClass> FIngredientRegistry::IngredientMap;
 bool FIngredientRegistry::bIsInitialized = false;
@@ -8,20 +9,20 @@ void FIngredientRegistry::Initialize(UDataTable* IngredientTable)
 {
     if (bIsInitialized)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Herbalist] FIngredientRegistry already initialized, skipping"));
+        UE_LOG(LogHerbalist, Warning, TEXT("[Herbalist] FIngredientRegistry already initialized, skipping"));
         return;
     }
 
     if (!IngredientTable)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FIngredientRegistry: IngredientTable is null. Registry will be empty. All Classify calls will return Unknown."));
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FIngredientRegistry: IngredientTable is null. Registry will be empty. All Classify calls will return Unknown."));
         bIsInitialized = true;
         return;
     }
 
     if (IngredientTable->GetRowStruct() != FIngredientTableRow::StaticStruct())
     {
-        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FIngredientRegistry: DataTable row structure mismatch. Expected FIngredientTableRow, got %s. Registry will be empty."),
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FIngredientRegistry: DataTable row structure mismatch. Expected FIngredientTableRow, got %s. Registry will be empty."),
             *IngredientTable->GetRowStruct()->GetName());
         bIsInitialized = true;
         return;
@@ -38,19 +39,19 @@ void FIngredientRegistry::Initialize(UDataTable* IngredientTable)
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("[Herbalist] FIngredientRegistry: Failed to read row '%s', skipping"), *RowName.ToString());
+            UE_LOG(LogHerbalist, Warning, TEXT("[Herbalist] FIngredientRegistry: Failed to read row '%s', skipping"), *RowName.ToString());
         }
     }
 
     bIsInitialized = true;
-    UE_LOG(LogTemp, Log, TEXT("[Herbalist] FIngredientRegistry initialized with %d ingredients"), IngredientMap.Num());
+    UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] FIngredientRegistry initialized with %d ingredients"), IngredientMap.Num());
 }
 
 EIngredientClass FIngredientRegistry::Classify(FName IngredientName)
 {
     if (!bIsInitialized)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Herbalist] FIngredientRegistry::Classify called before Initialize! Returning Unknown."));
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FIngredientRegistry::Classify called before Initialize! Returning Unknown."));
         return EIngredientClass::Unknown;
     }
 
@@ -77,5 +78,5 @@ void FIngredientRegistry::Reset()
 {
     IngredientMap.Empty();
     bIsInitialized = false;
-    UE_LOG(LogTemp, Log, TEXT("[Herbalist] FIngredientRegistry reset"));
+    UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] FIngredientRegistry reset"));
 }
