@@ -1,82 +1,78 @@
+// IngredientRegistry.cpp
 #include "IngredientRegistry.h"
 #include "Engine/DataTable.h"
 #include "ProjectHerbalist.h"
 
-TMap<FName, EIngredientClass> FIngredientRegistry::IngredientMap;
+TMap<FName, FIngredientTableRow> FIngredientRegistry::Rows;
 bool FIngredientRegistry::bIsInitialized = false;
 
 void FIngredientRegistry::Initialize(UDataTable* IngredientTable)
 {
-    if (bIsInitialized)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("[Herbalist] FIngredientRegistry already initialized, skipping"));
-        return;
-    }
-
-    if (!IngredientTable)
-    {
-        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FIngredientRegistry: IngredientTable is null. Registry will be empty. All Classify calls will return Unknown."));
-        bIsInitialized = true;
-        return;
-    }
-
-    if (IngredientTable->GetRowStruct() != FIngredientTableRow::StaticStruct())
-    {
-        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FIngredientRegistry: DataTable row structure mismatch. Expected FIngredientTableRow, got %s. Registry will be empty."),
-            *IngredientTable->GetRowStruct()->GetName());
-        bIsInitialized = true;
-        return;
-    }
-
-    const FString ContextStr(TEXT("FIngredientRegistry::Initialize"));
+    if (bIsInitialized) return;
+    if (!IngredientTable) { UE_LOG(LogHerbalist, Error, TEXT("IngredientTable is null")); bIsInitialized = true; return; }
+    const FString Context(TEXT("IngredientRegistry"));
     TArray<FName> RowNames = IngredientTable->GetRowNames();
-
-    for (const FName& RowName : RowNames)
-    {
-        if (const FIngredientTableRow* Row = IngredientTable->FindRow<FIngredientTableRow>(RowName, ContextStr))
-        {
-            IngredientMap.Add(RowName, Row->Class);
-        }
-        else
-        {
-            UE_LOG(LogHerbalist, Warning, TEXT("[Herbalist] FIngredientRegistry: Failed to read row '%s', skipping"), *RowName.ToString());
-        }
-    }
-
+    for (FName RowName : RowNames)
+        if (auto* Row = IngredientTable->FindRow<FIngredientTableRow>(RowName, Context))
+            Rows.Add(RowName, *Row);
     bIsInitialized = true;
-    UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] FIngredientRegistry initialized with %d ingredients"), IngredientMap.Num());
+    UE_LOG(LogHerbalist, Log, TEXT("IngredientRegistry loaded %d ingredients"), Rows.Num());
 }
 
-EIngredientClass FIngredientRegistry::Classify(FName IngredientName)
+const FIngredientTableRow* FIngredientRegistry::GetRow(FName IngredientID)
 {
-    if (!bIsInitialized)
+    if (!bIsInitialized) return nullptr;
+    return Rows.Find(IngredientID);
+}
+
+EIngredientClass FIngredientRegistry::Classify(FName IngredientID)
+{
+    auto* Row = GetRow(IngredientID);
+    return Row ? Row->Class : EIngredientClass::Unknown;
+}
+
+bool FIngredientRegistry::IsWater(FName IngredientID)
+{
+    auto* Row = GetRow(IngredientID);
+    return Row ? Row->bIsWater : false;
+}
+
+TArray<FName> FIngredientRegistry::GetResourcesForBiome(EBiomeType Biome)
+{
+    TArray<FName> Res;
+    if (!bIsInitialized) return Res;
+    for (auto& Pair : Rows)
+        if (Pair.Value.AllowedBiomes.Contains(Biome))
+            Res.Add(Pair.Key);
+    return Res;
+}
+
+FName FIngredientRegistry::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng)
+{
+    auto Candidates = GetResourcesForBiome(Biome);
+    if (Candidates.Num() == 0) return NAME_None;
+    if (Candidates.Num() == 1) return Candidates[0];
+    int32 TotalWeight = 0;
+    for (auto& ID : Candidates)
+        if (auto* Row = GetRow(ID)) TotalWeight += Row->RarityWeight;
+    if (TotalWeight == 0) return Candidates[0];
+    int32 Roll = Rng.RandRange(1, TotalWeight);
+    int32 Accum = 0;
+    for (auto& ID : Candidates)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] FIngredientRegistry::Classify called before Initialize! Returning Unknown."));
-        return EIngredientClass::Unknown;
+        if (auto* Row = GetRow(ID)) Accum += Row->RarityWeight;
+        if (Roll <= Accum) return ID;
     }
-
-    const EIngredientClass* Found = IngredientMap.Find(IngredientName);
-    return Found ? *Found : EIngredientClass::Unknown;
-}
-
-bool FIngredientRegistry::IsWater(FName IngredientName)
-{
-    return Classify(IngredientName) == EIngredientClass::Water;
-}
-
-bool FIngredientRegistry::IsKnown(FName IngredientName)
-{
-    return bIsInitialized && IngredientMap.Contains(IngredientName);
-}
-
-int32 FIngredientRegistry::GetIngredientCount()
-{
-    return IngredientMap.Num();
+    return Candidates[0];
 }
 
 void FIngredientRegistry::Reset()
 {
-    IngredientMap.Empty();
+    Rows.Empty();
     bIsInitialized = false;
-    UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] FIngredientRegistry reset"));
+}
+
+bool FIngredientRegistry::IsKnown(FName IngredientID)
+{
+    return Rows.Contains(IngredientID);
 }

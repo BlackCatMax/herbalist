@@ -15,6 +15,8 @@
 #include "Core/Types/HerbalistIngredient.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
+#include "Core/Data/IngredientRegistry.h"
+#include "Core/Data/IngredientTableRow.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
@@ -61,18 +63,13 @@ void UInventorySlotWidget::UpdateDisplay()
     }
 
     FString DisplayName = CachedItem.IngredientID.ToString();
-
-    // Загружаем ассет ингредиента синхронно
     if (CachedItem.IngredientID != FName(TEXT("Potion")) &&
         CachedItem.IngredientID != FName(TEXT("Water")) &&
         !CachedItem.IngredientID.IsNone())
     {
-        FPrimaryAssetId AssetId = FPrimaryAssetId(UHerbalistIngredient::StaticClass()->GetFName(), CachedItem.IngredientID);
-        FSoftObjectPath AssetPath = UAssetManager::Get().GetPrimaryAssetPath(AssetId);
-        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(AssetPath.TryLoad());
-        if (Ingredient)
+        if (const FIngredientTableRow* Row = FIngredientRegistry::GetRow(CachedItem.IngredientID))
         {
-            DisplayName = Ingredient->DisplayName.ToString();
+            DisplayName = Row->DisplayName.ToString();
         }
     }
     else if (CachedItem.IngredientID == FName(TEXT("Potion")))
@@ -85,12 +82,10 @@ void UInventorySlotWidget::UpdateDisplay()
     }
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));
-
     if (CountText)
     {
         CountText->SetText(CachedItem.Count > 1 ? FText::AsNumber(CachedItem.Count) : FText::GetEmpty());
     }
-
     if (ItemIcon) ItemIcon->SetVisibility(ESlateVisibility::Visible);
 }
 

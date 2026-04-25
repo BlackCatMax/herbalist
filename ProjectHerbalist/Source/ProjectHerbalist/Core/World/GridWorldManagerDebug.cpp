@@ -4,6 +4,7 @@
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Player/HerbalistPlayerController.h"
+#include "Core/Data/IngredientRegistry.h"
 
 void AGridWorldManager::SelectCell(int32 X, int32 Y)
 {
@@ -48,10 +49,9 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
             }
             else
             {
-                // Загружаем ассет, чтобы получить отображаемое имя
-                if (UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(Cell->AvailableIngredientID))
+                if (const FIngredientTableRow* Row = FIngredientRegistry::GetRow(Cell->AvailableIngredientID))
                 {
-                    ResourceName = Ingredient->DisplayName.ToString();
+                    ResourceName = Row->DisplayName.ToString();
                 }
                 else
                 {
@@ -94,9 +94,9 @@ void AGridWorldManager::ShowInventory()
         {
             Name = TEXT("Вода");
         }
-        else if (UHerbalistIngredient* Ingredient = UHarvestService::LoadIngredientAssetStatic(Item.IngredientID))
+        else if (const FIngredientTableRow* Row = FIngredientRegistry::GetRow(Item.IngredientID))
         {
-            Name = Ingredient->DisplayName.ToString();
+            Name = Row->DisplayName.ToString();
         }
         else
         {

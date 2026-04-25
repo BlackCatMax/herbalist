@@ -90,5 +90,4 @@ static FAutoConsoleCommandWithWorld CmdToggleCellInfluence(
 
 void BiomeGraphCommands::Register()
 {
-    // Команды регистрируются статически при загрузке модуля.
 }

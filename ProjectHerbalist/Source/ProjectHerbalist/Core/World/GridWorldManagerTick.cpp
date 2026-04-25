@@ -28,7 +28,6 @@ void AGridWorldManager::Tick(float DeltaTime)
             Cell->HarvestStress = FMath::Max(0.0f, Cell->HarvestStress - HarvestStressDecayRate * DeltaTime);
             if (!FMath::IsNearlyEqual(OldStress, Cell->HarvestStress, 1e-4f))
             {
-                RecalculateDistortionFromHarvestStress(*Cell);
                 MarkDirty(X, Y);
             }
             if (Cell->HarvestStress <= 0.0f)
@@ -70,7 +69,6 @@ void AGridWorldManager::Tick(float DeltaTime)
             FGridCell* Cell = GetCell(X, Y);
             if (!Cell) continue;
 
-            // Проверка, насколько текущее состояние близко к целевому
             bool bStateNear =
                 FMath::IsNearlyEqual(Cell->State.Magnitude, Cell->TargetState.Magnitude, 0.001f) &&
                 FMath::IsNearlyEqual(Cell->State.Meta.Distortion, Cell->TargetState.Meta.Distortion, 0.001f) &&
@@ -105,6 +103,15 @@ void AGridWorldManager::Tick(float DeltaTime)
         bInterpolationActive = bShouldTick;
         SetActorTickEnabled(bShouldTick);
     }
+
+    // ОТРИСОВКА ОТЛАДКИ (если включена)
+#if WITH_EDITOR
+    if (bEnableDebugDraw)
+    {
+        DrawGridDebug();
+        DrawBiomeGraphDebug();
+    }
+#endif
 }
 
 void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
@@ -125,25 +132,4 @@ void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
     Cur.Meta.Corruption = FMath::FInterpTo(Cur.Meta.Corruption, Target.Meta.Corruption, DeltaTime, StateInterpolationSpeed);
 
     Cur.Direction.NormalizeSum();
-}
-
-void AGridWorldManager::RedrawDebugBoxes()
-{
-    if (!bEnableDebugDraw) return;
-    FlushPersistentDebugLines(GetWorld());
-    for (const FGridCell& Cell : Cells)
-    {
-        FVector Center = FVector(Cell.X * CellSize, Cell.Y * CellSize, 0.0f);
-        FVector Extent = FVector(CellSize / 2.0f, CellSize / 2.0f, CellHeight / 2.0f);
-        FColor Color;
-        if (Cell.bIsWater)
-            Color = FColor::Blue;
-        else
-        {
-            float Dist = Cell.Memory.AccumulatedDistortion;
-            FLinearColor LinearColor = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Dist);
-            Color = LinearColor.ToFColor(false);
-        }
-        DrawDebugBox(GetWorld(), Center, Extent, Color, true, -1.0f, 0, BorderThickness);
-    }
 }

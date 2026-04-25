@@ -15,6 +15,7 @@ class AStorageContainer;
 class UInventoryTransferWidget;
 class AAlchemyTableActor;
 class AGridWorldManager;
+class AHerbalistResourceActor; // ДОБАВИТЬ ЭТУ СТРОКУ
 
 UCLASS()
 class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
@@ -49,6 +50,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Alchemy")
 	float CurrentGlobalDistortion = 0.3f;
 
+    // Максимальная дистанция сбора ресурсов
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Herbalist|Harvesting")
+    float MaxHarvestDistance = 200.0f;
+
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
 
@@ -64,10 +69,14 @@ public:
     // Применить зелье на клетку
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();
+    
+    // Проверка, может ли игрок собрать ресурс на дистанции
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Harvesting")
+    bool CanHarvestActor(AActor* TargetActor) const;
 	
-	AGridWorldManager* FindWorldManager() const;
-	void GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
-	void UpdateDistortionFromCell(int32 X, int32 Y);
+    AGridWorldManager* FindWorldManager() const;
+    void GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
+    void UpdateDistortionFromCell(int32 X, int32 Y);
 
 protected:
     // Input mapping
@@ -113,4 +122,7 @@ protected:
 private:
     UPROPERTY()
     UInventoryWidget* InventoryWidgetInstance = nullptr;
+    
+    // Вспомогательный метод для сбора ресурса с проверкой дистанции
+    bool TryHarvestResource(AHerbalistResourceActor* Resource);
 };

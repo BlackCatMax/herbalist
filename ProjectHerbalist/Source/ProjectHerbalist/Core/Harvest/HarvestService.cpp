@@ -1,6 +1,7 @@
 // HarvestService.cpp
 #include "HarvestService.h"
 #include "ProjectHerbalist.h"
+#include "Core/Data/IngredientRegistry.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/AssetManager.h"
@@ -8,65 +9,36 @@
 static constexpr float k_biome = 0.6f;
 static constexpr float k_condition = 0.4f;
 
-UHerbalistIngredient* UHarvestService::LoadIngredientAssetStatic(FName IngredientID)
-{
-    if (IngredientID.IsNone()) return nullptr;
-
-    // Прямой путь (если ассеты лежат в корне папки Ingredients)
-    FString DirectPath = FString::Printf(TEXT("/Game/Data/Ingredients/%s.%s"), *IngredientID.ToString(), *IngredientID.ToString());
-    if (UHerbalistIngredient* DirectAsset = LoadObject<UHerbalistIngredient>(nullptr, *DirectPath))
-    {
-        return DirectAsset;
-    }
-
-    // Поиск через AssetRegistry по всем подпапкам
-    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-    IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-
-    FARFilter Filter;
-    Filter.ClassPaths.Add(UHerbalistIngredient::StaticClass()->GetClassPathName());
-    Filter.bRecursivePaths = true;
-    Filter.PackagePaths.Add(FName("/Game/Data/Ingredients"));
-    Filter.bRecursivePaths = true;
-
-    TArray<FAssetData> AssetDataList;
-    AssetRegistry.GetAssets(Filter, AssetDataList);
-
-    for (const FAssetData& AssetData : AssetDataList)
-    {
-        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(AssetData.GetAsset());
-        if (Ingredient && Ingredient->IngredientID == IngredientID)
-        {
-            return Ingredient;
-        }
-    }
-
-    UE_LOG(LogHerbalist, Warning, TEXT("LoadIngredientAssetStatic: Failed to find ingredient with ID '%s'"), *IngredientID.ToString());
-    return nullptr;
-}
-
 UHerbalistIngredient* UHarvestService::LoadIngredientAsset(FName IngredientID) const
 {
-    return LoadIngredientAssetStatic(IngredientID);
+    // Оставлено для совместимости, но лучше не использовать
+    if (IngredientID.IsNone()) return nullptr;
+    FString DirectPath = FString::Printf(TEXT("/Game/Data/Ingredients/%s.%s"), *IngredientID.ToString(), *IngredientID.ToString());
+    return LoadObject<UHerbalistIngredient>(nullptr, *DirectPath);
 }
 
 FRealState UHarvestService::GetBaseResourceParams(FName IngredientID) const
 {
-    UHerbalistIngredient* Ingredient = LoadIngredientAsset(IngredientID);
-    if (!Ingredient)
+    const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
+    if (!Row)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: Ingredient asset not found for ID '%s'"), *IngredientID.ToString());
+        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: Ingredient not found in registry '%s'"), *IngredientID.ToString());
         return FRealState();
     }
-    
-    FRealState State = Ingredient->BaseState;
+    FRealState State = Row->BaseState;
     State.Direction.NormalizeSum();
     return State;
 }
 
 FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions) const
 {
-    FRealState Base = GetBaseResourceParams(IngredientID);
+    const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
+    if (!Row)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: Ingredient not found in registry '%s'"), *IngredientID.ToString());
+        return FRealState();
+    }
+    FRealState Base = Row->BaseState;
     if (Base.Magnitude < 0.01f && Base.Meta.Distortion < 0.01f)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("Harvest: invalid base params for '%s', aborting"), *IngredientID.ToString());
@@ -148,4 +120,10 @@ FRealState UHarvestService::HarvestWater(const FRealState& WaterState, const FCo
     Water.Meta.Resonance = FMath::Clamp(Water.Meta.Resonance, 0.0f, 1.0f);
     Water.Meta.Corruption = FMath::Clamp(Water.Meta.Corruption, 0.0f, 1.0f);
     return Water;
+}
+
+UHerbalistIngredient* UHarvestService::LoadIngredientAssetStatic(FName IngredientID)
+{
+    // Временная заглушка – ассеты не используются, все данные берутся из реестра
+    return nullptr;
 }

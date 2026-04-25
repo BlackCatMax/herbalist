@@ -11,6 +11,7 @@
 #include "GridWorldManager.generated.h"
 
 class UHarvestService;
+class AHerbalistResourceActor;
 
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
@@ -61,6 +62,16 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery")
     bool bEnableRecovery = true;
 
+    // --- Визуализация ---
+#if WITH_EDITOR
+    bool bShowBiomeGraph = false;
+    bool bShowCellDistortion = false;
+    bool bShowCellInfluence = false;
+    void DrawGridDebug();
+#endif
+    void DrawBiomeGraphDebug();
+
+    // --- Основные методы ---
     FGridCell* GetCell(int32 X, int32 Y);
     const FGridCell* GetCellConst(int32 X, int32 Y) const;
     void SetTargetState(int32 X, int32 Y, const FRealState& NewState);
@@ -71,7 +82,6 @@ public:
 
     FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
     FRealState HarvestFromCellSimple(int32 X, int32 Y);
-
     void ApplyPotionToCell(int32 X, int32 Y, const FRealState& PotionState);
 
     void SelectCell(int32 X, int32 Y);
@@ -88,17 +98,17 @@ public:
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowInventory();
 
-#if WITH_EDITOR
-    bool bShowBiomeGraph = false;
-    bool bShowCellDistortion = false;
-    bool bShowCellInfluence = false;
-#endif
-
-    void DrawBiomeGraphDebug();
-
+    // --- Контракты для графа биомов ---
     TArray<FGridBiomeSample> GetBiomeSamples() const;
     TMap<FName, FVector> GetBiomeCenters() const;
     void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale);
+
+    // --- Акторы ресурсов (заглушки) ---
+    UHarvestService* GetHarvestService() const { return HarvestService; }
+    void OnResourceCollected(AHerbalistResourceActor* Actor);
+    void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
+    void SpawnResourcesForCell(FGridCell& Cell);
+    TArray<FName> GetResourcesForBiome(EBiomeType Biome) const;
 
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)
@@ -136,7 +146,6 @@ protected:
     void InterpolateCell(FGridCell& Cell, float DeltaTime);
     void UpdateMemory(FMemoryState& Memory, const FRealState& NewState, float Rate);
     void RecalculateDistortionFromHarvestStress(FGridCell& Cell);
-    void RedrawDebugBoxes();
 
     void MarkDirty(int32 X, int32 Y) { DirtyCells.Add(Y * GridSizeX + X); }
     void MarkRegrowing(int32 X, int32 Y) { RegrowingCells.Add(Y * GridSizeX + X); }
@@ -147,5 +156,4 @@ protected:
 
 private:
     int32 SelectedX = -1, SelectedY = -1;
-    FTimerHandle DebugDrawTimer;
 };

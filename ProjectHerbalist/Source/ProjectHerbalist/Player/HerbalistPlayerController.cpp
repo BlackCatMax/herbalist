@@ -1,4 +1,3 @@
-// HerbalistPlayerController.cpp
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "Engine/World.h"
@@ -7,11 +6,13 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Storage/AlchemyTableActor.h"
+#include "Core/Resources/AHerbalistResourceActor.h"
 #include "UI/InventoryWidget.h"
 #include "UI/AlchemyTransferWidget.h"
 #include "UI/InventoryTransferWidget.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Core/Data/IngredientRegistry.h"
 
 AHerbalistPlayerController::AHerbalistPlayerController()
 {
@@ -64,9 +65,44 @@ void AHerbalistPlayerController::Look(const FInputActionValue& Value)
     AddPitchInput(LookVector.Y);
 }
 
-void AHerbalistPlayerController::Harvest() { OnLeftClick(); }
-void AHerbalistPlayerController::Info() { OnRightClick(); }
-void AHerbalistPlayerController::ApplyAlchemy() { OnApplyAlchemyKey(); }
+void AHerbalistPlayerController::Harvest()
+{
+    FHitResult Hit;
+    
+    // Сначала пробуем через Visibility канал
+    if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+    {
+        // Если не попали, пробуем через GameTraceChannel1
+        if (!GetHitResultUnderCursor(ECC_GameTraceChannel1, false, Hit))
+        {
+            return;
+        }
+    }
+    
+    AHerbalistResourceActor* Resource = Cast<AHerbalistResourceActor>(Hit.GetActor());
+    if (Resource)
+    {
+        TryHarvestResource(Resource);
+        return;
+    }
+
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X >= 0)
+    {
+        HarvestTest(X, Y);
+    }
+}
+
+void AHerbalistPlayerController::Info() 
+{ 
+    OnRightClick(); 
+}
+
+void AHerbalistPlayerController::ApplyAlchemy() 
+{ 
+    OnApplyAlchemyKey(); 
+}
 
 void AHerbalistPlayerController::CloseAnyWidget()
 {
@@ -108,7 +144,7 @@ void AHerbalistPlayerController::Inventory()
 
     if (InventoryWidgetInstance)
     {
-        InventoryWidgetInstance->Destruct();
+        InventoryWidgetInstance->RemoveFromParent();
         InventoryWidgetInstance = nullptr;
     }
 
@@ -133,7 +169,7 @@ bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
     FVector CameraLocation;
     FRotator CameraRotation;
     GetPlayerViewPoint(CameraLocation, CameraRotation);
-    FVector End = CameraLocation + CameraRotation.Vector() * 500.0f;
+    FVector End = CameraLocation + CameraRotation.Vector() * 1000.0f;
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(GetPawn());
     return GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
@@ -152,8 +188,8 @@ void AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& Ou
     if (!WorldManager) return;
 
     FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-    int32 X = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-    int32 Y = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
+    int32 X = FMath::FloorToInt(LocalLoc.X / WorldManager->CellSize);
+    int32 Y = FMath::FloorToInt(LocalLoc.Y / WorldManager->CellSize);
     if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
     {
         OutX = X;
@@ -264,7 +300,10 @@ void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
     if (WorldManager) WorldManager->ApplyTest(X, Y);
 }
 
-void AHerbalistPlayerController::ShowInventory() { Inventory(); }
+void AHerbalistPlayerController::ShowInventory() 
+{ 
+    Inventory(); 
+}
 
 void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
 {
@@ -272,7 +311,10 @@ void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
     if (WorldManager) WorldManager->MassHarvestTest(X, Y, Count);
 }
 
-void AHerbalistPlayerController::OnUsePotion() { UsePotion(); }
+void AHerbalistPlayerController::OnUsePotion() 
+{ 
+    UsePotion(); 
+}
 
 void AHerbalistPlayerController::UsePotion()
 {
@@ -297,4 +339,40 @@ void AHerbalistPlayerController::UsePotion()
 
     WorldManager->ApplyPotionToCell(X, Y, Items[PotionIndex].State);
     InventoryComponent->RemoveItem(PotionIndex, 1);
+}
+
+// ========== НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С РЕСУРСАМИ ==========
+
+bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
+{
+    if (!TargetActor || !GetPawn())
+    {
+        return false;
+    }
+    
+    float Distance = FVector::Dist(GetPawn()->GetActorLocation(), TargetActor->GetActorLocation());
+    return Distance <= MaxHarvestDistance;
+}
+
+bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Resource)
+{
+    if (!Resource)
+    {
+        return false;
+    }
+    
+    if (!CanHarvestActor(Resource))
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("Too far to harvest %s"), *Resource->GetName());
+        return false;
+    }
+    
+    if (Resource->IsBeingHarvested())
+    {
+        UE_LOG(LogHerbalist, Verbose, TEXT("%s is already being harvested"), *Resource->GetName());
+        return false;
+    }
+    
+    Resource->Harvest();
+    return true;
 }
