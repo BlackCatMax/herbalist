@@ -1,3 +1,4 @@
+// HerbalistPlayerController.cpp
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "Engine/World.h"
@@ -23,6 +24,7 @@ void AHerbalistPlayerController::BeginPlay()
 {
     Super::BeginPlay();
     bShowMouseCursor = false;
+    CachedWorldManager = FindWorldManager();
 
     if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
     {
@@ -68,39 +70,30 @@ void AHerbalistPlayerController::Look(const FInputActionValue& Value)
 void AHerbalistPlayerController::Harvest()
 {
     FHitResult Hit;
-    
-    // Сначала пробуем через Visibility канал
     if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
     {
-        // Если не попали, пробуем через GameTraceChannel1
         if (!GetHitResultUnderCursor(ECC_GameTraceChannel1, false, Hit))
-        {
             return;
-        }
     }
-    
+
     AHerbalistResourceActor* Resource = Cast<AHerbalistResourceActor>(Hit.GetActor());
     if (Resource)
     {
         TryHarvestResource(Resource);
-        // Не продолжаем дальше, чтобы не вызывать HarvestTest
         return;
     }
 
-    // Автоматический сбор клетки отключён – только через акторы
-    // int32 X, Y;
-    // GetCellFromHit(Hit, X, Y);
-    // if (X >= 0) HarvestTest(X, Y);
+    // Автоматический сбор клетки отключён (только через акторы)
 }
 
-void AHerbalistPlayerController::Info() 
-{ 
-    OnRightClick(); 
+void AHerbalistPlayerController::Info()
+{
+    OnRightClick();
 }
 
-void AHerbalistPlayerController::ApplyAlchemy() 
-{ 
-    OnApplyAlchemyKey(); 
+void AHerbalistPlayerController::ApplyAlchemy()
+{
+    OnApplyAlchemyKey();
 }
 
 void AHerbalistPlayerController::CloseAnyWidget()
@@ -171,12 +164,26 @@ bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
     FVector End = CameraLocation + CameraRotation.Vector() * 1000.0f;
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(GetPawn());
-    return GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
+    bool bHit = GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
+
+    // Визуализация луча для отладки
+    DrawDebugLine(GetWorld(), CameraLocation, End, bHit ? FColor::Green : FColor::Red, false, 1.0f, 0, 2.0f);
+    if (bHit)
+    {
+        DrawDebugSphere(GetWorld(), OutHit.Location, 10.0f, 12, FColor::Yellow, false, 1.0f);
+    }
+    return bHit;
 }
 
 AGridWorldManager* AHerbalistPlayerController::FindWorldManager() const
 {
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It) return *It;
+    if (CachedWorldManager)
+        return CachedWorldManager;
+
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        return *It;
+    }
     return nullptr;
 }
 
@@ -274,18 +281,6 @@ void AHerbalistPlayerController::Interact()
         AlchemyTable->OnInteract(this);
         return;
     }
-
-    // Автоматический сбор клетки отключён
-    // if (!bIsAnyWidgetOpen)
-    // {
-    //     int32 X, Y;
-    //     GetCellFromHit(Hit, X, Y);
-    //     if (X >= 0)
-    //     {
-    //         UpdateDistortionFromCell(X, Y);
-    //         HarvestTest(X, Y);
-    //     }
-    // }
 }
 
 void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y)
@@ -300,9 +295,9 @@ void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
     if (WorldManager) WorldManager->ApplyTest(X, Y);
 }
 
-void AHerbalistPlayerController::ShowInventory() 
-{ 
-    Inventory(); 
+void AHerbalistPlayerController::ShowInventory()
+{
+    Inventory();
 }
 
 void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
@@ -311,9 +306,9 @@ void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
     if (WorldManager) WorldManager->MassHarvestTest(X, Y, Count);
 }
 
-void AHerbalistPlayerController::OnUsePotion() 
-{ 
-    UsePotion(); 
+void AHerbalistPlayerController::OnUsePotion()
+{
+    UsePotion();
 }
 
 void AHerbalistPlayerController::UsePotion()
@@ -343,34 +338,27 @@ void AHerbalistPlayerController::UsePotion()
 
 bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
 {
-    if (!TargetActor || !GetPawn())
-    {
-        return false;
-    }
-    
+    if (!TargetActor || !GetPawn()) return false;
     float Distance = FVector::Dist(GetPawn()->GetActorLocation(), TargetActor->GetActorLocation());
     return Distance <= MaxHarvestDistance;
 }
 
 bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Resource)
 {
-    if (!Resource)
-    {
-        return false;
-    }
-    
+    if (!Resource) return false;
+
     if (!CanHarvestActor(Resource))
     {
         UE_LOG(LogHerbalist, Warning, TEXT("Too far to harvest %s"), *Resource->GetName());
         return false;
     }
-    
+
     if (Resource->IsBeingHarvested())
     {
         UE_LOG(LogHerbalist, Verbose, TEXT("%s is already being harvested"), *Resource->GetName());
         return false;
     }
-    
+
     Resource->Harvest();
     return true;
 }

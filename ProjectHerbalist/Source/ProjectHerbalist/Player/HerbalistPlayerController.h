@@ -15,7 +15,7 @@ class AStorageContainer;
 class UInventoryTransferWidget;
 class AAlchemyTableActor;
 class AGridWorldManager;
-class AHerbalistResourceActor; // ДОБАВИТЬ ЭТУ СТРОКУ
+class AHerbalistResourceActor;
 
 UCLASS()
 class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
@@ -34,23 +34,18 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "UI")
     bool bIsAnyWidgetOpen = false;
 
-    // Текущий открытый виджет сундука (для двойного клика)
     UPROPERTY()
     UInventoryTransferWidget* CurrentTransferWidget = nullptr;
 
-    // Текущий открытый виджет алхимии
     UPROPERTY()
     UAlchemyTransferWidget* CurrentAlchemyWidget = nullptr;
 
-    // Текущий алхимический стол
     UPROPERTY()
     AAlchemyTableActor* CurrentAlchemyTable = nullptr;
 	
-	/** Текущий глобальный Distortion из Memory клетки под игроком. */
-	UPROPERTY(BlueprintReadOnly, Category = "Alchemy")
-	float CurrentGlobalDistortion = 0.3f;
+    UPROPERTY(BlueprintReadOnly, Category = "Alchemy")
+    float CurrentGlobalDistortion = 0.3f;
 
-    // Максимальная дистанция сбора ресурсов
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Herbalist|Harvesting")
     float MaxHarvestDistance = 200.0f;
 
@@ -66,11 +61,9 @@ public:
     UFUNCTION(Exec)
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
 
-    // Применить зелье на клетку
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();
     
-    // Проверка, может ли игрок собрать ресурс на дистанции
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Harvesting")
     bool CanHarvestActor(AActor* TargetActor) const;
 	
@@ -79,7 +72,6 @@ public:
     void UpdateDistortionFromCell(int32 X, int32 Y);
 
 protected:
-    // Input mapping
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
 
@@ -122,7 +114,10 @@ protected:
 private:
     UPROPERTY()
     UInventoryWidget* InventoryWidgetInstance = nullptr;
-    
-    // Вспомогательный метод для сбора ресурса с проверкой дистанции
+
+    // Кэш для мира
+    UPROPERTY()
+    AGridWorldManager* CachedWorldManager = nullptr;
+
     bool TryHarvestResource(AHerbalistResourceActor* Resource);
 };

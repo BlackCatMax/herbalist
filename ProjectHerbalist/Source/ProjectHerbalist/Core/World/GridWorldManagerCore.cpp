@@ -62,6 +62,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
         Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
         Cell.TargetState.Meta.Purity = FMath::Clamp(Cell.TargetState.Meta.Purity + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+        // Пункт 2.1: помечаем клетку грязной, чтобы изменения интерполировались
         MarkDirty(Cell.X, Cell.Y);
     }
 }

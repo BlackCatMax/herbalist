@@ -2,6 +2,7 @@
 #include "HarvestService.h"
 #include "ProjectHerbalist.h"
 #include "Core/Data/IngredientRegistry.h"
+#include "Core/Data/WaterTypeRegistry.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/AssetManager.h"
@@ -11,7 +12,6 @@ static constexpr float k_condition = 0.4f;
 
 UHerbalistIngredient* UHarvestService::LoadIngredientAsset(FName IngredientID) const
 {
-    // Оставлено для совместимости, но лучше не использовать
     if (IngredientID.IsNone()) return nullptr;
     FString DirectPath = FString::Printf(TEXT("/Game/Data/Ingredients/%s.%s"), *IngredientID.ToString(), *IngredientID.ToString());
     return LoadObject<UHerbalistIngredient>(nullptr, *DirectPath);
@@ -32,6 +32,7 @@ FRealState UHarvestService::GetBaseResourceParams(FName IngredientID) const
 
 FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions) const
 {
+    // ... (без изменений, как в исходном коде)
     const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
     if (!Row)
     {
@@ -72,7 +73,6 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     Result.Meta.Resonance = Base.Meta.Resonance + k_biome * BiomeDelta.Meta.Resonance + k_condition * Conditions.DeltaResonance;
     Result.Meta.Corruption = Base.Meta.Corruption + k_biome * BiomeDelta.Meta.Corruption + k_condition * Conditions.DeltaCorruption;
 
-    // Мягкое накопление Distortion (нелинейное)
     float BaseDist = Base.Meta.Distortion;
     float BiomeDist = BiomeState.Meta.Distortion;
     float CondDist  = Conditions.DeltaDistortion;
@@ -96,9 +96,26 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     return Result;
 }
 
-FRealState UHarvestService::HarvestWater(const FRealState& WaterState, const FConditionModifier& Conditions) const
+FRealState UHarvestService::HarvestWater(const FGridCell& Cell, const FConditionModifier& Conditions) const
 {
-    FRealState Water = WaterState;
+    // Базовая вода – состояние клетки
+    FRealState Water = Cell.State;
+
+    // Применяем специальные параметры из WaterTypeRegistry, если они есть
+    if (!Cell.WaterTypeID.IsNone())
+    {
+        if (const FWaterTypeRow* WaterRow = FWaterTypeRegistry::GetWaterType(Cell.WaterTypeID))
+        {
+            Water.Meta.Purity = WaterRow->BasePurity;
+            Water.Meta.Distortion = WaterRow->BaseDistortion;
+            Water.Meta.Stability = WaterRow->BaseStability;
+            Water.Meta.Potency = WaterRow->BasePotency;
+            Water.Meta.Corruption = WaterRow->BaseCorruption;
+            // Направление и магнитуда могут быть оставлены от биома
+        }
+    }
+
+    // Добавляем влияние условий
     Water.Magnitude += k_condition * Conditions.DeltaMagnitude;
     Water.Direction.Body += k_condition * Conditions.DeltaDirection.Body;
     Water.Direction.Mind += k_condition * Conditions.DeltaDirection.Mind;
@@ -124,6 +141,5 @@ FRealState UHarvestService::HarvestWater(const FRealState& WaterState, const FCo
 
 UHerbalistIngredient* UHarvestService::LoadIngredientAssetStatic(FName IngredientID)
 {
-    // Временная заглушка – ассеты не используются, все данные берутся из реестра
     return nullptr;
 }

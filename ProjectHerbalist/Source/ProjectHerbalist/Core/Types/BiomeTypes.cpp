@@ -97,57 +97,12 @@ FRealState FBiomeDefaults::GetDefaultWaterState(EBiomeType Biome)
 
 FName FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng)
 {
-    // Получаем все ассеты UHerbalistIngredient через AssetRegistry
-    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-    IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
-
-    FARFilter Filter;
-    Filter.ClassPaths.Add(UHerbalistIngredient::StaticClass()->GetClassPathName());
-    Filter.bRecursiveClasses = true;
-
-    TArray<FAssetData> AssetDataList;
-    AssetRegistry.GetAssets(Filter, AssetDataList);
-
-    // Собираем ингредиенты, подходящие под биом
-    struct FWeightedIngredient
+    // Устаревший метод, использующий AssetRegistry. Игнорируем, используйте FIngredientRegistry::GetRandomResourceForBiome.
+    static bool bWarned = false;
+    if (!bWarned)
     {
-        FName IngredientID;
-        int32 Weight;
-    };
-    TArray<FWeightedIngredient> Candidates;
-
-    for (const FAssetData& AssetData : AssetDataList)
-    {
-        UHerbalistIngredient* Ingredient = Cast<UHerbalistIngredient>(AssetData.GetAsset());
-        if (!Ingredient) continue;
-
-        // Проверяем биом
-        if (!Ingredient->AllowedBiomes.Contains(Biome)) continue;
-
-        // Добавляем кандидата
-        Candidates.Add({ Ingredient->IngredientID, Ingredient->RarityWeight });
+        UE_LOG(LogHerbalist, Warning, TEXT("FBiomeDefaults::GetRandomResourceForBiome is deprecated and returns NAME_None. Use IngredientRegistry instead."));
+        bWarned = true;
     }
-
-    if (Candidates.Num() == 0)
-    {
-        return NAME_None;
-    }
-
-    // Выбираем случайный ингредиент с учётом веса
-    int32 TotalWeight = 0;
-    for (const auto& C : Candidates)
-        TotalWeight += C.Weight;
-
-    if (TotalWeight <= 0) return Candidates[0].IngredientID;
-
-    int32 Roll = Rng.RandRange(1, TotalWeight);
-    int32 Accum = 0;
-    for (const auto& C : Candidates)
-    {
-        Accum += C.Weight;
-        if (Roll <= Accum)
-            return C.IngredientID;
-    }
-
-    return Candidates.Last().IngredientID;
+    return NAME_None;
 }

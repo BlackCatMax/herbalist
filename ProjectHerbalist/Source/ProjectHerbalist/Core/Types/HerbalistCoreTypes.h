@@ -230,34 +230,38 @@ struct PROJECTHERBALIST_API FL2Direction
     float Nature = 0.0f;
 
     void NormalizeL2(FRngState& Rng)
-    {
-        float LenSq = Body*Body + Mind*Mind + Spirit*Spirit + Nature*Nature;
-        if (LenSq > KINDA_SMALL_NUMBER)
-        {
-            float InvLen = FMath::InvSqrt(LenSq);
-            Body   *= InvLen;
-            Mind   *= InvLen;
-            Spirit *= InvLen;
-            Nature *= InvLen;
-        }
-        else
-        {
-            float x1, x2, x3, x4, s;
-            do {
-                x1 = FMath::FRand() * 2.0f - 1.0f;
-                x2 = FMath::FRand() * 2.0f - 1.0f;
-                x3 = FMath::FRand() * 2.0f - 1.0f;
-                x4 = FMath::FRand() * 2.0f - 1.0f;
-                s = x1*x1 + x2*x2 + x3*x3 + x4*x4;
-            } while (s > 1.0f || s < KINDA_SMALL_NUMBER);
-            
-            float InvLen = FMath::InvSqrt(s);
-            Body   = x1 * InvLen;
-            Mind   = x2 * InvLen;
-            Spirit = x3 * InvLen;
-            Nature = x4 * InvLen;
-        }
-    }
+	{
+		float LenSq = Body*Body + Mind*Mind + Spirit*Spirit + Nature*Nature;
+		if (LenSq > KINDA_SMALL_NUMBER)
+		{
+			float InvLen = FMath::InvSqrt(LenSq);
+			Body   *= InvLen;
+			Mind   *= InvLen;
+			Spirit *= InvLen;
+			Nature *= InvLen;
+		}
+		else
+		{
+			// Детерминированный генератор на основе Rng.Seed (линейный конгруэнтный)
+			auto Rand01 = [&Rng]() {
+				Rng.Seed = (Rng.Seed * 196314165) + 907633515;
+				return (Rng.Seed & 0x00FFFFFF) / float(0x01000000);
+			};
+			float x1, x2, x3, x4, s;
+			do {
+				x1 = Rand01() * 2.0f - 1.0f;
+				x2 = Rand01() * 2.0f - 1.0f;
+				x3 = Rand01() * 2.0f - 1.0f;
+				x4 = Rand01() * 2.0f - 1.0f;
+				s = x1*x1 + x2*x2 + x3*x3 + x4*x4;
+			} while (s > 1.0f || s < KINDA_SMALL_NUMBER);
+			float InvLen = FMath::InvSqrt(s);
+			Body   = x1 * InvLen;
+			Mind   = x2 * InvLen;
+			Spirit = x3 * InvLen;
+			Nature = x4 * InvLen;
+		}
+	}
 
     FDirection ToL1() const
     {

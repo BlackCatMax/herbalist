@@ -29,6 +29,8 @@ void AGridWorldManager::Tick(float DeltaTime)
             if (!FMath::IsNearlyEqual(OldStress, Cell->HarvestStress, 1e-4f))
             {
                 MarkDirty(X, Y);
+                // Пункт 1.2: пересчитываем Distortion и Magnitude при изменении стресса
+                RecalculateDistortionFromHarvestStress(*Cell);
             }
             if (Cell->HarvestStress <= 0.0f)
             {
@@ -96,8 +98,14 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
-    // Управление активностью тика
+    // Управление активностью тика (пункт 1.3: учитываем граф биомов)
     bool bShouldTick = (DirtyCells.Num() > 0) || (RegrowingCells.Num() > 0) || (StressCells.Num() > 0);
+    UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>();
+    if (Graph && Graph->IsInitialized())
+    {
+        bShouldTick = true;
+    }
+
     if (bInterpolationActive != bShouldTick)
     {
         bInterpolationActive = bShouldTick;

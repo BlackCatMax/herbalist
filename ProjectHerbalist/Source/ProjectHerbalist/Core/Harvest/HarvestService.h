@@ -25,8 +25,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Harvest")
     FRealState Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions) const;
 
+    // Изменённая сигнатура: теперь принимает FGridCell для доступа к WaterTypeID
     UFUNCTION(BlueprintCallable, Category = "Harvest")
-    FRealState HarvestWater(const FRealState& WaterState, const FConditionModifier& Conditions) const;
-
-    UHarvestService* GetHarvestService() { return this; }
+    FRealState HarvestWater(const FGridCell& Cell, const FConditionModifier& Conditions) const;
 };

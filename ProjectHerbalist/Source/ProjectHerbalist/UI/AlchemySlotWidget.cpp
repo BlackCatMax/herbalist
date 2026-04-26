@@ -7,7 +7,7 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Data/IngredientRegistry.h"
 #include "UI/ItemTooltipWidget.h"
-#include "Core/Inventory/InventoryDragDropOperation.h"   // <-- добавлено
+#include "Core/Inventory/InventoryDragDropOperation.h"
 
 extern FText GeneratePotionName(const FRealState& State);
 
@@ -20,11 +20,9 @@ void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCoun
 
 bool UAlchemySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
 {
-    // Если слот полон (не Result) – предмет не влезает
     if (SlotType != EAlchemySlotType::Result && bHasItem && Count >= MaxCount) return false;
     if (SlotType == EAlchemySlotType::Result) return false;
 
-    // Вода?
     bool bItemIsWater = FIngredientRegistry::IsWater(Item.IngredientID);
     if (Item.IngredientID == FName(TEXT("Potion"))) bItemIsWater = false;
 
@@ -107,7 +105,7 @@ bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDr
     if (!HPC || !HPC->InventoryComponent)
         return false;
 
-    // Строим предмет для переноса (одна единица)
+    // Строим предмет для переноса
     FInventoryItem ItemToMove;
     if (DragOp->bIsSplit)
     {
@@ -118,19 +116,19 @@ bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDr
         const FInventoryItem* SourceItem = DragOp->SourceInventory->GetSlot(DragOp->SourceIndex);
         if (!SourceItem) return false;
         ItemToMove = *SourceItem;
-        ItemToMove.Count = 1;
+        ItemToMove.Count = 1;   // обычный перенос – 1 единица
     }
 
     if (!CanAcceptItem(ItemToMove))
         return false;
 
-    // Пытаемся добавить в этот слот
-    if (AddItem(ItemToMove, 1))
+    // Пытаемся добавить в этот слот – передаём правильное количество
+    if (AddItem(ItemToMove, ItemToMove.Count))
     {
         // Удаляем из исходного инвентаря
         if (DragOp->bIsSplit)
         {
-            DragOp->bIsSplit = false; // сплит-предмет уже перенесён
+            DragOp->bIsSplit = false; // split-предмет уже перенесён
         }
         else
         {

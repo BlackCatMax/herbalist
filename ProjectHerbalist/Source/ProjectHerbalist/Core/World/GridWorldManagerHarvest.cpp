@@ -12,7 +12,8 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
 
     if (Cell->bIsWater)
     {
-        return HarvestService->HarvestWater(Cell->State, Conditions);
+        // Используем новую сигнатуру HarvestWater, передавая всю клетку
+        return HarvestService->HarvestWater(*Cell, Conditions);
     }
 
     if (Cell->ResourceRegrowthTimer > 0.0f)
@@ -29,6 +30,14 @@ FRealState AGridWorldManager::HarvestFromCell(int32 X, int32 Y, const FCondition
     }
 
     FRealState Resource = HarvestService->Harvest(IngredientID, Cell->State, Conditions);
+    
+    // Проверка валидности результата
+    if (FMath::IsNearlyZero(Resource.Magnitude) && FMath::IsNearlyZero(Resource.Meta.Distortion))
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("HarvestFromCell: HarvestService returned invalid state for %s"), *IngredientID.ToString());
+        return FRealState();
+    }
+
     Cell->ResourceRegrowthTimer = ResourceRegrowthTime;
     MarkRegrowing(X, Y);
 
