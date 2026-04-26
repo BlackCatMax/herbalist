@@ -23,6 +23,8 @@ public:
 
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
+	
+	void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     int32 GridSizeX = 20;

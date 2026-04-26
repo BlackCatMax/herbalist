@@ -62,7 +62,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
         Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
         Cell.TargetState.Meta.Purity = FMath::Clamp(Cell.TargetState.Meta.Purity + ZaryanaInfluence * 0.5f, 0.f, 1.f);
-        // Пункт 2.1: помечаем клетку грязной, чтобы изменения интерполировались
+        // Пункт 2.1: помечаем клетку грязной
         MarkDirty(Cell.X, Cell.Y);
     }
 }
@@ -79,7 +79,7 @@ void AGridWorldManager::BeginPlay()
     WorldRNG.Initialize(12345);
     HarvestService = NewObject<UHarvestService>(this);
 
-    // Пункт 4.3: автоматическая инициализация клеток, если не были инициализированы
+    // Автоинициализация, если клетки не были созданы
     if (Cells.Num() == 0)
     {
         InitializeCells();
@@ -130,9 +130,16 @@ void AGridWorldManager::InitializeCells()
             Cells[Index].ResourceRegrowthTimer = 0.0f;
             Cells[Index].bIsWater = false;
             Cells[Index].WaterTypeID = NAME_None;
+
+            // АВТОМАТИЧЕСКИЙ СПАВН АКТОРА РЕСУРСА (если есть ингредиент и клетка не вода)
+            if (!Cells[Index].AvailableIngredientID.IsNone() && !Cells[Index].bIsWater)
+            {
+                SpawnResourceActor(Cells[Index].AvailableIngredientID, X, Y, FVector::ZeroVector);
+            }
         }
     }
 
+    // Размещение воды (перезаписывает часть клеток)
     int32 TargetWaterCount = TotalCells * 0.2f;
     if (TargetWaterCount < 1) TargetWaterCount = 1;
     TArray<bool> IsWaterAlready;
@@ -197,6 +204,12 @@ void AGridWorldManager::RegenerateCellResource(FGridCell& Cell)
 {
     Cell.AvailableIngredientID = FIngredientRegistry::GetRandomResourceForBiome(Cell.Biome, WorldRNG);
     Cell.ResourceRegrowthTimer = 0.0f;
+
+    // При регенерации заново создаём актор ресурса (предыдущий был уничтожен при сборе)
+    if (!Cell.AvailableIngredientID.IsNone() && !Cell.bIsWater)
+    {
+        SpawnResourceActor(Cell.AvailableIngredientID, Cell.X, Cell.Y, FVector::ZeroVector);
+    }
 }
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
@@ -234,9 +247,7 @@ void AGridWorldManager::UpdateMemory(FMemoryState& Memory, const FRealState& New
     const float TargetDistortion = NewState.Meta.Distortion;
     const float Delta = (TargetDistortion - Memory.AccumulatedDistortion) * Rate;
     FAlchemyWorldStateApplier::ApplyDistortionDelta(Memory, Delta, CurrentTime);
-
-    // Пункт 4.5: обновляем память стабильности (интерполяция к новому значению Stability)
-    // Используем Rate как скорость интерполяции (аналог DeltaTime)
+    // Обновляем память стабильности (4.5)
     Memory.StabilityMemory = FMath::FInterpTo(Memory.StabilityMemory, NewState.Meta.Stability, 0.05f, Rate);
 }
 
@@ -260,7 +271,7 @@ TArray<FName> AGridWorldManager::GetResourcesForBiome(EBiomeType Biome) const
 
 void AGridWorldManager::SpawnResourcesForCell(FGridCell& Cell)
 {
-    // Заглушка
+    // Заглушка (не используется)
 }
 
 void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
@@ -304,7 +315,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
         RecalculateDistortionFromHarvestStress(*Cell);
     }
     Cell->ResourceRegrowthTimer = ResourceRegrowthTime;
-    MarkRegrowing(X, Y);
+    MarkRegrowing(X, Y);   // через некоторое время вызовется RegenerateCellResource
 
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
     if (!PC || !PC->InventoryComponent)
@@ -313,14 +324,13 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
         return;
     }
 
-    // Проверка валидности состояния – пункт 3.5
+    // Добавляем предмет только если состояние валидное
     if (ResourceState.Magnitude > 0.01f || ResourceState.Meta.Distortion > 0.01f)
     {
         FInventoryItem Item;
         Item.IngredientID = IngredientID;
         Item.State = ResourceState;
         Item.Count = 1;
-
         if (PC->InventoryComponent->AddItem(Item, 1))
         {
             UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Successfully added %s to inventory"), *IngredientID.ToString());
@@ -337,9 +347,37 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     }
 }
 
+// ============================================================================
+// АВТОМАТИЧЕСКИЙ СПАВН АКТОРА РЕСУРСА
+// ============================================================================
+
 void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset)
 {
-    // Заглушка
+    if (IngredientID.IsNone()) return;
+
+    const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
+    if (!Row)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("SpawnResourceActor: Ingredient %s not found in registry"), *IngredientID.ToString());
+        return;
+    }
+
+    FVector SpawnPos = GetCellWorldPosition(X, Y) + Offset;
+    FRotator SpawnRot = FRotator::ZeroRotator;
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, SpawnRot, SpawnParams);
+    if (NewActor)
+    {
+        NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y);
+        UE_LOG(LogHerbalist, Log, TEXT("Spawned resource actor for %s at cell (%d,%d)"), *IngredientID.ToString(), X, Y);
+    }
+    else
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("Failed to spawn resource actor for %s at cell (%d,%d)"), *IngredientID.ToString(), X, Y);
+    }
 }
 
 // ==================== ОТРИСОВКА ====================
