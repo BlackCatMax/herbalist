@@ -23,8 +23,6 @@ public:
 
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
-	
-	void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     int32 GridSizeX = 20;
@@ -64,7 +62,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery")
     bool bEnableRecovery = true;
 
-    // --- Визуализация ---
 #if WITH_EDITOR
     bool bShowBiomeGraph = false;
     bool bShowCellDistortion = false;
@@ -105,10 +102,13 @@ public:
     TMap<FName, FVector> GetBiomeCenters() const;
     void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale);
 
-    // --- Акторы ресурсов (заглушки) ---
+    // --- Акторы ресурсов ---
     UHarvestService* GetHarvestService() const { return HarvestService; }
     void OnResourceCollected(AHerbalistResourceActor* Actor);
+    
+    // ЕДИНСТВЕННОЕ объявление (дублирование удалено)
     void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
+    
     void SpawnResourcesForCell(FGridCell& Cell);
     TArray<FName> GetResourcesForBiome(EBiomeType Biome) const;
 
