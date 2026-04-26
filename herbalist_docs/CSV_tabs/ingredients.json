@@ -1,0 +1,2863 @@
+[
+    {
+        "Name": "bol_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_01_DisplayName\", \"Багульник\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_01_Description\", \"# Багульник  *[Изображение: bagulnik.jpeg]*  ## Описание  То не малина, не смородина — то багульник болотный, дурман-трава проклятая. Лист у него узкий, снизу рыжим пухом покрыт, а цветёт он так, что голова кругом идёт: белые щитки, словно призрачные свеч\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.6,
+                "Spirit": 0.8,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.7,
+                "Stability": 0.3,
+                "Purity": 0.4,
+                "Potency": 0.7,
+                "Resonance": 0.8,
+                "Corruption": 0.6
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "кустарник",
+            "яд",
+            "дурман",
+            "духи"
+        ]
+    },
+    {
+        "Name": "bol_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_02_DisplayName\", \"Белокрыльник\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_02_Description\", \"# Белокрыльник  *[Изображение: belokrylnik.jpeg]*  ## Описание  Выходит из трясины, словно девица в белом саване: лист широкий, копьевидный, а початок свечой белой горит, да не к добру. То Белокрыльник — цветок болотный, мертвая лилия. Где он покажется, т\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.3,
+                "Spirit": 0.9,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.8,
+                "Stability": 0.25,
+                "Purity": 0.35,
+                "Potency": 0.75,
+                "Resonance": 0.85,
+                "Corruption": 0.7
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "трава",
+            "яд",
+            "видения",
+            "смерть"
+        ]
+    },
+    {
+        "Name": "bol_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_03_DisplayName\", \"Берёза пушистая\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_03_Description\", \"# Берёза пушистая  *[Изображение: bereza_pushistaya.jpeg]*  ## Описание  Не та берёза, что в чистом поле кудри чешет, а иная — болотная, пушистая, с корой, что мохом поросла, да с ветвями, книзу склонёнными, словно бабы в горе. Растёт на кочках, корнями в\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.55,
+            "Direction": {
+                "Body": 0.4,
+                "Mind": 0.5,
+                "Spirit": 0.7,
+                "Nature": 0.6
+            },
+            "Meta": {
+                "Distortion": 0.45,
+                "Stability": 0.45,
+                "Purity": 0.55,
+                "Potency": 0.4,
+                "Resonance": 0.65,
+                "Corruption": 0.35
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "дерево",
+            "берёза",
+            "духи",
+            "оберег"
+        ]
+    },
+    {
+        "Name": "bol_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_04_DisplayName\", \"Гонобобель (Голубика)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_04_Description\", \"# Гонобобель (Голубика)  *[Изображение: gonobobel.jpeg]*  ## Описание  А вот и Гонобобель — ягода болотная, что синим пухом покрыта, словно иней на покойнике. Куст у неё низкий, корявый, лист сизый, будто смерть облизала. В народе прозвали её «дурника» ил\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.5,
+                "Spirit": 0.6,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.35,
+                "Stability": 0.5,
+                "Purity": 0.6,
+                "Potency": 0.45,
+                "Resonance": 0.55,
+                "Corruption": 0.25
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "ягода",
+            "гонобобель",
+            "дурника",
+            "пьяника",
+            "синика",
+            "водопьянка"
+        ]
+    },
+    {
+        "Name": "bol_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_05_DisplayName\", \"Журавина (Клюква)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_05_Description\", \"# Журавина (Клюква)  *[Изображение: zhuravina.jpeg]*  ## Описание  Стелится по кочкам красным ковром, ягода к ягоде — словно капли крови застывшей. То Журавина, клюква болотная. В народе сказывают, будто это журавли, улетая на юг, обронили свои головушки,\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.55,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.45,
+                "Spirit": 0.65,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.6,
+                "Purity": 0.7,
+                "Potency": 0.5,
+                "Resonance": 0.5,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "ягода",
+            "журавина",
+            "весновка",
+            "подснежница",
+            "клюква",
+            "медвежья ягода"
+        ]
+    },
+    {
+        "Name": "bol_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_06_DisplayName\", \"Елха чёрная (Ольха чёрная, кора)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_06_Description\", \"# Елха чёрная (Ольха чёрная, кора)  *[Изображение: olha_chernaya_kora.jpeg]*  ## Описание  Стоит у самой воды, чёрная, корявая, будто старуха сгорбленная. Кора у неё тёмная, в трещинах, а если надрезать — из-под неё кровь алая сочится, не сок, а сукровица\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.6,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.75,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.5,
+                "Stability": 0.65,
+                "Purity": 0.45,
+                "Potency": 0.55,
+                "Resonance": 0.7,
+                "Corruption": 0.45
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "дерево",
+            "ольха",
+            "елха",
+            "вольха",
+            "кородёр",
+            "чернотал"
+        ]
+    },
+    {
+        "Name": "bol_07",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_07_DisplayName\", \"Резун (Осока)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_07_Description\", \"# Резун (Осока)  *[Изображение: osoka.jpeg]*  ## Описание  Растёт по сырым берегам, жёсткая, острая — лист, что нож. Резанет по пальцу — кровь выступит, а рана долго заживает. Прозвали её Резун, и не зря. В народе бают: из осоки черти верёвки вьют, чтобы\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.35,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.35,
+                "Spirit": 0.55,
+                "Nature": 0.9
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.7,
+                "Purity": 0.5,
+                "Potency": 0.35,
+                "Resonance": 0.4,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "трава",
+            "резун",
+            "острец",
+            "дерябка",
+            "куга",
+            "чаполоть",
+            "болотная трава"
+        ]
+    },
+    {
+        "Name": "bol_08",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_08_DisplayName\", \"Пухлянка (Пушица)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_08_Description\", \"# Пухлянка (Пушица)  *[Изображение: pushica.jpeg]*  ## Описание  То не пух и не снег — то Пухлянка болотная головки подняла. Растёт на кочках, белыми шапками качает, словно старухи в платках седых. А по весне, когда ветер подует, летят от неё белые хлопья\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.3,
+                "Spirit": 0.7,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.35,
+                "Stability": 0.55,
+                "Purity": 0.6,
+                "Potency": 0.3,
+                "Resonance": 0.5,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "трава",
+            "пухлянка"
+        ]
+    },
+    {
+        "Name": "bol_09",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_09_DisplayName\", \"Царевы очи (Росянка)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_09_Description\", \"# Царевы очи (Росянка)  *[Изображение: rosyanka.jpeg]*  ## Описание  Глядишь на неё — аж мурашки по коже: лист круглый, красно-зелёный, весь в тонких волосках, а на каждом — капля, словно слеза. То не роса, то яд сладкий, что заманивает мошек да комаров.\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.3,
+            "Direction": {
+                "Body": 0.05,
+                "Mind": 0.2,
+                "Spirit": 0.95,
+                "Nature": 0.9
+            },
+            "Meta": {
+                "Distortion": 0.85,
+                "Stability": 0.2,
+                "Purity": 0.7,
+                "Potency": 0.8,
+                "Resonance": 0.9,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "трава",
+            "росянка",
+            "царевы очи",
+            "росичка",
+            "солнечная роса",
+            "лихоманная трава",
+            "мухоловка"
+        ]
+    },
+    {
+        "Name": "bol_10",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_10_DisplayName\", \"Девятисил (Сабельник болотный)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_10_Description\", \"# Девятисил (Сабельник болотный)  *[Изображение: sabelnik.jpeg]*  ## Описание  В самой серёдке трясины, среди моховых кочек, растёт Девятисил — трава могучая, девяти смертям назло. Стебель у неё красно-бурый, лист зубчатый, будто пила, а цветёт тёмно-багр\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.4,
+                "Stability": 0.5,
+                "Purity": 0.55,
+                "Potency": 0.6,
+                "Resonance": 0.65,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "трава",
+            "сабельник",
+            "девятисил",
+            "могучник",
+            "моховник",
+            "красный корень",
+            "суставник"
+        ]
+    },
+    {
+        "Name": "bol_11",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_11_DisplayName\", \"Бѣлый мохъ (Сфагновые мхи)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_11_Description\", \"# Бѣлый мохъ (Сфагновые мхи)  *[Изображение: sfagnum.jpeg]*  ## Описание  Стелится по болоту бело-зелёным ковром, мягким, да неласковым. Потрогаешь — вода течёт, отожмёшь — сухой, а через миг снова мокрый. Будто живая губка, что пьёт слёзы земли. В народе\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.35,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.2,
+                "Spirit": 0.6,
+                "Nature": 0.9
+            },
+            "Meta": {
+                "Distortion": 0.2,
+                "Stability": 0.75,
+                "Purity": 0.8,
+                "Potency": 0.25,
+                "Resonance": 0.5,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "мох",
+            "сфагнум",
+            "белый мох",
+            "живой мох",
+            "торфяник",
+            "мертвая губа",
+            "болотная шерсть"
+        ]
+    },
+    {
+        "Name": "bol_12",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_12_DisplayName\", \"Трифоль (Вахта трёхлистная)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"bol_12_Description\", \"# Трифоль (Вахта трёхлистная)  *[Изображение: trifol.jpeg]*  ## Описание  То не клевер луговой, то иное — Трифоль болотный, что стражи́т у самой трясины. Лист у него тройчатый, словно три ладони, молящие о пощаде, а цветёт он бело-розовыми свечками, что в\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.8,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.6,
+                "Stability": 0.4,
+                "Purity": 0.5,
+                "Potency": 0.6,
+                "Resonance": 0.75,
+                "Corruption": 0.5
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "болото",
+            "трава",
+            "бобовник",
+            "лихорадочник",
+            "троелистка"
+        ]
+    },
+    {
+        "Name": "les_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_01_DisplayName\", \"Синецвет (Василёк)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_01_Description\", \"# Синецвет (Василёк)  *[Изображение: vasilek.jpeg]*  ## Описание  Смотрит из ржи синим глазом — то Синецвет, василёк-трава. Стебель тонкий, жёсткий, цветок лазоревый, словно небо в землю глядит. В народе бают: когда пахарь пашет поле, то Господь за ним ид\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.45,
+                "Spirit": 0.65,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.5,
+                "Purity": 0.7,
+                "Potency": 0.45,
+                "Resonance": 0.6,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "василёк",
+            "синецвет",
+            "волошки",
+            "блават"
+        ]
+    },
+    {
+        "Name": "les_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_02_DisplayName\", \"Стародубка (Горицвет весенний)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_02_Description\", \"# Стародубка (Горицвет весенний)  *[Изображение: goricvet.jpeg]*  ## Описание  На пригорках, где солнце печёт, цветёт Стародубка — жёлтыми искрами, алым огнём. Цветок у неё яркий, будто жар-птица перо обронила. Стебель прямой, крепкий, как старый дубок —\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.5,
+                "Spirit": 0.8,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.45,
+                "Stability": 0.4,
+                "Purity": 0.5,
+                "Potency": 0.75,
+                "Resonance": 0.7,
+                "Corruption": 0.35
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Огонь",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "горицвет",
+            "стародубка",
+            "желтоцвет",
+            "черногорка"
+        ]
+    },
+    {
+        "Name": "les_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_03_DisplayName\", \"Буркун (Донник)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_03_Description\", \"# Буркун (Донник)  *[Изображение: donnik.jpeg]*  ## Описание  В чистом поле, на межах да вдоль дорог, растёт Буркун — трава рослая, с мелкими жёлтыми цветками, что мёдом пахнут. Только не обманывайся сладким духом: за ним горечь идёт. В народе зовут его «\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.5,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.35,
+                "Stability": 0.45,
+                "Purity": 0.55,
+                "Potency": 0.6,
+                "Resonance": 0.65,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "донник",
+            "буркун",
+            "могильница"
+        ]
+    },
+    {
+        "Name": "les_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_04_DisplayName\", \"Дятлина (Клевер луговой)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_04_Description\", \"# Дятлина (Клевер луговой)  *[Изображение: klever.jpeg]*  ## Описание  На лугу, где коровы пасутся, а пастухи дудки режут, цветёт Дятлина — тройчатый лист, красная головка, будто капелька крови. В старину баяли: то Мать Сыра Земля рожает цветок для скотин\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.4,
+                "Spirit": 0.65,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.55,
+                "Purity": 0.6,
+                "Potency": 0.5,
+                "Resonance": 0.6,
+                "Corruption": 0.25
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "клевер",
+            "дятлина",
+            "красноголовник",
+            "кашка"
+        ]
+    },
+    {
+        "Name": "les_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_05_DisplayName\", \"Ковыль (Тирса, Перова трава)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_05_Description\", \"# Ковыль (Тирса, Перова трава)  *[Изображение: kovyl.jpeg]*  ## Описание  Стелится по степи седым морем — то ковыль колышется, волнами ходит. Белые ости, как бороды старцев, шелестят на ветру, поют тоскливо. В народе зовут «перова трава» — будто сам Перун\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.3,
+                "Spirit": 0.85,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.6,
+                "Stability": 0.35,
+                "Purity": 0.7,
+                "Potency": 0.65,
+                "Resonance": 0.75,
+                "Corruption": 0.25
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "ковыль",
+            "тирса"
+        ]
+    },
+    {
+        "Name": "les_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_06_DisplayName\", \"Сон-трава (Прострел)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_06_Description\", \"# Сон-трава (Прострел)  *[Изображение: son_trava.jpeg]*  ## Описание  В лесостепи, на пригорочках, где солнце весной пригревает, расцветает Сон-трава. Ещё снег не сошёл, а она уже лиловым колокольчиком глядит, опушённая серебряной шерстью, будто сонная ба\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.4,
+                "Spirit": 0.9,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.75,
+                "Stability": 0.3,
+                "Purity": 0.55,
+                "Potency": 0.7,
+                "Resonance": 0.85,
+                "Corruption": 0.4
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "сон-трава",
+            "прострел",
+            "сон-зелье",
+            "вещие сны",
+            "усон-трава",
+            "сончик"
+        ]
+    },
+    {
+        "Name": "les_07",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_07_DisplayName\", \"Типец (Типчак, Овсяница валлийская)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_07_Description\", \"# Типец (Типчак, Овсяница валлийская)  *[Изображение: tipchak.jpeg]*  ## Описание  В сухой степи, где овцы пасутся да жаворонки поют, растёт Типец — травка невысокая, жёсткая, сизая, будто сединой покрытая. Колосья у неё тонкие, метёлочкой, шелестят на ве\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.35,
+                "Spirit": 0.6,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.7,
+                "Purity": 0.65,
+                "Potency": 0.3,
+                "Resonance": 0.45,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "типчак",
+            "типец",
+            "овсяница",
+            "метлица",
+            "овечья трава",
+            "суходольник"
+        ]
+    },
+    {
+        "Name": "les_08",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_08_DisplayName\", \"Шалфей луговой (Конский шалфей, Бабка)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_08_Description\", \"# Шалфей луговой (Конский шалфей, Бабка)  *[Изображение: shalfey_lugovoy.jpeg]*  ## Описание  На холмах, где ветер гуляет да пчёлы жужжат, цветёт шалфей луговой — голубыми свечками, листом морщинистым, что ладонь старого ведуна. Пахнет горько-сладко, камф\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.55,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.5,
+                "Purity": 0.6,
+                "Potency": 0.55,
+                "Resonance": 0.6,
+                "Corruption": 0.25
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "лесостепь",
+            "трава",
+            "шалфей",
+            "сальвия",
+            "жабрей",
+            "конский шалфей",
+            "бабка",
+            "красные головки"
+        ]
+    },
+    {
+        "Name": "riv_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_01_DisplayName\", \"Ракита (Ива плакучая)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_01_Description\", \"# Ракита (Ива плакучая)  *[Изображение: iva.jpeg]*  ## Описание  Стоит у воды, ветви до самой реки свесила, словно баба по покойнике плачет. Лист у неё узкий, бледный, с изнанки седой, а как ветер подует — стонет, скрипит, шепчет неладное. В народе зовут\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.8,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.6,
+                "Stability": 0.35,
+                "Purity": 0.45,
+                "Potency": 0.5,
+                "Resonance": 0.7,
+                "Corruption": 0.5
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "ива",
+            "ракита",
+            "верба",
+            "плакучая",
+            "ветла",
+            "краснотал",
+            "шелюга"
+        ]
+    },
+    {
+        "Name": "riv_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_02_DisplayName\", \"Петушки (Ирис болотный)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_02_Description\", \"# Петушки (Ирис болотный)  *[Изображение: iris_bolotnyi.jpeg]*  ## Описание  На сырых берегах, где утром туман стелется да лягушки квакают, цветут Петушки — жёлтые, с коричневыми крапинками, будто крылья бабочкины. Лист мечевидный, жёсткий, сизо-зелёный.\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.3,
+                "Spirit": 0.75,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.45,
+                "Stability": 0.5,
+                "Purity": 0.6,
+                "Potency": 0.55,
+                "Resonance": 0.7,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "ирис",
+            "петушки",
+            "касатик",
+            "селёдочник",
+            "сабельник (не путать)",
+            "болотный цвет",
+            "водяная лилия (ошибочно)"
+        ]
+    },
+    {
+        "Name": "riv_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_03_DisplayName\", \"Ирный корень (Аир обыкновенный, Лепеха)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_03_Description\", \"# Ирный корень (Аир обыкновенный, Лепеха)  *[Изображение: air.jpeg]*  ## Описание  На отмелях, где вода тихая да рыба плещется, растёт Ирный корень — из воды торчат мечевидные листья, жёлто-зелёные, жёсткие, а внизу корневище толстое, розовое, пахучее, ка\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.55,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.45,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.6,
+                "Purity": 0.65,
+                "Potency": 0.6,
+                "Resonance": 0.6,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "трава",
+            "аир",
+            "ирный корень",
+            "лепеха",
+            "водяной корень"
+        ]
+    },
+    {
+        "Name": "riv_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_04_DisplayName\", \"Калина (Червона ягода, Снегирёва ягода)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_04_Description\", \"# Калина (Червона ягода, Снегирёва ягода)  *[Изображение: kalina.jpeg]*  ## Описание  В сырых низинах, у самой воды, растёт калина — куст кудрявый, в белых цветах весной, в красных гроздьях осенью. Ягода горькая, да после мороза сладкой становится. В наро\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.55,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.4,
+                "Spirit": 0.75,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.35,
+                "Stability": 0.55,
+                "Purity": 0.65,
+                "Potency": 0.6,
+                "Resonance": 0.7,
+                "Corruption": 0.25
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "калина",
+            "червона ягода",
+            "снегирёва ягода",
+            "лесная краса",
+            "свадебная ягода",
+            "горькая сладость",
+            "тайна девичья"
+        ]
+    },
+    {
+        "Name": "riv_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_05_DisplayName\", \"Куга (Камыш озерный)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_05_Description\", \"# Куга (Камыш озерный)  *[Изображение: kamysh.jpeg]*  ## Описание  У самой кромки воды, где мелко да тихо, стоит Куга — коричневыми бархатными головками кивает, словно кивает, подзывает. Стебель прямой, полый, шуршит на ветру сухо, страшно. В народе бают:\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.25,
+                "Spirit": 0.65,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.7,
+                "Purity": 0.55,
+                "Potency": 0.3,
+                "Resonance": 0.55,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "камыш",
+            "куга",
+            "тростник (ошибочно)",
+            "водяная метла",
+            "болотный веник",
+            "шуршун"
+        ]
+    },
+    {
+        "Name": "riv_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_06_DisplayName\", \"Одолень-трава (Кувшинка белая)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_06_Description\", \"# Одолень-трава (Кувшинка белая)  *[Изображение: kuvshinka.jpeg]*  ## Описание  На тихой воде, где течение спит да солнце в омут глядится, цветёт Одолень-трава — белая лилия, жёлтая сердцевина, лист, что ладонь. В народе бают: то не цветок, а русалка, что\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.3,
+                "Spirit": 0.9,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.5,
+                "Stability": 0.4,
+                "Purity": 0.8,
+                "Potency": 0.7,
+                "Resonance": 0.85,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "кувшинка",
+            "одолень-трава",
+            "белая водяная лилия",
+            "водяной цвет",
+            "русалочий цвет",
+            "лопушник водяной"
+        ]
+    },
+    {
+        "Name": "riv_07",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_07_DisplayName\", \"Вольха (Ольха серая)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_07_Description\", \"# Вольха (Ольха серая)  *[Изображение: olha.jpeg]*  ## Описание  У самой воды, корнями в ручей глядя, растёт Вольха — ствол прямой, кора гладкая, серебристая, лист зубчатый, на ветру трепещет, шепчет. Серёжки у неё повисли, как косы девичьи, а шишки чёрны\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.35,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.4,
+                "Stability": 0.6,
+                "Purity": 0.5,
+                "Potency": 0.45,
+                "Resonance": 0.65,
+                "Corruption": 0.35
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "ольха",
+            "вольха",
+            "елха",
+            "чернотал (не путать)",
+            "водяное дерево",
+            "береговое дерево"
+        ]
+    },
+    {
+        "Name": "riv_08",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_08_DisplayName\", \"Рогоз (Початки, Батлачок)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_08_Description\", \"# Рогоз (Початки, Батлачок)  *[Изображение: rogoz.jpeg]*  ## Описание  У самой воды, из тины поднимаются тёмно-коричневые початки — бархатные, плотные, на пальцы похожие. Стебель высокий, жёсткий, лист длинный, мечевидный. В народе зовут Рогоз, а иные — «\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.3,
+                "Spirit": 0.65,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.65,
+                "Purity": 0.6,
+                "Potency": 0.35,
+                "Resonance": 0.5,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "рогоз",
+            "початки",
+            "батлачок",
+            "чаткан",
+            "ситовник",
+            "водяная свеча",
+            "чертов палец"
+        ]
+    },
+    {
+        "Name": "riv_09",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_09_DisplayName\", \"Чернушка (Смородина чёрная)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_09_Description\", \"# Чернушка (Смородина чёрная)  *[Изображение: smorodina_chernaya.jpeg]*  ## Описание  В сырых кустарниках, у самой воды, растёт Чернушка — куст кудрявый, лист зубчатый, пахучий, а ягода чёрная, с сизым налётом, как глаз воровской. Запах от неё сильный, пр\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.45,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.5,
+                "Purity": 0.65,
+                "Potency": 0.55,
+                "Resonance": 0.6,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "смородина",
+            "чернушка",
+            "чёрная ягода",
+            "лесная смородина",
+            "кисельная ягода",
+            "сморода",
+            "чёрный грозд"
+        ]
+    },
+    {
+        "Name": "riv_10",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_10_DisplayName\", \"Стрелолист (Жабник, Шилник)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_10_Description\", \"# Стрелолист (Жабник, Шилник)  *[Изображение: strelolist.jpeg]*  ## Описание  На мелководье, где тина да ряска, торчит из воды Стрелолист — лист, как наконечник стрелы, острый, твёрдый. Стебель длинный, белый, хрустящий. В народе бают: то не трава, а стре\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.35,
+                "Spirit": 0.7,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.35,
+                "Stability": 0.55,
+                "Purity": 0.6,
+                "Potency": 0.5,
+                "Resonance": 0.65,
+                "Corruption": 0.25
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "речная пойма",
+            "стрелолист",
+            "жабник",
+            "шильник",
+            "водяная стрела",
+            "лягушечник",
+            "болотный лучник"
+        ]
+    },
+    {
+        "Name": "mix_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_01_DisplayName\", \"Берёза кудрявая (Белостволка)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_01_Description\", \"# Берёза кудрявая (Белостволка)  *[Изображение: bereza_mix.jpeg]*  ## Описание  На опушке да на пригорке, где солнце играет, стоит Берёза кудрявая — ствол белый, в чёрных крапинках, ветви вниз склонены, лист зелёный, зубчатый, на ветру шелестит, словно де\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.45,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.2,
+                "Stability": 0.55,
+                "Purity": 0.75,
+                "Potency": 0.5,
+                "Resonance": 0.65,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "смешанный лес",
+            "дерево",
+            "берёза",
+            "белостволка",
+            "кудрявая",
+            "весеннее дерево",
+            "девичья радость"
+        ]
+    },
+    {
+        "Name": "mix_10",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_10_DisplayName\", \"Бледная поганка (Смертный гриб, Ведьмин зонт)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_10_Description\", \"# Бледная поганка (Смертный гриб, Ведьмин зонт) *[Изображение: blednaya_poganka.jpeg]* ## Описание С виду невинная: бледно-зеленоватая шляпка, белая ножка с юбочкой. Но это самый смертоносный гриб. В народе зовут «ведьмин зонт», «смертный гриб». Говорят,\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.3,
+                "Spirit": 0.9,
+                "Nature": 0.5
+            },
+            "Meta": {
+                "Distortion": 0.8,
+                "Stability": 0.15,
+                "Purity": 0.1,
+                "Potency": 0.9,
+                "Resonance": 0.7,
+                "Corruption": 0.95
+            }
+        },
+        "Class": "Fungus",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "смешанный лес",
+            "гриб",
+            "поганка",
+            "яд",
+            "смерть"
+        ]
+    },
+    {
+        "Name": "mix_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_02_DisplayName\", \"Ветреница (Перелеска, Подснежница)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_02_Description\", \"# Ветреница (Перелеска, Подснежница)  *[Изображение: vetrenica.jpeg]*  ## Описание  Ещё снег не везде сошёл, а в лесу, под старыми дубами, уже цветёт Ветреница — белый цветок на тонком стебле, качается от малейшего ветра, словно живой. Лист у неё резной,\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.35,
+                "Spirit": 0.8,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.6,
+                "Stability": 0.35,
+                "Purity": 0.6,
+                "Potency": 0.65,
+                "Resonance": 0.75,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "смешанный лес",
+            "трава",
+            "ветреница",
+            "перелеска",
+            "подснежница",
+            "белый цвет",
+            "ветровая трава",
+            "лесной подснежник"
+        ]
+    },
+    {
+        "Name": "mix_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_03_DisplayName\", \"Жарок (Купальница европейская)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_03_Description\", \"# Жарок (Купальница европейская)  *[Изображение: kupalnitsa.jpeg]*  ## Описание  В сырых лесах, у ручьёв да на низинных лугах, в пору летнего солнцеворота расцветает Жарок — жёлтые шары, словно маковки, горят среди зелени. Цветок у него закрытый, как свеч\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.3,
+                "Spirit": 0.75,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.55,
+                "Stability": 0.4,
+                "Purity": 0.55,
+                "Potency": 0.65,
+                "Resonance": 0.7,
+                "Corruption": 0.35
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Огонь",
+        "Tags": [
+            "смешанный лес",
+            "трава",
+            "купальница",
+            "жарок",
+            "огонек",
+            "бубенчики",
+            "синюха (ошибочно)",
+            "купава"
+        ]
+    },
+    {
+        "Name": "mix_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_04_DisplayName\", \"Ландыш майский (Лесной звон, Серебряник)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_04_Description\", \"# Ландыш майский (Лесной звон, Серебряник)  *[Изображение: landysh.jpeg]*  ## Описание  В глухой чаще, где солнце редко заглядывает, под пологом старых лип и дубов, в мае цветёт Ландыш — белые колокольчики на тонкой стрелке, словно подвески на девичьем ож\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.35,
+                "Spirit": 0.85,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.7,
+                "Stability": 0.3,
+                "Purity": 0.6,
+                "Potency": 0.7,
+                "Resonance": 0.8,
+                "Corruption": 0.4
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "смешанный лес",
+            "трава",
+            "ландыш",
+            "лесной звон",
+            "серебряник",
+            "майская лилия",
+            "заячья соль",
+            "молодильник",
+            "воронец"
+        ]
+    },
+    {
+        "Name": "mix_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_05_DisplayName\", \"Лѣщина (Орешник, Громовой орех)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_05_Description\", \"# Лѣщина (Орешник, Громовой орех)  *[Изображение: leshchina.jpeg]*  ## Описание  В смешанном лесу, на опушках да по оврагам, растёт Лѣщина — куст кудрявый, лист широкий, зубчатый, а осенью орех в зелёной плюске, твёрдый, как кость. В народе зовут её «гром\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.5,
+                "Spirit": 0.7,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.6,
+                "Purity": 0.65,
+                "Potency": 0.5,
+                "Resonance": 0.7,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "смешанный лес",
+            "кустарник",
+            "лещина",
+            "орешник",
+            "громовой орех",
+            "волшебный орех",
+            "лоза",
+            "кладоискатель",
+            "грозовое дерево"
+        ]
+    },
+    {
+        "Name": "mix_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_06_DisplayName\", \"Медвяница (Медуница, Легочница)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_06_Description\", \"# Медвяница (Медуница, Легочница)  *[Изображение: medunica.jpeg]*  ## Описание  Ещё в лесу местами снег лежит, а у корней старых дубов и лип уже пробивается Медвяница — стебель шершавый, лист пятнистый, будто в белых веснушках, а цветы на одном стебле и р\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.7,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.5,
+                "Purity": 0.65,
+                "Potency": 0.55,
+                "Resonance": 0.65,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "смешанный лес",
+            "трава",
+            "медуница",
+            "медвяница",
+            "легочница",
+            "сосульник",
+            "весенняя трава",
+            "лесная свеча",
+            "пятнистый лист"
+        ]
+    },
+    {
+        "Name": "mix_09",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_09_DisplayName\", \"Мухомор (Мушиный гриб, Лесной шут)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_09_Description\", \"# Мухомор (Мушиный гриб, Лесной шут) *[Изображение: muhomor.jpeg]* ## Описание Красная шапка в белых крапинах — кто не знает Мухомора? Растёт в сырых лесах, красуется, будто сам Леший его для потехи посадил. В народе говорят: «Мухомор красен, да для еды о\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.65,
+            "Direction": {
+                "Body": 0.4,
+                "Mind": 0.8,
+                "Spirit": 0.6,
+                "Nature": 0.2
+            },
+            "Meta": {
+                "Distortion": 0.85,
+                "Stability": 0.25,
+                "Purity": 0.3,
+                "Potency": 0.75,
+                "Resonance": 0.85,
+                "Corruption": 0.8
+            }
+        },
+        "Class": "Fungus",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Огонь",
+        "Tags": [
+            "смешанный лес",
+            "гриб",
+            "мухомор",
+            "галлюциноген",
+            "духи"
+        ]
+    },
+    {
+        "Name": "mix_07",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_07_DisplayName\", \"Осина (Шептун, Проклятое дерево)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_07_Description\", \"# Осина (Шептун, Проклятое дерево)  *[Изображение: osina.jpeg]*  ## Описание  Стоит среди берез и дубов Осина — ствол зеленовато-серый, в лишайниках, лист круглый, дрожит, шелестит даже в безветрие, словно шепчет что-то неладное. В народе зовут её «прокля\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.85,
+                "Nature": 0.6
+            },
+            "Meta": {
+                "Distortion": 0.7,
+                "Stability": 0.45,
+                "Purity": 0.5,
+                "Potency": 0.65,
+                "Resonance": 0.8,
+                "Corruption": 0.45
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "смешанный лес",
+            "дерево",
+            "осина",
+            "шептун",
+            "проклятое дерево",
+            "иудино дерево",
+            "дрожащее дерево",
+            "коловерт"
+        ]
+    },
+    {
+        "Name": "mix_08",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_08_DisplayName\", \"Папоротник (Щитовник мужской, Перунов цвет)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"mix_08_Description\", \"*← [К списку ингредиентов Смешанного леса](04_Compendium/Ingredients/Смешанный лес)*\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.8,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.6,
+                "Stability": 0.4,
+                "Purity": 0.5,
+                "Potency": 0.65,
+                "Resonance": 0.75,
+                "Corruption": 0.4
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "смешанный лес",
+            "папоротник",
+            "щитовник",
+            "перунов цвет",
+            "купальский цвет",
+            "разрыв-трава",
+            "чертов палец",
+            "кладоискатель"
+        ]
+    },
+    {
+        "Name": "ste_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_01_DisplayName\", \"Кошачий горох (Астрагал шерстистоцветковый)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_01_Description\", \"# Кошачий горох (Астрагал шерстистоцветковый)  *[Изображение: astragal.jpeg]*  ## Описание  В ковыльной степи, на сухих склонах да по балкам, растёт Кошачий горох — невысокая трава с нежными перистыми листьями и жёлто-белыми цветками, что собраны в кисти,\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.45,
+                "Spirit": 0.7,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.55,
+                "Purity": 0.7,
+                "Potency": 0.6,
+                "Resonance": 0.65,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "степь",
+            "трава",
+            "астрагал",
+            "кошачий горох",
+            "журавлиный горох",
+            "живучая трава",
+            "перекати-поле (ошибочно)",
+            "змеедушник"
+        ]
+    },
+    {
+        "Name": "ste_07",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_07_DisplayName\", \"Бессмертник (Цмин песчаный, Сухоцвет)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_07_Description\", \"_← [К списку ингредиентов Степи](https://04_compendium/Ingredients/%D0%A1%D1%82%D0%B5%D0%BF%D1%8C)_\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.35,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.8,
+                "Purity": 0.6,
+                "Potency": 0.55,
+                "Resonance": 0.65,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "степь",
+            "трава",
+            "бессмертник",
+            "цмин",
+            "сухоцвет",
+            "златоцвет",
+            "живучая трава",
+            "память предков"
+        ]
+    },
+    {
+        "Name": "ste_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_02_DisplayName\", \"Степной хрен (Катран, Дикая редька)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_02_Description\", \"# Степной хрен (Катран, Дикая редька)  *[Изображение: katran.jpeg]*  ## Описание  В сухой степи, где ветер гуляет и солнце печёт, растёт Степной хрен — лист сизый, резной, будто папоротник, а внизу корень толстый, чёрный, как уголь, а внутри белый, жгучий\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.65,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.35,
+                "Stability": 0.6,
+                "Purity": 0.6,
+                "Potency": 0.55,
+                "Resonance": 0.55,
+                "Corruption": 0.25
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "степь",
+            "трава",
+            "катран",
+            "степной хрен",
+            "дикая редька",
+            "воловий корень"
+        ]
+    },
+    {
+        "Name": "ste_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_03_DisplayName\", \"Любчак (Мак самосейка, Дикий мак)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_03_Description\", \"# Любчак (Мак самосейка, Дикий мак)  *[Изображение: mak.jpeg]*  ## Описание  В степи, на старых курганах да вдоль заброшенных дорог, алым пожаром цветёт Любчак — мак самосейка, дикий, не сеяный. Лепестки его красны, как кровь, а сердцевина чёрная, как ноч\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.05,
+                "Mind": 0.25,
+                "Spirit": 0.9,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.8,
+                "Stability": 0.2,
+                "Purity": 0.4,
+                "Potency": 0.8,
+                "Resonance": 0.85,
+                "Corruption": 0.7
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "степь",
+            "трава",
+            "мак",
+            "любчак",
+            "самоцвет",
+            "сон-зелье",
+            "глаз ведьмы",
+            "дикий мак",
+            "красный мак",
+            "червонный цвет"
+        ]
+    },
+    {
+        "Name": "ste_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_04_DisplayName\", \"Чернобыльник (Полынь горькая)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_04_Description\", \"# Чернобыльник (Полынь горькая)  *[Изображение: polyn.jpeg]*  ## Описание  В степи, вдоль дорог да на пустырях, где ветер гуляет, растёт Чернобыльник — стебель прямой, фиолетовый, лист рассечённый, снизу беловойлочный, пахнет горько, как тоска. В народе з\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.5,
+                "Spirit": 0.8,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.55,
+                "Stability": 0.5,
+                "Purity": 0.6,
+                "Potency": 0.65,
+                "Resonance": 0.75,
+                "Corruption": 0.4
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "степь",
+            "трава",
+            "полынь",
+            "чернобыльник",
+            "чернобыль",
+            "емшан",
+            "быльё",
+            "вдовья трава",
+            "оберег от нечисти"
+        ]
+    },
+    {
+        "Name": "ste_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_05_DisplayName\", \"Порезник (Тысячелистник, Кровавник)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_05_Description\", \"# Порезник (Тысячелистник, Кровавник)  *[Изображение: tysyachelistnik.jpeg]*  ## Описание  В степи, на межах да по краям полей, растёт Порезник — лист рассечённый, будто на тысячи нитей, корзинки белые или розовые, щитком. В народе зовут «кровавник», «сер\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.45,
+                "Spirit": 0.7,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.5,
+                "Purity": 0.65,
+                "Potency": 0.55,
+                "Resonance": 0.6,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "степь",
+            "трава",
+            "тысячелистник",
+            "порезник",
+            "кровавник",
+            "серпорез",
+            "кашка",
+            "белоголовник"
+        ]
+    },
+    {
+        "Name": "ste_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_06_DisplayName\", \"Лазорик (Тюльпан степной, Огневка)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_06_Description\", \"# Лазорик (Тюльпан степной, Огневка)  *[Изображение: tulpan.jpeg]*  ## Описание  В весенней степи, едва сойдёт снег, вспыхивают Лазорики — алым, жёлтым, пурпурным огнём. Бокал цветка на тонком стебле, лепестки на солнце отсвечивают, как начищенная медь. В\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.3,
+                "Spirit": 0.75,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.5,
+                "Stability": 0.35,
+                "Purity": 0.6,
+                "Potency": 0.6,
+                "Resonance": 0.7,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "Element": "Огонь",
+        "Tags": [
+            "степь",
+            "цветок",
+            "тюльпан",
+            "лазорик",
+            "огневка",
+            "зорька",
+            "степная свеча",
+            "майский цвет"
+        ]
+    },
+    {
+        "Name": "tai_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_01_DisplayName\", \"Брусника (Боровика, Сердце-ягода)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_01_Description\", \"# Брусника (Боровика, Сердце-ягода)  *[Изображение: brusnika.jpeg]*  ## Описание  В глухой тайге, где сосны да ели стеной стоят, стелется Брусника — кустик низкий, лист зелёный, кожистый, даже зимой из-под снега глядит, ягода красная, кисло-сладкая. В нар\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.4,
+                "Spirit": 0.65,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.6,
+                "Purity": 0.7,
+                "Potency": 0.5,
+                "Resonance": 0.6,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "тайга",
+            "ягода",
+            "брусника",
+            "боровика",
+            "сердечная ягода",
+            "вечнозелёная",
+            "медвежья ягода",
+            "подснежница (ошибочно)"
+        ]
+    },
+    {
+        "Name": "tai_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_02_DisplayName\", \"Зимозелень (Грушанка круглолистная)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_02_Description\", \"# Зимозелень (Грушанка круглолистная)  *[Изображение: grushanka.jpeg]*  ## Описание  В глухой тайге, под пологом сосен и елей, стелется Зимозелень — лист тёмно-зелёный, кожистый, округлый, как монетка, даже зимой из-под снега зелёным глядит. Цветёт белыми\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.4,
+                "Spirit": 0.7,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.55,
+                "Purity": 0.65,
+                "Potency": 0.55,
+                "Resonance": 0.65,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "тайга",
+            "трава",
+            "грушанка",
+            "зимозелень",
+            "боровинка",
+            "грушка",
+            "лесная груша",
+            "пардушка"
+        ]
+    },
+    {
+        "Name": "tai_08",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_08_DisplayName\", \"Жимолость (Жимолость синяя, Лесная вишня)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_08_Description\", \"_← [К списку ингредиентов Тайги](https://04_compendium/Ingredients/%D0%A2%D0%B0%D0%B9%D0%B3%D0%B0)_\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.35,
+                "Spirit": 0.6,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.6,
+                "Purity": 0.65,
+                "Potency": 0.45,
+                "Resonance": 0.55,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "тайга",
+            "кустарник",
+            "жимолость",
+            "синяя жимолость",
+            "лесная вишня",
+            "медовая ягода",
+            "северный виноград"
+        ]
+    },
+    {
+        "Name": "tai_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_04_DisplayName\", \"Кисличка (Кислица, Заячья капуста)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_04_Description\", \"# Кисличка (Кислица, Заячья капуста)  *[Изображение: kislica.jpeg]*  ## Описание  В тенистом ельнике, где солнце редко заглядывает, стелется Кисличка — лист тройчатый, как клевер, но нежный, кисловатый на вкус. Цветёт белым цветком с фиолетовыми жилками,\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.35,
+                "Spirit": 0.65,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.55,
+                "Purity": 0.7,
+                "Potency": 0.45,
+                "Resonance": 0.6,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "тайга",
+            "трава",
+            "кислица",
+            "кисличка",
+            "заячья капуста",
+            "кукушкин клевер",
+            "лесной щавель",
+            "сонная трава (ошибочно)"
+        ]
+    },
+    {
+        "Name": "tai_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_05_DisplayName\", \"Верес (Можжевельник, Яловець)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_05_Description\", \"# Верес (Можжевельник, Яловець)  *[Изображение: mozhzhevelnik.jpeg]*  ## Описание  В сухих борах, на опушках тайги, растёт Верес — куст колючий, хвоя жёсткая, шишки сизо-чёрные, будто ягоды, пахнут смолой и перцем. В народе зовут «яловець», «смерделка». Б\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.4,
+                "Spirit": 0.75,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.65,
+                "Purity": 0.7,
+                "Potency": 0.6,
+                "Resonance": 0.7,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Огонь",
+        "Tags": [
+            "тайга",
+            "кустарник",
+            "можжевельник",
+            "верес",
+            "яловець",
+            "боровой верес",
+            "смерделка",
+            "громовая ягода"
+        ]
+    },
+    {
+        "Name": "tai_07",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_07_DisplayName\", \"Пихта (Пихта сибирская, Лесная свеча)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_07_Description\", \"_← [К списку ингредиентов Тайги](https://04_compendium/Ingredients/%D0%A2%D0%B0%D0%B9%D0%B3%D0%B0)_\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.55,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.4,
+                "Spirit": 0.65,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.2,
+                "Stability": 0.75,
+                "Purity": 0.7,
+                "Potency": 0.5,
+                "Resonance": 0.6,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "тайга",
+            "дерево",
+            "пихта",
+            "лесная свеча",
+            "обережное дерево",
+            "смола",
+            "воскурение",
+            "сибирская пихта"
+        ]
+    },
+    {
+        "Name": "tai_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_03_DisplayName\", \"Сосна (Перунова сестра)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_03_Description\", \"# Сосна (Перунова сестра) *[Изображение: sosna.jpeg]* ## Описание В суровых таёжных борах, на песчаных холмах, высится Сосна — ствол медно-золотой, крона раскидистая, хвоя длинная, мягкая. В народе зовут «Перунова сестра»: бают, сам Громовержец посадил пе\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.55,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.35,
+                "Spirit": 0.65,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.2,
+                "Stability": 0.75,
+                "Purity": 0.7,
+                "Potency": 0.5,
+                "Resonance": 0.6,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "тайга",
+            "дерево",
+            "сосна",
+            "перунова сестра",
+            "долголетие"
+        ]
+    },
+    {
+        "Name": "tai_09",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_09_DisplayName\", \"Чага (Трутовик, Берёзовый гриб)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_09_Description\", \"# Чага (Трутовик, Берёзовый гриб) *[Изображение: chaga.jpeg]* ## Описание На стволах старых берёз чёрным наростом сидит Чага — гриб-трутовик, с виду неказистый, а внутри коричневый, плотный. В народе зовут «берёзовый гриб», «дар Велеса». Веками его собира\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.4,
+                "Mind": 0.3,
+                "Spirit": 0.5,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.2,
+                "Stability": 0.8,
+                "Purity": 0.7,
+                "Potency": 0.45,
+                "Resonance": 0.55,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Fungus",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "тайга",
+            "гриб",
+            "чага",
+            "трутовик",
+            "берёза",
+            "долголетие"
+        ]
+    },
+    {
+        "Name": "tai_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_06_DisplayName\", \"Черница (Черника, Воронница)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_06_Description\", \"# Черница (Черника, Воронница)  *[Изображение: chernika.jpeg]*  ## Описание  В сосновых борах и еловых чащах, на моховых кочках, стелется Черница — кустик низкий, лист зелёный, кожистый, ягода чёрная с сизым налётом, а внутри — сине-фиолетовая, красит рук\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.4,
+                "Spirit": 0.7,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.55,
+                "Purity": 0.7,
+                "Potency": 0.5,
+                "Resonance": 0.65,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "тайга",
+            "ягода",
+            "черника",
+            "черница",
+            "воронница",
+            "синяя ягода",
+            "чернишник",
+            "медвежья ягода (ошибочно)"
+        ]
+    },
+    {
+        "Name": "tun_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_06_DisplayName\", \"Водяника (Шикша, Вороница)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_06_Description\", \"_← [К списку ингредиентов Тундры](https://04_compendium/Ingredients/%D0%A2%D1%83%D0%BD%D0%B4%D1%80%D0%B0)_\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.25,
+                "Spirit": 0.55,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.7,
+                "Purity": 0.65,
+                "Potency": 0.4,
+                "Resonance": 0.5,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Tundra"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "тундра",
+            "ягода",
+            "водяника",
+            "шикша",
+            "вороница",
+            "медвежья ягода",
+            "чёрная трава",
+            "воронья ягода"
+        ]
+    },
+    {
+        "Name": "tun_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_02_DisplayName\", \"Ерник (Карликовая берёза)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_02_Description\", \"# Ерник (Карликовая берёза)  *[Изображение: karlikovaya_bereza.jpeg]*  ## Описание  В тундре, где земля промёрзшая да ветер ледяной, стелется Ерник — берёза не берёза: ствол кривой, по земле ползёт, лист мелкий, круглый, как монетка, серёжки торчат кверху\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.35,
+                "Spirit": 0.65,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.7,
+                "Purity": 0.6,
+                "Potency": 0.45,
+                "Resonance": 0.55,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Tundra"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "тундра",
+            "кустарник",
+            "ерник",
+            "карликовая берёза",
+            "сланка",
+            "стланик",
+            "северная берёза",
+            "берёза-стланка"
+        ]
+    },
+    {
+        "Name": "tun_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_05_DisplayName\", \"Княженика (Поленика, Мамура)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_05_Description\", \"_← [К списку ингредиентов Тундры](https://04_compendium/Ingredients/%D0%A2%D1%83%D0%BD%D0%B4%D1%80%D0%B0)_\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.35,
+                "Spirit": 0.6,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.2,
+                "Stability": 0.55,
+                "Purity": 0.75,
+                "Potency": 0.45,
+                "Resonance": 0.6,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Tundra"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "тундра",
+            "ягода",
+            "княженика",
+            "поленика",
+            "мамура",
+            "северная малина",
+            "жемчужная ягода",
+            "обережная ягода"
+        ]
+    },
+    {
+        "Name": "tun_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_03_DisplayName\", \"Морошка (Смоква, Царская ягода)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_03_Description\", \"# Морошка (Смоква, Царская ягода)  *[Изображение: moroshka.jpeg]*  ## Описание  В тундре, на кочках среди мхов и лишайников, зреет Морошка — ягода янтарная, на солнце сквозная, словно капля жидкого огня. Сначала она красная, как кровь, а поспеет — жёлтая,\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.25,
+                "Mind": 0.4,
+                "Spirit": 0.7,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.55,
+                "Purity": 0.7,
+                "Potency": 0.55,
+                "Resonance": 0.65,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Tundra"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "тундра",
+            "ягода",
+            "морошка",
+            "смоква",
+            "царская ягода",
+            "болотный янтарь",
+            "северная мандарина",
+            "моховая смородина"
+        ]
+    },
+    {
+        "Name": "tun_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_04_DisplayName\", \"Студёный мак (Полярный мак)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_04_Description\", \"# Студёный мак (Полярный мак)  *[Изображение: polyarny_mak.jpeg]*  ## Описание  В каменистой тундре, где даже летом дует ледяной ветер, на короткий срок расцветает Студёный мак — жёлтый, как полярное солнце, лепестки нежные, словно из воска, чашечка опуще\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.4,
+            "Direction": {
+                "Body": 0.05,
+                "Mind": 0.3,
+                "Spirit": 0.85,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.7,
+                "Stability": 0.3,
+                "Purity": 0.55,
+                "Potency": 0.75,
+                "Resonance": 0.8,
+                "Corruption": 0.4
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Tundra"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "тундра",
+            "мак",
+            "полярный мак",
+            "студёный мак",
+            "холодный мак",
+            "северный сон",
+            "ледяной цвет"
+        ]
+    },
+    {
+        "Name": "tun_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_01_DisplayName\", \"Ягель (Олений мох, Северная борода)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tun_01_Description\", \"# Ягель (Олений мох, Северная борода)  *[Изображение: yagel.jpeg]*  ## Описание  Серебристо-серым ковром стелется Ягель по каменистой тундре, хрустит под ногой, как первый снег. В народе зовут «олений мох», «северная борода». Бают, что это борода самого Х\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.25,
+                "Spirit": 0.6,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.55,
+                "Purity": 0.65,
+                "Potency": 0.5,
+                "Resonance": 0.6,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Tundra"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "тундра",
+            "мох",
+            "ягель",
+            "олений мох",
+            "северная борода",
+            "снежный мох",
+            "дух-корм",
+            "белый лишай"
+        ]
+    },
+    {
+        "Name": "broad_09",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_09_DisplayName\", \"Белый гриб (Боровик, Царь грибов)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_09_Description\", \"# Белый гриб (Боровик, Царь грибов) *[Изображение: belyj_grib.jpeg]* ## Описание Крепкий, с толстой ножкой и коричневой шляпкой — Белый гриб, всем грибам полковник. В народе зовут «боровик», «царь грибов». Растёт в дубравах и борах, на чистых местах. Гово\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.6,
+            "Direction": {
+                "Body": 0.5,
+                "Mind": 0.4,
+                "Spirit": 0.3,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.15,
+                "Stability": 0.65,
+                "Purity": 0.8,
+                "Potency": 0.55,
+                "Resonance": 0.5,
+                "Corruption": 0.1
+            }
+        },
+        "Class": "Fungus",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "широколиственный лес",
+            "гриб",
+            "белый гриб",
+            "боровик",
+            "сила",
+            "чистота"
+        ]
+    },
+    {
+        "Name": "broad_01",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_01_DisplayName\", \"Дуб (Перуново дерево, Царь-дуб)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_01_Description\", \"# Дуб (Перуново дерево, Царь-дуб)  *[Изображение: dub.jpeg]*  ## Описание  Стоит в лесу широколиственном Дуб — старый, могучий, корявый, крона шатром, корни глубоко в землю уходят, к подземным ключам. Кора тёмная, в трещинах, лист резной, жёсткий. В народ\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.6,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.5,
+                "Spirit": 0.75,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.2,
+                "Stability": 0.8,
+                "Purity": 0.7,
+                "Potency": 0.6,
+                "Resonance": 0.7,
+                "Corruption": 0.1
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "широколиственный лес",
+            "дуб",
+            "перуново дерево",
+            "царь-дуб",
+            "громовое дерево",
+            "вековечный",
+            "желудь",
+            "обережное дерево"
+        ]
+    },
+    {
+        "Name": "broad_02",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_02_DisplayName\", \"Клён (Явор, Кленина)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_02_Description\", \"# Клён (Явор, Кленина)  *[Изображение: klen.jpeg]*  ## Описание  На опушке, где солнце золотит листву, стоит Клён — ствол прямой, гладкий, кора светлая, а лист резной, пятиязычный, осенью алым горит. В народе зовут «Явор» да «кленина». Бают, что в клёне д\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.45,
+                "Spirit": 0.7,
+                "Nature": 0.75
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.55,
+                "Purity": 0.65,
+                "Potency": 0.55,
+                "Resonance": 0.65,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Воздух",
+        "Tags": [
+            "широколиственный лес",
+            "клён",
+            "явор",
+            "кленина",
+            "осокорь (ошибочно)",
+            "птичье дерево",
+            "гусли-дерево",
+            "осенний клён"
+        ]
+    },
+    {
+        "Name": "broad_03",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_03_DisplayName\", \"Копытень (Копыто, Копычник, Рвотный корень)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_03_Description\", \"# Копытень (Копыто, Копытник, Рвотный корень)  *[Изображение: kopiten.jpeg]*  ## Описание  В тенистом лесу, под пологом широколиственных крон, стелется Копытень — лист тёмно-зелёный, кожистый, на длинном черешке, формой на лошадиное копыто похож. Цветок у\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.15,
+                "Mind": 0.4,
+                "Spirit": 0.75,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.5,
+                "Stability": 0.55,
+                "Purity": 0.6,
+                "Potency": 0.65,
+                "Resonance": 0.7,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "широколиственный лес",
+            "копытень",
+            "копыто",
+            "копытник",
+            "рвотный корень",
+            "лесной перец",
+            "дикий имбирь",
+            "подлесник",
+            "тайное зелье"
+        ]
+    },
+    {
+        "Name": "broad_04",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_04_DisplayName\", \"Жгучка (Крапива двудомная)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_04_Description\", \"# Жгучка (Крапива двудомная)  *[Изображение: krapiva.jpeg]*  ## Описание  У заборов, в оврагах, на лесных опушках растёт Жгучка — стебель прямой, лист зубчатый, весь в жгучих волосках. Тронешь — руку обожжёт, как огнём. В народе зовут «стрекава», «жалюга»\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.45,
+                "Spirit": 0.65,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.55,
+                "Purity": 0.65,
+                "Potency": 0.6,
+                "Resonance": 0.6,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Огонь",
+        "Tags": [
+            "широколиственный лес",
+            "крапива",
+            "жгучка",
+            "стрекава",
+            "жалюга",
+            "огненная трава",
+            "ведьмина пряжа",
+            "покровница"
+        ]
+    },
+    {
+        "Name": "broad_05",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_05_DisplayName\", \"Липа (Люба, Медовница, Лыкодёр)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_05_Description\", \"# Липа (Люба, Медовница, Лыкодёр)  *[Изображение: lipa.jpeg]*  ## Описание  У дорог, на опушках да в пойменных лесах стоит Липа — ствол чёрный, растрескавшийся, лист сердцевидный, а цветёт медовым духом, на всю округу. В народе зовут «Люба» да «Медовница»\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.45,
+                "Spirit": 0.7,
+                "Nature": 0.8
+            },
+            "Meta": {
+                "Distortion": 0.25,
+                "Stability": 0.6,
+                "Purity": 0.7,
+                "Potency": 0.55,
+                "Resonance": 0.65,
+                "Corruption": 0.15
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "широколиственный лес",
+            "липа",
+            "люба",
+            "медовница",
+            "лыкодёр",
+            "шептун-дерево",
+            "материнская липа",
+            "липов цвет",
+            "лапоть-трава"
+        ]
+    },
+    {
+        "Name": "broad_06",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_06_DisplayName\", \"Пролеска (Перелеска, Синий подснежник)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_06_Description\", \"# Пролеска (Перелеска, Синий подснежник)  *[Изображение: proleska.jpeg]*  ## Описание  Ещё снег не везде сошёл, а в лесу, на старых вырубках да под пологом ещё голых дубов, расцветает Пролеска — синие звёздочки на тонких стебельках, будто небо обронило ос\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.35,
+                "Spirit": 0.75,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.55,
+                "Stability": 0.35,
+                "Purity": 0.65,
+                "Potency": 0.6,
+                "Resonance": 0.75,
+                "Corruption": 0.3
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Вода",
+        "Tags": [
+            "широколиственный лес",
+            "пролеска",
+            "перелеска",
+            "синий подснежник",
+            "сцилла",
+            "лесной колоколец",
+            "мертвый цвет",
+            "вестница весны"
+        ]
+    },
+    {
+        "Name": "broad_07",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_07_DisplayName\", \"Хохлатка (Хохлушка, Кукушкины сапожки)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_07_Description\", \"# Хохлатка (Хохлушка, Кукушкины сапожки)  *[Изображение: hohlatka.jpeg]*  ## Описание  В самом начале весны, когда ещё дубы стоят голые, а на проталинах кукушка начинает куковать, из земли вылезает Хохлатка — невысокий стебелёк с нежными перистыми листьям\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.3,
+                "Spirit": 0.8,
+                "Nature": 0.85
+            },
+            "Meta": {
+                "Distortion": 0.6,
+                "Stability": 0.35,
+                "Purity": 0.55,
+                "Potency": 0.65,
+                "Resonance": 0.75,
+                "Corruption": 0.4
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Земля",
+        "Tags": [
+            "широколиственный лес",
+            "хохлатка",
+            "хохлушка",
+            "кукушкины сапожки",
+            "петушки",
+            "земляные орешки",
+            "подлесница",
+            "весенний цвет"
+        ]
+    },
+    {
+        "Name": "broad_08",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_08_DisplayName\", \"Чистуха (Чистотел, Ласточкина трава, Бородавник)\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_08_Description\", \"# Чистуха (Чистотел, Ласточкина трава, Бородавник)  *[Изображение: chistotel.jpeg]*  ## Описание  У заборов, в оврагах, под стенами старых церквей растёт Чистуха — стебель ветвистый, лист резной, снизу сизый, а сок — жёлтый, как желчь, едкий, как огонь. В\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.45,
+            "Direction": {
+                "Body": 0.1,
+                "Mind": 0.4,
+                "Spirit": 0.8,
+                "Nature": 0.7
+            },
+            "Meta": {
+                "Distortion": 0.65,
+                "Stability": 0.35,
+                "Purity": 0.45,
+                "Potency": 0.7,
+                "Resonance": 0.75,
+                "Corruption": 0.55
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "Element": "Огонь",
+        "Tags": [
+            "широколиственный лес",
+            "чистотел",
+            "чистуха",
+            "ласточкина трава",
+            "бородавник",
+            "желтомолочник",
+            "ведьмино зелье",
+            "глистник"
+        ]
+    }
+]
