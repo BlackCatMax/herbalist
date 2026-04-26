@@ -83,15 +83,14 @@ void AHerbalistPlayerController::Harvest()
     if (Resource)
     {
         TryHarvestResource(Resource);
+        // Не продолжаем дальше, чтобы не вызывать HarvestTest
         return;
     }
 
-    int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X >= 0)
-    {
-        HarvestTest(X, Y);
-    }
+    // Автоматический сбор клетки отключён – только через акторы
+    // int32 X, Y;
+    // GetCellFromHit(Hit, X, Y);
+    // if (X >= 0) HarvestTest(X, Y);
 }
 
 void AHerbalistPlayerController::Info() 
@@ -276,16 +275,17 @@ void AHerbalistPlayerController::Interact()
         return;
     }
 
-    if (!bIsAnyWidgetOpen)
-    {
-        int32 X, Y;
-        GetCellFromHit(Hit, X, Y);
-        if (X >= 0)
-        {
-            UpdateDistortionFromCell(X, Y);
-            HarvestTest(X, Y);
-        }
-    }
+    // Автоматический сбор клетки отключён
+    // if (!bIsAnyWidgetOpen)
+    // {
+    //     int32 X, Y;
+    //     GetCellFromHit(Hit, X, Y);
+    //     if (X >= 0)
+    //     {
+    //         UpdateDistortionFromCell(X, Y);
+    //         HarvestTest(X, Y);
+    //     }
+    // }
 }
 
 void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y)
@@ -340,8 +340,6 @@ void AHerbalistPlayerController::UsePotion()
     WorldManager->ApplyPotionToCell(X, Y, Items[PotionIndex].State);
     InventoryComponent->RemoveItem(PotionIndex, 1);
 }
-
-// ========== НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С РЕСУРСАМИ ==========
 
 bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
 {

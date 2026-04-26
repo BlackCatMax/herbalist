@@ -13,9 +13,6 @@
 #include "TimerManager.h"
 #include "ProjectHerbalist.h"
 
-// Временно отключаем проверку IngredientRegistry, если её нет
-// TODO: Убедиться, что IngredientRegistry существует
-
 AHerbalistResourceActor::AHerbalistResourceActor()
 {
     PrimaryActorTick.bCanEverTick = false;
@@ -63,15 +60,6 @@ void AHerbalistResourceActor::BeginPlay()
         UE_LOG(LogHerbalist, Log, TEXT("%s: Auto-assigned to cell (%d,%d)"), 
                *GetName(), GridX, GridY);
     }
-    
-    // Временная проверка - закомментировано, если нет IngredientRegistry
-    /*
-    if (!UIngredientRegistry::IsValidIngredient(IngredientID))
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Invalid ingredient ID '%s'"), 
-               *GetName(), *IngredientID.ToString());
-    }
-    */
 }
 
 void AHerbalistResourceActor::FindAndSetWorldManager()
@@ -157,43 +145,13 @@ void AHerbalistResourceActor::Harvest()
         return;
     }
 
-    UHarvestService* HarvestService = WorldManager->GetHarvestService();
-    if (!HarvestService)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - No HarvestService"), *GetName());
-        return;
-    }
-
     bIsBeingHarvested = true;
     
     OnHarvestStarted();
 
-    FRealState ResourceState = HarvestService->Harvest(IngredientID, Cell->State, FConditionModifier());
-
-    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
-    if (PC && PC->InventoryComponent)
-    {
-        FInventoryItem Item;
-        Item.IngredientID = IngredientID;
-        Item.State = ResourceState;
-        Item.Count = 1;
-        
-        if (PC->InventoryComponent->AddItem(Item, 1))
-        {
-            // Убираем обращение к Quality, если его нет в FRealState
-            UE_LOG(LogHerbalist, Log, TEXT("%s: Harvested %s from cell (%d,%d)"), 
-                   *GetName(), *IngredientID.ToString(), GridX, GridY);
-        }
-        else
-        {
-            UE_LOG(LogHerbalist, Warning, TEXT("%s: Failed to add item to inventory"), *GetName());
-        }
-    }
-    else
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - No Player Controller or Inventory"), 
-               *GetName());
-    }
+    // Предмет будет добавлен в инвентарь в WorldManager->OnResourceCollected
+    UE_LOG(LogHerbalist, Log, TEXT("%s: Harvested %s from cell (%d,%d), delegating to WorldManager"), 
+           *GetName(), *IngredientID.ToString(), GridX, GridY);
 
     if (HarvestParticleSystem)
     {

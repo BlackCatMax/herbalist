@@ -7,6 +7,8 @@
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Data/IngredientRegistry.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
+#include "Player/HerbalistPlayerController.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "ProjectHerbalist.h"
@@ -60,6 +62,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
         Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
         Cell.TargetState.Meta.Purity = FMath::Clamp(Cell.TargetState.Meta.Purity + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+        MarkDirty(Cell.X, Cell.Y);
     }
 }
 
@@ -251,7 +254,68 @@ void AGridWorldManager::SpawnResourcesForCell(FGridCell& Cell)
 
 void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
 {
-    // Заглушка
+    if (!Actor)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("OnResourceCollected: Actor is null"));
+        return;
+    }
+
+    int32 X = Actor->GetGridX();
+    int32 Y = Actor->GetGridY();
+    UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Actor=%s, cell=(%d,%d)"), *Actor->GetName(), X, Y);
+
+    FGridCell* Cell = GetCell(X, Y);
+    if (!Cell)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("OnResourceCollected: Invalid cell (%d,%d)"), X, Y);
+        return;
+    }
+
+    FName IngredientID = Actor->GetIngredientID();
+    if (IngredientID.IsNone())
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("OnResourceCollected: Actor has no IngredientID"));
+        return;
+    }
+
+    UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Harvesting %s from cell state"), *IngredientID.ToString());
+
+    FRealState ResourceState = HarvestService->Harvest(IngredientID, Cell->State, FConditionModifier());
+
+    UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Harvest returned Magnitude=%.3f, Distortion=%.3f"),
+           ResourceState.Magnitude, ResourceState.Meta.Distortion);
+
+    // Даже если ресурс нулевой – всё равно обновляем клетку и добавляем (для отладки)
+    if (bHarvestAffectsBiome)
+    {
+        Cell->HarvestStress += HarvestStressIncrement;
+        Cell->HarvestStress = FMath::Clamp(Cell->HarvestStress, 0.0f, 1.0f);
+        MarkStress(X, Y);
+        RecalculateDistortionFromHarvestStress(*Cell);
+    }
+    Cell->ResourceRegrowthTimer = ResourceRegrowthTime;
+    MarkRegrowing(X, Y);
+
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (!PC || !PC->InventoryComponent)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("OnResourceCollected: PlayerController or InventoryComponent missing"));
+        return;
+    }
+
+    FInventoryItem Item;
+    Item.IngredientID = IngredientID;
+    Item.State = ResourceState;
+    Item.Count = 1;
+
+    if (PC->InventoryComponent->AddItem(Item, 1))
+    {
+        UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Successfully added %s to inventory"), *IngredientID.ToString());
+    }
+    else
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("OnResourceCollected: AddItem failed (inventory full or other error)"));
+    }
 }
 
 void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset)

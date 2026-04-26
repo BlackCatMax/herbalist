@@ -46,6 +46,7 @@ static FAutoConsoleCommandWithWorld CmdResetGraph(
     })
 );
 
+#if WITH_EDITOR
 static FAutoConsoleCommandWithWorld CmdToggleVis(
     TEXT("Herbalist.Graph.ToggleVis"),
     TEXT("Toggle biome graph visualization"),
@@ -87,6 +88,7 @@ static FAutoConsoleCommandWithWorld CmdToggleCellInfluence(
         }
     })
 );
+#endif // WITH_EDITOR
 
 void BiomeGraphCommands::Register()
 {
