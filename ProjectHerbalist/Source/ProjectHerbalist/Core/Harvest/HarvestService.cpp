@@ -4,35 +4,19 @@
 #include "Core/Data/IngredientRegistry.h"
 #include "Core/Data/WaterTypeRegistry.h"
 #include "Core/Types/HerbalistIngredient.h"
+#include "Core/HerbalistSettings.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/AssetManager.h"
 
-static constexpr float k_biome = 0.6f;
-static constexpr float k_condition = 0.4f;
-
-UHerbalistIngredient* UHarvestService::LoadIngredientAsset(FName IngredientID) const
-{
-    if (IngredientID.IsNone()) return nullptr;
-    FString DirectPath = FString::Printf(TEXT("/Game/Data/Ingredients/%s.%s"), *IngredientID.ToString(), *IngredientID.ToString());
-    return LoadObject<UHerbalistIngredient>(nullptr, *DirectPath);
-}
-
-FRealState UHarvestService::GetBaseResourceParams(FName IngredientID) const
-{
-    const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
-    if (!Row)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: Ingredient not found in registry '%s'"), *IngredientID.ToString());
-        return FRealState();
-    }
-    FRealState State = Row->BaseState;
-    State.Direction.NormalizeSum();
-    return State;
-}
+static constexpr float DEFAULT_BIOME_WEIGHT = 0.6f;
+static constexpr float DEFAULT_CONDITION_WEIGHT = 0.4f;
 
 FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions) const
 {
-    // ... (без изменений, как в исходном коде)
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    float k_biome = Settings ? Settings->HarvestBiomeWeight : DEFAULT_BIOME_WEIGHT;
+    float k_condition = Settings ? Settings->HarvestConditionWeight : DEFAULT_CONDITION_WEIGHT;
+
     const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
     if (!Row)
     {
@@ -98,10 +82,11 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
 
 FRealState UHarvestService::HarvestWater(const FGridCell& Cell, const FConditionModifier& Conditions) const
 {
-    // Базовая вода – состояние клетки
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    float k_condition = Settings ? Settings->HarvestConditionWeight : DEFAULT_CONDITION_WEIGHT;
+
     FRealState Water = Cell.State;
 
-    // Применяем специальные параметры из WaterTypeRegistry, если они есть
     if (!Cell.WaterTypeID.IsNone())
     {
         if (const FWaterTypeRow* WaterRow = FWaterTypeRegistry::GetWaterType(Cell.WaterTypeID))
@@ -111,11 +96,9 @@ FRealState UHarvestService::HarvestWater(const FGridCell& Cell, const FCondition
             Water.Meta.Stability = WaterRow->BaseStability;
             Water.Meta.Potency = WaterRow->BasePotency;
             Water.Meta.Corruption = WaterRow->BaseCorruption;
-            // Направление и магнитуда могут быть оставлены от биома
         }
     }
 
-    // Добавляем влияние условий
     Water.Magnitude += k_condition * Conditions.DeltaMagnitude;
     Water.Direction.Body += k_condition * Conditions.DeltaDirection.Body;
     Water.Direction.Mind += k_condition * Conditions.DeltaDirection.Mind;
@@ -137,9 +120,4 @@ FRealState UHarvestService::HarvestWater(const FGridCell& Cell, const FCondition
     Water.Meta.Resonance = FMath::Clamp(Water.Meta.Resonance, 0.0f, 1.0f);
     Water.Meta.Corruption = FMath::Clamp(Water.Meta.Corruption, 0.0f, 1.0f);
     return Water;
-}
-
-UHerbalistIngredient* UHarvestService::LoadIngredientAssetStatic(FName IngredientID)
-{
-    return nullptr;
 }

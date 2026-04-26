@@ -26,11 +26,6 @@ void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& I
     UpdateDisplay();
 }
 
-void UInventorySlotWidget::SetOtherInventory(UHerbalistInventoryComponent* InOther)
-{
-    OtherInventory = InOther;
-}
-
 void UInventorySlotWidget::Refresh()
 {
     UpdateDisplay();

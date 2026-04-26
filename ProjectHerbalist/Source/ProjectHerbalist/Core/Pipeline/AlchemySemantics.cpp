@@ -2,7 +2,6 @@
 #include "AlchemySemantics.h"
 #include "ProjectHerbalist.h"
 #include "Core/Data/IngredientRegistry.h"
-#include "Core/Data/IngredientRegistry.h"
 
 namespace HerbalistCore
 {

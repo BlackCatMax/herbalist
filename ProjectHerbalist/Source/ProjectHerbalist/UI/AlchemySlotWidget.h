@@ -48,9 +48,6 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional))
     class UTextBlock* CountText;
 
-    UPROPERTY(meta = (BindWidgetOptional))
-    class UBorder* SlotBorder;
-
     EAlchemySlotType SlotType;
     FInventoryItem StoredItem;
     int32 Count = 0;

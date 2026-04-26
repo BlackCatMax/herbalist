@@ -14,18 +14,9 @@ class PROJECTHERBALIST_API UHarvestService : public UObject
     GENERATED_BODY()
 
 public:
-    static UHerbalistIngredient* LoadIngredientAssetStatic(FName IngredientID);
-
-    UFUNCTION(BlueprintCallable, Category = "Harvest")
-    UHerbalistIngredient* LoadIngredientAsset(FName IngredientID) const;
-
-    UFUNCTION(BlueprintCallable, Category = "Harvest")
-    FRealState GetBaseResourceParams(FName IngredientID) const;
-
     UFUNCTION(BlueprintCallable, Category = "Harvest")
     FRealState Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions) const;
 
-    // Изменённая сигнатура: теперь принимает FGridCell для доступа к WaterTypeID
     UFUNCTION(BlueprintCallable, Category = "Harvest")
     FRealState HarvestWater(const FGridCell& Cell, const FConditionModifier& Conditions) const;
 };

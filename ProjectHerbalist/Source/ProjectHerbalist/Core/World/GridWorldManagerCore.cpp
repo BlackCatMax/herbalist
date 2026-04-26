@@ -78,6 +78,12 @@ void AGridWorldManager::BeginPlay()
     Super::BeginPlay();
     WorldRNG.Initialize(12345);
     HarvestService = NewObject<UHarvestService>(this);
+
+    // Пункт 4.3: автоматическая инициализация клеток, если не были инициализированы
+    if (Cells.Num() == 0)
+    {
+        InitializeCells();
+    }
 }
 
 void AGridWorldManager::InitializeCells()
@@ -228,6 +234,10 @@ void AGridWorldManager::UpdateMemory(FMemoryState& Memory, const FRealState& New
     const float TargetDistortion = NewState.Meta.Distortion;
     const float Delta = (TargetDistortion - Memory.AccumulatedDistortion) * Rate;
     FAlchemyWorldStateApplier::ApplyDistortionDelta(Memory, Delta, CurrentTime);
+
+    // Пункт 4.5: обновляем память стабильности (интерполяция к новому значению Stability)
+    // Используем Rate как скорость интерполяции (аналог DeltaTime)
+    Memory.StabilityMemory = FMath::FInterpTo(Memory.StabilityMemory, NewState.Meta.Stability, 0.05f, Rate);
 }
 
 void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
@@ -286,7 +296,6 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Harvest returned Magnitude=%.3f, Distortion=%.3f"),
            ResourceState.Magnitude, ResourceState.Meta.Distortion);
 
-    // Даже если ресурс нулевой – всё равно обновляем клетку и добавляем (для отладки)
     if (bHarvestAffectsBiome)
     {
         Cell->HarvestStress += HarvestStressIncrement;
@@ -304,18 +313,27 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
         return;
     }
 
-    FInventoryItem Item;
-    Item.IngredientID = IngredientID;
-    Item.State = ResourceState;
-    Item.Count = 1;
-
-    if (PC->InventoryComponent->AddItem(Item, 1))
+    // Проверка валидности состояния – пункт 3.5
+    if (ResourceState.Magnitude > 0.01f || ResourceState.Meta.Distortion > 0.01f)
     {
-        UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Successfully added %s to inventory"), *IngredientID.ToString());
+        FInventoryItem Item;
+        Item.IngredientID = IngredientID;
+        Item.State = ResourceState;
+        Item.Count = 1;
+
+        if (PC->InventoryComponent->AddItem(Item, 1))
+        {
+            UE_LOG(LogHerbalist, Log, TEXT("OnResourceCollected: Successfully added %s to inventory"), *IngredientID.ToString());
+        }
+        else
+        {
+            UE_LOG(LogHerbalist, Warning, TEXT("OnResourceCollected: AddItem failed (inventory full or other error)"));
+        }
     }
     else
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("OnResourceCollected: AddItem failed (inventory full or other error)"));
+        UE_LOG(LogHerbalist, Warning, TEXT("OnResourceCollected: ResourceState is empty (Mag=%.3f Dist=%.3f), not adding to inventory"),
+               ResourceState.Magnitude, ResourceState.Meta.Distortion);
     }
 }
 

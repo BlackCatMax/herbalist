@@ -1,3 +1,4 @@
+// InventorySlotWidget.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -17,7 +18,6 @@ class PROJECTHERBALIST_API UInventorySlotWidget : public UUserWidget
 public:
     void InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory);
     void Refresh();
-    void SetOtherInventory(UHerbalistInventoryComponent* InOther);
 
 protected:
     virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -38,9 +38,6 @@ protected:
     UPROPERTY(meta = (BindWidget))
     UTextBlock* CountText;
 
-    UPROPERTY(meta = (BindWidget))
-    UTextBlock* PerceptionText;
-
     UPROPERTY(EditDefaultsOnly, Category = "Tooltip")
     TSubclassOf<UItemTooltipWidget> TooltipWidgetClass;
 
@@ -50,9 +47,6 @@ private:
 
     UPROPERTY()
     UHerbalistInventoryComponent* InventoryComponent = nullptr;
-
-    UPROPERTY()
-    UHerbalistInventoryComponent* OtherInventory = nullptr;
 
     void UpdateDisplay();
     bool TryMoveToOtherInventory();

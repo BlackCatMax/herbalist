@@ -14,26 +14,19 @@ public:
     UHerbalistSettings();
 
     // --- Pipeline coefficients ---
-
-    // Коэффициент влияния BiomeMorokField на Distortion
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeMorokInfluence = 0.3f;
 
-    // Коэффициент влияния BiomeZaryanaField на ZaryanaStrength
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeZaryanaInfluence = 0.3f;
 
-    // Вес влияния BiomeAxisDrift на Delta.Direction
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeAxisDriftWeight = 0.1f;
 
     // --- Water blending ---
-
-    // Максимальная доля воды до применения штрафа
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Water", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MaxWaterRatio = 0.8f;
 
-    // Штраф разбавления при превышении MaxWaterRatio
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Water", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float WaterDilutionPenalty = 0.2f;
 
@@ -59,7 +52,13 @@ public:
     // --- Bifurcation ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Bifurcation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BifurcationThreshold = 0.85f;
+
+    // --- Harvest (новые настройки, пункт 4.1) ---
+    UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float HarvestBiomeWeight = 0.6f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float HarvestConditionWeight = 0.4f;
 };
 
-// Доступ к настройкам
 UHerbalistSettings* GetHerbalistSettings();
