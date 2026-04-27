@@ -296,6 +296,8 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
         Item.IngredientID = IngredientID;
         Item.State = ResourceState;
         Item.Count = 1;
+        Item.CreationTime = GetWorld()->GetTimeSeconds();
+        Item.bSubjectToDecay = true;   // собранные ресурсы портятся
         PC->InventoryComponent->AddItem(Item, 1);
     }
 

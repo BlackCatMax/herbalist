@@ -1,4 +1,4 @@
-// Core/HerbalistSettings.h
+// HerbalistSettings.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -63,6 +63,12 @@ public:
 
     UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HarvestConditionWeight = 0.4f;
+
+    // --- Inventory Decay ---
+    // Скорость порчи: увеличение Distortion в секунду при отсутствии Stability.
+    // Умножается на (1 - Stability) предмета, т.е. стабильные предметы портятся медленнее.
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float InventoryDecayRate = 0.02f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

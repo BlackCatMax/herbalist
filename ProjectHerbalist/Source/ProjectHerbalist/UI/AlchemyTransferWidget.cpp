@@ -1,4 +1,4 @@
-// UI/AlchemyTransferWidget.cpp
+// AlchemyTransferWidget.cpp
 #include "UI/AlchemyTransferWidget.h"
 #include "UI/InventoryWidget.h"
 #include "Components/Button.h"
@@ -9,7 +9,7 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Storage/AlchemyTableActor.h"
-#include "Core/Pipeline/AlchemyPipelineFacade.h"   // <-- используем фасад
+#include "Core/Pipeline/AlchemyPipelineFacade.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -116,7 +116,6 @@ void UAlchemyTransferWidget::OnMixClicked()
     UGameInstance* GameInstance = World->GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
-    // Получаем GridWorldManager
     AGridWorldManager* WorldManager = nullptr;
     for (TActorIterator<AGridWorldManager> It(World); It; ++It)
     {
@@ -157,7 +156,7 @@ void UAlchemyTransferWidget::OnMixClicked()
             }
         }
     }
-    else // Если нет координат, используем глобальный distortion контроллера
+    else
     {
         GlobalDistortion = HPC->CurrentGlobalDistortion;
     }
@@ -171,7 +170,6 @@ void UAlchemyTransferWidget::OnMixClicked()
     }
     Rng.Seed = Seed;
 
-    // Используем единый фасад
     FAlchemyFacadeResult Result = FAlchemyPipelineFacade::Execute(
         Ingredients,
         CellState, Env, Memory,
@@ -187,7 +185,7 @@ void UAlchemyTransferWidget::OnMixClicked()
         Potion.IngredientID = FName(TEXT("BoiledWater"));
         break;
     case EAlchemyOutcome::Ash:
-    case EAlchemyOutcome::Catastrophe: // Catastrophe тоже можно считать Ash или особым именем
+    case EAlchemyOutcome::Catastrophe:
         Potion.IngredientID = FName(TEXT("Ash"));
         break;
     default:
@@ -196,6 +194,8 @@ void UAlchemyTransferWidget::OnMixClicked()
     }
     Potion.State = Result.FinalState;
     Potion.Count = 1;
+    Potion.CreationTime = World->GetTimeSeconds();
+    Potion.bSubjectToDecay = false;   // зелья не портятся
 
     ResultSlot->AddItem(Potion, 1);
     ClearIngredientSlots();

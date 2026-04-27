@@ -2,10 +2,52 @@
 #include "HerbalistInventoryComponent.h"
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreMath.h"
+#include "Core/HerbalistSettings.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 {
-    PrimaryComponentTick.bCanEverTick = false;
+    PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.TickInterval = 0.2f;
+}
+
+void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    TimeSinceLastDecayUpdate += DeltaTime;
+    if (TimeSinceLastDecayUpdate < DecayUpdateInterval)
+        return;
+
+    TimeSinceLastDecayUpdate = 0.0f;
+
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+    const float DecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
+
+    for (FInventoryItem& Item : Items)
+    {
+        if (Item.bSubjectToDecay)
+            ApplyDecayToItem(Item, DecayUpdateInterval, DecayRate);
+    }
+    // Не дёргаем OnInventoryChanged каждый тик, чтобы не спамить UI;
+    // тултип обновится при следующем открытии инвентаря.
+}
+
+void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float DeltaTime, float DecayRate)
+{
+    const float Instability = 1.0f - Item.State.Meta.Stability;
+    const float DecayFactor = DecayRate * DeltaTime * Instability;
+
+    Item.State.Meta.Distortion = FMath::Min(Item.State.Meta.Distortion + DecayFactor * 0.5f, 1.0f);
+    Item.State.Meta.Corruption = FMath::Min(Item.State.Meta.Corruption + DecayFactor * 0.3f, 1.0f);
+    Item.State.Meta.Purity      = FMath::Max(Item.State.Meta.Purity      - DecayFactor * 0.2f, 0.0f);
+    Item.State.Meta.Stability   = FMath::Max(Item.State.Meta.Stability   - DecayFactor * 0.1f, 0.0f);
+
+    // Лёгкое хаотичное смещение осей
+    Item.State.Direction.Body   = FMath::Clamp(Item.State.Direction.Body   + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.Mind   = FMath::Clamp(Item.State.Direction.Mind   + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.Spirit = FMath::Clamp(Item.State.Direction.Spirit + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.Nature = FMath::Clamp(Item.State.Direction.Nature + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.NormalizeSum();
 }
 
 bool UHerbalistInventoryComponent::AddItem(const FInventoryItem& Item, int32 Amount)
@@ -205,6 +247,12 @@ void UHerbalistInventoryComponent::MergeStack(FInventoryItem& Target, const FInv
 
     float PurityDiff = FMath::Abs(T.Meta.Purity - S.Meta.Purity);
     T.Meta.Purity = FMath::Clamp(T.Meta.Purity - PurityDiff * 0.1f, 0.0f, 1.0f);
+
+    // Усредняем CreationTime
+    Target.CreationTime = Target.CreationTime * OldWeight + Source.CreationTime * NewWeight;
+
+    // bSubjectToDecay остаётся true, если оба true; иначе false (если хоть один – зелье)
+    Target.bSubjectToDecay = Target.bSubjectToDecay && Source.bSubjectToDecay;
 
     Target.Count = NewCount;
 }
