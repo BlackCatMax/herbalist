@@ -3,6 +3,7 @@
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "Core/HerbalistSettings.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 {
@@ -21,12 +22,32 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     TimeSinceLastDecayUpdate = 0.0f;
 
     const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
-    const float DecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
+    const float GlobalDecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
+
+    // Получаем реестр для индивидуальных множителей
+    UIngredientRegistrySubsystem* IngredientReg = nullptr;
+    if (UWorld* World = GetWorld())
+    {
+        if (UGameInstance* GI = World->GetGameInstance())
+        {
+            IngredientReg = GI->GetSubsystem<UIngredientRegistrySubsystem>();
+        }
+    }
 
     for (FInventoryItem& Item : Items)
     {
         if (Item.bSubjectToDecay)
-            ApplyDecayToItem(Item, DecayUpdateInterval, DecayRate);
+        {
+            float IngredientDecay = 1.0f;
+            if (IngredientReg)
+            {
+                if (const FIngredientTableRow* Row = IngredientReg->GetRow(Item.IngredientID))
+                {
+                    IngredientDecay = Row->DecayRate;
+                }
+            }
+            ApplyDecayToItem(Item, DecayUpdateInterval, GlobalDecayRate * IngredientDecay);
+        }
     }
     // Не дёргаем OnInventoryChanged каждый тик, чтобы не спамить UI;
     // тултип обновится при следующем открытии инвентаря.

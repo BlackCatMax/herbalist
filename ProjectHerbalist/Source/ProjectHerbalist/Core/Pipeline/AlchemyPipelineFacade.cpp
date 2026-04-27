@@ -27,11 +27,13 @@ FAlchemyFacadeResult FAlchemyPipelineFacade::Execute(
     {
         bool bIsWater = false;
         EIngredientClass Class = EIngredientClass::Unknown;
-        if (Item.IngredientID != FName(TEXT("Potion")))
+
+        if (IngredientReg)
         {
-            bIsWater = IngredientReg ? IngredientReg->IsWater(Item.IngredientID) : false;
-            Class = IngredientReg ? IngredientReg->Classify(Item.IngredientID) : EIngredientClass::Unknown;
+            bIsWater = IngredientReg->IsWater(Item.IngredientID);
+            Class = IngredientReg->Classify(Item.IngredientID);
         }
+
         Atoms.Add(FAlchemyAtom(
             Item.IngredientID,
             bIsWater,
@@ -39,7 +41,7 @@ FAlchemyFacadeResult FAlchemyPipelineFacade::Execute(
             Class,
             EAtomOrigin::Harvest,
             GlobalDistortion,
-            0.0f // TimeOfCreation не важен для результата
+            0.0f
         ));
     }
 

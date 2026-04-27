@@ -110,6 +110,9 @@ public:
     void OnResourceCollected(AHerbalistResourceActor* Actor);
     void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
 
+    // --- Сбор воды ---
+    FRealState CollectWater(int32 X, int32 Y);
+
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)
     {

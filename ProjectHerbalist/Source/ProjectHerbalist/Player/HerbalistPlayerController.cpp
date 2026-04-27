@@ -83,7 +83,35 @@ void AHerbalistPlayerController::Harvest()
         return;
     }
 
-    // Автоматический сбор клетки отключён (только через акторы)
+    // Сбор воды без актора
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (GetPawn())
+    {
+        float Dist = FVector::Dist(GetPawn()->GetActorLocation(), Hit.Location);
+        if (Dist > MaxHarvestDistance) return;
+    }
+
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X < 0) return;
+
+    FGridCell* Cell = WorldManager->GetCell(X, Y);
+    if (!Cell || !Cell->bIsWater) return;
+
+    FRealState WaterState = WorldManager->CollectWater(X, Y);
+    if (InventoryComponent)
+    {
+        FInventoryItem Item;
+        Item.IngredientID = Cell->WaterTypeID;     // уникальный тип воды
+        Item.State = WaterState;
+        Item.Count = 1;
+        Item.CreationTime = GetWorld()->GetTimeSeconds();
+        Item.bSubjectToDecay = false;              // вода не портится
+        InventoryComponent->AddItem(Item, 1);
+    }
+    UE_LOG(LogHerbalist, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
 }
 
 void AHerbalistPlayerController::Info()
@@ -166,7 +194,6 @@ bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
     QueryParams.AddIgnoredActor(GetPawn());
     bool bHit = GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
 
-    // Визуализация луча для отладки
     DrawDebugLine(GetWorld(), CameraLocation, End, bHit ? FColor::Green : FColor::Red, false, 1.0f, 0, 2.0f);
     if (bHit)
     {

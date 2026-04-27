@@ -50,6 +50,10 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning", meta = (ClampMin = "1"))
     int32 RarityWeight = 1;
 
+    // Множитель скорости порчи в инвентаре (1.0 = стандартная скорость)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay", meta = (ClampMin = "0.0", ClampMax = "10.0"))
+    float DecayRate = 1.0f;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
     FName Element;
 

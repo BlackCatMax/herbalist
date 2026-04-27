@@ -1,4 +1,4 @@
-// GridWorldManagerCore.cpp
+// Core/World/GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
@@ -113,7 +113,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         {
             NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y);
             Cell.ResourceActors.Add(NewActor);
-            UE_LOG(LogHerbalist, Log, TEXT("Spawned %s at cell (%d,%d)"), *IngredientID.ToString(), Cell.X, Cell.Y);
+            UE_LOG(LogHerbalist, Verbose, TEXT("Spawned %s at cell (%d,%d)"), *IngredientID.ToString(), Cell.X, Cell.Y);
         }
     }
 }
@@ -135,7 +135,7 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     {
         NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y);
         Cell->ResourceActors.Add(NewActor);
-        UE_LOG(LogHerbalist, Log, TEXT("SpawnResourceActor: %s at cell (%d,%d)"), *IngredientID.ToString(), X, Y);
+        UE_LOG(LogHerbalist, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d)"), *IngredientID.ToString(), X, Y);
     }
 }
 
@@ -297,7 +297,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
         Item.State = ResourceState;
         Item.Count = 1;
         Item.CreationTime = GetWorld()->GetTimeSeconds();
-        Item.bSubjectToDecay = true;   // собранные ресурсы портятся
+        Item.bSubjectToDecay = true;
         PC->InventoryComponent->AddItem(Item, 1);
     }
 
@@ -315,6 +315,23 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
         MarkStress(Cell->X, Cell->Y);
         RecalculateDistortionFromHarvestStress(*Cell);
     }
+}
+
+FRealState AGridWorldManager::CollectWater(int32 X, int32 Y)
+{
+    FGridCell* Cell = GetCell(X, Y);
+    if (!Cell || !Cell->bIsWater || !HarvestService) return FRealState();
+
+    FRealState WaterState = HarvestService->HarvestWater(*Cell, FConditionModifier());
+
+    if (bHarvestAffectsBiome)
+    {
+        Cell->HarvestStress += HarvestStressIncrement;
+        Cell->HarvestStress = FMath::Clamp(Cell->HarvestStress, 0.0f, 1.0f);
+        MarkStress(X, Y);
+        RecalculateDistortionFromHarvestStress(*Cell);
+    }
+    return WaterState;
 }
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
