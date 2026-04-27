@@ -1,4 +1,4 @@
-// HerbalistCoreTypes.h (полный файл с добавленным EAlchemyOutcome)
+// HerbalistCoreTypes.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -95,25 +95,18 @@ struct PROJECTHERBALIST_API FMemoryState
 {
     GENERATED_BODY()
 
-    /** Накопленное искажение клетки (основной параметр Distortion). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
     float AccumulatedDistortion = 0.0f;
 
-    /** Память стабильности. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
     float StabilityMemory = 0.0f;
 
-    /** История чистоты. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
     float HistoryPurity = 0.0f;
 
-    // --- Фаза 2: Continuous Distortion ---
-
-    /** Скорость изменения Distortion (для непрерывности). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
     float DistortionVelocity = 0.0f;
 
-    /** Игровое время последнего изменения Distortion. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
     float TimeOfLastDistortionChange = 0.0f;
 };
@@ -156,11 +149,12 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMemoryState Memory;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float HarvestStress = 0.0f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEntityTriggered = false;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) FName AvailableIngredientID;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) float ResourceRegrowthTimer = 0.0f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsWater = false;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName WaterTypeID = NAME_None;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FName WaterTypeID = NAME_None;
+
+    // Список акторов ресурсов в этой клетке (слабые указатели, чтобы не мешать сборщику)
+    UPROPERTY()
+    TArray<TWeakObjectPtr<class AHerbalistResourceActor>> ResourceActors;
 };
 
 USTRUCT(BlueprintType)
@@ -230,52 +224,50 @@ struct PROJECTHERBALIST_API FL2Direction
     float Nature = 0.0f;
 
     void NormalizeL2(FRngState& Rng)
-	{
-		float LenSq = Body*Body + Mind*Mind + Spirit*Spirit + Nature*Nature;
-		if (LenSq > KINDA_SMALL_NUMBER)
-		{
-			float InvLen = FMath::InvSqrt(LenSq);
-			Body   *= InvLen;
-			Mind   *= InvLen;
-			Spirit *= InvLen;
-			Nature *= InvLen;
-		}
-		else
-		{
-			// Детерминированный генератор на основе Rng.Seed (линейный конгруэнтный)
-			auto Rand01 = [&Rng]() {
-				Rng.Seed = (Rng.Seed * 196314165) + 907633515;
-				return (Rng.Seed & 0x00FFFFFF) / float(0x01000000);
-			};
-			float x1, x2, x3, x4, s;
-			do {
-				x1 = Rand01() * 2.0f - 1.0f;
-				x2 = Rand01() * 2.0f - 1.0f;
-				x3 = Rand01() * 2.0f - 1.0f;
-				x4 = Rand01() * 2.0f - 1.0f;
-				s = x1*x1 + x2*x2 + x3*x3 + x4*x4;
-			} while (s > 1.0f || s < KINDA_SMALL_NUMBER);
-			float InvLen = FMath::InvSqrt(s);
-			Body   = x1 * InvLen;
-			Mind   = x2 * InvLen;
-			Spirit = x3 * InvLen;
-			Nature = x4 * InvLen;
-		}
-	}
+    {
+        float LenSq = Body * Body + Mind * Mind + Spirit * Spirit + Nature * Nature;
+        if (LenSq > KINDA_SMALL_NUMBER)
+        {
+            float InvLen = FMath::InvSqrt(LenSq);
+            Body *= InvLen;
+            Mind *= InvLen;
+            Spirit *= InvLen;
+            Nature *= InvLen;
+        }
+        else
+        {
+            auto Rand01 = [&Rng]() {
+                Rng.Seed = (Rng.Seed * 196314165) + 907633515;
+                return (Rng.Seed & 0x00FFFFFF) / float(0x01000000);
+                };
+            float x1, x2, x3, x4, s;
+            do {
+                x1 = Rand01() * 2.0f - 1.0f;
+                x2 = Rand01() * 2.0f - 1.0f;
+                x3 = Rand01() * 2.0f - 1.0f;
+                x4 = Rand01() * 2.0f - 1.0f;
+                s = x1 * x1 + x2 * x2 + x3 * x3 + x4 * x4;
+            } while (s > 1.0f || s < KINDA_SMALL_NUMBER);
+            float InvLen = FMath::InvSqrt(s);
+            Body = x1 * InvLen;
+            Mind = x2 * InvLen;
+            Spirit = x3 * InvLen;
+            Nature = x4 * InvLen;
+        }
+    }
 
     FDirection ToL1() const
     {
         FDirection Result;
-        Result.Body   = FMath::Max(0.0f, Body);
-        Result.Mind   = FMath::Max(0.0f, Mind);
+        Result.Body = FMath::Max(0.0f, Body);
+        Result.Mind = FMath::Max(0.0f, Mind);
         Result.Spirit = FMath::Max(0.0f, Spirit);
         Result.Nature = FMath::Max(0.0f, Nature);
-        
         float Sum = Result.Body + Result.Mind + Result.Spirit + Result.Nature;
         if (Sum > KINDA_SMALL_NUMBER)
         {
-            Result.Body   /= Sum;
-            Result.Mind   /= Sum;
+            Result.Body /= Sum;
+            Result.Mind /= Sum;
             Result.Spirit /= Sum;
             Result.Nature /= Sum;
         }
@@ -288,15 +280,15 @@ struct PROJECTHERBALIST_API FL2Direction
 
     float Length() const
     {
-        return FMath::Sqrt(Body*Body + Mind*Mind + Spirit*Spirit + Nature*Nature);
+        return FMath::Sqrt(Body * Body + Mind * Mind + Spirit * Spirit + Nature * Nature);
     }
 };
 
 inline FL2Direction ToL2(const FDirection& L1, FRngState& Rng)
 {
     FL2Direction Result;
-    Result.Body   = L1.Body;
-    Result.Mind   = L1.Mind;
+    Result.Body = L1.Body;
+    Result.Mind = L1.Mind;
     Result.Spirit = L1.Spirit;
     Result.Nature = L1.Nature;
     Result.NormalizeL2(Rng);

@@ -29,33 +29,11 @@ void AGridWorldManager::Tick(float DeltaTime)
             if (!FMath::IsNearlyEqual(OldStress, Cell->HarvestStress, 1e-4f))
             {
                 MarkDirty(X, Y);
-                // Пункт 1.2: пересчитываем Distortion и Magnitude при изменении стресса
                 RecalculateDistortionFromHarvestStress(*Cell);
             }
             if (Cell->HarvestStress <= 0.0f)
             {
                 StressCells.Remove(Idx);
-            }
-        }
-    }
-
-    // Регенерация ресурсов
-    if (RegrowingCells.Num() > 0)
-    {
-        TArray<int32> RegrowIndices = RegrowingCells.Array();
-        for (int32 Idx : RegrowIndices)
-        {
-            int32 X = Idx % GridSizeX;
-            int32 Y = Idx / GridSizeX;
-            FGridCell* Cell = GetCell(X, Y);
-            if (!Cell) continue;
-
-            Cell->ResourceRegrowthTimer -= DeltaTime;
-            if (Cell->ResourceRegrowthTimer <= 0.0f)
-            {
-                RegenerateCellResource(*Cell);
-                UnmarkRegrowing(X, Y);
-                UE_LOG(LogHerbalist, Log, TEXT("Cell (%d,%d) resource regenerated"), X, Y);
             }
         }
     }
@@ -98,13 +76,10 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
-    // Управление активностью тика (пункт 1.3: учитываем граф биомов)
-    bool bShouldTick = (DirtyCells.Num() > 0) || (RegrowingCells.Num() > 0) || (StressCells.Num() > 0);
+    // Управление активностью тика
+    bool bShouldTick = (DirtyCells.Num() > 0) || (StressCells.Num() > 0);
     UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>();
-    if (Graph && Graph->IsInitialized())
-    {
-        bShouldTick = true;
-    }
+    if (Graph && Graph->IsInitialized()) bShouldTick = true;
 
     if (bInterpolationActive != bShouldTick)
     {
@@ -112,7 +87,6 @@ void AGridWorldManager::Tick(float DeltaTime)
         SetActorTickEnabled(bShouldTick);
     }
 
-    // ОТРИСОВКА ОТЛАДКИ (если включена)
 #if WITH_EDITOR
     if (bEnableDebugDraw)
     {
@@ -124,6 +98,7 @@ void AGridWorldManager::Tick(float DeltaTime)
 
 void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
 {
+    // без изменений
     FRealState& Cur = Cell.State;
     const FRealState& Target = Cell.TargetState;
 

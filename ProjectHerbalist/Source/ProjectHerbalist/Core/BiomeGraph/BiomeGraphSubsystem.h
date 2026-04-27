@@ -8,6 +8,7 @@
 
 class UBiomeGraphAsset;
 class AGridWorldManager;
+class UMaterialParameterCollection;   // forward declaration
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnBiomeGraphStep, float);
 
@@ -39,6 +40,13 @@ public:
 
     const TMap<FName, FVector>& GetCachedBiomeCenters() const { return CachedBiomeCenters; }
 
+    // Визуализация через Material Parameter Collection
+    UFUNCTION(BlueprintCallable, Category = "BiomeGraph")
+    void UpdateVisualization();
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visualization")
+    TSoftObjectPtr<UMaterialParameterCollection> VisualizationMPC;
+
     FOnBiomeGraphStep OnStepExecuted;
 
 protected:
@@ -62,7 +70,6 @@ protected:
     AGridWorldManager* FindGridWorldManager() const;
     bool IsGridValid() const;
 
-    // Список смежности: BiomeID -> индексы рёбер в Edges
     TMap<FName, TArray<int32>> AdjacencyList;
     void BuildAdjacencyList();
 

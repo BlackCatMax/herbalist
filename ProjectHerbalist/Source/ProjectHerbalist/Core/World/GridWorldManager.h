@@ -24,6 +24,9 @@ public:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
 
+    void SpawnResourcesInCell(FGridCell& Cell);
+    void StartRegeneration(FGridCell& Cell);
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     int32 GridSizeX = 20;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
@@ -105,12 +108,7 @@ public:
     // --- Акторы ресурсов ---
     UHarvestService* GetHarvestService() const { return HarvestService; }
     void OnResourceCollected(AHerbalistResourceActor* Actor);
-    
-    // ЕДИНСТВЕННОЕ объявление (дублирование удалено)
     void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
-    
-    void SpawnResourcesForCell(FGridCell& Cell);
-    TArray<FName> GetResourcesForBiome(EBiomeType Biome) const;
 
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)
@@ -131,7 +129,7 @@ protected:
     FRandomStream WorldRNG;
 
     TSet<int32> DirtyCells;
-    TSet<int32> RegrowingCells;
+    TSet<int32> RegrowingCells; // больше не используется, но оставим для совместимости
     TSet<int32> StressCells;
     bool bInterpolationActive = false;
 
@@ -144,7 +142,6 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "World|Init")
     void InitializeCells();
 
-    void RegenerateCellResource(FGridCell& Cell);
     void InterpolateCell(FGridCell& Cell, float DeltaTime);
     void UpdateMemory(FMemoryState& Memory, const FRealState& NewState, float Rate);
     void RecalculateDistortionFromHarvestStress(FGridCell& Cell);
