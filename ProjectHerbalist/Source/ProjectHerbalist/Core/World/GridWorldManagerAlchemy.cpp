@@ -9,6 +9,7 @@
 #include "Core/Pipeline/AlchemyTypes.h"
 #include "Core/Pipeline/IntentResolver.h"
 #include "Core/Pipeline/PipelineTypes.h"
+#include "Core/Pipeline/AlchemyPipelineFacade.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
@@ -23,26 +24,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
-    // 1. Конвертация в атомы
-    TArray<FAlchemyAtom> Atoms;
-    for (const FInventoryItem& Item : Ingredients)
-    {
-        FAlchemyAtom Atom(
-            Item.IngredientID,
-            IngredientSubsystem ? IngredientSubsystem->IsWater(Item.IngredientID) : false,
-            Item.State,
-            IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown,
-            EAtomOrigin::Harvest,
-            Cell->Memory.AccumulatedDistortion,
-            GetWorld()->GetTimeSeconds()
-        );
-        Atoms.Add(Atom);
-    }
-
-    // 2. Семантическое разрешение (считает и Coherence)
-    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms, Cell->Memory.AccumulatedDistortion);
-
-    // 3. Биомный контекст
+    // 1. Биомный контекст
     float BiomeMorokField = 0.0f, BiomeZaryanaField = 0.0f;
     FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
@@ -56,25 +38,24 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         }
     }
 
-    // 4. Запуск физики с вычисленной Coherence
-    TArray<FRealState> IngredientStates, WaterStates;
-    for (const FAlchemyAtom& A : Semantic.IngredientAtoms) IngredientStates.Add(A.State);
-    for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
-
-    FAlchemyPhysicsResult Physics = FAlchemyPhysicsPipeline::Run(
-        IngredientStates, WaterStates,
-        Cell->State, Cell->Environment, Cell->Memory,
-        Semantic.Coherence,
-        Rng,
-        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift);
-
-    // 5. Применение результата к миру
+    // 2. Сохраняем старое состояние для дельты
     FRealState OldState = Cell->State;
-    FRealState NewState = FAlchemyWorldStateApplier::Apply(Semantic, Physics, Rng);
 
-    UE_LOG(LogHerbalist, Log, TEXT("Alchemy outcome: %d"), (int32)Semantic.Outcome);
+    // 3. Выполняем алхимию через фасад
+    FAlchemyFacadeResult AlchemyResult = FAlchemyPipelineFacade::Execute(
+        Ingredients,
+        Cell->State, Cell->Environment, Cell->Memory,
+        Cell->Memory.AccumulatedDistortion,
+        IngredientSubsystem,
+        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift,
+        Rng);
 
-    // 6. Дельта и след
+    FRealState NewState = AlchemyResult.FinalState;
+    EAlchemyOutcome Outcome = AlchemyResult.Outcome;
+
+    UE_LOG(LogHerbalist, Log, TEXT("Alchemy outcome: %d"), (int32)Outcome);
+
+    // 4. Дельта и след
     FDeltaState Delta = HerbalistCore::ComputeDelta(OldState, NewState);
 
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
@@ -86,10 +67,8 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         Graph->RecordFootprint(BiomeID, MorokImpact, ZaryanaImpact, AxisDelta, 1.0f);
     }
 
-    // 7. Применение к сетке
+    // 5. Применение к сетке
     SetTargetState(X, Y, NewState);
-    
-    // PropagateToNeighbors ожидает FRealState для дельты, преобразуем
     FRealState DeltaForPropagation;
     DeltaForPropagation.Magnitude = Delta.MagnitudeDelta;
     DeltaForPropagation.Direction = Delta.DirectionDelta;
