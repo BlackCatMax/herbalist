@@ -1,15 +1,18 @@
 // GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
-#include "Core/Data/WaterTypeRegistry.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Types/BiomeTypes.h"
-#include "Core/Data/IngredientRegistry.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
+#include "Player/HerbalistPlayerController.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "ProjectHerbalist.h"
+#include "TimerManager.h"
 
 FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
 {
@@ -60,6 +63,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
         Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
         Cell.TargetState.Meta.Purity = FMath::Clamp(Cell.TargetState.Meta.Purity + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+        MarkDirty(Cell.X, Cell.Y);
     }
 }
 
@@ -74,12 +78,89 @@ void AGridWorldManager::BeginPlay()
     Super::BeginPlay();
     WorldRNG.Initialize(12345);
     HarvestService = NewObject<UHarvestService>(this);
+
+    if (Cells.Num() == 0)
+    {
+        InitializeCells();
+    }
 }
+
+// -----------------------------------------------------------------------------
+// НОВЫЕ ФУНКЦИИ
+// -----------------------------------------------------------------------------
+
+void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
+{
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
+    int32 NumResources = FMath::RandRange(1, 3);
+    for (int32 i = 0; i < NumResources; ++i)
+    {
+        FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell.Biome, WorldRNG) : NAME_None;
+        if (IngredientID.IsNone()) continue;
+
+        FVector Offset = FVector(FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
+            FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
+            0);
+        FVector SpawnPos = this->GetCellWorldPosition(Cell.X, Cell.Y) + Offset;
+
+        const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
+        if (!Row) continue;
+
+        AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
+        if (NewActor)
+        {
+            NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y);
+            Cell.ResourceActors.Add(NewActor);
+            UE_LOG(LogHerbalist, Log, TEXT("Spawned %s at cell (%d,%d)"), *IngredientID.ToString(), Cell.X, Cell.Y);
+        }
+    }
+}
+
+void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset)
+{
+    FGridCell* Cell = GetCell(X, Y);
+    if (!Cell) return;
+
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
+    if (!Row) return;
+
+    FVector SpawnPos = GetCellWorldPosition(X, Y) + Offset;
+
+    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
+    if (NewActor)
+    {
+        NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y);
+        Cell->ResourceActors.Add(NewActor);
+        UE_LOG(LogHerbalist, Log, TEXT("SpawnResourceActor: %s at cell (%d,%d)"), *IngredientID.ToString(), X, Y);
+    }
+}
+
+void AGridWorldManager::StartRegeneration(FGridCell& Cell)
+{
+    FTimerHandle TimerHandle;
+    GetWorldTimerManager().SetTimer(TimerHandle, [this, &Cell]()
+        {
+            if (Cell.bIsWater) return;
+            SpawnResourcesInCell(Cell);
+        }, ResourceRegrowthTime, false);
+}
+
+// -----------------------------------------------------------------------------
+// ИНИЦИАЛИЗАЦИЯ МИРА
+// -----------------------------------------------------------------------------
 
 void AGridWorldManager::InitializeCells()
 {
     const int32 TotalCells = GridSizeX * GridSizeY;
     Cells.SetNum(TotalCells);
+
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
 
     TArray<EBiomeType> AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
     if (AllBiomes.Num() == 0)
@@ -107,22 +188,22 @@ void AGridWorldManager::InitializeCells()
 
             FRealState defaultState = FBiomeDefaults::GetDefaultState(biome);
             FEnvironment defaultEnv = FBiomeDefaults::GetDefaultEnvironment(biome);
-            Cells[Index].Biome = biome;
-            Cells[Index].State = defaultState;
-            Cells[Index].TargetState = defaultState;
-            Cells[Index].Environment = defaultEnv;
-            Cells[Index].Memory = FMemoryState();
-            Cells[Index].X = X;
-            Cells[Index].Y = Y;
-            Cells[Index].HarvestStress = 0.0f;
-            Cells[Index].bEntityTriggered = false;
-            Cells[Index].AvailableIngredientID = FIngredientRegistry::GetRandomResourceForBiome(biome, WorldRNG);
-            Cells[Index].ResourceRegrowthTimer = 0.0f;
-            Cells[Index].bIsWater = false;
-            Cells[Index].WaterTypeID = NAME_None;
+            FGridCell& Cell = Cells[Index];
+            Cell.Biome = biome;
+            Cell.State = defaultState;
+            Cell.TargetState = defaultState;
+            Cell.Environment = defaultEnv;
+            Cell.Memory = FMemoryState();
+            Cell.X = X;
+            Cell.Y = Y;
+            Cell.HarvestStress = 0.0f;
+            Cell.bEntityTriggered = false;
+            Cell.bIsWater = false;
+            Cell.WaterTypeID = NAME_None;
         }
     }
 
+    // Размещение воды (затирает ресурсы в водных клетках)
     int32 TargetWaterCount = TotalCells * 0.2f;
     if (TargetWaterCount < 1) TargetWaterCount = 1;
     TArray<bool> IsWaterAlready;
@@ -158,21 +239,23 @@ void AGridWorldManager::InitializeCells()
                 int32 Idx = Y * GridSizeX + X;
                 FGridCell& Cell = Cells[Idx];
                 Cell.bIsWater = true;
-                Cell.AvailableIngredientID = NAME_None;
-                Cell.WaterTypeID = FWaterTypeRegistry::GetRandomWaterType(Cell.Biome, WorldRNG);
+                Cell.WaterTypeID = WaterSubsystem ? WaterSubsystem->GetRandomWaterType(Cell.Biome, WorldRNG) : NAME_None;
                 FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
-                if (const FWaterTypeRow* WaterRow = FWaterTypeRegistry::GetWaterType(Cell.WaterTypeID))
+                if (WaterSubsystem)
                 {
-                    waterState.Meta.Purity = WaterRow->BasePurity;
-                    waterState.Meta.Distortion = WaterRow->BaseDistortion;
-                    waterState.Meta.Stability = WaterRow->BaseStability;
-                    waterState.Meta.Potency = WaterRow->BasePotency;
-                    waterState.Meta.Corruption = WaterRow->BaseCorruption;
+                    if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
+                    {
+                        waterState.Meta.Purity = WaterRow->BasePurity;
+                        waterState.Meta.Distortion = WaterRow->BaseDistortion;
+                        waterState.Meta.Stability = WaterRow->BaseStability;
+                        waterState.Meta.Potency = WaterRow->BasePotency;
+                        waterState.Meta.Corruption = WaterRow->BaseCorruption;
+                    }
                 }
                 Cell.State = waterState;
                 Cell.TargetState = waterState;
                 Cell.HarvestStress = 0.0f;
-                Cell.ResourceRegrowthTimer = 0.0f;
+                Cell.ResourceActors.Empty();
                 IsWaterAlready[Idx] = true;
                 PlacedWater++;
             }
@@ -180,13 +263,56 @@ void AGridWorldManager::InitializeCells()
         if (PlacedWater >= TargetWaterCount) break;
     }
 
+    // Спавним ресурсы во всех не-водных клетках
+    for (FGridCell& Cell : Cells)
+    {
+        if (!Cell.bIsWater)
+        {
+            SpawnResourcesInCell(Cell);
+        }
+    }
+
     SetActorTickEnabled(true);
 }
 
-void AGridWorldManager::RegenerateCellResource(FGridCell& Cell)
+void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
 {
-    Cell.AvailableIngredientID = FIngredientRegistry::GetRandomResourceForBiome(Cell.Biome, WorldRNG);
-    Cell.ResourceRegrowthTimer = 0.0f;
+    if (!Actor) return;
+
+    FGridCell* Cell = GetCell(Actor->GetGridX(), Actor->GetGridY());
+    if (!Cell) return;
+
+    // Удаляем актор из списка клетки
+    Cell->ResourceActors.Remove(Actor);
+    UE_LOG(LogHerbalist, Log, TEXT("Resource collected at cell (%d,%d), remaining: %d"), Cell->X, Cell->Y, Cell->ResourceActors.Num());
+
+    // Добавляем предмет в инвентарь (сам сбор)
+    FName IngredientID = Actor->GetIngredientID();
+    FRealState ResourceState = HarvestService->Harvest(IngredientID, Cell->State, FConditionModifier());
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (PC && PC->InventoryComponent && (ResourceState.Magnitude > 0.01f || ResourceState.Meta.Distortion > 0.01f))
+    {
+        FInventoryItem Item;
+        Item.IngredientID = IngredientID;
+        Item.State = ResourceState;
+        Item.Count = 1;
+        PC->InventoryComponent->AddItem(Item, 1);
+    }
+
+    // Если ресурсов больше нет, запускаем регенерацию
+    if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)
+    {
+        StartRegeneration(*Cell);
+    }
+
+    // Обновляем стресс клетки
+    if (bHarvestAffectsBiome)
+    {
+        Cell->HarvestStress += HarvestStressIncrement;
+        Cell->HarvestStress = FMath::Clamp(Cell->HarvestStress, 0.0f, 1.0f);
+        MarkStress(Cell->X, Cell->Y);
+        RecalculateDistortionFromHarvestStress(*Cell);
+    }
 }
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
@@ -224,6 +350,7 @@ void AGridWorldManager::UpdateMemory(FMemoryState& Memory, const FRealState& New
     const float TargetDistortion = NewState.Meta.Distortion;
     const float Delta = (TargetDistortion - Memory.AccumulatedDistortion) * Rate;
     FAlchemyWorldStateApplier::ApplyDistortionDelta(Memory, Delta, CurrentTime);
+    Memory.StabilityMemory = FMath::FInterpTo(Memory.StabilityMemory, NewState.Meta.Stability, 0.05f, Rate);
 }
 
 void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
@@ -239,28 +366,7 @@ void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
     MarkDirty(Cell.X, Cell.Y);
 }
 
-TArray<FName> AGridWorldManager::GetResourcesForBiome(EBiomeType Biome) const
-{
-    return FIngredientRegistry::GetResourcesForBiome(Biome);
-}
-
-void AGridWorldManager::SpawnResourcesForCell(FGridCell& Cell)
-{
-    // Заглушка
-}
-
-void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
-{
-    // Заглушка
-}
-
-void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset)
-{
-    // Заглушка
-}
-
-// ==================== ОТРИСОВКА ====================
-
+// ---------------------- ОТРИСОВКА ----------------------
 #if WITH_EDITOR
 void AGridWorldManager::DrawGridDebug()
 {
@@ -268,8 +374,17 @@ void AGridWorldManager::DrawGridDebug()
     for (const FGridCell& Cell : Cells)
     {
         FVector Center = GetCellWorldPosition(Cell.X, Cell.Y);
-        FVector Extent = FVector(CellSize/2.0f, CellSize/2.0f, CellHeight/2.0f);
-        FColor Color = Cell.bIsWater ? FColor::White : FColor(64,64,64);
+        FVector Extent = FVector(CellSize / 2.0f, CellSize / 2.0f, CellHeight / 2.0f);
+        FColor Color;
+        if (Cell.bIsWater)
+        {
+            Color = FColor::White;
+        }
+        else
+        {
+            float Distortion = Cell.State.Meta.Distortion;
+            Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Distortion).ToFColor(false);
+        }
         DrawDebugBox(GetWorld(), Center, Extent, Color, false, 0.0f, 0, BorderThickness);
     }
 }

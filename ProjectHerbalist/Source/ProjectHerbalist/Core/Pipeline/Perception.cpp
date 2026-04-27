@@ -1,6 +1,7 @@
 // Perception.cpp
 #include "Perception.h"
 #include "ProjectHerbalist.h"
+
 float Perception::PerceiveValue(float RealValue, float GlobalDistortion, FRandomStream& Random)
 {
     const float M = 2.0f;
@@ -29,8 +30,9 @@ EIngredientClass Perception::PerceiveClass(EIngredientClass RealClass, float Glo
             EIngredientClass::Fungus, EIngredientClass::Catalyst, EIngredientClass::Essence
         };
         All.Remove(RealClass);
-        return All[Random.RandRange(0, All.Num() - 1)];
-        UE_LOG(LogHerbalist, Verbose, TEXT("Perception: class changed from %d to %d (Distortion=%.2f)"), (int32)RealClass, (int32)All[Random.RandRange(0, All.Num() - 1)], GlobalDistortion);
+        EIngredientClass Chosen = All[Random.RandRange(0, All.Num() - 1)];
+        UE_LOG(LogHerbalist, Verbose, TEXT("Perception: class changed from %d to %d (Distortion=%.2f)"), (int32)RealClass, (int32)Chosen, GlobalDistortion);
+        return Chosen;
     }
     return RealClass;
 }

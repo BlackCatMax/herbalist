@@ -13,6 +13,10 @@ AStorageContainer::AStorageContainer()
 void AStorageContainer::BeginPlay()
 {
     Super::BeginPlay();
+    if (InventoryComponent)
+    {
+        InventoryComponent->MaxSlots = MaxSlots;
+    }
 }
 
 void AStorageContainer::OnInteract(APlayerController* PlayerController)
@@ -26,7 +30,6 @@ void AStorageContainer::OnInteract(APlayerController* PlayerController)
         return;
     }
 
-    // Закрытие, если уже открыт
     if (TransferWidgetInstance && TransferWidgetInstance->IsInViewport())
     {
         UE_LOG(LogHerbalist, Log, TEXT("Closing TransferWidget"));
@@ -41,7 +44,6 @@ void AStorageContainer::OnInteract(APlayerController* PlayerController)
         return;
     }
 
-    // Не открываем, если другой виджет уже открыт
     if (PC->bIsAnyWidgetOpen)
     {
         UE_LOG(LogHerbalist, Log, TEXT("Another widget is open, cannot open storage"));

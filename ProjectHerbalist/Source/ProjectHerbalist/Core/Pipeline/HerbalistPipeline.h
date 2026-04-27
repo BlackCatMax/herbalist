@@ -5,9 +5,9 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 
-// Forward declarations
 struct FAggregatedState;
 struct FDeltaState;
+class UIngredientRegistrySubsystem;
 
 namespace HerbalistCore
 {
@@ -38,7 +38,8 @@ namespace HerbalistCore
             FRngState& Rng,
             float BiomeMorokField = 0.0f,
             float BiomeZaryanaField = 0.0f,
-            const FVector4& BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f)
+            const FVector4& BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f),
+            UIngredientRegistrySubsystem* IngredientRegistry = nullptr
         );
 
         // ========== Вспомогательные функции ==========
@@ -47,7 +48,8 @@ namespace HerbalistCore
         static void SeparateWaterAndIngredients(
             const TArray<FInventoryItem>& Inputs,
             TArray<FRealState>& OutNonWater,
-            TArray<FRealState>& OutWater
+            TArray<FRealState>& OutWater,
+            UIngredientRegistrySubsystem* IngredientRegistry = nullptr
         );
 
         // Обработка случая "только вода" -> варёная вода

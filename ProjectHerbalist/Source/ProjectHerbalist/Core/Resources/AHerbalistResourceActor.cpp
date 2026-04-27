@@ -1,27 +1,24 @@
 // AHerbalistResourceActor.cpp
 #include "AHerbalistResourceActor.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/BoxComponent.h"
-#include "Core/World/GridWorldManager.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Data/IngredientRegistry.h"
-#include "Player/HerbalistPlayerController.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
-#include "TimerManager.h"
+#include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
-
-// Временно отключаем проверку IngredientRegistry, если её нет
-// TODO: Убедиться, что IngredientRegistry существует
+#include "TimerManager.h"
 
 AHerbalistResourceActor::AHerbalistResourceActor()
 {
     PrimaryActorTick.bCanEverTick = false;
 
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-    
+
     MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
     MeshComponent->SetupAttachment(RootComponent);
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
@@ -29,19 +26,19 @@ AHerbalistResourceActor::AHerbalistResourceActor()
     MeshComponent->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
     MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-    CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
-    CollisionBox->SetupAttachment(RootComponent);
-    CollisionBox->SetBoxExtent(FVector(50.0f, 50.0f, 50.0f));
-    CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    CollisionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-    CollisionBox->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
-    CollisionBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+    HarvestSphere = CreateDefaultSubobject<USphereComponent>(TEXT("HarvestSphere"));
+    HarvestSphere->SetupAttachment(RootComponent);
+    HarvestSphere->SetSphereRadius(70.0f);
+    HarvestSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    HarvestSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+    HarvestSphere->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
+    HarvestSphere->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
 void AHerbalistResourceActor::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
-    
+
     if (MeshComponent)
     {
         MeshComponent->SetVisibility(true);
@@ -51,48 +48,39 @@ void AHerbalistResourceActor::PostInitializeComponents()
 void AHerbalistResourceActor::BeginPlay()
 {
     Super::BeginPlay();
-    
+
     if (!WorldManager)
         FindAndSetWorldManager();
-    
+
     if ((GridX == -1 || GridY == -1) && WorldManager)
     {
         FVector LocalLoc = GetActorLocation() - WorldManager->GetActorLocation();
         GridX = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
         GridY = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-        UE_LOG(LogHerbalist, Log, TEXT("%s: Auto-assigned to cell (%d,%d)"), 
-               *GetName(), GridX, GridY);
+        UE_LOG(LogHerbalist, Log, TEXT("%s: Auto-assigned to cell (%d,%d)"),
+            *GetName(), GridX, GridY);
     }
-    
-    // Временная проверка - закомментировано, если нет IngredientRegistry
-    /*
-    if (!UIngredientRegistry::IsValidIngredient(IngredientID))
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Invalid ingredient ID '%s'"), 
-               *GetName(), *IngredientID.ToString());
-    }
-    */
 }
 
 void AHerbalistResourceActor::FindAndSetWorldManager()
 {
     UWorld* World = GetWorld();
     if (!World) return;
-    
+
     for (TActorIterator<AGridWorldManager> It(World); It; ++It)
     {
         WorldManager = *It;
         break;
     }
-    
+
     if (!WorldManager)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("%s: No GridWorldManager found in level"), *GetName());
     }
 }
 
-void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayName, 
-    UStaticMesh* Mesh, const FRealState& InBaseState, const FVector& Location, 
+void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayName,
+    UStaticMesh* Mesh, const FRealState& InBaseState, const FVector& Location,
     AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY)
 {
     IngredientID = InIngredientID;
@@ -102,35 +90,28 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
     GridX = InGridX;
     GridY = InGridY;
     SetActorLocation(Location);
-    
+
     if (Mesh)
     {
         MeshComponent->SetStaticMesh(Mesh);
         MeshComponent->SetVisibility(true);
-        
-        if (WorldManager)
-        {
-            float CellSize = WorldManager->CellSize;
-            float DesiredScale = CellSize / 100.0f;
-            MeshComponent->SetWorldScale3D(FVector(DesiredScale, DesiredScale, DesiredScale * 0.8f));
-        }
     }
     else
     {
         MeshComponent->SetVisibility(false);
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: No mesh provided for ingredient %s"), 
-               *GetName(), *IngredientID.ToString());
+        UE_LOG(LogHerbalist, Warning, TEXT("%s: No mesh provided for ingredient %s"),
+            *GetName(), *IngredientID.ToString());
     }
-    
-    UE_LOG(LogHerbalist, Log, TEXT("%s: Initialized at cell (%d,%d) with ingredient %s"), 
-           *GetName(), GridX, GridY, *IngredientID.ToString());
+
+    UE_LOG(LogHerbalist, Log, TEXT("%s: Initialized at cell (%d,%d) with ingredient %s"),
+        *GetName(), GridX, GridY, *IngredientID.ToString());
 }
 
 bool AHerbalistResourceActor::IsInHarvestRange(float MaxDistance) const
 {
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (!PC || !PC->GetPawn()) return false;
-    
+
     float Distance = FVector::Dist(PC->GetPawn()->GetActorLocation(), GetActorLocation());
     return Distance <= MaxDistance;
 }
@@ -142,7 +123,7 @@ void AHerbalistResourceActor::Harvest()
         UE_LOG(LogHerbalist, Verbose, TEXT("%s: Already being harvested"), *GetName());
         return;
     }
-    
+
     if (!WorldManager)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - No WorldManager"), *GetName());
@@ -152,83 +133,38 @@ void AHerbalistResourceActor::Harvest()
     FGridCell* Cell = WorldManager->GetCell(GridX, GridY);
     if (!Cell)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - Invalid cell (%d,%d)"), 
-               *GetName(), GridX, GridY);
-        return;
-    }
-
-    UHarvestService* HarvestService = WorldManager->GetHarvestService();
-    if (!HarvestService)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - No HarvestService"), *GetName());
+        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - Invalid cell (%d,%d)"),
+            *GetName(), GridX, GridY);
         return;
     }
 
     bIsBeingHarvested = true;
-    
+
     OnHarvestStarted();
 
-    FRealState ResourceState = HarvestService->Harvest(IngredientID, Cell->State, FConditionModifier());
-
-    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
-    if (PC && PC->InventoryComponent)
-    {
-        FInventoryItem Item;
-        Item.IngredientID = IngredientID;
-        Item.State = ResourceState;
-        Item.Count = 1;
-        
-        if (PC->InventoryComponent->AddItem(Item, 1))
-        {
-            // Убираем обращение к Quality, если его нет в FRealState
-            UE_LOG(LogHerbalist, Log, TEXT("%s: Harvested %s from cell (%d,%d)"), 
-                   *GetName(), *IngredientID.ToString(), GridX, GridY);
-        }
-        else
-        {
-            UE_LOG(LogHerbalist, Warning, TEXT("%s: Failed to add item to inventory"), *GetName());
-        }
-    }
-    else
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - No Player Controller or Inventory"), 
-               *GetName());
-    }
-
-    if (HarvestParticleSystem)
-    {
-        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), HarvestParticleSystem, 
-                                                  GetActorLocation(), GetActorRotation(), true);
-    }
-    
-    if (HarvestSound)
-    {
-        UGameplayStatics::PlaySoundAtLocation(GetWorld(), HarvestSound, GetActorLocation());
-    }
-
     WorldManager->OnResourceCollected(this);
-    
+
     OnHarvestComplete();
-    
+
     StartDisappearAnimation();
 }
 
 void AHerbalistResourceActor::StartDisappearAnimation()
 {
-    if (CollisionBox)
+    if (HarvestSphere)
     {
-        CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        HarvestSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
     if (MeshComponent)
     {
         MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
-    
+
     if (DisappearDuration > 0.0f)
     {
-        GetWorldTimerManager().SetTimer(DisappearTimerHandle, this, 
-                                        &AHerbalistResourceActor::OnDisappearAnimationFinished, 
-                                        DisappearDuration, false);
+        GetWorldTimerManager().SetTimer(DisappearTimerHandle, this,
+            &AHerbalistResourceActor::OnDisappearAnimationFinished,
+            DisappearDuration, false);
     }
     else
     {
@@ -242,6 +178,6 @@ void AHerbalistResourceActor::OnDisappearAnimationFinished()
     {
         GetWorldTimerManager().ClearTimer(DisappearTimerHandle);
     }
-    
+
     Destroy();
 }

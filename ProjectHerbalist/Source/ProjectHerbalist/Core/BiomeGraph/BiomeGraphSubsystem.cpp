@@ -4,6 +4,8 @@
 #include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Materials/MaterialParameterCollection.h"
+#include "Kismet/KismetMaterialLibrary.h"
 #include "ProjectHerbalist.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogBiomeGraph, Log, All);
@@ -131,6 +133,9 @@ void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
         UpdateBiomeCenters(Grid);
     }
 
+    // Обновляем визуализацию после каждого шага
+    UpdateVisualization();
+
     OnStepExecuted.Broadcast(StepDeltaTime);
 }
 
@@ -148,7 +153,6 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
         CountMap.Add(Pair.Key, 0);
     }
 
-    // Используем контракт FGridBiomeSample
     TArray<FGridBiomeSample> Samples = Grid->GetBiomeSamples();
     for (const FGridBiomeSample& Sample : Samples)
     {
@@ -174,7 +178,6 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
 
 void UBiomeGraphSubsystem::PropagateWaves()
 {
-    // Snapshot
     TMap<FName, float> PrevMorok, PrevZaryana;
     for (const auto& Pair : Nodes)
     {
@@ -182,7 +185,6 @@ void UBiomeGraphSubsystem::PropagateWaves()
         PrevZaryana.Add(Pair.Key, FMath::Clamp(Pair.Value.ZaryanaField, 0.f, 1.f));
     }
 
-    // Дельты
     TMap<FName, float> DeltaMorok, DeltaZaryana;
     for (const auto& Pair : Nodes)
     {
@@ -199,7 +201,6 @@ void UBiomeGraphSubsystem::PropagateWaves()
         DeltaZaryana[Edge.ToBiome] += SourceZaryana * Edge.ZaryanaFlow * GlobalInfluenceScale;
     }
 
-    // Применяем дельты с clamp
     for (auto& Pair : Nodes)
     {
         Pair.Value.MorokField = FMath::Clamp(PrevMorok[Pair.Key] + DeltaMorok[Pair.Key], 0.f, 1.f);
@@ -213,7 +214,6 @@ void UBiomeGraphSubsystem::ApplyFieldsToGrid(AGridWorldManager* Grid)
 {
     if (!Grid) return;
 
-    // Grid сам применит влияние через свой метод
     TMap<FName, float> MorokFields, ZaryanaFields;
     for (const auto& Pair : Nodes)
     {
@@ -252,7 +252,6 @@ void UBiomeGraphSubsystem::RecordFootprint(FName BiomeID, float MorokImpact, flo
     Node->Memory.Instability = FMath::Clamp(Node->Memory.Instability + MorokImpact * DeltaTime * 0.1f, 0.f, 1.f);
     Node->Memory.AxisDrift += AxisDelta * DeltaTime * 0.05f;
 
-    // Замена GetClamped на покомпонентный Clamp
     Node->Memory.AxisDrift.X = FMath::Clamp(Node->Memory.AxisDrift.X, 0.f, 1.f);
     Node->Memory.AxisDrift.Y = FMath::Clamp(Node->Memory.AxisDrift.Y, 0.f, 1.f);
     Node->Memory.AxisDrift.Z = FMath::Clamp(Node->Memory.AxisDrift.Z, 0.f, 1.f);
@@ -296,4 +295,45 @@ void UBiomeGraphSubsystem::ResetGraph()
         Pair.Value.Memory = FBiomeMemory();
     }
     UE_LOG(LogBiomeGraph, Log, TEXT("Graph reset"));
+}
+
+// ============================================================================
+// ВИЗУАЛИЗАЦИЯ ЧЕРЕЗ MATERIAL PARAMETER COLLECTION
+// ============================================================================
+
+void UBiomeGraphSubsystem::UpdateVisualization()
+{
+    if (!bInitialized || Nodes.Num() == 0)
+    {
+        UE_LOG(LogBiomeGraph, Verbose, TEXT("UpdateVisualization: graph not initialized or empty"));
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    if (!World)
+        return;
+
+    UMaterialParameterCollection* MPC = VisualizationMPC.LoadSynchronous();
+    if (!MPC)
+        return;
+
+    float TotalMorok = 0.0f;
+    float TotalZaryana = 0.0f;
+    for (const auto& Pair : Nodes)
+    {
+        TotalMorok += Pair.Value.MorokField;
+        TotalZaryana += Pair.Value.ZaryanaField;
+    }
+    float AvgMorok = TotalMorok / Nodes.Num();
+    float AvgZaryana = TotalZaryana / Nodes.Num();
+
+    UKismetMaterialLibrary::SetScalarParameterValue(World, MPC, "GlobalMorok", AvgMorok);
+    UKismetMaterialLibrary::SetScalarParameterValue(World, MPC, "GlobalZaryana", AvgZaryana);
+
+    FLinearColor MorokColor = FLinearColor(AvgMorok, 0.0f, 0.0f, 1.0f);
+    FLinearColor ZaryanaColor = FLinearColor(0.0f, AvgZaryana, 0.0f, 1.0f);
+    UKismetMaterialLibrary::SetVectorParameterValue(World, MPC, "MorokColor", MorokColor);
+    UKismetMaterialLibrary::SetVectorParameterValue(World, MPC, "ZaryanaColor", ZaryanaColor);
+
+    UE_LOG(LogBiomeGraph, Verbose, TEXT("UpdateVisualization: Morok=%.2f, Zaryana=%.2f"), AvgMorok, AvgZaryana);
 }

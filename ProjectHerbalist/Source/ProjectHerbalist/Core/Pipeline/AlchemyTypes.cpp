@@ -1,5 +1,5 @@
+// AlchemyTypes.cpp
 #include "AlchemyTypes.h"
-#include "Core/Data/IngredientRegistry.h"
 #include "ProjectHerbalist.h"
 
 FAlchemyAtom::FAlchemyAtom()
@@ -15,12 +15,13 @@ FAlchemyAtom::FAlchemyAtom()
 }
 
 FAlchemyAtom::FAlchemyAtom(FName InSourceID, bool bInIsWater, const FRealState& InState,
-                           EAtomOrigin InOrigin, float InDistortionAtCollection, float InTimeOfCreation)
+                           EIngredientClass InClass, EAtomOrigin InOrigin,
+                           float InDistortionAtCollection, float InTimeOfCreation)
     : bIsWater(bInIsWater)
     , SourceID(InSourceID)
     , State(InState)
     , AtomUID(FGuid::NewGuid())
-    , Class(FIngredientRegistry::Classify(InSourceID))
+    , Class(InClass)
     , OriginContext(InOrigin)
     , DistortionAtCollection(InDistortionAtCollection)
     , TimeOfCreation(InTimeOfCreation)

@@ -19,11 +19,6 @@ void UInventoryWidget::BindInventory(UHerbalistInventoryComponent* InInventory)
     }
 }
 
-void UInventoryWidget::SetOtherInventory(UHerbalistInventoryComponent* InOther)
-{
-    OtherInventory = InOther;
-}
-
 void UInventoryWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -58,7 +53,6 @@ void UInventoryWidget::RefreshInventoryDisplay()
         if (NewSlot)
         {
             NewSlot->InitializeSlot(i, Items[i], InventoryComponent);
-            NewSlot->SetOtherInventory(OtherInventory);
             SlotContainer->AddChildToVerticalBox(NewSlot);
         }
     }

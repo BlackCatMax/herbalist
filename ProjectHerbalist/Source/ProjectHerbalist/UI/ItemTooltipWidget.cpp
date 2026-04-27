@@ -4,7 +4,8 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Pipeline/Perception.h"
 #include "Core/Pipeline/AlchemySemantics.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Player/HerbalistPlayerController.h"
 
 FText GeneratePotionName(const FRealState& State)
 {
@@ -41,8 +42,15 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistort
 {
     if (Item.IsEmpty()) return;
 
-    // Детерминированный seed: стабильное восприятие в рамках сессии
-	FRandomStream Random(GetTypeHash(Item.IngredientID) ^ static_cast<int32>(GlobalDistortion * 1000.0f));
+    FRandomStream Random(GetTypeHash(Item.IngredientID) ^ static_cast<int32>(GlobalDistortion * 1000.0f));
+
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    UIngredientRegistrySubsystem* IngredientSubsystem = nullptr;
+    if (PC)
+    {
+        UGameInstance* GameInstance = PC->GetGameInstance();
+        IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    }
 
     FString Name;
     if (Item.IngredientID == FName(TEXT("Potion")))
@@ -63,13 +71,11 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistort
     }
     else
     {
-        // Искажение класса
-        EIngredientClass RealClass = FIngredientRegistry::Classify(Item.IngredientID);
+        EIngredientClass RealClass = IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown;
         EIngredientClass PerceivedClass = Perception::PerceiveClass(RealClass, GlobalDistortion, Random);
         
         if (PerceivedClass != RealClass)
         {
-            // Показываем искажённое имя
             Name = FString::Printf(TEXT("%s?"), *Item.IngredientID.ToString());
         }
         else
@@ -80,8 +86,7 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistort
 
     if (NameText) NameText->SetText(FText::FromString(Name));
 
-    // Класс ингредиента
-    EIngredientClass IngClass = FIngredientRegistry::Classify(Item.IngredientID);
+    EIngredientClass IngClass = IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown;
     FString ClassName;
     switch (IngClass)
     {
@@ -95,7 +100,6 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistort
     }
     if (TypeText) TypeText->SetText(FText::FromString(ClassName));
 
-    // Отображаем искажённые значения + реальные в скобках
     auto SetDistortedText = [&](UTextBlock* TextBlock, float RealValue, const FString& Label)
     {
         if (!TextBlock) return;

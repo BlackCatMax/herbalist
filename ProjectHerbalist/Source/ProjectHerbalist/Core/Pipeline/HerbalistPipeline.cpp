@@ -5,6 +5,7 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/HerbalistSettings.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Math/UnrealMathUtility.h"
 #include "Math/Vector4.h"
 #include "PipelineMeta.h"
@@ -20,11 +21,12 @@ namespace HerbalistCore
         FRngState& Rng,
         float BiomeMorokField,
         float BiomeZaryanaField,
-        const FVector4& BiomeAxisDrift)
+        const FVector4& BiomeAxisDrift,
+        UIngredientRegistrySubsystem* IngredientRegistry)
     {
         // 1. Разделение ингредиентов на воду и не-воду
         TArray<FRealState> NonWater, Water;
-        SeparateWaterAndIngredients(Inputs, NonWater, Water);
+        SeparateWaterAndIngredients(Inputs, NonWater, Water, IngredientRegistry);
 
         // 2. Специальные случаи
         if (NonWater.Num() == 0 && Water.Num() > 0)

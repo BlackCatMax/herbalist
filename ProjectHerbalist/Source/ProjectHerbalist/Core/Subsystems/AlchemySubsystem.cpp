@@ -1,7 +1,9 @@
+// AlchemySubsystem.cpp
 #include "AlchemySubsystem.h"
-#include "Core/Data/IngredientRegistry.h"
-#include "Core/Data/WaterTypeRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Engine/DataTable.h"
+#include "Engine/GameInstance.h"
 #include "ProjectHerbalist.h"
 
 void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -9,28 +11,68 @@ void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
     Super::Initialize(Collection);
     UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] UAlchemySubsystem::Initialize"));
 
-    // Ingredient Registry
-    UDataTable* IngredientTable = LoadObject<UDataTable>(nullptr, IngredientTablePath);
-    if (!IngredientTable) { UE_LOG(LogHerbalist, Error, TEXT("Failed to load DT_IngredientClass")); }
-    if (!IngredientTable)
+    UGameInstance* GameInstance = GetGameInstance();
+    if (!GameInstance)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load DT_IngredientClass"));
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] AlchemySubsystem: GetGameInstance() returned null"));
+        return;
     }
-    FIngredientRegistry::Initialize(IngredientTable);
 
-    // Water Type Registry
-    UDataTable* WaterTypeTable = LoadObject<UDataTable>(nullptr, WaterTypeTablePath);
-    if (!WaterTypeTable)
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>();
+    if (!IngredientSubsystem)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load DT_WaterTypes"));
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] UIngredientRegistrySubsystem not found"));
     }
-    FWaterTypeRegistry::Initialize(WaterTypeTable);
+    else
+    {
+        UDataTable* IngredientTable = LoadObject<UDataTable>(nullptr, IngredientTablePath);
+        if (!IngredientTable)
+        {
+            UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load DT_IngredientClass from path: %s"), IngredientTablePath);
+        }
+        else
+        {
+            UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] DT_IngredientClass loaded, row count: %d"), IngredientTable->GetRowMap().Num());
+            IngredientSubsystem->LoadFromDataTable(IngredientTable);
+        }
+    }
+
+    UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>();
+    if (!WaterSubsystem)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] UWaterTypeRegistrySubsystem not found"));
+    }
+    else
+    {
+        UDataTable* WaterTypeTable = LoadObject<UDataTable>(nullptr, WaterTypeTablePath);
+        if (!WaterTypeTable)
+        {
+            UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load DT_WaterTypes from path: %s"), WaterTypeTablePath);
+        }
+        else
+        {
+            UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] DT_WaterTypes loaded, row count: %d"), WaterTypeTable->GetRowMap().Num());
+            WaterSubsystem->LoadFromDataTable(WaterTypeTable);
+        }
+    }
 }
 
 void UAlchemySubsystem::Deinitialize()
 {
     UE_LOG(LogHerbalist, Log, TEXT("[Herbalist] UAlchemySubsystem::Deinitialize"));
-    FIngredientRegistry::Reset();
-    FWaterTypeRegistry::Reset();
+
+    UGameInstance* GameInstance = GetGameInstance();
+    if (GameInstance)
+    {
+        if (UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>())
+        {
+            IngredientSubsystem->Reset();
+        }
+        if (UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>())
+        {
+            WaterSubsystem->Reset();
+        }
+    }
+
     Super::Deinitialize();
 }

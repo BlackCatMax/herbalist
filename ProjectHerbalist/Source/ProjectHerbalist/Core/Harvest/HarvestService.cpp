@@ -1,38 +1,30 @@
 // HarvestService.cpp
 #include "HarvestService.h"
 #include "ProjectHerbalist.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Types/HerbalistIngredient.h"
-#include "AssetRegistry/AssetRegistryModule.h"
-#include "Engine/AssetManager.h"
+#include "Core/HerbalistSettings.h"
+#include "Engine/World.h"
 
-static constexpr float k_biome = 0.6f;
-static constexpr float k_condition = 0.4f;
-
-UHerbalistIngredient* UHarvestService::LoadIngredientAsset(FName IngredientID) const
-{
-    // Оставлено для совместимости, но лучше не использовать
-    if (IngredientID.IsNone()) return nullptr;
-    FString DirectPath = FString::Printf(TEXT("/Game/Data/Ingredients/%s.%s"), *IngredientID.ToString(), *IngredientID.ToString());
-    return LoadObject<UHerbalistIngredient>(nullptr, *DirectPath);
-}
-
-FRealState UHarvestService::GetBaseResourceParams(FName IngredientID) const
-{
-    const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
-    if (!Row)
-    {
-        UE_LOG(LogHerbalist, Warning, TEXT("GetBaseResourceParams: Ingredient not found in registry '%s'"), *IngredientID.ToString());
-        return FRealState();
-    }
-    FRealState State = Row->BaseState;
-    State.Direction.NormalizeSum();
-    return State;
-}
+static constexpr float DEFAULT_BIOME_WEIGHT = 0.6f;
+static constexpr float DEFAULT_CONDITION_WEIGHT = 0.4f;
 
 FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeState, const FConditionModifier& Conditions) const
 {
-    const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    float k_biome = Settings ? Settings->HarvestBiomeWeight : DEFAULT_BIOME_WEIGHT;
+    float k_condition = Settings ? Settings->HarvestConditionWeight : DEFAULT_CONDITION_WEIGHT;
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("Harvest: No World available"));
+        return FRealState();
+    }
+
+    UIngredientRegistrySubsystem* IngredientSubsystem = World->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
     if (!Row)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("Harvest: Ingredient not found in registry '%s'"), *IngredientID.ToString());
@@ -72,7 +64,6 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     Result.Meta.Resonance = Base.Meta.Resonance + k_biome * BiomeDelta.Meta.Resonance + k_condition * Conditions.DeltaResonance;
     Result.Meta.Corruption = Base.Meta.Corruption + k_biome * BiomeDelta.Meta.Corruption + k_condition * Conditions.DeltaCorruption;
 
-    // Мягкое накопление Distortion (нелинейное)
     float BaseDist = Base.Meta.Distortion;
     float BiomeDist = BiomeState.Meta.Distortion;
     float CondDist  = Conditions.DeltaDistortion;
@@ -96,9 +87,30 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     return Result;
 }
 
-FRealState UHarvestService::HarvestWater(const FRealState& WaterState, const FConditionModifier& Conditions) const
+FRealState UHarvestService::HarvestWater(const FGridCell& Cell, const FConditionModifier& Conditions) const
 {
-    FRealState Water = WaterState;
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    float k_condition = Settings ? Settings->HarvestConditionWeight : DEFAULT_CONDITION_WEIGHT;
+
+    FRealState Water = Cell.State;
+
+    if (!Cell.WaterTypeID.IsNone())
+    {
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            UWaterTypeRegistrySubsystem* WaterSubsystem = World->GetGameInstance()->GetSubsystem<UWaterTypeRegistrySubsystem>();
+            if (const FWaterTypeRow* WaterRow = WaterSubsystem ? WaterSubsystem->GetWaterType(Cell.WaterTypeID) : nullptr)
+            {
+                Water.Meta.Purity = WaterRow->BasePurity;
+                Water.Meta.Distortion = WaterRow->BaseDistortion;
+                Water.Meta.Stability = WaterRow->BaseStability;
+                Water.Meta.Potency = WaterRow->BasePotency;
+                Water.Meta.Corruption = WaterRow->BaseCorruption;
+            }
+        }
+    }
+
     Water.Magnitude += k_condition * Conditions.DeltaMagnitude;
     Water.Direction.Body += k_condition * Conditions.DeltaDirection.Body;
     Water.Direction.Mind += k_condition * Conditions.DeltaDirection.Mind;
@@ -120,10 +132,4 @@ FRealState UHarvestService::HarvestWater(const FRealState& WaterState, const FCo
     Water.Meta.Resonance = FMath::Clamp(Water.Meta.Resonance, 0.0f, 1.0f);
     Water.Meta.Corruption = FMath::Clamp(Water.Meta.Corruption, 0.0f, 1.0f);
     return Water;
-}
-
-UHerbalistIngredient* UHarvestService::LoadIngredientAssetStatic(FName IngredientID)
-{
-    // Временная заглушка – ассеты не используются, все данные берутся из реестра
-    return nullptr;
 }

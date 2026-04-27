@@ -4,7 +4,9 @@
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Player/HerbalistPlayerController.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Resources/AHerbalistResourceActor.h"
+
 
 void AGridWorldManager::SelectCell(int32 X, int32 Y)
 {
@@ -24,50 +26,44 @@ FString AGridWorldManager::GetSelectedCellInfo() const
 {
     const FGridCell* Cell = GetCellConst(SelectedX, SelectedY);
     if (!Cell) return TEXT("No cell selected");
-    FString ResourceStr = Cell->bIsWater ? TEXT("Water") : Cell->AvailableIngredientID.ToString();
-    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, Resource=%s, Regrowth=%.1f"),
+    FString ResourceStr = TEXT("None");
+    if (Cell->ResourceActors.Num() > 0 && Cell->ResourceActors[0].IsValid())
+    {
+        ResourceStr = Cell->ResourceActors[0]->GetIngredientID().ToString();
+    }
+    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, Resource=%s"),
         SelectedX, SelectedY,
         Cell->State.Magnitude,
         Cell->State.Meta.Distortion,
         Cell->HarvestStress,
-        *ResourceStr,
-        Cell->ResourceRegrowthTimer);
+        *ResourceStr);
 }
 
 void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& ResourceName, float& RegrowthTimer, float& Distortion, float& HarvestStress)
 {
     X = SelectedX;
     Y = SelectedY;
+    RegrowthTimer = 0.0f;
+    Distortion = 0.0f;
+    HarvestStress = 0.0f;
+    ResourceName = TEXT("None");
     if (X >= 0 && Y >= 0)
     {
         FGridCell* Cell = GetCell(X, Y);
         if (Cell)
         {
+            Distortion = Cell->State.Meta.Distortion;
+            HarvestStress = Cell->HarvestStress;
             if (Cell->bIsWater)
             {
                 ResourceName = TEXT("Вода");
             }
-            else
+            else if (Cell->ResourceActors.Num() > 0 && Cell->ResourceActors[0].IsValid())
             {
-                if (const FIngredientTableRow* Row = FIngredientRegistry::GetRow(Cell->AvailableIngredientID))
-                {
-                    ResourceName = Row->DisplayName.ToString();
-                }
-                else
-                {
-                    ResourceName = Cell->AvailableIngredientID.ToString();
-                }
+                ResourceName = Cell->ResourceActors[0]->GetIngredientID().ToString();
             }
-            RegrowthTimer = Cell->ResourceRegrowthTimer;
-            Distortion = Cell->State.Meta.Distortion;
-            HarvestStress = Cell->HarvestStress;
-            return;
         }
     }
-    ResourceName = TEXT("None");
-    RegrowthTimer = 0.0f;
-    Distortion = 0.0f;
-    HarvestStress = 0.0f;
 }
 
 void AGridWorldManager::ShowInventory()
@@ -78,6 +74,9 @@ void AGridWorldManager::ShowInventory()
         UE_LOG(LogHerbalist, Warning, TEXT("No player controller or inventory component found"));
         return;
     }
+
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
     TArray<FInventoryItem> Inventory = PC->InventoryComponent->GetItems();
     UE_LOG(LogHerbalist, Log, TEXT("=== INVENTORY (%d items) ==="), Inventory.Num());
@@ -94,9 +93,16 @@ void AGridWorldManager::ShowInventory()
         {
             Name = TEXT("Вода");
         }
-        else if (const FIngredientTableRow* Row = FIngredientRegistry::GetRow(Item.IngredientID))
+        else if (IngredientSubsystem)
         {
-            Name = Row->DisplayName.ToString();
+            if (const FIngredientTableRow* Row = IngredientSubsystem->GetRow(Item.IngredientID))
+            {
+                Name = Row->DisplayName.ToString();
+            }
+            else
+            {
+                Name = Item.IngredientID.ToString();
+            }
         }
         else
         {

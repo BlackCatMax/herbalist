@@ -8,7 +8,7 @@
 
 class UStaticMeshComponent;
 class AGridWorldManager;
-class UBoxComponent;
+class USphereComponent;
 class UParticleSystem;
 class USoundBase;
 
@@ -20,17 +20,14 @@ class PROJECTHERBALIST_API AHerbalistResourceActor : public AActor
 public:
     AHerbalistResourceActor();
 
-    // Инициализация ресурса
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
-    void Init(FName InIngredientID, const FText& InDisplayName, UStaticMesh* Mesh, 
-              const FRealState& InBaseState, const FVector& Location, 
-              AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
+    void Init(FName InIngredientID, const FText& InDisplayName, UStaticMesh* Mesh,
+        const FRealState& InBaseState, const FVector& Location,
+        AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
 
-    // Сбор ресурса
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Harvest();
 
-    // Геттеры
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     FName GetIngredientID() const { return IngredientID; }
 
@@ -43,7 +40,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     bool IsBeingHarvested() const { return bIsBeingHarvested; }
 
-    // Сеттеры
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void SetIngredientID(FName NewID) { IngredientID = NewID; }
 
@@ -56,7 +52,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void FindAndSetWorldManager();
 
-    // Проверка дистанции до игрока
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     bool IsInHarvestRange(float MaxDistance) const;
 
@@ -64,14 +59,12 @@ protected:
     virtual void BeginPlay() override;
     virtual void PostInitializeComponents() override;
 
-    // Визуальные эффекты
     UFUNCTION(BlueprintImplementableEvent, Category = "Herbalist|Effects")
     void OnHarvestStarted();
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Herbalist|Effects")
     void OnHarvestComplete();
 
-    // Анимация исчезновения
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Effects")
     void StartDisappearAnimation();
 
@@ -82,7 +75,7 @@ protected:
     UStaticMeshComponent* MeshComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UBoxComponent* CollisionBox;
+    USphereComponent* HarvestSphere;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
     FName IngredientID;
@@ -99,7 +92,6 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
     FRealState BaseState;
 
-    // Эффекты
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Effects")
     UParticleSystem* HarvestParticleSystem;
 

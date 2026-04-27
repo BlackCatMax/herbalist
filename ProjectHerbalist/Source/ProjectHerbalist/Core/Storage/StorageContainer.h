@@ -16,7 +16,10 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Storage")
     UHerbalistInventoryComponent* InventoryComponent;
 
-    // Взаимодействие (вызывается из контроллера)
+    // Пункт 4.4: настраиваемая вместимость
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Storage")
+    int32 MaxSlots = 20;
+
     void OnInteract(APlayerController* PlayerController);
 
 protected:
