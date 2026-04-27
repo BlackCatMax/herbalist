@@ -1,4 +1,4 @@
-// PipelineTypes.h
+// Core/Pipeline/PipelineTypes.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -11,4 +11,11 @@ struct FAggregatedState
     FMeta Meta;
 
     FAggregatedState() : Magnitude(0.0f) {}
+};
+
+struct FDeltaState
+{
+    FDirection DirectionDelta;
+    float MagnitudeDelta = 0.0f;
+    FMeta MetaDelta;
 };
