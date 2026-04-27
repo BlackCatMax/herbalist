@@ -1,12 +1,11 @@
 // HarvestService.cpp
 #include "HarvestService.h"
 #include "ProjectHerbalist.h"
-#include "Core/Data/IngredientRegistry.h"
-#include "Core/Data/WaterTypeRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Core/HerbalistSettings.h"
-#include "AssetRegistry/AssetRegistryModule.h"
-#include "Engine/AssetManager.h"
+#include "Engine/World.h"
 
 static constexpr float DEFAULT_BIOME_WEIGHT = 0.6f;
 static constexpr float DEFAULT_CONDITION_WEIGHT = 0.4f;
@@ -17,7 +16,15 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     float k_biome = Settings ? Settings->HarvestBiomeWeight : DEFAULT_BIOME_WEIGHT;
     float k_condition = Settings ? Settings->HarvestConditionWeight : DEFAULT_CONDITION_WEIGHT;
 
-    const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("Harvest: No World available"));
+        return FRealState();
+    }
+
+    UIngredientRegistrySubsystem* IngredientSubsystem = World->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
     if (!Row)
     {
         UE_LOG(LogHerbalist, Warning, TEXT("Harvest: Ingredient not found in registry '%s'"), *IngredientID.ToString());
@@ -89,13 +96,18 @@ FRealState UHarvestService::HarvestWater(const FGridCell& Cell, const FCondition
 
     if (!Cell.WaterTypeID.IsNone())
     {
-        if (const FWaterTypeRow* WaterRow = FWaterTypeRegistry::GetWaterType(Cell.WaterTypeID))
+        UWorld* World = GetWorld();
+        if (World)
         {
-            Water.Meta.Purity = WaterRow->BasePurity;
-            Water.Meta.Distortion = WaterRow->BaseDistortion;
-            Water.Meta.Stability = WaterRow->BaseStability;
-            Water.Meta.Potency = WaterRow->BasePotency;
-            Water.Meta.Corruption = WaterRow->BaseCorruption;
+            UWaterTypeRegistrySubsystem* WaterSubsystem = World->GetGameInstance()->GetSubsystem<UWaterTypeRegistrySubsystem>();
+            if (const FWaterTypeRow* WaterRow = WaterSubsystem ? WaterSubsystem->GetWaterType(Cell.WaterTypeID) : nullptr)
+            {
+                Water.Meta.Purity = WaterRow->BasePurity;
+                Water.Meta.Distortion = WaterRow->BaseDistortion;
+                Water.Meta.Stability = WaterRow->BaseStability;
+                Water.Meta.Potency = WaterRow->BasePotency;
+                Water.Meta.Corruption = WaterRow->BaseCorruption;
+            }
         }
     }
 

@@ -4,7 +4,7 @@
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Player/HerbalistPlayerController.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 
 
@@ -75,6 +75,9 @@ void AGridWorldManager::ShowInventory()
         return;
     }
 
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
     TArray<FInventoryItem> Inventory = PC->InventoryComponent->GetItems();
     UE_LOG(LogHerbalist, Log, TEXT("=== INVENTORY (%d items) ==="), Inventory.Num());
     for (int32 i = 0; i < Inventory.Num(); ++i)
@@ -90,9 +93,16 @@ void AGridWorldManager::ShowInventory()
         {
             Name = TEXT("Вода");
         }
-        else if (const FIngredientTableRow* Row = FIngredientRegistry::GetRow(Item.IngredientID))
+        else if (IngredientSubsystem)
         {
-            Name = Row->DisplayName.ToString();
+            if (const FIngredientTableRow* Row = IngredientSubsystem->GetRow(Item.IngredientID))
+            {
+                Name = Row->DisplayName.ToString();
+            }
+            else
+            {
+                Name = Item.IngredientID.ToString();
+            }
         }
         else
         {

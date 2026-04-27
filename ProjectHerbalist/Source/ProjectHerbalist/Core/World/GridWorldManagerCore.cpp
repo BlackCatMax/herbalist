@@ -1,10 +1,11 @@
+// GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
-#include "Core/Data/WaterTypeRegistry.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Types/BiomeTypes.h"
-#include "Core/Data/IngredientRegistry.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
@@ -90,10 +91,13 @@ void AGridWorldManager::BeginPlay()
 
 void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
 {
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
     int32 NumResources = FMath::RandRange(1, 3);
     for (int32 i = 0; i < NumResources; ++i)
     {
-        FName IngredientID = FIngredientRegistry::GetRandomResourceForBiome(Cell.Biome, WorldRNG);
+        FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell.Biome, WorldRNG) : NAME_None;
         if (IngredientID.IsNone()) continue;
 
         FVector Offset = FVector(FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
@@ -101,7 +105,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
             0);
         FVector SpawnPos = this->GetCellWorldPosition(Cell.X, Cell.Y) + Offset;
 
-        const FIngredientTableRow* Row = FIngredientRegistry::GetRow(IngredientID);
+        const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
         if (!Row) continue;
 
         AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
@@ -111,6 +115,27 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
             Cell.ResourceActors.Add(NewActor);
             UE_LOG(LogHerbalist, Log, TEXT("Spawned %s at cell (%d,%d)"), *IngredientID.ToString(), Cell.X, Cell.Y);
         }
+    }
+}
+
+void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset)
+{
+    FGridCell* Cell = GetCell(X, Y);
+    if (!Cell) return;
+
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
+    if (!Row) return;
+
+    FVector SpawnPos = GetCellWorldPosition(X, Y) + Offset;
+
+    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
+    if (NewActor)
+    {
+        NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y);
+        Cell->ResourceActors.Add(NewActor);
+        UE_LOG(LogHerbalist, Log, TEXT("SpawnResourceActor: %s at cell (%d,%d)"), *IngredientID.ToString(), X, Y);
     }
 }
 
@@ -132,6 +157,10 @@ void AGridWorldManager::InitializeCells()
 {
     const int32 TotalCells = GridSizeX * GridSizeY;
     Cells.SetNum(TotalCells);
+
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
 
     TArray<EBiomeType> AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
     if (AllBiomes.Num() == 0)
@@ -171,7 +200,6 @@ void AGridWorldManager::InitializeCells()
             Cell.bEntityTriggered = false;
             Cell.bIsWater = false;
             Cell.WaterTypeID = NAME_None;
-            // ResourceActors пуст по умолчанию
         }
     }
 
@@ -211,20 +239,22 @@ void AGridWorldManager::InitializeCells()
                 int32 Idx = Y * GridSizeX + X;
                 FGridCell& Cell = Cells[Idx];
                 Cell.bIsWater = true;
-                Cell.WaterTypeID = FWaterTypeRegistry::GetRandomWaterType(Cell.Biome, WorldRNG);
+                Cell.WaterTypeID = WaterSubsystem ? WaterSubsystem->GetRandomWaterType(Cell.Biome, WorldRNG) : NAME_None;
                 FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
-                if (const FWaterTypeRow* WaterRow = FWaterTypeRegistry::GetWaterType(Cell.WaterTypeID))
+                if (WaterSubsystem)
                 {
-                    waterState.Meta.Purity = WaterRow->BasePurity;
-                    waterState.Meta.Distortion = WaterRow->BaseDistortion;
-                    waterState.Meta.Stability = WaterRow->BaseStability;
-                    waterState.Meta.Potency = WaterRow->BasePotency;
-                    waterState.Meta.Corruption = WaterRow->BaseCorruption;
+                    if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
+                    {
+                        waterState.Meta.Purity = WaterRow->BasePurity;
+                        waterState.Meta.Distortion = WaterRow->BaseDistortion;
+                        waterState.Meta.Stability = WaterRow->BaseStability;
+                        waterState.Meta.Potency = WaterRow->BasePotency;
+                        waterState.Meta.Corruption = WaterRow->BaseCorruption;
+                    }
                 }
                 Cell.State = waterState;
                 Cell.TargetState = waterState;
                 Cell.HarvestStress = 0.0f;
-                // Очищаем ресурсы водной клетки
                 Cell.ResourceActors.Empty();
                 IsWaterAlready[Idx] = true;
                 PlacedWater++;
@@ -353,7 +383,6 @@ void AGridWorldManager::DrawGridDebug()
         else
         {
             float Distortion = Cell.State.Meta.Distortion;
-            // Интерполяция между зелёным (Distortion=0) и красным (Distortion=1)
             Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Distortion).ToFColor(false);
         }
         DrawDebugBox(GetWorld(), Center, Extent, Color, false, 0.0f, 0, BorderThickness);

@@ -2,14 +2,15 @@
 #include "HerbalistPipeline.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 
 namespace HerbalistCore
 {
     void Pipeline::SeparateWaterAndIngredients(
         const TArray<FInventoryItem>& Inputs,
         TArray<FRealState>& OutNonWater,
-        TArray<FRealState>& OutWater)
+        TArray<FRealState>& OutWater,
+        UIngredientRegistrySubsystem* IngredientRegistry)
     {
         OutNonWater.Empty();
         OutWater.Empty();
@@ -18,7 +19,7 @@ namespace HerbalistCore
             bool bIsWater = false;
             if (Item.IngredientID != FName(TEXT("Potion")))
             {
-                bIsWater = FIngredientRegistry::IsWater(Item.IngredientID);
+                bIsWater = IngredientRegistry ? IngredientRegistry->IsWater(Item.IngredientID) : false;
             }
 
             if (bIsWater)

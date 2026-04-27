@@ -8,7 +8,7 @@
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Pipeline/AlchemyTypes.h"
 #include "Core/Pipeline/IntentResolver.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/HerbalistSettings.h"
@@ -19,14 +19,18 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
 
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
     // 1. Конвертация в атомы
     TArray<FAlchemyAtom> Atoms;
     for (const FInventoryItem& Item : Ingredients)
     {
         FAlchemyAtom Atom(
             Item.IngredientID,
-            FIngredientRegistry::IsWater(Item.IngredientID),
+            IngredientSubsystem ? IngredientSubsystem->IsWater(Item.IngredientID) : false,
             Item.State,
+            IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown,
             EAtomOrigin::Harvest,
             Cell->Memory.AccumulatedDistortion,
             GetWorld()->GetTimeSeconds()
@@ -35,7 +39,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     }
 
     // 2. Семантическое разрешение (считает и Coherence)
-	FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms, Cell->Memory.AccumulatedDistortion);
+    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms, Cell->Memory.AccumulatedDistortion);
 
     // 3. Биомный контекст
     float BiomeMorokField = 0.0f, BiomeZaryanaField = 0.0f;
@@ -223,10 +227,8 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FIntent Intent;
     Intent.Coherence = 0.5f;
     FRngState Rng;
-    // Детерминированный seed на основе координат клетки и текущего Distortion (или памяти)
-	// X, Y – координаты клетки, Cell – указатель на FGridCell
-	int32 Seed = (X * 7919) ^ (Y * 7901) ^ (int32)(Cell->Memory.AccumulatedDistortion * 10000);
-	Rng.Seed = Seed;
+    int32 Seed = (X * 7919) ^ (Y * 7901) ^ (int32)(Cell->Memory.AccumulatedDistortion * 10000);
+    Rng.Seed = Seed;
 
     ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
 }

@@ -50,5 +50,6 @@ struct PROJECTHERBALIST_API FAlchemyAtom
     FAlchemyAtom();
 
     FAlchemyAtom(FName InSourceID, bool bInIsWater, const FRealState& InState,
-                 EAtomOrigin InOrigin, float InDistortionAtCollection, float InTimeOfCreation);
+                 EIngredientClass InClass, EAtomOrigin InOrigin,
+                 float InDistortionAtCollection, float InTimeOfCreation);
 };

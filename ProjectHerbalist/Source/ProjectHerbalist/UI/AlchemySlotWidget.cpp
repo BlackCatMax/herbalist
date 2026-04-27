@@ -5,7 +5,7 @@
 #include "Components/Border.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "UI/ItemTooltipWidget.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
 
@@ -23,7 +23,15 @@ bool UAlchemySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
     if (SlotType != EAlchemySlotType::Result && bHasItem && Count >= MaxCount) return false;
     if (SlotType == EAlchemySlotType::Result) return false;
 
-    bool bItemIsWater = FIngredientRegistry::IsWater(Item.IngredientID);
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    UIngredientRegistrySubsystem* IngredientSubsystem = nullptr;
+    if (PC)
+    {
+        UGameInstance* GameInstance = PC->GetGameInstance();
+        IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    }
+
+    bool bItemIsWater = IngredientSubsystem ? IngredientSubsystem->IsWater(Item.IngredientID) : false;
     if (Item.IngredientID == FName(TEXT("Potion"))) bItemIsWater = false;
 
     if (SlotType == EAlchemySlotType::Water && !bItemIsWater) return false;
@@ -105,7 +113,6 @@ bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDr
     if (!HPC || !HPC->InventoryComponent)
         return false;
 
-    // Строим предмет для переноса
     FInventoryItem ItemToMove;
     if (DragOp->bIsSplit)
     {
@@ -116,19 +123,17 @@ bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDr
         const FInventoryItem* SourceItem = DragOp->SourceInventory->GetSlot(DragOp->SourceIndex);
         if (!SourceItem) return false;
         ItemToMove = *SourceItem;
-        ItemToMove.Count = 1;   // обычный перенос – 1 единица
+        ItemToMove.Count = 1;
     }
 
     if (!CanAcceptItem(ItemToMove))
         return false;
 
-    // Пытаемся добавить в этот слот – передаём правильное количество
     if (AddItem(ItemToMove, ItemToMove.Count))
     {
-        // Удаляем из исходного инвентаря
         if (DragOp->bIsSplit)
         {
-            DragOp->bIsSplit = false; // split-предмет уже перенесён
+            DragOp->bIsSplit = false;
         }
         else
         {
@@ -141,7 +146,6 @@ bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDr
 
 void UAlchemySlotWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
 {
-    // Ничего не делаем
 }
 
 void UAlchemySlotWidget::NativeConstruct()

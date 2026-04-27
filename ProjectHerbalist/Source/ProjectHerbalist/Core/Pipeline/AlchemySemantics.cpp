@@ -1,54 +1,9 @@
 // AlchemySemantics.cpp
 #include "AlchemySemantics.h"
 #include "ProjectHerbalist.h"
-#include "Core/Data/IngredientRegistry.h"
 
 namespace HerbalistCore
 {
-    // --- Классификаторы через реестр ---
-
-    bool IsWaterIngredient(FName IngredientName)
-    {
-        return FIngredientRegistry::IsWater(IngredientName);
-    }
-
-    bool IsPlantIngredient(FName IngredientName)
-    {
-        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Plant;
-    }
-
-    bool IsMineralIngredient(FName IngredientName)
-    {
-        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Mineral;
-    }
-
-    bool IsFungusIngredient(FName IngredientName)
-    {
-        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Fungus;
-    }
-
-    bool IsCatalystIngredient(FName IngredientName)
-    {
-        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Catalyst;
-    }
-
-    bool IsEssenceIngredient(FName IngredientName)
-    {
-        return FIngredientRegistry::Classify(IngredientName) == EIngredientClass::Essence;
-    }
-
-    bool IsKnownIngredient(FName IngredientName)
-    {
-        return FIngredientRegistry::IsKnown(IngredientName);
-    }
-
-    EIngredientClass GetIngredientClass(FName IngredientName)
-    {
-        return FIngredientRegistry::Classify(IngredientName);
-    }
-
-    // --- Исходные функции (без изменений) ---
-
     EAlchemyOutcome ClassifyOutcome(const TArray<FInventoryItem>& Inputs)
     {
         if (Inputs.Num() == 0) return EAlchemyOutcome::Ash;
@@ -57,7 +12,8 @@ namespace HerbalistCore
         bool bHasIngredient = false;
         for (const FInventoryItem& Item : Inputs)
         {
-            if (IsWaterIngredient(Item.IngredientID))
+            // Вoda определяется по ID, совпадающему с "Water", или по пустому ID (для сырых FRealState)
+            if (Item.IngredientID == FName(TEXT("Water")) || Item.IngredientID.IsNone())
                 bHasWater = true;
             else if (!Item.IngredientID.IsNone())
                 bHasIngredient = true;

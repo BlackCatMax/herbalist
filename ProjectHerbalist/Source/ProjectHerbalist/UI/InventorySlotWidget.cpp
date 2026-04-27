@@ -15,7 +15,7 @@
 #include "Core/Types/HerbalistIngredient.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
@@ -58,13 +58,25 @@ void UInventorySlotWidget::UpdateDisplay()
     }
 
     FString DisplayName = CachedItem.IngredientID.ToString();
+
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    UIngredientRegistrySubsystem* IngredientSubsystem = nullptr;
+    if (PC)
+    {
+        UGameInstance* GameInstance = PC->GetGameInstance();
+        IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    }
+
     if (CachedItem.IngredientID != FName(TEXT("Potion")) &&
         CachedItem.IngredientID != FName(TEXT("Water")) &&
         !CachedItem.IngredientID.IsNone())
     {
-        if (const FIngredientTableRow* Row = FIngredientRegistry::GetRow(CachedItem.IngredientID))
+        if (IngredientSubsystem)
         {
-            DisplayName = Row->DisplayName.ToString();
+            if (const FIngredientTableRow* Row = IngredientSubsystem->GetRow(CachedItem.IngredientID))
+            {
+                DisplayName = Row->DisplayName.ToString();
+            }
         }
     }
     else if (CachedItem.IngredientID == FName(TEXT("Potion")))

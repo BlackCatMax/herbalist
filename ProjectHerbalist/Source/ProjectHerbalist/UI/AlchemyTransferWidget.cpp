@@ -15,7 +15,7 @@
 #include "Core/Pipeline/AlchemyPhysicsPipeline.h"
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Pipeline/AlchemyTypes.h"
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -111,16 +111,23 @@ void UAlchemyTransferWidget::OnMixClicked()
         return;
     }
 
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        SetStatusMessage(TEXT("Ошибка мира."));
+        bIsMixing = false;
+        return;
+    }
+
+    UGameInstance* GameInstance = World->GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
     // Получаем GridWorldManager
     AGridWorldManager* WorldManager = nullptr;
-    UWorld* World = GetWorld();
-    if (World)
+    for (TActorIterator<AGridWorldManager> It(World); It; ++It)
     {
-        for (TActorIterator<AGridWorldManager> It(World); It; ++It)
-        {
-            WorldManager = *It;
-            break;
-        }
+        WorldManager = *It;
+        break;
     }
 
     // Получаем координаты алхимического стола
@@ -144,7 +151,6 @@ void UAlchemyTransferWidget::OnMixClicked()
             Env = Cell->Environment;
             Memory = Cell->Memory;
 
-            // Получаем контекст биома из графа
             if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
             {
                 FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
@@ -164,17 +170,17 @@ void UAlchemyTransferWidget::OnMixClicked()
     {
         FAlchemyAtom Atom(
             Item.IngredientID,
-            FIngredientRegistry::IsWater(Item.IngredientID),
+            IngredientSubsystem ? IngredientSubsystem->IsWater(Item.IngredientID) : false,
             Item.State,
+            IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown,
             EAtomOrigin::Harvest,
             Memory.AccumulatedDistortion,
-            GetWorld()->GetTimeSeconds()
+            World->GetTimeSeconds()
         );
         Atoms.Add(Atom);
     }
 
     // 2. Семантическое разрешение
-    // Пункт 2.3: используем Distortion клетки стола, если доступна
     float GlobalD = 0.3f;
     if (Cell)
     {
@@ -189,7 +195,7 @@ void UAlchemyTransferWidget::OnMixClicked()
 
     // 3. Готовим Rng
     FRngState Rng;
-    int32 Seed = 12345; // fallback
+    int32 Seed = 12345;
     if (HPC && HPC->CurrentAlchemyTable)
     {
         FIntPoint Coords = HPC->CurrentAlchemyTable->GetGridCoords();
@@ -197,7 +203,7 @@ void UAlchemyTransferWidget::OnMixClicked()
     }
     Rng.Seed = Seed;
 
-    // 4. Запуск физики (только для Valid)
+    // 4. Запуск физики
     FRealState ResultState;
     FName ResultID;
 
@@ -228,7 +234,7 @@ void UAlchemyTransferWidget::OnMixClicked()
         ResultState = HerbalistCore::ApplyBoiledWaterTransform(WaterStates);
         ResultID = FName(TEXT("BoiledWater"));
     }
-    else // Ash
+    else
     {
         FMeta CoreMeta;
         ResultState = HerbalistCore::ApplyAshTransform(CoreMeta);

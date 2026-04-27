@@ -46,7 +46,9 @@ FAlchemyPhysicsResult FAlchemyPhysicsPipeline::Run(
         Rng,
         MorokField,
         ZaryanaField,
-        AxisDrift);
+        AxisDrift,
+        nullptr // IngredientRegistry не нужен при маркировке Water через IngredientID
+    );
 
     if (Result.State.Meta.Distortion > 0.92f)
     {

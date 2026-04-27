@@ -1,17 +1,17 @@
 // AHerbalistResourceActor.cpp
 #include "AHerbalistResourceActor.h"
-#include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
-#include "Core/World/GridWorldManager.h"
+#include "Components/StaticMeshComponent.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Data/IngredientRegistry.h"
-#include "Player/HerbalistPlayerController.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
-#include "TimerManager.h"
+#include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
+#include "TimerManager.h"
 
 AHerbalistResourceActor::AHerbalistResourceActor()
 {

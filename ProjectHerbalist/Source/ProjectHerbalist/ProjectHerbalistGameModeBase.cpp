@@ -4,9 +4,12 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Types/BiomeTypes.h"
-#include "Engine/World.h"
 #include "Engine/DataTable.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 
 AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
 {
@@ -15,6 +18,28 @@ AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
 
 void AProjectHerbalistGameModeBase::BeginPlay()
 {
+    // Загрузка реестров ДО всего остального
+    if (UGameInstance* GameInstance = GetGameInstance())
+    {
+        if (UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>())
+        {
+            UDataTable* IngredientTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_IngredientClass"));
+            if (IngredientTable)
+            {
+                IngredientSubsystem->LoadFromDataTable(IngredientTable);
+            }
+        }
+
+        if (UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>())
+        {
+            UDataTable* WaterTypeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_WaterTypes"));
+            if (WaterTypeTable)
+            {
+                WaterSubsystem->LoadFromDataTable(WaterTypeTable);
+            }
+        }
+    }
+
     Super::BeginPlay();
 
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
