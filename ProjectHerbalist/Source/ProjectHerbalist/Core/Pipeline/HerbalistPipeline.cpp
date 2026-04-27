@@ -1,4 +1,4 @@
-// HerbalistPipeline.cpp
+// Core/Pipeline/HerbalistPipeline.cpp
 #include "HerbalistPipeline.h"
 #include "PipelineTypes.h"
 #include "ProjectHerbalist.h"
@@ -105,22 +105,11 @@ namespace HerbalistCore
             0.0f, 1.0f);
 
         // ============================================================
-        // ФАЗА 4: Environment Influence (мягкие оси)
+        // ФАЗА 4: Environment Influence (смешивание с метой среды)
         // ============================================================
-        FMeta EnvApplied = MorokMeta;
-
-        EnvApplied.Purity = FMath::Clamp(
-            MorokMeta.Purity - Env.Toxicity * 0.3f,
-            0.0f, 1.0f);
-
-        float EnvStabilityBias = 1.0f - Env.Toxicity;
-        EnvApplied.Stability = FMath::Clamp(
-            FMath::Lerp(MorokMeta.Stability, EnvStabilityBias, 0.4f),
-            0.0f, 1.0f);
-
-        EnvApplied.Potency = FMath::Clamp(
-            MorokMeta.Potency + (Env.Fertility * 0.1f + Env.Moisture * 0.05f),
-            0.0f, 1.0f);
+        FMeta EnvironmentMeta = BuildEnvironmentMeta(Env, Memory);
+        const float EnvBlendWeight = Settings ? Settings->EnvironmentBlendWeight : 0.4f;
+        FMeta EnvApplied = BlendMeta(MorokMeta, EnvironmentMeta, EnvBlendWeight);
 
         // ============================================================
         // ФАЗА 5: Zaryana Projection (нормализация)

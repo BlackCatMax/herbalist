@@ -16,6 +16,8 @@ class PROJECTHERBALIST_API UHerbalistInventoryComponent : public UActorComponent
 public:
     UHerbalistInventoryComponent();
 
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
     int32 MaxSlots = 20;
 
@@ -57,4 +59,11 @@ protected:
     int32 FindStackableSlot(const FInventoryItem& Item) const;
     bool AreItemsStackable(const FInventoryItem& A, const FInventoryItem& B) const;
     void MergeStack(FInventoryItem& Target, const FInventoryItem& Source, int32 AddedCount);
+
+    // Применить порчу к одному предмету (если bSubjectToDecay == true)
+    void ApplyDecayToItem(FInventoryItem& Item, float DeltaTime, float DecayRate);
+
+    // Периодичность обновления (в секундах)
+    static constexpr float DecayUpdateInterval = 1.0f;
+    float TimeSinceLastDecayUpdate = 0.0f;
 };

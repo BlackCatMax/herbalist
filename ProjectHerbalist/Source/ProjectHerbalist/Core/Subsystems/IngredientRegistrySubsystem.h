@@ -3,8 +3,11 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
+#include "Core/Data/WaterTypeRow.h"  // для EWaterSpecialEffect и FWaterTypeRow
 #include "Math/RandomStream.h"
 #include "IngredientRegistrySubsystem.generated.h"
+
+class UWaterTypeRegistrySubsystem;  // forward declaration, сам include не нужен в .h, но можно оставить
 
 UCLASS()
 class PROJECTHERBALIST_API UIngredientRegistrySubsystem : public UGameInstanceSubsystem
@@ -15,27 +18,22 @@ public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 
-    // Загрузка из DataTable
     void LoadFromDataTable(UDataTable* IngredientTable);
 
-    // Доступ к данным
     const FIngredientTableRow* GetRow(FName IngredientID) const;
     EIngredientClass Classify(FName IngredientID) const;
     bool IsWater(FName IngredientID) const;
     bool IsKnown(FName IngredientID) const;
 
-    // Спавн ресурсов (с кэшированием по биомам)
     TArray<FName> GetResourcesForBiome(EBiomeType Biome) const;
     FName GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng) const;
 
-    // Сброс
     void Reset();
 
 private:
     TMap<FName, FIngredientTableRow> Rows;
     bool bInitialized = false;
 
-    // Кэшированные списки для быстрого доступа (пункт 3.3)
     TMap<EBiomeType, TArray<FName>> CachedResourcesByBiome;
     TMap<EBiomeType, TArray<int32>> CachedWeightsByBiome;
 

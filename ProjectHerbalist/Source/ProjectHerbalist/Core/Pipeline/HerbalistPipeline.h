@@ -1,4 +1,4 @@
-// HerbalistPipeline.h
+// Core/Pipeline/HerbalistPipeline.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -78,8 +78,8 @@ namespace HerbalistCore
     // Агрегация ингредиентов
     FAggregatedState Fold(const TArray<FRealState>& Inputs, FRngState& Rng);
 
-    // Вычисление дельты
-    FDeltaState ComputeDelta(const FAggregatedState& Aggregated, const FRealState& CurrentBiomeState, FRngState& Rng);
+    // Вычисление дельты между двумя состояниями
+    FDeltaState ComputeDelta(const FRealState& Before, const FRealState& After);
 
     // Матричное искажение Morok
     void ApplyMorokDistortion(FL2Direction& Dir, float Distortion, FRngState& Rng);

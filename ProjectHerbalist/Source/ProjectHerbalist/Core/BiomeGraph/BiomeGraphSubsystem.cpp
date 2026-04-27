@@ -1,4 +1,4 @@
-// BiomeGraphSubsystem.cpp
+// Core/BiomeGraph/BiomeGraphSubsystem.cpp
 #include "BiomeGraphSubsystem.h"
 #include "BiomeGraphAsset.h"
 #include "Core/World/GridWorldManager.h"
@@ -257,7 +257,8 @@ void UBiomeGraphSubsystem::RecordFootprint(FName BiomeID, float MorokImpact, flo
     Node->Memory.AxisDrift.Z = FMath::Clamp(Node->Memory.AxisDrift.Z, 0.f, 1.f);
     Node->Memory.AxisDrift.W = FMath::Clamp(Node->Memory.AxisDrift.W, 0.f, 1.f);
 
-    UE_LOG(LogBiomeGraph, Verbose, TEXT("Footprint on %s: Morok=%.3f, Zaryana=%.3f, Axis=(%.2f,%.2f,%.2f,%.2f)"),
+    // Уровень Log – теперь Footprint виден всегда
+    UE_LOG(LogBiomeGraph, Log, TEXT("Footprint on %s: Morok=%.3f, Zaryana=%.3f, Axis=(%.2f,%.2f,%.2f,%.2f)"),
         *BiomeID.ToString(), MorokImpact, ZaryanaImpact, AxisDelta.X, AxisDelta.Y, AxisDelta.Z, AxisDelta.W);
 }
 

@@ -1,11 +1,11 @@
 #include "IngredientRegistrySubsystem.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Engine/DataTable.h"
 #include "ProjectHerbalist.h"
 
 void UIngredientRegistrySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
-    // Таблица будет загружаться позже через LoadFromDataTable, вызывается из GameMode или AlchemySubsystem
 }
 
 void UIngredientRegistrySubsystem::Deinitialize()
@@ -63,18 +63,41 @@ const FIngredientTableRow* UIngredientRegistrySubsystem::GetRow(FName Ingredient
 EIngredientClass UIngredientRegistrySubsystem::Classify(FName IngredientID) const
 {
     const FIngredientTableRow* Row = GetRow(IngredientID);
-    return Row ? Row->Class : EIngredientClass::Unknown;
+    if (Row) return Row->Class;
+
+    // Проверяем, не является ли ID типом воды из WaterTypeRegistry
+    if (UWaterTypeRegistrySubsystem* WaterReg = GetGameInstance()->GetSubsystem<UWaterTypeRegistrySubsystem>())
+    {
+        if (WaterReg->IsValidWaterType(IngredientID))
+            return EIngredientClass::Water;
+    }
+    return EIngredientClass::Unknown;
 }
 
 bool UIngredientRegistrySubsystem::IsWater(FName IngredientID) const
 {
     const FIngredientTableRow* Row = GetRow(IngredientID);
-    return Row ? Row->bIsWater : false;
+    if (Row) return Row->bIsWater;
+
+    // Если строка не найдена, проверяем в реестре типов воды
+    if (UWaterTypeRegistrySubsystem* WaterReg = GetGameInstance()->GetSubsystem<UWaterTypeRegistrySubsystem>())
+    {
+        return WaterReg->IsValidWaterType(IngredientID);
+    }
+    return false;
 }
 
 bool UIngredientRegistrySubsystem::IsKnown(FName IngredientID) const
 {
-    return bInitialized && Rows.Contains(IngredientID);
+    if (bInitialized && Rows.Contains(IngredientID))
+        return true;
+
+    // Также считаем известным, если это валидный тип воды
+    if (UWaterTypeRegistrySubsystem* WaterReg = GetGameInstance()->GetSubsystem<UWaterTypeRegistrySubsystem>())
+    {
+        return WaterReg->IsValidWaterType(IngredientID);
+    }
+    return false;
 }
 
 TArray<FName> UIngredientRegistrySubsystem::GetResourcesForBiome(EBiomeType Biome) const

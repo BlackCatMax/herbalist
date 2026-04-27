@@ -9,14 +9,8 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Storage/AlchemyTableActor.h"
-#include "Core/Pipeline/IntentResolver.h"
-#include "Core/Pipeline/AlchemySemantics.h"
-#include "Core/Pipeline/AlchemySemanticResolver.h"
-#include "Core/Pipeline/AlchemyPhysicsPipeline.h"
-#include "Core/Pipeline/AlchemyWorldStateApplier.h"
-#include "Core/Pipeline/AlchemyTypes.h"
+#include "Core/Pipeline/AlchemyPipelineFacade.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
-#include "Core/Harvest/HarvestService.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "ProjectHerbalist.h"
@@ -122,7 +116,6 @@ void UAlchemyTransferWidget::OnMixClicked()
     UGameInstance* GameInstance = World->GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
-    // Получаем GridWorldManager
     AGridWorldManager* WorldManager = nullptr;
     for (TActorIterator<AGridWorldManager> It(World); It; ++It)
     {
@@ -130,26 +123,26 @@ void UAlchemyTransferWidget::OnMixClicked()
         break;
     }
 
-    // Получаем координаты алхимического стола
     FIntPoint TableCoords = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : FIntPoint(-1, -1);
 
-    // Определяем состояние биома и контекст графа
-    FRealState CurrentBiomeState = FAlatyr::S0;
+    FRealState CellState = FAlatyr::S0;
     FEnvironment Env;
     FMemoryState Memory;
     float BiomeMorokField = 0.0f;
     float BiomeZaryanaField = 0.0f;
     FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
     FGridCell* Cell = nullptr;
+    float GlobalDistortion = 0.3f;
 
     if (WorldManager && TableCoords.X >= 0 && TableCoords.Y >= 0)
     {
         Cell = WorldManager->GetCell(TableCoords.X, TableCoords.Y);
         if (Cell)
         {
-            CurrentBiomeState = Cell->State;
+            CellState = Cell->State;
             Env = Cell->Environment;
             Memory = Cell->Memory;
+            GlobalDistortion = Cell->Memory.AccumulatedDistortion;
 
             if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
             {
@@ -163,37 +156,11 @@ void UAlchemyTransferWidget::OnMixClicked()
             }
         }
     }
-
-    // 1. Конвертируем ингредиенты в атомы
-    TArray<FAlchemyAtom> Atoms;
-    for (const FInventoryItem& Item : Ingredients)
+    else
     {
-        FAlchemyAtom Atom(
-            Item.IngredientID,
-            IngredientSubsystem ? IngredientSubsystem->IsWater(Item.IngredientID) : false,
-            Item.State,
-            IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown,
-            EAtomOrigin::Harvest,
-            Memory.AccumulatedDistortion,
-            World->GetTimeSeconds()
-        );
-        Atoms.Add(Atom);
+        GlobalDistortion = HPC->CurrentGlobalDistortion;
     }
 
-    // 2. Семантическое разрешение
-    float GlobalD = 0.3f;
-    if (Cell)
-    {
-        GlobalD = Cell->Memory.AccumulatedDistortion;
-    }
-    else if (HPC)
-    {
-        GlobalD = HPC->CurrentGlobalDistortion;
-    }
-    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms, GlobalD);
-    UE_LOG(LogHerbalist, Log, TEXT("OnMixClicked: GlobalDistortion used = %.3f"), GlobalD);
-
-    // 3. Готовим Rng
     FRngState Rng;
     int32 Seed = 12345;
     if (HPC && HPC->CurrentAlchemyTable)
@@ -203,48 +170,32 @@ void UAlchemyTransferWidget::OnMixClicked()
     }
     Rng.Seed = Seed;
 
-    // 4. Запуск физики
-    FRealState ResultState;
-    FName ResultID;
-
-    if (Semantic.Outcome == EAlchemyOutcome::Valid)
-    {
-        TArray<FRealState> IngredientStates, WaterStates;
-        for (const FAlchemyAtom& A : Semantic.IngredientAtoms) IngredientStates.Add(A.State);
-        for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
-
-        FAlchemyPhysicsResult Physics = FAlchemyPhysicsPipeline::Run(
-            IngredientStates, WaterStates,
-            CurrentBiomeState, Env, Memory,
-            Semantic.Coherence,
-            Rng, BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift);
-
-        ResultState = Physics.State;
-        if (Physics.bCatastropheTriggered)
-        {
-            ResultState = HerbalistCore::ApplyCatastropheTransform(ResultState, Physics.bCollapse, Rng);
-            Semantic.Outcome = EAlchemyOutcome::Catastrophe;
-        }
-        ResultID = FName(TEXT("Potion"));
-    }
-    else if (Semantic.Outcome == EAlchemyOutcome::BoiledWater)
-    {
-        TArray<FRealState> WaterStates;
-        for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
-        ResultState = HerbalistCore::ApplyBoiledWaterTransform(WaterStates);
-        ResultID = FName(TEXT("BoiledWater"));
-    }
-    else
-    {
-        FMeta CoreMeta;
-        ResultState = HerbalistCore::ApplyAshTransform(CoreMeta);
-        ResultID = FName(TEXT("Ash"));
-    }
+    FAlchemyFacadeResult Result = FAlchemyPipelineFacade::Execute(
+        Ingredients,
+        CellState, Env, Memory,
+        GlobalDistortion,
+        IngredientSubsystem,
+        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift,
+        Rng);
 
     FInventoryItem Potion;
-    Potion.IngredientID = ResultID;
-    Potion.State = ResultState;
+    switch (Result.Outcome)
+    {
+    case EAlchemyOutcome::BoiledWater:
+        Potion.IngredientID = FName(TEXT("BoiledWater"));
+        break;
+    case EAlchemyOutcome::Ash:
+    case EAlchemyOutcome::Catastrophe:
+        Potion.IngredientID = FName(TEXT("Ash"));
+        break;
+    default:
+        Potion.IngredientID = FName(TEXT("Potion"));
+        break;
+    }
+    Potion.State = Result.FinalState;
     Potion.Count = 1;
+    Potion.CreationTime = World->GetTimeSeconds();
+    Potion.bSubjectToDecay = false;   // зелья не портятся
 
     ResultSlot->AddItem(Potion, 1);
     ClearIngredientSlots();

@@ -1,0 +1,122 @@
+[
+    {
+        "Name": "BogWater",
+        "WaterTypeID": "BogWater",
+        "DisplayName": "Болото вода",
+        "AllowedBiomes": [
+            "Bog"
+        ],
+        "BasePurity": 0.35,
+        "BaseDistortion": 0.7,
+        "BaseStability": 0.35,
+        "BasePotency": 0.68,
+        "BaseCorruption": 0.7,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    },
+    {
+        "Name": "ForestSteppeWater",
+        "WaterTypeID": "ForestSteppeWater",
+        "DisplayName": "Лесостепь вода",
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "BasePurity": 0.6,
+        "BaseDistortion": 0.35,
+        "BaseStability": 0.55,
+        "BasePotency": 0.5,
+        "BaseCorruption": 0.35,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    },
+    {
+        "Name": "FloodplainWater",
+        "WaterTypeID": "FloodplainWater",
+        "DisplayName": "Речная пойма вода",
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "BasePurity": 0.55,
+        "BaseDistortion": 0.5,
+        "BaseStability": 0.45,
+        "BasePotency": 0.7,
+        "BaseCorruption": 0.45,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    },
+    {
+        "Name": "MixedForestWater",
+        "WaterTypeID": "MixedForestWater",
+        "DisplayName": "Смешанный лес вода",
+        "AllowedBiomes": [
+            "MixedForest"
+        ],
+        "BasePurity": 0.75,
+        "BaseDistortion": 0.28,
+        "BaseStability": 0.65,
+        "BasePotency": 0.58,
+        "BaseCorruption": 0.22,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    },
+    {
+        "Name": "SteppeWater",
+        "WaterTypeID": "SteppeWater",
+        "DisplayName": "Степь вода",
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "BasePurity": 0.5,
+        "BaseDistortion": 0.38,
+        "BaseStability": 0.5,
+        "BasePotency": 0.4,
+        "BaseCorruption": 0.42,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    },
+    {
+        "Name": "TaigaWater",
+        "WaterTypeID": "TaigaWater",
+        "DisplayName": "Тайга вода",
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "BasePurity": 0.8,
+        "BaseDistortion": 0.25,
+        "BaseStability": 0.7,
+        "BasePotency": 0.55,
+        "BaseCorruption": 0.18,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    },
+    {
+        "Name": "TundraWater",
+        "WaterTypeID": "TundraWater",
+        "DisplayName": "Тундра вода",
+        "AllowedBiomes": [
+            "Tundra"
+        ],
+        "BasePurity": 0.7,
+        "BaseDistortion": 0.3,
+        "BaseStability": 0.5,
+        "BasePotency": 0.55,
+        "BaseCorruption": 0.2,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    },
+    {
+        "Name": "BroadleafForestWater",
+        "WaterTypeID": "BroadleafForestWater",
+        "DisplayName": "Широколиственный лес вода",
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "BasePurity": 0.7,
+        "BaseDistortion": 0.3,
+        "BaseStability": 0.6,
+        "BasePotency": 0.65,
+        "BaseCorruption": 0.28,
+        "SpecialEffect": "None",
+        "Rarity": 1.0
+    }
+]

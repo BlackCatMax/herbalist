@@ -1,4 +1,4 @@
-// GridWorldManagerAlchemy.cpp
+// Core/World/GridWorldManagerAlchemy.cpp
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "Core/Pipeline/HerbalistPipeline.h"
@@ -8,6 +8,8 @@
 #include "Core/Pipeline/AlchemyWorldStateApplier.h"
 #include "Core/Pipeline/AlchemyTypes.h"
 #include "Core/Pipeline/IntentResolver.h"
+#include "Core/Pipeline/PipelineTypes.h"
+#include "Core/Pipeline/AlchemyPipelineFacade.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
@@ -22,26 +24,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
-    // 1. Конвертация в атомы
-    TArray<FAlchemyAtom> Atoms;
-    for (const FInventoryItem& Item : Ingredients)
-    {
-        FAlchemyAtom Atom(
-            Item.IngredientID,
-            IngredientSubsystem ? IngredientSubsystem->IsWater(Item.IngredientID) : false,
-            Item.State,
-            IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown,
-            EAtomOrigin::Harvest,
-            Cell->Memory.AccumulatedDistortion,
-            GetWorld()->GetTimeSeconds()
-        );
-        Atoms.Add(Atom);
-    }
-
-    // 2. Семантическое разрешение (считает и Coherence)
-    FAlchemySemanticResult Semantic = FAlchemySemanticResolver::Resolve(Atoms, Cell->Memory.AccumulatedDistortion);
-
-    // 3. Биомный контекст
+    // 1. Биомный контекст
     float BiomeMorokField = 0.0f, BiomeZaryanaField = 0.0f;
     FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
@@ -55,50 +38,42 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         }
     }
 
-    // 4. Запуск физики с вычисленной Coherence
-    TArray<FRealState> IngredientStates, WaterStates;
-    for (const FAlchemyAtom& A : Semantic.IngredientAtoms) IngredientStates.Add(A.State);
-    for (const FAlchemyAtom& A : Semantic.WaterAtoms) WaterStates.Add(A.State);
-
-    FAlchemyPhysicsResult Physics = FAlchemyPhysicsPipeline::Run(
-        IngredientStates, WaterStates,
-        Cell->State, Cell->Environment, Cell->Memory,
-        Semantic.Coherence,
-        Rng,
-        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift);
-
-    // 5. Применение результата к миру
+    // 2. Сохраняем старое состояние для дельты
     FRealState OldState = Cell->State;
-    FRealState NewState = FAlchemyWorldStateApplier::Apply(Semantic, Physics, Rng);
 
-    UE_LOG(LogHerbalist, Log, TEXT("Alchemy outcome: %d"), (int32)Semantic.Outcome);
+    // 3. Выполняем алхимию через фасад
+    FAlchemyFacadeResult AlchemyResult = FAlchemyPipelineFacade::Execute(
+        Ingredients,
+        Cell->State, Cell->Environment, Cell->Memory,
+        Cell->Memory.AccumulatedDistortion,
+        IngredientSubsystem,
+        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift,
+        Rng);
 
-    // 6. Дельта и след
-    FRealState Delta;
-    Delta.Magnitude = NewState.Magnitude - OldState.Magnitude;
-    Delta.Direction.Body = NewState.Direction.Body - OldState.Direction.Body;
-    Delta.Direction.Mind = NewState.Direction.Mind - OldState.Direction.Mind;
-    Delta.Direction.Spirit = NewState.Direction.Spirit - OldState.Direction.Spirit;
-    Delta.Direction.Nature = NewState.Direction.Nature - OldState.Direction.Nature;
-    Delta.Meta.Distortion = NewState.Meta.Distortion - OldState.Meta.Distortion;
-    Delta.Meta.Stability = NewState.Meta.Stability - OldState.Meta.Stability;
-    Delta.Meta.Purity = NewState.Meta.Purity - OldState.Meta.Purity;
-    Delta.Meta.Potency = NewState.Meta.Potency - OldState.Meta.Potency;
-    Delta.Meta.Resonance = NewState.Meta.Resonance - OldState.Meta.Resonance;
-    Delta.Meta.Corruption = NewState.Meta.Corruption - OldState.Meta.Corruption;
+    FRealState NewState = AlchemyResult.FinalState;
+    EAlchemyOutcome Outcome = AlchemyResult.Outcome;
+
+    UE_LOG(LogHerbalist, Log, TEXT("Alchemy outcome: %d"), (int32)Outcome);
+
+    // 4. Дельта и след
+    FDeltaState Delta = HerbalistCore::ComputeDelta(OldState, NewState);
 
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
     {
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
-        float MorokImpact = Delta.Meta.Distortion;
-        float ZaryanaImpact = 1.f - Delta.Meta.Distortion;
-        FVector4 AxisDelta(Delta.Direction.Body, Delta.Direction.Mind, Delta.Direction.Spirit, Delta.Direction.Nature);
+        float MorokImpact = Delta.MetaDelta.Distortion;
+        float ZaryanaImpact = 1.f - Delta.MetaDelta.Distortion;
+        FVector4 AxisDelta(Delta.DirectionDelta.Body, Delta.DirectionDelta.Mind, Delta.DirectionDelta.Spirit, Delta.DirectionDelta.Nature);
         Graph->RecordFootprint(BiomeID, MorokImpact, ZaryanaImpact, AxisDelta, 1.0f);
     }
 
-    // 7. Применение к сетке
+    // 5. Применение к сетке
     SetTargetState(X, Y, NewState);
-    PropagateToNeighbors(X, Y, Delta, 0.5f, PropagationDepth);
+    FRealState DeltaForPropagation;
+    DeltaForPropagation.Magnitude = Delta.MagnitudeDelta;
+    DeltaForPropagation.Direction = Delta.DirectionDelta;
+    DeltaForPropagation.Meta = Delta.MetaDelta;
+    PropagateToNeighbors(X, Y, DeltaForPropagation, 0.5f, PropagationDepth);
 }
 
 void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng)
