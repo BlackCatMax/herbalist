@@ -1,6 +1,7 @@
-// PipelineFold.cpp
+// Core/Pipeline/PipelineFold.cpp
 #include "HerbalistPipeline.h"
 #include "PipelineTypes.h"
+#include "PipelineMeta.h"
 #include "Core/HerbalistSettings.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "Math/UnrealMathUtility.h"
@@ -43,11 +44,11 @@ namespace HerbalistCore
             AccumMag += Res.Magnitude * w;
 
             AccumMeta.Distortion += Res.Meta.Distortion * w;
-            AccumMeta.Stability += Res.Meta.Stability * w;
-            AccumMeta.Purity += Res.Meta.Purity * w;
-            AccumMeta.Potency += Res.Meta.Potency * w;
-            AccumMeta.Resonance += Res.Meta.Resonance * w;
-            AccumMeta.Corruption += Res.Meta.Corruption * w;
+            AccumMeta.Stability   += Res.Meta.Stability   * w;
+            AccumMeta.Purity      += Res.Meta.Purity      * w;
+            AccumMeta.Potency     += Res.Meta.Potency     * w;
+            AccumMeta.Resonance   += Res.Meta.Resonance   * w;
+            AccumMeta.Corruption  += Res.Meta.Corruption  * w;
 
             Weight *= WeightDecay;
         }
@@ -61,11 +62,11 @@ namespace HerbalistCore
             AccumMag /= TotalWeight;
 
             AccumMeta.Distortion /= TotalWeight;
-            AccumMeta.Stability /= TotalWeight;
-            AccumMeta.Purity /= TotalWeight;
-            AccumMeta.Potency /= TotalWeight;
-            AccumMeta.Resonance /= TotalWeight;
-            AccumMeta.Corruption /= TotalWeight;
+            AccumMeta.Stability   /= TotalWeight;
+            AccumMeta.Purity      /= TotalWeight;
+            AccumMeta.Potency     /= TotalWeight;
+            AccumMeta.Resonance   /= TotalWeight;
+            AccumMeta.Corruption  /= TotalWeight;
         }
 
         AccumDir.NormalizeL2(Rng);
@@ -154,10 +155,10 @@ namespace HerbalistCore
         Aggregated.Direction.Nature = NonWaterAggregated.Direction.Nature * NonWaterWeight + WaterAggregated.Direction.Nature * WaterWeight;
         Aggregated.Direction.NormalizeSum();
 
-        Aggregated.Meta.Purity = NonWaterAggregated.Meta.Purity * NonWaterWeight + WaterAggregated.Meta.Purity * WaterWeight;
-        Aggregated.Meta.Stability = NonWaterAggregated.Meta.Stability * NonWaterWeight + WaterAggregated.Meta.Stability * WaterWeight;
-        Aggregated.Meta.Corruption = NonWaterAggregated.Meta.Corruption * NonWaterWeight + WaterAggregated.Meta.Corruption * WaterWeight;
-        Aggregated.Meta.Potency = NonWaterAggregated.Meta.Potency * NonWaterWeight + WaterAggregated.Meta.Potency * WaterWeight;
+        // Используем BlendMeta для Meta, чтобы обеспечить единообразное смешивание
+        Aggregated.Meta = BlendMeta(NonWaterAggregated.Meta, WaterAggregated.Meta, WaterWeight);
+
+        // Корректировка Resonance и Distortion согласно исходной логике (оставляем от не-воды)
         Aggregated.Meta.Resonance = NonWaterAggregated.Meta.Resonance;
         Aggregated.Meta.Distortion = NonWaterAggregated.Meta.Distortion;
 

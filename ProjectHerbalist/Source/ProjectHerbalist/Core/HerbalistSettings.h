@@ -1,4 +1,4 @@
-// HerbalistSettings.h
+// Core/HerbalistSettings.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -22,6 +22,10 @@ public:
 
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeAxisDriftWeight = 0.1f;
+
+    // --- Environment Influence ---
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Environment", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float EnvironmentBlendWeight = 0.4f;
 
     // --- Water blending ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Water", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -53,7 +57,7 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Bifurcation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BifurcationThreshold = 0.85f;
 
-    // --- Harvest (новые настройки, пункт 4.1) ---
+    // --- Harvest ---
     UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HarvestBiomeWeight = 0.6f;
 

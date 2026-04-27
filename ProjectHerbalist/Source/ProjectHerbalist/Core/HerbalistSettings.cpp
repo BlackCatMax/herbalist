@@ -1,4 +1,4 @@
-// HerbalistSettings.cpp
+// Core/HerbalistSettings.cpp
 #include "HerbalistSettings.h"
 #include "Engine/Engine.h"
 
