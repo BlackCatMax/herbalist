@@ -1,7 +1,12 @@
+// SnapshotService.cpp
 #include "SnapshotService.h"
+#include "Core/Simulation/Private/PipelineV2.h"
+#include "Core/Simulation/Public/SnapshotTypes.h"
+#include "Core/Simulation/Public/DeltaTypes.h"
 
 namespace Simulation
 {
+    // ----- Захват состояния (пока заглушки) -----
     FWorldSnapshot FSnapshotService::CaptureWorld()
     {
         return FWorldSnapshot{};
@@ -17,16 +22,49 @@ namespace Simulation
         return FBiomeSnapshot{};
     }
 
-    void FSnapshotService::ApplyDeltaToWorld(const FStateDelta& Delta) {}
-    void FSnapshotService::ApplyDeltaToInventory(const FStateDelta& Delta) {}
-    void FSnapshotService::ApplyDeltaToBiomes(const FStateDelta& Delta) {}
-	
-	FCommandGraph FSnapshotService::BuildCommandGraph(const TArray<FCommandEntry>& RawCommands)
+    // ----- Применение дельты (пока заглушки) -----
+    void FSnapshotService::ApplyDeltaToWorld(const FStateDelta& Delta)
+    {
+        // Будет реализовано после интеграции с GridWorldManager
+    }
+
+    void FSnapshotService::ApplyDeltaToInventory(const FStateDelta& Delta)
+    {
+        // Будет реализовано после интеграции с инвентарём
+    }
+
+    void FSnapshotService::ApplyDeltaToBiomes(const FStateDelta& Delta)
+    {
+        // Будет реализовано после интеграции с BiomeGraph
+    }
+
+    // ----- Сборка графа команд (заглушка) -----
+    FCommandGraph FSnapshotService::BuildCommandGraph(const TArray<FCommandEntry>& RawCommands)
     {
         FCommandGraph Graph;
-        // Просто копируем команды как есть (сортировка позже)
         Graph.Commands = RawCommands;
-        // В реальной реализации здесь должна быть валидация, сортировка по ExecutionOrder и т.д.
         return Graph;
+    }
+
+    // ----- Выполнение одного тика симуляции -----
+    FStateDelta FSnapshotService::ExecuteTick(const FCommandGraph& Commands)
+    {
+        // 1. Захват состояния
+        FWorldSnapshot WorldSnap = CaptureWorld();
+        FInventorySnapshot InvSnap = CaptureInventory();
+        FBiomeSnapshot BiomeSnap = CaptureBiomes();   // пока не используется
+
+        // 2. Инициализация ГПСЧ из сида мира (пока WorldSeed = 0)
+        FRandomStream Rng(WorldSnap.WorldSeed);
+
+        // 3. Запуск детерминированного пайплайна
+        FStateDelta Delta = ExecutePipeline(WorldSnap, InvSnap, Commands, Rng);
+
+        // 4. Применение полученной дельты
+        ApplyDeltaToWorld(Delta);
+        ApplyDeltaToInventory(Delta);
+        ApplyDeltaToBiomes(Delta);
+
+        return Delta;
     }
 }

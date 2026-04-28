@@ -19,5 +19,6 @@ namespace Simulation
 
         // Новый метод для PR-4 (заглушка)
         static FCommandGraph BuildCommandGraph(const TArray<FCommandEntry>& RawCommands);
+		static FStateDelta ExecuteTick(const FCommandGraph& Commands);
     };
 }

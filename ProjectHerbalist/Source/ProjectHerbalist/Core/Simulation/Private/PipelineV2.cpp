@@ -1,0 +1,149 @@
+// Core/Simulation/Private/PipelineV2.cpp
+#include "PipelineV2.h"
+#include "ProjectHerbalist.h"
+
+namespace Simulation
+{
+    // ---------------------------------------------------------
+    // Вспомогательные функции
+    // ---------------------------------------------------------
+
+    static const FInventoryItem* FindItemInSnapshot(const FInventorySnapshot& InvSnap,
+                                                    int32 ContainerID,
+                                                    FName IngredientID)
+    {
+        const TArray<FInventoryItem>* Items = InvSnap.ContainerContents.Find(ContainerID);
+        if (!Items) return nullptr;
+
+        for (const FInventoryItem& Item : *Items)
+        {
+            if (Item.IngredientID == IngredientID)
+                return &Item;
+        }
+        return nullptr;
+    }
+
+    static FInventoryItem GenerateHarvestResult(const FGridCell& Cell,
+                                               FName IngredientID,
+                                               FRandomStream& Rng)
+    {
+        FInventoryItem Result;
+        Result.IngredientID = IngredientID;
+        Result.State = Cell.State;
+        // Используем потокобезопасный метод Rng.FRandRange
+        Result.State.Magnitude = FMath::Clamp(Result.State.Magnitude + Rng.FRandRange(-0.05f, 0.05f), 0.0f, 1.0f);
+        Result.State.Meta.Distortion = FMath::Clamp(Result.State.Meta.Distortion + Rng.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
+        Result.Count = 1;
+        Result.CreationTime = 0.0;
+        Result.bSubjectToDecay = true;
+        return Result;
+    }
+
+    // ---------------------------------------------------------
+    // Обработчики команд
+    // ---------------------------------------------------------
+
+    static void ProcessHarvestCommand(const FHarvestCommand& Cmd,
+                                     const FWorldSnapshot& WorldSnap,
+                                     FRandomStream& Rng,
+                                     FStateDelta& OutDelta)
+    {
+        const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
+        if (!Cell)
+        {
+            UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Harvest cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            return;
+        }
+        if (Cell->bIsWater)
+        {
+            UE_LOG(LogHerbalist, Verbose, TEXT("PipelineV2: Skipped water cell (%d,%d)"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            return;
+        }
+
+        FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Rng);
+
+        FInventoryOperation Op;
+        Op.ContainerID = 0;   // игрок
+        Op.Ingredient = Harvested;
+        Op.OpType = EInventoryOpType::Add;
+        Op.Amount = Cmd.Amount;
+        OutDelta.InventoryOps.Add(Op);
+
+        // Изменяем клетку, увеличивая стресс
+        FGridCell Modified = *Cell;
+        Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.1f, 0.0f, 1.0f);
+        OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
+    }
+
+    static void ProcessTransferCommand(const FTransferCommand& Cmd,
+                                      const FInventorySnapshot& InvSnap,
+                                      FStateDelta& OutDelta)
+    {
+        const FInventoryItem* SourceItem = FindItemInSnapshot(InvSnap, Cmd.SourceContainerID, Cmd.IngredientID);
+        if (!SourceItem)
+        {
+            UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Transfer source item %s not found in container %d"),
+                *Cmd.IngredientID.ToString(), Cmd.SourceContainerID);
+            return;
+        }
+
+        // Remove из источника
+        FInventoryOperation RemoveOp;
+        RemoveOp.ContainerID = Cmd.SourceContainerID;
+        RemoveOp.Ingredient = *SourceItem;
+        RemoveOp.OpType = EInventoryOpType::Remove;
+        RemoveOp.Amount = Cmd.Amount;
+        OutDelta.InventoryOps.Add(RemoveOp);
+
+        // Add в цель
+        FInventoryOperation AddOp;
+        AddOp.ContainerID = Cmd.TargetContainerID;
+        AddOp.Ingredient = *SourceItem;
+        AddOp.Ingredient.Count = Cmd.Amount;
+        AddOp.OpType = EInventoryOpType::Add;
+        AddOp.Amount = Cmd.Amount;
+        OutDelta.InventoryOps.Add(AddOp);
+    }
+
+    static void ProcessApplyCommand(const FApplyCommand& Cmd,
+                                   const FWorldSnapshot& WorldSnap,
+                                   FRandomStream& Rng,
+                                   FStateDelta& OutDelta)
+    {
+        // Заглушка
+        UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Apply not implemented yet"));
+    }
+
+    // ---------------------------------------------------------
+    // Главная точка входа
+    // ---------------------------------------------------------
+    FStateDelta ExecutePipeline(const FWorldSnapshot& WorldSnapshot,
+                                const FInventorySnapshot& InventorySnapshot,
+                                const FCommandGraph& Commands,
+                                FRandomStream& Rng)
+    {
+        FStateDelta Delta;
+
+        for (const FCommandEntry& Entry : Commands.Commands)
+        {
+            if (Entry.bCancelled) continue;
+
+            switch (Entry.Primitive)
+            {
+            case ECommandPrimitive::Harvest:
+                ProcessHarvestCommand(Entry.Harvest, WorldSnapshot, Rng, Delta);
+                break;
+            case ECommandPrimitive::Transfer:
+                ProcessTransferCommand(Entry.Transfer, InventorySnapshot, Delta);
+                break;
+            case ECommandPrimitive::Apply:
+                ProcessApplyCommand(Entry.Apply, WorldSnapshot, Rng, Delta);
+                break;
+            default:
+                break;
+            }
+        }
+
+        return Delta;
+    }
+}
