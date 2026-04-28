@@ -300,10 +300,6 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     }, ResourceRegrowthTime, false);
 }
 
-// ============================================================================
-// СБОР И АЛХИМИЯ (старые методы – будут заменены на команды)
-// ============================================================================
-
 void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
 {
     if (!Actor) return;
@@ -311,31 +307,22 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     FGridCell* Cell = GetCell(Actor->GetGridX(), Actor->GetGridY());
     if (!Cell) return;
 
+    // Удаляем актор из списка клетки
     Cell->ResourceActors.Remove(Actor);
     UE_LOG(LogHerbalist, Log, TEXT("Resource collected at cell (%d,%d), remaining: %d"), Cell->X, Cell->Y, Cell->ResourceActors.Num());
 
-    FName IngredientID = Actor->GetIngredientID();
-    FRealState ResourceState = HarvestService->Harvest(IngredientID, Cell->State, FConditionModifier());
-    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
-    if (PC && PC->InventoryComponent && (ResourceState.Magnitude > 0.01f || ResourceState.Meta.Distortion > 0.01f))
-    {
-        FInventoryItem Item;
-        Item.IngredientID    = IngredientID;
-        Item.State           = ResourceState;
-        Item.Count           = 1;
-        Item.CreationTime    = GetWorld()->GetTimeSeconds();
-        Item.bSubjectToDecay = true;
-        PC->InventoryComponent->AddItem(Item, 1);
-    }
+    // Формируем команду Harvest для нового пайплайна
+    FCommandEntry Cmd;
+    Cmd.Primitive             = ECommandPrimitive::Harvest;
+    Cmd.Harvest.TargetCell    = FIntPoint(Cell->X, Cell->Y);
+    Cmd.Harvest.IngredientID  = Actor->GetIngredientID();
+    Cmd.Harvest.Amount        = 1;
+    QueueCommand(Cmd);
 
+    // Если ресурсов больше нет, запускаем регенерацию
     if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)
     {
         StartRegeneration(*Cell);
-    }
-
-    if (bHarvestAffectsBiome)
-    {
-        Cell->HarvestStress = FMath::Clamp(Cell->HarvestStress + HarvestStressIncrement, 0.0f, 1.0f);
     }
 }
 
@@ -344,13 +331,16 @@ FRealState AGridWorldManager::CollectWater(int32 X, int32 Y)
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell || !Cell->bIsWater || !HarvestService) return FRealState();
 
-    FRealState WaterState = HarvestService->HarvestWater(*Cell, FConditionModifier());
+    // Формируем команду Harvest для воды
+    FCommandEntry Cmd;
+    Cmd.Primitive             = ECommandPrimitive::Harvest;
+    Cmd.Harvest.TargetCell    = FIntPoint(X, Y);
+    Cmd.Harvest.IngredientID  = Cell->WaterTypeID;
+    Cmd.Harvest.Amount        = 1;
+    QueueCommand(Cmd);
 
-    if (bHarvestAffectsBiome)
-    {
-        Cell->HarvestStress = FMath::Clamp(Cell->HarvestStress + HarvestStressIncrement, 0.0f, 1.0f);
-    }
-    return WaterState;
+    // Возвращаем пустое состояние — реальный сбор произойдёт через новый пайплайн
+    return FRealState();
 }
 
 // ============================================================================

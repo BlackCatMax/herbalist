@@ -147,28 +147,40 @@ namespace Simulation
         OutDelta.InventoryOps.Add(AddOp);
     }
 
-    static void ProcessApplyCommand(const FApplyCommand& Cmd,
-                                   const FWorldSnapshot& WorldSnap,
-                                   FRandomStream& Rng,
-                                   FStateDelta& OutDelta)
-    {
-        const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
-        if (!Cell)
-        {
-            UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Apply target cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
-            return;
-        }
+	static void ProcessApplyCommand(const FApplyCommand& Cmd,
+								   const FWorldSnapshot& WorldSnap,
+								   FRandomStream& Rng,
+								   FStateDelta& OutDelta)
+	{
+		const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
+		if (!Cell)
+		{
+			UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Apply target cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+			return;
+		}
 
-        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, Cmd.Intent, Rng);
+		FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, Cmd.Intent, Rng);
 
-        FGridCell Modified = *Cell;
-        Modified.State = PotionState;
-        Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.2f, 0.f, 1.f);
+		// Удаляем использованные ингредиенты из инвентаря
+		for (const FInventoryItem& Ing : Cmd.Ingredients)
+		{
+			FInventoryOperation RemoveOp;
+			RemoveOp.ContainerID = 0;   // инвентарь игрока
+			RemoveOp.Ingredient = Ing;
+			RemoveOp.Ingredient.Count = 1;
+			RemoveOp.OpType = EInventoryOpType::Remove;
+			RemoveOp.Amount = 1;
+			OutDelta.InventoryOps.Add(RemoveOp);
+		}
 
-        OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
-        UE_LOG(LogHerbalist, Log, TEXT("PipelineV2: Apply to cell (%d,%d) - new state M=%.2f, Dist=%.2f"),
-            Cmd.TargetCell.X, Cmd.TargetCell.Y, PotionState.Magnitude, PotionState.Meta.Distortion);
-    }
+		FGridCell Modified = *Cell;
+		Modified.State = PotionState;
+		Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.2f, 0.f, 1.f);
+
+		OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
+		UE_LOG(LogHerbalist, Log, TEXT("PipelineV2: Apply to cell (%d,%d) - new state M=%.2f, Dist=%.2f"),
+			Cmd.TargetCell.X, Cmd.TargetCell.Y, PotionState.Magnitude, PotionState.Meta.Distortion);
+	}
 
     // ---------------------------------------------------------
     // Главная точка входа

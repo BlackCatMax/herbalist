@@ -192,17 +192,7 @@ void AHerbalistPlayerController::Harvest()
     FGridCell* Cell = WorldManager->GetCell(X, Y);
     if (!Cell || !Cell->bIsWater) return;
 
-    const FRealState WaterState = WorldManager->CollectWater(X, Y);
-    if (InventoryComponent)
-    {
-        FInventoryItem Item;
-        Item.IngredientID    = Cell->WaterTypeID;
-        Item.State           = WaterState;
-        Item.Count           = 1;
-        Item.CreationTime    = GetWorld()->GetTimeSeconds();
-        Item.bSubjectToDecay = false;
-        InventoryComponent->AddItem(Item, 1);
-    }
+    WorldManager->CollectWater(X, Y);
     UE_LOG(LogHerbalist, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
 }
 
