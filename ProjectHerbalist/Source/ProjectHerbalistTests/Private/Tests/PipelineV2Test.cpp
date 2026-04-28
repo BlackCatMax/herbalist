@@ -1,4 +1,4 @@
-// Source/ProjectHerbalist/Private/Tests/PipelineV2Test.cpp
+// Source/ProjectHerbalistTests/Private/Tests/PipelineV2Test.cpp
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
@@ -75,7 +75,6 @@ bool FPipelineV2HarvestTest::RunTest(const FString& Parameters)
     return true;
 }
 
-// Тест игнорирования воды
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FPipelineV2HarvestWaterTest,
     "ProjectHerbalist.PipelineV2.HarvestWaterIgnored",

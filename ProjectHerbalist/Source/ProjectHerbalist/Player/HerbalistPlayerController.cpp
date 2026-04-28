@@ -394,8 +394,6 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
 void AHerbalistPlayerController::TestNewHarvest(int32 X, int32 Y, FName IngredientID)
 {
     if (!GetWorld()) return;
-
-    // Находим GridWorldManager
     for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
     {
         AGridWorldManager* Grid = *It;
@@ -407,10 +405,65 @@ void AHerbalistPlayerController::TestNewHarvest(int32 X, int32 Y, FName Ingredie
             Cmd.Harvest.IngredientID = IngredientID;
             Cmd.Harvest.Amount = 1;
             Grid->QueueCommand(Cmd);
-
-            UE_LOG(LogHerbalist, Log, TEXT("Queued harvest command: cell(%d,%d) %s"), X, Y, *IngredientID.ToString());
             return;
         }
     }
-    UE_LOG(LogHerbalist, Warning, TEXT("TestNewHarvest: GridWorldManager not found"));
+}
+
+void AHerbalistPlayerController::TestNewTransfer(FName IngredientID, int32 Amount)
+{
+    if (!GetWorld()) return;
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* Grid = *It;
+        if (Grid)
+        {
+            FCommandEntry Cmd;
+            Cmd.Primitive = ECommandPrimitive::Transfer;
+            Cmd.Transfer.SourceContainerID = 0;   // инвентарь игрока
+            Cmd.Transfer.TargetContainerID = 1;   // условный сундук
+            Cmd.Transfer.IngredientID = IngredientID;
+            Cmd.Transfer.Amount = Amount;
+            Grid->QueueCommand(Cmd);
+            return;
+        }
+    }
+}
+
+void AHerbalistPlayerController::TestNewApply(int32 X, int32 Y, FString IngredientList)
+{
+    if (!GetWorld() || !InventoryComponent) return;
+
+    TArray<FInventoryItem> Items;
+    TArray<FString> Names;
+    IngredientList.ParseIntoArray(Names, TEXT(","), true);
+    for (const FString& Name : Names)
+    {
+        FName IngID(*Name);
+        for (const FInventoryItem& Item : InventoryComponent->GetItems())
+        {
+            if (Item.IngredientID == IngID)
+            {
+                Items.Add(Item);
+                break;
+            }
+        }
+    }
+
+    if (Items.Num() == 0) return;
+
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* Grid = *It;
+        if (Grid)
+        {
+            FCommandEntry Cmd;
+            Cmd.Primitive = ECommandPrimitive::Apply;
+            Cmd.Apply.TargetCell = FIntPoint(X, Y);
+            Cmd.Apply.Ingredients = Items;
+            Cmd.Apply.Intent.Coherence = 0.5f;
+            Grid->QueueCommand(Cmd);
+            return;
+        }
+    }
 }

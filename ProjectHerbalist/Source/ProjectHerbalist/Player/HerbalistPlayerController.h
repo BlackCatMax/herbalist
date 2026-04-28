@@ -73,6 +73,12 @@ public:
     AGridWorldManager* FindWorldManager() const;
     void GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
     void UpdateDistortionFromCell(int32 X, int32 Y);
+	
+    UFUNCTION(Exec)
+    void TestNewTransfer(FName IngredientID, int32 Amount);
+
+    UFUNCTION(Exec)
+    void TestNewApply(int32 X, int32 Y, FString IngredientList);
 
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")

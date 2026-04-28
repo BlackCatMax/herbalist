@@ -30,12 +30,55 @@ namespace Simulation
         FInventoryItem Result;
         Result.IngredientID = IngredientID;
         Result.State = Cell.State;
-        // Используем потокобезопасный метод Rng.FRandRange
         Result.State.Magnitude = FMath::Clamp(Result.State.Magnitude + Rng.FRandRange(-0.05f, 0.05f), 0.0f, 1.0f);
         Result.State.Meta.Distortion = FMath::Clamp(Result.State.Meta.Distortion + Rng.FRandRange(-0.02f, 0.02f), 0.0f, 1.0f);
         Result.Count = 1;
         Result.CreationTime = 0.0;
         Result.bSubjectToDecay = true;
+        return Result;
+    }
+
+    static FRealState ComputeApplyResult(const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRandomStream& Rng)
+    {
+        if (Ingredients.Num() == 0) return FRealState();
+
+        FRealState Result;
+        float TotalWeight = 0.f;
+        for (const FInventoryItem& Item : Ingredients)
+        {
+            float Weight = Item.State.Magnitude * Item.Count;
+            Result.Magnitude += Item.State.Magnitude * Weight;
+            Result.Direction.Body += Item.State.Direction.Body * Weight;
+            Result.Direction.Mind += Item.State.Direction.Mind * Weight;
+            Result.Direction.Spirit += Item.State.Direction.Spirit * Weight;
+            Result.Direction.Nature += Item.State.Direction.Nature * Weight;
+            Result.Meta.Distortion += Item.State.Meta.Distortion * Weight;
+            Result.Meta.Stability += Item.State.Meta.Stability * Weight;
+            Result.Meta.Purity += Item.State.Meta.Purity * Weight;
+            Result.Meta.Potency += Item.State.Meta.Potency * Weight;
+            Result.Meta.Resonance += Item.State.Meta.Resonance * Weight;
+            Result.Meta.Corruption += Item.State.Meta.Corruption * Weight;
+            TotalWeight += Weight;
+        }
+        if (TotalWeight > KINDA_SMALL_NUMBER)
+        {
+            Result.Magnitude /= TotalWeight;
+            Result.Direction.Body /= TotalWeight;
+            Result.Direction.Mind /= TotalWeight;
+            Result.Direction.Spirit /= TotalWeight;
+            Result.Direction.Nature /= TotalWeight;
+            Result.Meta.Distortion /= TotalWeight;
+            Result.Meta.Stability /= TotalWeight;
+            Result.Meta.Purity /= TotalWeight;
+            Result.Meta.Potency /= TotalWeight;
+            Result.Meta.Resonance /= TotalWeight;
+            Result.Meta.Corruption /= TotalWeight;
+        }
+
+        float Coherence = FMath::Clamp(Intent.Coherence, 0.f, 1.f);
+        Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion * (1.f - Coherence) + Rng.FRandRange(0.f, 0.2f) * Coherence, 0.f, 1.f);
+        Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability * (1.f + Coherence * 0.5f), 0.f, 1.f);
+        Result.Direction.NormalizeSum();
         return Result;
     }
 
@@ -69,7 +112,6 @@ namespace Simulation
         Op.Amount = Cmd.Amount;
         OutDelta.InventoryOps.Add(Op);
 
-        // Изменяем клетку, увеличивая стресс
         FGridCell Modified = *Cell;
         Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.1f, 0.0f, 1.0f);
         OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
@@ -110,8 +152,22 @@ namespace Simulation
                                    FRandomStream& Rng,
                                    FStateDelta& OutDelta)
     {
-        // Заглушка
-        UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Apply not implemented yet"));
+        const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
+        if (!Cell)
+        {
+            UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Apply target cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            return;
+        }
+
+        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, Cmd.Intent, Rng);
+
+        FGridCell Modified = *Cell;
+        Modified.State = PotionState;
+        Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.2f, 0.f, 1.f);
+
+        OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
+        UE_LOG(LogHerbalist, Log, TEXT("PipelineV2: Apply to cell (%d,%d) - new state M=%.2f, Dist=%.2f"),
+            Cmd.TargetCell.X, Cmd.TargetCell.Y, PotionState.Magnitude, PotionState.Meta.Distortion);
     }
 
     // ---------------------------------------------------------
