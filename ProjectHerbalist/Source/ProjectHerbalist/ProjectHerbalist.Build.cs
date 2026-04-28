@@ -1,4 +1,3 @@
-// ProjectHerbalist.Build.cs
 using UnrealBuildTool;
 
 public class ProjectHerbalist : ModuleRules
@@ -25,13 +24,10 @@ public class ProjectHerbalist : ModuleRules
             "AssetRegistry"
         });
 
-        // Оставляем только корневую папку модуля.
-        // Все инклюды в коде должны быть с префиксами, например: #include "Core/Data/IngredientRegistry.h"
         PublicIncludePaths.AddRange(new string[]
         {
             "ProjectHerbalist",
-			"ProjectHerbalist/Core/Simulation/Public"
-
+            "ProjectHerbalist/Core/Simulation/Public"
         });
     }
 }

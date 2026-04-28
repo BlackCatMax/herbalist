@@ -2,6 +2,8 @@
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "DrawDebugHelpers.h"
+#include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/Simulation/Public/SnapshotService.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 
 void AGridWorldManager::Tick(float DeltaTime)
@@ -86,6 +88,13 @@ void AGridWorldManager::Tick(float DeltaTime)
         bInterpolationActive = bShouldTick;
         SetActorTickEnabled(bShouldTick);
     }
+	
+		if (bUseNewPipeline)
+	{
+		FCommandGraph CmdGraph = Simulation::FSnapshotService::BuildCommandGraph(PendingCommands);
+		PendingCommands.Empty();
+		Simulation::FSnapshotService::ExecuteTick(CmdGraph);
+	}
 
 #if WITH_EDITOR
     if (bEnableDebugDraw)

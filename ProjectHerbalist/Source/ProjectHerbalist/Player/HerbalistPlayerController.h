@@ -60,6 +60,9 @@ public:
     void ShowInventory();
     UFUNCTION(Exec)
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
+	
+	UFUNCTION(Exec)
+	void TestNewHarvest(int32 X, int32 Y, FName IngredientID);
 
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();

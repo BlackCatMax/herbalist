@@ -7,6 +7,7 @@
 #include "Core/Types/BiomeTypes.h"
 #include "Math/RandomStream.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
+#include "Core/Simulation/Public/CommandTypes.h"
 #include "GridWorldManager.generated.h"
 
 class UHarvestService;
@@ -29,6 +30,7 @@ public:
 
     void SpawnResourcesInCell(FGridCell& Cell);
     void StartRegeneration(FGridCell& Cell);
+	void QueueCommand(const FCommandEntry& Cmd);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     int32 GridSizeX = 20;
@@ -67,6 +69,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery")
     bool bEnableRecovery = true;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation")
+	bool bUseNewPipeline = false;
 
 #if WITH_EDITOR
     bool bShowBiomeGraph = false;
@@ -161,4 +166,6 @@ protected:
 
 private:
     int32 SelectedX = -1, SelectedY = -1;
+	TArray<FCommandEntry> PendingCommands; // очередь команд для нового пайплайна
+
 };

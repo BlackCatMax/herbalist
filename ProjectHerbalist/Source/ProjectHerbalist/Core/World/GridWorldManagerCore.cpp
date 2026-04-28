@@ -10,6 +10,7 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
+#include "Core/Simulation/Public/CommandTypes.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "ProjectHerbalist.h"
@@ -519,4 +520,9 @@ void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
         bInterpolationActive = false;
         SetActorTickEnabled(false);
     }
+}
+
+void AGridWorldManager::QueueCommand(const FCommandEntry& Cmd)
+{
+    PendingCommands.Add(Cmd);
 }

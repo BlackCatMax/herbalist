@@ -14,6 +14,7 @@
 #include "UI/AlchemyTransferWidget.h"
 #include "UI/InventoryTransferWidget.h"
 #include "UI/InventoryWidget.h"
+#include "Core/Simulation/Public/CommandTypes.h"
 
 AHerbalistPlayerController::AHerbalistPlayerController()
 {
@@ -388,4 +389,28 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
 
     Resource->Harvest();
     return true;
+}
+
+void AHerbalistPlayerController::TestNewHarvest(int32 X, int32 Y, FName IngredientID)
+{
+    if (!GetWorld()) return;
+
+    // Находим GridWorldManager
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* Grid = *It;
+        if (Grid)
+        {
+            FCommandEntry Cmd;
+            Cmd.Primitive = ECommandPrimitive::Harvest;
+            Cmd.Harvest.TargetCell = FIntPoint(X, Y);
+            Cmd.Harvest.IngredientID = IngredientID;
+            Cmd.Harvest.Amount = 1;
+            Grid->QueueCommand(Cmd);
+
+            UE_LOG(LogHerbalist, Log, TEXT("Queued harvest command: cell(%d,%d) %s"), X, Y, *IngredientID.ToString());
+            return;
+        }
+    }
+    UE_LOG(LogHerbalist, Warning, TEXT("TestNewHarvest: GridWorldManager not found"));
 }
