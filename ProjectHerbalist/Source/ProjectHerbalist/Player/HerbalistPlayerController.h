@@ -25,10 +25,7 @@ class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
 public:
     AHerbalistPlayerController();
 	
-	UFUNCTION(Exec)
-	void ToggleNewPipeline();
-
-    virtual void SetupInputComponent() override;
+	virtual void SetupInputComponent() override;
     virtual void BeginPlay() override;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
