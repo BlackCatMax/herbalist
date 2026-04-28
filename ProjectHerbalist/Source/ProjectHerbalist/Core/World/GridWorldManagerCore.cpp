@@ -9,12 +9,14 @@
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
-#include "Core/Simulation/Public/DeltaTypes.h"
-#include "Core/Simulation/Public/CommandTypes.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "ProjectHerbalist.h"
 #include "TimerManager.h"
+#include "Core/Simulation/Public/SnapshotTypes.h"
+#include "Core/Simulation/Public/DeltaTypes.h"
+#include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/Simulation/Public/PerceptionComponent.h"
 
 FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
 {
@@ -73,6 +75,8 @@ AGridWorldManager::AGridWorldManager()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = false;
+
+    PerceptionComponent = CreateDefaultSubobject<UPerceptionComponent>(TEXT("PerceptionComp"));
 }
 
 void AGridWorldManager::BeginPlay()
@@ -387,21 +391,52 @@ void AGridWorldManager::RecalculateDistortionFromHarvestStress(FGridCell& Cell)
     MarkDirty(Cell.X, Cell.Y);
 }
 
-// Захват снапшота мира
+// ---------------------- НОВЫЕ МЕТОДЫ (Snapshot/Delta/Commands) ----------------------
+
 FWorldSnapshot AGridWorldManager::CaptureState() const
 {
     FWorldSnapshot Snapshot;
-    // Предполагаем, что массив клеток называется Cells (как во всём коде)
     for (const FGridCell& Cell : Cells)
     {
-        // Ключ – координаты клетки
         Snapshot.GridState.Add(FIntPoint(Cell.X, Cell.Y), Cell);
     }
-
-    // Здесь можно сохранить текущий сид, если он доступен (пока 0)
-    Snapshot.WorldSeed = 0; // WorldRNG.GetSeed() – если будет метод
-
+    Snapshot.WorldSeed = WorldRNG.GetCurrentSeed();
     return Snapshot;
+}
+
+void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
+{
+    for (const auto& Pair : Delta.WorldChanges)
+    {
+        const FIntPoint& Coord = Pair.Key;
+        const FGridCell& NewCellData = Pair.Value;
+
+        FGridCell* Cell = GetCell(Coord.X, Coord.Y);
+        if (Cell)
+        {
+            Cell->State = NewCellData.State;
+            Cell->TargetState = NewCellData.State;
+            Cell->Biome = NewCellData.Biome;
+            Cell->bIsWater = NewCellData.bIsWater;
+            Cell->WaterTypeID = NewCellData.WaterTypeID;
+            DirtyCells.Remove(GetCellIndex(Coord.X, Coord.Y));
+        }
+    }
+    if (DirtyCells.Num() == 0)
+    {
+        bInterpolationActive = false;
+        SetActorTickEnabled(false);
+    }
+}
+
+void AGridWorldManager::QueueCommand(const FCommandEntry& Cmd)
+{
+    PendingCommands.Add(Cmd);
+}
+
+const FPerceivedWorld* AGridWorldManager::GetPerceivedWorld() const
+{
+    return PerceptionComponent ? &PerceptionComponent->GetPerceivedWorld() : nullptr;
 }
 
 // ---------------------- ОТРИСОВКА ----------------------
@@ -490,39 +525,4 @@ void AGridWorldManager::DrawBiomeGraphDebug()
         }
     }
 #endif
-}
-
-void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
-{
-    for (const auto& Pair : Delta.WorldChanges)
-    {
-        const FIntPoint& Coord = Pair.Key;
-        const FGridCell& NewCellData = Pair.Value;
-
-        FGridCell* Cell = GetCell(Coord.X, Coord.Y);
-        if (Cell)
-        {
-            // Прямая замена состояния клетки (мгновенное применение)
-            Cell->State = NewCellData.State;
-            Cell->TargetState = NewCellData.State;
-            Cell->Biome = NewCellData.Biome;          // если биом мог измениться
-            Cell->bIsWater = NewCellData.bIsWater;    // если тип клетки меняется
-            Cell->WaterTypeID = NewCellData.WaterTypeID;
-            // Другие важные поля при необходимости скопировать
-
-            // Убираем клетку из списка "грязных", т.к. состояние уже финальное
-            DirtyCells.Remove(GetCellIndex(Coord.X, Coord.Y));
-        }
-    }
-    // Если дельта опустошила все грязные клетки, интерполяция не нужна
-    if (DirtyCells.Num() == 0)
-    {
-        bInterpolationActive = false;
-        SetActorTickEnabled(false);
-    }
-}
-
-void AGridWorldManager::QueueCommand(const FCommandEntry& Cmd)
-{
-    PendingCommands.Add(Cmd);
 }

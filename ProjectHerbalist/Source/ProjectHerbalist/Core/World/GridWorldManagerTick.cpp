@@ -15,7 +15,31 @@ void AGridWorldManager::Tick(float DeltaTime)
         Graph->StepSimulation(DeltaTime);
     }
 
-    // Восстановление стресса
+    // ---------------------------------------------------------
+    // НОВЫЙ РЕЖИМ: только новый пайплайн
+    // ---------------------------------------------------------
+    if (bUseNewPipelineOnly)
+    {
+        FCommandGraph CmdGraph = Simulation::FSnapshotService::BuildCommandGraph(PendingCommands);
+        PendingCommands.Empty();
+        Simulation::FSnapshotService::ExecuteTick(CmdGraph);
+
+        // Принудительно держим тик включённым для вызова пайплайна каждый кадр
+        SetActorTickEnabled(true);
+
+#if WITH_EDITOR
+        if (bEnableDebugDraw)
+        {
+            DrawGridDebug();
+            DrawBiomeGraphDebug();
+        }
+#endif
+        return;     // старый код не выполняется
+    }
+
+    // ---------------------------------------------------------
+    // СТАРЫЙ РЕЖИМ (оригинальная логика)
+    // ---------------------------------------------------------
     if (bEnableRecovery && StressCells.Num() > 0)
     {
         TArray<int32> StressIndices = StressCells.Array();
@@ -88,13 +112,14 @@ void AGridWorldManager::Tick(float DeltaTime)
         bInterpolationActive = bShouldTick;
         SetActorTickEnabled(bShouldTick);
     }
-	
-		if (bUseNewPipeline)
-	{
-		FCommandGraph CmdGraph = Simulation::FSnapshotService::BuildCommandGraph(PendingCommands);
-		PendingCommands.Empty();
-		Simulation::FSnapshotService::ExecuteTick(CmdGraph);
-	}
+
+    // Параллельный новый пайплайн (если включён флаг bUseNewPipeline)
+    if (bUseNewPipeline)
+    {
+        FCommandGraph CmdGraph = Simulation::FSnapshotService::BuildCommandGraph(PendingCommands);
+        PendingCommands.Empty();
+        Simulation::FSnapshotService::ExecuteTick(CmdGraph);
+    }
 
 #if WITH_EDITOR
     if (bEnableDebugDraw)

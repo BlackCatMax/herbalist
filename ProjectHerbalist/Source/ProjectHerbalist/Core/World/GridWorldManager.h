@@ -6,6 +6,8 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Math/RandomStream.h"
+#include "Core/Simulation/Public/PerceivedTypes.h"
+#include "Core/Simulation/Public/PerceptionComponent.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "GridWorldManager.generated.h"
@@ -22,15 +24,15 @@ class PROJECTHERBALIST_API AGridWorldManager : public AActor
 
 public:
     AGridWorldManager();
-	FWorldSnapshot CaptureState() const;
-	void ApplyStateDelta(const FStateDelta& Delta);
+    FWorldSnapshot CaptureState() const;
+    void ApplyStateDelta(const FStateDelta& Delta);
 
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
 
     void SpawnResourcesInCell(FGridCell& Cell);
     void StartRegeneration(FGridCell& Cell);
-	void QueueCommand(const FCommandEntry& Cmd);
+    void QueueCommand(const FCommandEntry& Cmd);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     int32 GridSizeX = 20;
@@ -64,14 +66,20 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bEnableDebugDraw = true;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     float BorderThickness = 2.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery")
     bool bEnableRecovery = true;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation")
-	bool bUseNewPipeline = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation")
+    bool bUseNewPipeline = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Simulation")
+    bool bUseNewPipelineOnly = false;
+
+    const FPerceivedWorld* GetPerceivedWorld() const;
 
 #if WITH_EDITOR
     bool bShowBiomeGraph = false;
@@ -140,7 +148,7 @@ protected:
     FRandomStream WorldRNG;
 
     TSet<int32> DirtyCells;
-    TSet<int32> RegrowingCells; // больше не используется, но оставим для совместимости
+    TSet<int32> RegrowingCells;
     TSet<int32> StressCells;
     bool bInterpolationActive = false;
 
@@ -164,8 +172,10 @@ protected:
 
     inline int32 GetCellIndex(int32 X, int32 Y) const { return Y * GridSizeX + X; }
 
+    UPROPERTY()
+    TObjectPtr<UPerceptionComponent> PerceptionComponent;
+
 private:
     int32 SelectedX = -1, SelectedY = -1;
-	TArray<FCommandEntry> PendingCommands; // очередь команд для нового пайплайна
-
+    TArray<FCommandEntry> PendingCommands;
 };

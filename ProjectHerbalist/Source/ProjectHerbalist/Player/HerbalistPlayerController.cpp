@@ -467,3 +467,18 @@ void AHerbalistPlayerController::TestNewApply(int32 X, int32 Y, FString Ingredie
         }
     }
 }
+
+void AHerbalistPlayerController::ToggleNewPipeline()
+{
+    if (!GetWorld()) return;
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* Grid = *It;
+        if (Grid)
+        {
+            Grid->bUseNewPipelineOnly = !Grid->bUseNewPipelineOnly;
+            UE_LOG(LogHerbalist, Log, TEXT("New pipeline only: %s"), Grid->bUseNewPipelineOnly ? TEXT("ON") : TEXT("OFF"));
+            return;
+        }
+    }
+}
