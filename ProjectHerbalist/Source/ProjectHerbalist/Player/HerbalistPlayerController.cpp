@@ -14,6 +14,11 @@
 #include "UI/AlchemyTransferWidget.h"
 #include "UI/InventoryTransferWidget.h"
 #include "UI/InventoryWidget.h"
+#include "Core/Simulation/Public/CommandTypes.h"
+
+// ============================================================================
+// ЖИЗНЕННЫЙ ЦИКЛ
+// ============================================================================
 
 AHerbalistPlayerController::AHerbalistPlayerController()
 {
@@ -29,7 +34,9 @@ void AHerbalistPlayerController::BeginPlay()
     if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
     {
         if (DefaultMappingContext)
+        {
             Subsystem->AddMappingContext(DefaultMappingContext, 0);
+        }
     }
 }
 
@@ -39,33 +46,116 @@ void AHerbalistPlayerController::SetupInputComponent()
 
     if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
     {
-        EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Move);
-        EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Look);
-        EnhancedInputComponent->BindAction(HarvestAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Harvest);
-        EnhancedInputComponent->BindAction(InfoAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Info);
-        EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Inventory);
-        EnhancedInputComponent->BindAction(ApplyAlchemyAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::ApplyAlchemy);
-        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Interact);
-        EnhancedInputComponent->BindAction(UsePotionAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::OnUsePotion);
+        EnhancedInputComponent->BindAction(MoveAction,           ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Move);
+        EnhancedInputComponent->BindAction(LookAction,           ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Look);
+        EnhancedInputComponent->BindAction(HarvestAction,        ETriggerEvent::Started,   this, &AHerbalistPlayerController::Harvest);
+        EnhancedInputComponent->BindAction(InfoAction,           ETriggerEvent::Started,   this, &AHerbalistPlayerController::Info);
+        EnhancedInputComponent->BindAction(InventoryAction,      ETriggerEvent::Started,   this, &AHerbalistPlayerController::Inventory);
+        EnhancedInputComponent->BindAction(ApplyAlchemyAction,   ETriggerEvent::Started,   this, &AHerbalistPlayerController::ApplyAlchemy);
+        EnhancedInputComponent->BindAction(InteractAction,       ETriggerEvent::Started,   this, &AHerbalistPlayerController::Interact);
+        EnhancedInputComponent->BindAction(UsePotionAction,      ETriggerEvent::Started,   this, &AHerbalistPlayerController::OnUsePotion);
     }
 }
 
+// ============================================================================
+// ПЕРЕДВИЖЕНИЕ
+// ============================================================================
+
 void AHerbalistPlayerController::Move(const FInputActionValue& Value)
 {
-    FVector2D MovementVector = Value.Get<FVector2D>();
+    const FVector2D MovementVector = Value.Get<FVector2D>();
     if (APawn* ControlledPawn = GetPawn())
     {
         ControlledPawn->AddMovementInput(ControlledPawn->GetActorForwardVector(), MovementVector.Y);
-        ControlledPawn->AddMovementInput(ControlledPawn->GetActorRightVector(), MovementVector.X);
+        ControlledPawn->AddMovementInput(ControlledPawn->GetActorRightVector(),   MovementVector.X);
     }
 }
 
 void AHerbalistPlayerController::Look(const FInputActionValue& Value)
 {
-    FVector2D LookVector = Value.Get<FVector2D>();
+    const FVector2D LookVector = Value.Get<FVector2D>();
     AddYawInput(LookVector.X);
     AddPitchInput(LookVector.Y);
 }
+
+// ============================================================================
+// ВСПОМОГАТЕЛЬНЫЕ
+// ============================================================================
+
+AGridWorldManager* AHerbalistPlayerController::FindWorldManager() const
+{
+    if (CachedWorldManager)
+    {
+        return CachedWorldManager;
+    }
+
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        return *It;
+    }
+    return nullptr;
+}
+
+void AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const
+{
+    OutX = -1;
+    OutY = -1;
+
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    const FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
+    const int32 X = FMath::FloorToInt(LocalLoc.X / WorldManager->CellSize);
+    const int32 Y = FMath::FloorToInt(LocalLoc.Y / WorldManager->CellSize);
+
+    if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
+    {
+        OutX = X;
+        OutY = Y;
+    }
+}
+
+void AHerbalistPlayerController::UpdateDistortionFromCell(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (const FGridCell* Cell = WorldManager->GetCell(X, Y))
+    {
+        CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+    }
+}
+
+bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
+{
+    FVector CameraLocation;
+    FRotator CameraRotation;
+    GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+    const FVector End = CameraLocation + CameraRotation.Vector() * 1000.0f;
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(GetPawn());
+
+    const bool bHit = GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
+
+    DrawDebugLine(GetWorld(), CameraLocation, End, bHit ? FColor::Green : FColor::Red, false, 1.0f, 0, 2.0f);
+    if (bHit)
+    {
+        DrawDebugSphere(GetWorld(), OutHit.Location, 10.0f, 12, FColor::Yellow, false, 1.0f);
+    }
+    return bHit;
+}
+
+bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
+{
+    if (!TargetActor || !GetPawn()) return false;
+    const float Distance = FVector::Dist(GetPawn()->GetActorLocation(), TargetActor->GetActorLocation());
+    return Distance <= MaxHarvestDistance;
+}
+
+// ============================================================================
+// СБОР УРОЖАЯ
+// ============================================================================
 
 void AHerbalistPlayerController::Harvest()
 {
@@ -73,23 +163,25 @@ void AHerbalistPlayerController::Harvest()
     if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
     {
         if (!GetHitResultUnderCursor(ECC_GameTraceChannel1, false, Hit))
+        {
             return;
+        }
     }
 
-    AHerbalistResourceActor* Resource = Cast<AHerbalistResourceActor>(Hit.GetActor());
-    if (Resource)
+    // Сбор актора ресурса
+    if (AHerbalistResourceActor* Resource = Cast<AHerbalistResourceActor>(Hit.GetActor()))
     {
         TryHarvestResource(Resource);
         return;
     }
 
-    // Сбор воды без актора
+    // Сбор воды (без актора)
     AGridWorldManager* WorldManager = FindWorldManager();
     if (!WorldManager) return;
 
     if (GetPawn())
     {
-        float Dist = FVector::Dist(GetPawn()->GetActorLocation(), Hit.Location);
+        const float Dist = FVector::Dist(GetPawn()->GetActorLocation(), Hit.Location);
         if (Dist > MaxHarvestDistance) return;
     }
 
@@ -100,57 +192,61 @@ void AHerbalistPlayerController::Harvest()
     FGridCell* Cell = WorldManager->GetCell(X, Y);
     if (!Cell || !Cell->bIsWater) return;
 
-    FRealState WaterState = WorldManager->CollectWater(X, Y);
-    if (InventoryComponent)
-    {
-        FInventoryItem Item;
-        Item.IngredientID = Cell->WaterTypeID;     // уникальный тип воды
-        Item.State = WaterState;
-        Item.Count = 1;
-        Item.CreationTime = GetWorld()->GetTimeSeconds();
-        Item.bSubjectToDecay = false;              // вода не портится
-        InventoryComponent->AddItem(Item, 1);
-    }
+    WorldManager->CollectWater(X, Y);
     UE_LOG(LogHerbalist, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
 }
+
+bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Resource)
+{
+    if (!Resource) return false;
+
+    if (!CanHarvestActor(Resource))
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("Too far to harvest %s"), *Resource->GetName());
+        return false;
+    }
+
+    if (Resource->IsBeingHarvested())
+    {
+        UE_LOG(LogHerbalist, Verbose, TEXT("%s is already being harvested"), *Resource->GetName());
+        return false;
+    }
+
+    Resource->Harvest();
+    return true;
+}
+
+// ============================================================================
+// ИНФОРМАЦИЯ / ПРАВЫЙ КЛИК
+// ============================================================================
 
 void AHerbalistPlayerController::Info()
 {
     OnRightClick();
 }
 
-void AHerbalistPlayerController::ApplyAlchemy()
+void AHerbalistPlayerController::OnRightClick()
 {
-    OnApplyAlchemyKey();
+    FHitResult Hit;
+    if (!GetHitResultFromCamera(Hit)) return;
+
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X < 0) return;
+
+    UpdateDistortionFromCell(X, Y);
+
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (WorldManager)
+    {
+        WorldManager->SelectCell(X, Y);
+        UE_LOG(LogHerbalist, Log, TEXT("Cell info: %s"), *WorldManager->GetSelectedCellInfo());
+    }
 }
 
-void AHerbalistPlayerController::CloseAnyWidget()
-{
-    if (InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
-    {
-        InventoryWidgetInstance->RemoveFromParent();
-        InventoryWidgetInstance = nullptr;
-    }
-
-    if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
-    {
-        CurrentAlchemyWidget->RemoveFromParent();
-        CurrentAlchemyWidget = nullptr;
-        CurrentAlchemyTable = nullptr;
-    }
-
-    if (CurrentTransferWidget && CurrentTransferWidget->IsInViewport())
-    {
-        CurrentTransferWidget->RemoveFromParent();
-        CurrentTransferWidget = nullptr;
-    }
-
-    bShowMouseCursor = false;
-    FInputModeGameOnly GameMode;
-    SetInputMode(GameMode);
-    SetIgnoreLookInput(false);
-    bIsAnyWidgetOpen = false;
-}
+// ============================================================================
+// ИНВЕНТАРЬ
+// ============================================================================
 
 void AHerbalistPlayerController::Inventory()
 {
@@ -184,92 +280,13 @@ void AHerbalistPlayerController::Inventory()
     bIsAnyWidgetOpen = true;
 }
 
-bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
+// ============================================================================
+// АЛХИМИЯ
+// ============================================================================
+
+void AHerbalistPlayerController::ApplyAlchemy()
 {
-    FVector CameraLocation;
-    FRotator CameraRotation;
-    GetPlayerViewPoint(CameraLocation, CameraRotation);
-    FVector End = CameraLocation + CameraRotation.Vector() * 1000.0f;
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(GetPawn());
-    bool bHit = GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
-
-    DrawDebugLine(GetWorld(), CameraLocation, End, bHit ? FColor::Green : FColor::Red, false, 1.0f, 0, 2.0f);
-    if (bHit)
-    {
-        DrawDebugSphere(GetWorld(), OutHit.Location, 10.0f, 12, FColor::Yellow, false, 1.0f);
-    }
-    return bHit;
-}
-
-AGridWorldManager* AHerbalistPlayerController::FindWorldManager() const
-{
-    if (CachedWorldManager)
-        return CachedWorldManager;
-
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-    {
-        return *It;
-    }
-    return nullptr;
-}
-
-void AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const
-{
-    OutX = -1; OutY = -1;
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (!WorldManager) return;
-
-    FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-    int32 X = FMath::FloorToInt(LocalLoc.X / WorldManager->CellSize);
-    int32 Y = FMath::FloorToInt(LocalLoc.Y / WorldManager->CellSize);
-    if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
-    {
-        OutX = X;
-        OutY = Y;
-    }
-}
-
-void AHerbalistPlayerController::UpdateDistortionFromCell(int32 X, int32 Y)
-{
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (!WorldManager) return;
-    if (FGridCell* Cell = WorldManager->GetCell(X, Y))
-    {
-        CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
-    }
-}
-
-void AHerbalistPlayerController::OnLeftClick()
-{
-    FHitResult Hit;
-    if (!GetHitResultFromCamera(Hit)) return;
-
-    int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X < 0) return;
-
-    UpdateDistortionFromCell(X, Y);
-    HarvestTest(X, Y);
-}
-
-void AHerbalistPlayerController::OnRightClick()
-{
-    FHitResult Hit;
-    if (!GetHitResultFromCamera(Hit)) return;
-
-    int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X < 0) return;
-
-    UpdateDistortionFromCell(X, Y);
-
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (WorldManager)
-    {
-        WorldManager->SelectCell(X, Y);
-        UE_LOG(LogHerbalist, Log, TEXT("Cell info: %s"), *WorldManager->GetSelectedCellInfo());
-    }
+    OnApplyAlchemyKey();
 }
 
 void AHerbalistPlayerController::OnApplyAlchemyKey()
@@ -283,6 +300,41 @@ void AHerbalistPlayerController::OnApplyAlchemyKey()
 
     ApplyTest(X, Y);
 }
+
+void AHerbalistPlayerController::OnUsePotion()
+{
+    UsePotion();
+}
+
+void AHerbalistPlayerController::UsePotion()
+{
+    if (!InventoryComponent) return;
+
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
+    const int32 PotionIndex = Items.IndexOfByPredicate([](const FInventoryItem& Item)
+    {
+        return Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0;
+    });
+
+    if (PotionIndex == INDEX_NONE) return;
+
+    FHitResult Hit;
+    if (!GetHitResultFromCamera(Hit)) return;
+
+    int32 X, Y;
+    GetCellFromHit(Hit, X, Y);
+    if (X < 0 || !WorldManager->GetCell(X, Y)) return;
+
+    WorldManager->ApplyPotionToCell(X, Y, Items[PotionIndex].State);
+    InventoryComponent->RemoveItem(PotionIndex, 1);
+}
+
+// ============================================================================
+// ВЗАИМОДЕЙСТВИЕ
+// ============================================================================
 
 void AHerbalistPlayerController::Interact()
 {
@@ -310,16 +362,56 @@ void AHerbalistPlayerController::Interact()
     }
 }
 
+// ============================================================================
+// ЗАКРЫТИЕ ВИДЖЕТОВ
+// ============================================================================
+
+void AHerbalistPlayerController::CloseAnyWidget()
+{
+    if (InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
+    {
+        InventoryWidgetInstance->RemoveFromParent();
+        InventoryWidgetInstance = nullptr;
+    }
+
+    if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
+    {
+        CurrentAlchemyWidget->RemoveFromParent();
+        CurrentAlchemyWidget = nullptr;
+        CurrentAlchemyTable = nullptr;
+    }
+
+    if (CurrentTransferWidget && CurrentTransferWidget->IsInViewport())
+    {
+        CurrentTransferWidget->RemoveFromParent();
+        CurrentTransferWidget = nullptr;
+    }
+
+    bShowMouseCursor = false;
+    FInputModeGameOnly GameMode;
+    SetInputMode(GameMode);
+    SetIgnoreLookInput(false);
+    bIsAnyWidgetOpen = false;
+}
+
+// ============================================================================
+// ТЕСТОВЫЕ КОМАНДЫ (СТАРЫЕ)
+// ============================================================================
+
 void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y)
 {
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (WorldManager) WorldManager->HarvestTest(X, Y);
+    if (AGridWorldManager* WorldManager = FindWorldManager())
+    {
+        WorldManager->HarvestTest(X, Y);
+    }
 }
 
 void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
 {
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (WorldManager) WorldManager->ApplyTest(X, Y);
+    if (AGridWorldManager* WorldManager = FindWorldManager())
+    {
+        WorldManager->ApplyTest(X, Y);
+    }
 }
 
 void AHerbalistPlayerController::ShowInventory()
@@ -329,63 +421,89 @@ void AHerbalistPlayerController::ShowInventory()
 
 void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
 {
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (WorldManager) WorldManager->MassHarvestTest(X, Y, Count);
-}
-
-void AHerbalistPlayerController::OnUsePotion()
-{
-    UsePotion();
-}
-
-void AHerbalistPlayerController::UsePotion()
-{
-    if (!InventoryComponent) return;
-
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (!WorldManager) return;
-
-    const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
-    int32 PotionIndex = Items.IndexOfByPredicate([](const FInventoryItem& Item) {
-        return Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0;
-    });
-
-    if (PotionIndex == INDEX_NONE) return;
-
-    FHitResult Hit;
-    if (!GetHitResultFromCamera(Hit)) return;
-
-    int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X < 0 || !WorldManager->GetCell(X, Y)) return;
-
-    WorldManager->ApplyPotionToCell(X, Y, Items[PotionIndex].State);
-    InventoryComponent->RemoveItem(PotionIndex, 1);
-}
-
-bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
-{
-    if (!TargetActor || !GetPawn()) return false;
-    float Distance = FVector::Dist(GetPawn()->GetActorLocation(), TargetActor->GetActorLocation());
-    return Distance <= MaxHarvestDistance;
-}
-
-bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Resource)
-{
-    if (!Resource) return false;
-
-    if (!CanHarvestActor(Resource))
+    if (AGridWorldManager* WorldManager = FindWorldManager())
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Too far to harvest %s"), *Resource->GetName());
-        return false;
+        WorldManager->MassHarvestTest(X, Y, Count);
+    }
+}
+
+// ============================================================================
+// ТЕСТОВЫЕ КОМАНДЫ (НОВЫЙ ПАЙПЛАЙН)
+// ============================================================================
+
+void AHerbalistPlayerController::TestNewHarvest(int32 X, int32 Y, FName IngredientID)
+{
+    if (!GetWorld()) return;
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* Grid = *It;
+        if (Grid)
+        {
+            FCommandEntry Cmd;
+            Cmd.Primitive                = ECommandPrimitive::Harvest;
+            Cmd.Harvest.TargetCell       = FIntPoint(X, Y);
+            Cmd.Harvest.IngredientID     = IngredientID;
+            Cmd.Harvest.Amount           = 1;
+            Grid->QueueCommand(Cmd);
+            return;
+        }
+    }
+}
+
+void AHerbalistPlayerController::TestNewTransfer(FName IngredientID, int32 Amount)
+{
+    if (!GetWorld()) return;
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* Grid = *It;
+        if (Grid)
+        {
+            FCommandEntry Cmd;
+            Cmd.Primitive                     = ECommandPrimitive::Transfer;
+            Cmd.Transfer.SourceContainerID    = 0;
+            Cmd.Transfer.TargetContainerID    = 1;
+            Cmd.Transfer.IngredientID         = IngredientID;
+            Cmd.Transfer.Amount               = Amount;
+            Grid->QueueCommand(Cmd);
+            return;
+        }
+    }
+}
+
+void AHerbalistPlayerController::TestNewApply(int32 X, int32 Y, FString IngredientList)
+{
+    if (!GetWorld() || !InventoryComponent) return;
+
+    TArray<FInventoryItem> Items;
+    TArray<FString> Names;
+    IngredientList.ParseIntoArray(Names, TEXT(","), true);
+    for (const FString& Name : Names)
+    {
+        const FName IngID(*Name);
+        for (const FInventoryItem& Item : InventoryComponent->GetItems())
+        {
+            if (Item.IngredientID == IngID)
+            {
+                Items.Add(Item);
+                break;
+            }
+        }
     }
 
-    if (Resource->IsBeingHarvested())
-    {
-        UE_LOG(LogHerbalist, Verbose, TEXT("%s is already being harvested"), *Resource->GetName());
-        return false;
-    }
+    if (Items.Num() == 0) return;
 
-    Resource->Harvest();
-    return true;
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* Grid = *It;
+        if (Grid)
+        {
+            FCommandEntry Cmd;
+            Cmd.Primitive             = ECommandPrimitive::Apply;
+            Cmd.Apply.TargetCell      = FIntPoint(X, Y);
+            Cmd.Apply.Ingredients     = Items;
+            Cmd.Apply.Intent.Coherence = 0.5f;
+            Grid->QueueCommand(Cmd);
+            return;
+        }
+    }
 }

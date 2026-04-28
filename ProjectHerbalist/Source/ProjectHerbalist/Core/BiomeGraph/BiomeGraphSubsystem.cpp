@@ -6,6 +6,8 @@
 #include "EngineUtils.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Kismet/KismetMaterialLibrary.h"
+#include "Core/Simulation/Public/SnapshotTypes.h"
+#include "Core/Simulation/Public/DeltaTypes.h"
 #include "ProjectHerbalist.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogBiomeGraph, Log, All);
@@ -337,4 +339,26 @@ void UBiomeGraphSubsystem::UpdateVisualization()
     UKismetMaterialLibrary::SetVectorParameterValue(World, MPC, "ZaryanaColor", ZaryanaColor);
 
     UE_LOG(LogBiomeGraph, Verbose, TEXT("UpdateVisualization: Morok=%.2f, Zaryana=%.2f"), AvgMorok, AvgZaryana);
+}
+
+FBiomeSnapshot UBiomeGraphSubsystem::CaptureState() const
+{
+    FBiomeSnapshot Snapshot;
+    // Активные биомы – это просто ключи нашей карты Nodes
+    for (const auto& Pair : Nodes)
+    {
+        Snapshot.ActiveBiomeIds.Add(Pair.Key);
+    }
+    return Snapshot;
+}
+
+void UBiomeGraphSubsystem::ApplyStateDelta(const FStateDelta& Delta)
+{
+    // В будущем здесь будет обновление MorokField, ZaryanaField и т.д.
+    // Пока только логируем полученные активации
+    UE_LOG(LogBiomeGraph, Log, TEXT("ApplyStateDelta: received %d biome activations"), Delta.BiomeActivations.Num());
+    for (const FName& BiomeID : Delta.BiomeActivations)
+    {
+        UE_LOG(LogBiomeGraph, Verbose, TEXT(" - %s"), *BiomeID.ToString());
+    }
 }

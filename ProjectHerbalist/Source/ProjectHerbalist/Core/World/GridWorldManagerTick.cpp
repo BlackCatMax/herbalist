@@ -1,7 +1,13 @@
-// GridWorldManagerTick.cpp
+// Core/World/GridWorldManagerTick.cpp
+// Полный файл с трассировкой и реплеем
+
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "DrawDebugHelpers.h"
+#include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/Simulation/Public/SnapshotService.h"
+#include "Core/Simulation/Public/TraceTypes.h"
+#include "Core/Simulation/Private/TraceReplay.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 
 void AGridWorldManager::Tick(float DeltaTime)
@@ -13,79 +19,28 @@ void AGridWorldManager::Tick(float DeltaTime)
         Graph->StepSimulation(DeltaTime);
     }
 
-    // Восстановление стресса
-    if (bEnableRecovery && StressCells.Num() > 0)
+    // Снапшот мира для трассировки (если включено)
+    FWorldSnapshot PreTickSnapshot;
+    if (bEnableTrace)
     {
-        TArray<int32> StressIndices = StressCells.Array();
-        for (int32 Idx : StressIndices)
-        {
-            int32 X = Idx % GridSizeX;
-            int32 Y = Idx / GridSizeX;
-            FGridCell* Cell = GetCell(X, Y);
-            if (!Cell) continue;
-
-            float OldStress = Cell->HarvestStress;
-            Cell->HarvestStress = FMath::Max(0.0f, Cell->HarvestStress - HarvestStressDecayRate * DeltaTime);
-            if (!FMath::IsNearlyEqual(OldStress, Cell->HarvestStress, 1e-4f))
-            {
-                MarkDirty(X, Y);
-                RecalculateDistortionFromHarvestStress(*Cell);
-            }
-            if (Cell->HarvestStress <= 0.0f)
-            {
-                StressCells.Remove(Idx);
-            }
-        }
+        PreTickSnapshot = CaptureState();
     }
 
-    // Интерполяция грязных клеток
-    if (DirtyCells.Num() > 0)
+    // Построение и выполнение графа команд нового пайплайна
+    const FCommandGraph CmdGraph = Simulation::FSnapshotService::BuildCommandGraph(PendingCommands);
+    TArray<FCommandEntry> CommandsCopy = PendingCommands;   // копируем для трейса
+    PendingCommands.Empty();
+    FStateDelta Delta = Simulation::FSnapshotService::ExecuteTick(CmdGraph);
+
+    // Запись кадра трассировки
+    if (bEnableTrace)
     {
-        TArray<int32> DirtyIndices = DirtyCells.Array();
-        for (int32 Idx : DirtyIndices)
-        {
-            int32 X = Idx % GridSizeX;
-            int32 Y = Idx / GridSizeX;
-            FGridCell* Cell = GetCell(X, Y);
-            if (!Cell) continue;
-
-            bool bStateNear =
-                FMath::IsNearlyEqual(Cell->State.Magnitude, Cell->TargetState.Magnitude, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Meta.Distortion, Cell->TargetState.Meta.Distortion, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Meta.Stability, Cell->TargetState.Meta.Stability, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Meta.Purity, Cell->TargetState.Meta.Purity, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Meta.Potency, Cell->TargetState.Meta.Potency, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Meta.Resonance, Cell->TargetState.Meta.Resonance, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Meta.Corruption, Cell->TargetState.Meta.Corruption, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Direction.Body, Cell->TargetState.Direction.Body, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Direction.Mind, Cell->TargetState.Direction.Mind, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Direction.Spirit, Cell->TargetState.Direction.Spirit, 0.001f) &&
-                FMath::IsNearlyEqual(Cell->State.Direction.Nature, Cell->TargetState.Direction.Nature, 0.001f);
-
-            if (!bStateNear)
-            {
-                InterpolateCell(*Cell, DeltaTime);
-                UpdateMemory(Cell->Memory, Cell->State, 0.05f * DeltaTime);
-            }
-            else
-            {
-                Cell->State = Cell->TargetState;
-                UpdateMemory(Cell->Memory, Cell->State, 0.1f);
-                DirtyCells.Remove(Idx);
-            }
-        }
+        TraceBuffer.Record(CurrentTickID, PreTickSnapshot, CommandsCopy, Delta);
     }
 
-    // Управление активностью тика
-    bool bShouldTick = (DirtyCells.Num() > 0) || (StressCells.Num() > 0);
-    UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>();
-    if (Graph && Graph->IsInitialized()) bShouldTick = true;
-
-    if (bInterpolationActive != bShouldTick)
-    {
-        bInterpolationActive = bShouldTick;
-        SetActorTickEnabled(bShouldTick);
-    }
+    // Тик всегда активен для вызова нового пайплайна каждый кадр
+    SetActorTickEnabled(true);
+    CurrentTickID++;
 
 #if WITH_EDITOR
     if (bEnableDebugDraw)
@@ -96,23 +51,20 @@ void AGridWorldManager::Tick(float DeltaTime)
 #endif
 }
 
-void AGridWorldManager::InterpolateCell(FGridCell& Cell, float DeltaTime)
+void AGridWorldManager::DumpTrace()
 {
-    // без изменений
-    FRealState& Cur = Cell.State;
-    const FRealState& Target = Cell.TargetState;
+    TraceBuffer.DumpToLog();
+}
 
-    Cur.Magnitude = FMath::FInterpTo(Cur.Magnitude, Target.Magnitude, DeltaTime, StateInterpolationSpeed);
-    Cur.Direction.Body = FMath::FInterpTo(Cur.Direction.Body, Target.Direction.Body, DeltaTime, StateInterpolationSpeed);
-    Cur.Direction.Mind = FMath::FInterpTo(Cur.Direction.Mind, Target.Direction.Mind, DeltaTime, StateInterpolationSpeed);
-    Cur.Direction.Spirit = FMath::FInterpTo(Cur.Direction.Spirit, Target.Direction.Spirit, DeltaTime, StateInterpolationSpeed);
-    Cur.Direction.Nature = FMath::FInterpTo(Cur.Direction.Nature, Target.Direction.Nature, DeltaTime, StateInterpolationSpeed);
-    Cur.Meta.Distortion = FMath::FInterpTo(Cur.Meta.Distortion, Target.Meta.Distortion, DeltaTime, StateInterpolationSpeed);
-    Cur.Meta.Stability = FMath::FInterpTo(Cur.Meta.Stability, Target.Meta.Stability, DeltaTime, StateInterpolationSpeed);
-    Cur.Meta.Purity = FMath::FInterpTo(Cur.Meta.Purity, Target.Meta.Purity, DeltaTime, StateInterpolationSpeed);
-    Cur.Meta.Potency = FMath::FInterpTo(Cur.Meta.Potency, Target.Meta.Potency, DeltaTime, StateInterpolationSpeed);
-    Cur.Meta.Resonance = FMath::FInterpTo(Cur.Meta.Resonance, Target.Meta.Resonance, DeltaTime, StateInterpolationSpeed);
-    Cur.Meta.Corruption = FMath::FInterpTo(Cur.Meta.Corruption, Target.Meta.Corruption, DeltaTime, StateInterpolationSpeed);
+void AGridWorldManager::ReplayLastTick()
+{
+    const FTraceFrame* Frame = TraceBuffer.GetLastFrame();
+    if (!Frame)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("ReplayLastTick: No trace frames recorded"));
+        return;
+    }
 
-    Cur.Direction.NormalizeSum();
+    FRandomStream Rng(Frame->WorldSnapshot.WorldSeed);
+    Simulation::ReplayAndCompare(*Frame, Rng);
 }

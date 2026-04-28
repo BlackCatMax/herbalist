@@ -6,6 +6,9 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "HerbalistInventoryComponent.generated.h"
 
+struct FInventorySnapshot;
+struct FStateDelta;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -15,6 +18,7 @@ class PROJECTHERBALIST_API UHerbalistInventoryComponent : public UActorComponent
 
 public:
     UHerbalistInventoryComponent();
+	void ApplyStateDelta(const FStateDelta& Delta);
 
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
@@ -48,6 +52,8 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void Clear();
+	
+	FInventorySnapshot CaptureState() const;
 
     UPROPERTY(BlueprintAssignable, Category = "Inventory")
     FOnInventoryChanged OnInventoryChanged;

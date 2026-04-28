@@ -24,8 +24,8 @@ class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
 
 public:
     AHerbalistPlayerController();
-
-    virtual void SetupInputComponent() override;
+	
+	virtual void SetupInputComponent() override;
     virtual void BeginPlay() override;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
@@ -60,6 +60,9 @@ public:
     void ShowInventory();
     UFUNCTION(Exec)
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
+	
+	UFUNCTION(Exec)
+	void TestNewHarvest(int32 X, int32 Y, FName IngredientID);
 
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();
@@ -70,6 +73,12 @@ public:
     AGridWorldManager* FindWorldManager() const;
     void GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
     void UpdateDistortionFromCell(int32 X, int32 Y);
+	
+    UFUNCTION(Exec)
+    void TestNewTransfer(FName IngredientID, int32 Amount);
+
+    UFUNCTION(Exec)
+    void TestNewApply(int32 X, int32 Y, FString IngredientList);
 
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")

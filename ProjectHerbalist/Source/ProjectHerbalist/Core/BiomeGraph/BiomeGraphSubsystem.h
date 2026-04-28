@@ -9,6 +9,8 @@
 class UBiomeGraphAsset;
 class AGridWorldManager;
 class UMaterialParameterCollection;   // forward declaration
+struct FBiomeSnapshot;
+struct FStateDelta;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnBiomeGraphStep, float);
 
@@ -20,6 +22,7 @@ class PROJECTHERBALIST_API UBiomeGraphSubsystem : public UWorldSubsystem
 public:
     virtual void OnWorldBeginPlay(UWorld& InWorld) override;
     virtual void Deinitialize() override;
+	void ApplyStateDelta(const FStateDelta& Delta);
 
     void InitializeFromAsset(UBiomeGraphAsset* Asset);
     bool IsInitialized() const { return bInitialized; }
@@ -37,6 +40,8 @@ public:
 
     void DebugPrintNodes() const;
     void ResetGraph();
+	
+	FBiomeSnapshot CaptureState() const;
 
     const TMap<FName, FVector>& GetCachedBiomeCenters() const { return CachedBiomeCenters; }
 

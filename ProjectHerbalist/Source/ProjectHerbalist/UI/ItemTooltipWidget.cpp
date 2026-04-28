@@ -3,9 +3,6 @@
 #include "Components/TextBlock.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Pipeline/Perception.h"
-#include "Core/Pipeline/AlchemySemantics.h"
-#include "Core/Subsystems/IngredientRegistrySubsystem.h"
-#include "Player/HerbalistPlayerController.h"
 
 FText GeneratePotionName(const FRealState& State)
 {
@@ -44,14 +41,7 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistort
 
     FRandomStream Random(GetTypeHash(Item.IngredientID) ^ static_cast<int32>(GlobalDistortion * 1000.0f));
 
-    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
-    UIngredientRegistrySubsystem* IngredientSubsystem = nullptr;
-    if (PC)
-    {
-        UGameInstance* GameInstance = PC->GetGameInstance();
-        IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
-    }
-
+    // --- Имя предмета ---
     FString Name;
     if (Item.IngredientID == FName(TEXT("Potion")))
     {
@@ -71,40 +61,36 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistort
     }
     else
     {
-        EIngredientClass RealClass = IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown;
-        EIngredientClass PerceivedClass = Perception::PerceiveClass(RealClass, GlobalDistortion, Random);
-        
-        if (PerceivedClass != RealClass)
-        {
-            Name = FString::Printf(TEXT("%s?"), *Item.IngredientID.ToString());
-        }
-        else
-        {
-            Name = Item.IngredientID.ToString();
-        }
+        Name = Item.IngredientID.ToString();
     }
 
-    if (NameText) NameText->SetText(FText::FromString(Name));
-
-    EIngredientClass IngClass = IngredientSubsystem ? IngredientSubsystem->Classify(Item.IngredientID) : EIngredientClass::Unknown;
-    FString ClassName;
-    switch (IngClass)
+    if (NameText)
     {
-    case EIngredientClass::Water:    ClassName = TEXT("Вода"); break;
-    case EIngredientClass::Plant:    ClassName = TEXT("Растение"); break;
-    case EIngredientClass::Mineral:  ClassName = TEXT("Минерал"); break;
-    case EIngredientClass::Fungus:   ClassName = TEXT("Гриб"); break;
-    case EIngredientClass::Catalyst: ClassName = TEXT("Катализатор"); break;
-    case EIngredientClass::Essence:  ClassName = TEXT("Эссенция"); break;
-    default:                         ClassName = TEXT("Неизвестное"); break;
+        NameText->SetText(FText::FromString(Name));
+        NameText->SetColorAndOpacity(FLinearColor::White);
     }
-    if (TypeText) TypeText->SetText(FText::FromString(ClassName));
 
+    // --- Тип предмета ---
+    if (TypeText)
+    {
+        TypeText->SetText(FText::FromString(TEXT("Ингредиент")));
+        TypeText->SetColorAndOpacity(FLinearColor(0.7f, 0.7f, 0.7f, 1.0f));
+    }
+
+    // --- Параметры: искажённое значение (красным) и реальное (серым) ---
     auto SetDistortedText = [&](UTextBlock* TextBlock, float RealValue, const FString& Label)
     {
         if (!TextBlock) return;
         float Perceived = Perception::PerceiveValue(RealValue, GlobalDistortion, Random);
-        TextBlock->SetText(FText::FromString(FString::Printf(TEXT("%s: %.3f (%.3f)"), *Label, Perceived, RealValue)));
+        
+        FString DisplayString = FString::Printf(TEXT("%s: %.3f (%.3f)"), *Label, Perceived, RealValue);
+        TextBlock->SetText(FText::FromString(DisplayString));
+        
+        // Искажённое значение выделяем красным, реальное оставляем белым
+        FLinearColor TextColor = FMath::Abs(Perceived - RealValue) > 0.05f 
+            ? FLinearColor(1.0f, 0.3f, 0.3f, 1.0f)   // красный при расхождении
+            : FLinearColor(0.8f, 0.8f, 0.8f, 1.0f);  // светло-серый при совпадении
+        TextBlock->SetColorAndOpacity(TextColor);
     };
 
     SetDistortedText(MagnitudeText,        Item.State.Magnitude,          TEXT("Сила"));
