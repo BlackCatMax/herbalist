@@ -1,4 +1,4 @@
-// Core/Resources/AHerbalistResourceActor.cpp
+// AHerbalistResourceActor.cpp
 #include "AHerbalistResourceActor.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -57,7 +57,6 @@ void AHerbalistResourceActor::BeginPlay()
         FVector LocalLoc = GetActorLocation() - WorldManager->GetActorLocation();
         GridX = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
         GridY = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-        // Уровень Verbose – больше не спамит в консоль
         UE_LOG(LogHerbalist, Verbose, TEXT("%s: Auto-assigned to cell (%d,%d)"),
             *GetName(), GridX, GridY);
     }
@@ -100,12 +99,10 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
     else
     {
         MeshComponent->SetVisibility(false);
-        // Предупреждение о меше переведено в Verbose
         UE_LOG(LogHerbalist, Verbose, TEXT("%s: No mesh provided for ingredient %s"),
             *GetName(), *IngredientID.ToString());
     }
 
-    // Инициализация тоже в Verbose
     UE_LOG(LogHerbalist, Verbose, TEXT("%s: Initialized at cell (%d,%d) with ingredient %s"),
         *GetName(), GridX, GridY, *IngredientID.ToString());
 }

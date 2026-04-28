@@ -21,7 +21,8 @@ public class ProjectHerbalist : ModuleRules
 
         PrivateDependencyModuleNames.AddRange(new string[]
         {
-            "AssetRegistry"
+            "AssetRegistry",
+            "Landscape"      // <--- добавлено для работы с ландшафтом
         });
 
         PublicIncludePaths.AddRange(new string[]

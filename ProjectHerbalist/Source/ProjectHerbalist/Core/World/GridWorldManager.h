@@ -15,6 +15,7 @@
 
 class UHarvestService;
 class AHerbalistResourceActor;
+class ALandscape;
 struct FWorldSnapshot;
 struct FStateDelta;
 
@@ -26,7 +27,7 @@ class PROJECTHERBALIST_API AGridWorldManager : public AActor
 public:
     AGridWorldManager();
 	
-	// ---- Трассировка ----
+    // ---- Трассировка ----
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trace")
     bool bEnableTrace = false;
 
@@ -95,6 +96,8 @@ public:
     FGridCell* GetCell(int32 X, int32 Y);
     const FGridCell* GetCellConst(int32 X, int32 Y) const;
     FVector GetCellWorldPosition(int32 X, int32 Y) const;
+    FVector GetCellWorldPositionFlat(int32 X, int32 Y) const;
+    float GetCellHeight(int32 X, int32 Y) const;
 
     // ---- Алхимия (старая, будет заменена) ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng);
@@ -155,6 +158,16 @@ protected:
     // ---- Данные мира ----
     TArray<FGridCell> Cells;
     FRandomStream WorldRNG;
+
+    // ---- Ландшафт и кеш высот ----
+    UPROPERTY()
+    TObjectPtr<ALandscape> CachedLandscape;
+
+    UPROPERTY()
+    TArray<float> CachedCellHeights;
+
+    void FindAndCacheLandscape();
+    void CacheCellHeights();
 
     // ---- Вспомогательные данные ----
     TSet<int32> RegrowingCells;

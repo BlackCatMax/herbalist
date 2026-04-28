@@ -99,7 +99,7 @@ protected:
     USoundBase* HarvestSound;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Effects")
-    float DisappearDuration = 1.0f;
+    float DisappearDuration = 0.1f;
 
     UPROPERTY()
     AGridWorldManager* WorldManager = nullptr;

@@ -1,5 +1,8 @@
 // Core/World/GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
+#include "Landscape.h"
+#include "LandscapeInfo.h"
+#include "EngineUtils.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
@@ -17,12 +20,76 @@
 #include "Core/Simulation/Public/PerceptionComponent.h"
 
 // ============================================================================
-// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (ЛАНДШАФТ)
 // ============================================================================
+
+void AGridWorldManager::FindAndCacheLandscape()
+{
+    if (CachedLandscape) return;
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    for (TActorIterator<ALandscape> It(World); It; ++It)
+    {
+        CachedLandscape = *It;
+        break;
+    }
+    if (!CachedLandscape)
+    {
+        UE_LOG(LogHerbalist, Warning, TEXT("No Landscape found in level. Grid cells will use flat Z."));
+    }
+    else
+    {
+        UE_LOG(LogHerbalist, Log, TEXT("Landscape found: %s"), *CachedLandscape->GetName());
+    }
+}
+
+void AGridWorldManager::CacheCellHeights()
+{
+    FindAndCacheLandscape();
+    const int32 TotalCells = GridSizeX * GridSizeY;
+    CachedCellHeights.SetNum(TotalCells);
+
+    if (!CachedLandscape)
+    {
+        for (int32 i = 0; i < TotalCells; ++i) CachedCellHeights[i] = 0.f;
+        return;
+    }
+
+    FVector GridOrigin = GetActorLocation();
+    for (int32 Y = 0; Y < GridSizeY; ++Y)
+    {
+        for (int32 X = 0; X < GridSizeX; ++X)
+        {
+            FVector WorldPoint(GridOrigin.X + X * CellSize, GridOrigin.Y + Y * CellSize, 0.f);
+            TOptional<float> OptHeight = CachedLandscape->GetHeightAtLocation(WorldPoint);
+            float Z = OptHeight.IsSet() ? OptHeight.GetValue() : 0.f;
+            int32 Idx = Y * GridSizeX + X;
+            CachedCellHeights[Idx] = Z;
+        }
+    }
+    UE_LOG(LogHerbalist, Log, TEXT("Cached %d cell heights from landscape"), TotalCells);
+}
+
+float AGridWorldManager::GetCellHeight(int32 X, int32 Y) const
+{
+    int32 Idx = Y * GridSizeX + X;
+    if (CachedCellHeights.IsValidIndex(Idx))
+        return CachedCellHeights[Idx];
+    return 0.f;
+}
+
+FVector AGridWorldManager::GetCellWorldPositionFlat(int32 X, int32 Y) const
+{
+    return GetActorLocation() + FVector(X * CellSize, Y * CellSize, 0.f);
+}
 
 FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
 {
-    return GetActorLocation() + FVector(X * CellSize, Y * CellSize, CellHeight / 2.0f);
+    FVector Flat = GetCellWorldPositionFlat(X, Y);
+    float Z = GetCellHeight(X, Y);
+    // Центр отладочного бокса на уровне ландшафта
+    return FVector(Flat.X, Flat.Y, Z);
 }
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
@@ -64,7 +131,7 @@ TMap<FName, FVector> AGridWorldManager::GetBiomeCenters() const
     for (const FGridCell& Cell : Cells)
     {
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
-        FVector Pos = GetCellWorldPosition(Cell.X, Cell.Y);
+        FVector Pos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
         Centers.FindOrAdd(BiomeID) += Pos;
         Counts.FindOrAdd(BiomeID)++;
     }
@@ -222,6 +289,11 @@ void AGridWorldManager::InitializeCells()
         if (PlacedWater >= TargetWaterCount) break;
     }
 
+    // ========================================================================
+    // ВАЖНО: сначала кешируем высоты ландшафта, потом спавним ресурсы
+    // ========================================================================
+    CacheCellHeights();
+
     // Спавним ресурсы во всех не-водных клетках
     for (FGridCell& Cell : Cells)
     {
@@ -252,7 +324,10 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         FVector Offset = FVector(FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
                                  FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
                                  0);
-        FVector SpawnPos = GetCellWorldPosition(Cell.X, Cell.Y) + Offset;
+        // Плоская позиция (X,Y) плюс высота ландшафта + небольшой подъём (5 см)
+        FVector SpawnPos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
+        SpawnPos.Z = GetCellHeight(Cell.X, Cell.Y) + 5.0f;
+        SpawnPos += Offset;
 
         const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
         if (!Row) continue;
@@ -262,7 +337,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         {
             NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y);
             Cell.ResourceActors.Add(NewActor);
-            UE_LOG(LogHerbalist, Verbose, TEXT("Spawned %s at cell (%d,%d)"), *IngredientID.ToString(), Cell.X, Cell.Y);
+            UE_LOG(LogHerbalist, Verbose, TEXT("Spawned %s at cell (%d,%d) with Z=%.1f"), *IngredientID.ToString(), Cell.X, Cell.Y, SpawnPos.Z);
         }
     }
 }
@@ -277,13 +352,16 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
     if (!Row) return;
 
-    FVector SpawnPos = GetCellWorldPosition(X, Y) + Offset;
+    FVector SpawnPos = GetCellWorldPositionFlat(X, Y);
+    SpawnPos.Z = GetCellHeight(X, Y) + 5.0f;
+    SpawnPos += Offset;
+
     AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
     if (NewActor)
     {
         NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y);
         Cell->ResourceActors.Add(NewActor);
-        UE_LOG(LogHerbalist, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d)"), *IngredientID.ToString(), X, Y);
+        UE_LOG(LogHerbalist, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
     }
 }
 
@@ -465,17 +543,18 @@ void AGridWorldManager::DrawBiomeGraphDebug()
     {
         for (const FGridCell& Cell : Cells)
         {
-            FVector Pos = GetCellWorldPosition(Cell.X, Cell.Y);
+            FVector Pos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
+            Pos.Z = GetCellHeight(Cell.X, Cell.Y) + 30.0f;
             if (bShowCellDistortion)
             {
                 FColor Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Cell.State.Meta.Distortion).ToFColor(false);
-                DrawDebugString(World, Pos + FVector(0, 0, 30), FString::Printf(TEXT("%.2f"), Cell.State.Meta.Distortion), nullptr, Color, 0.0f, true);
+                DrawDebugString(World, Pos, FString::Printf(TEXT("%.2f"), Cell.State.Meta.Distortion), nullptr, Color, 0.0f, true);
             }
             if (bShowCellInfluence)
             {
                 float Influence = Cell.TargetState.Meta.Distortion - Cell.State.Meta.Distortion;
                 FColor Color = Influence > 0 ? FColor::Red : (Influence < 0 ? FColor::Blue : FColor::White);
-                DrawDebugString(World, Pos + FVector(0, 0, 50), FString::Printf(TEXT("Δ%.2f"), Influence), nullptr, Color, 0.0f, true);
+                DrawDebugString(World, Pos + FVector(0, 0, 30.0f), FString::Printf(TEXT("Δ%.2f"), Influence), nullptr, Color, 0.0f, true);
             }
         }
     }

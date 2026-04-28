@@ -3,7 +3,6 @@
 
 #include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"    // FInventoryItem, FGridCell (должны быть здесь)
-#include "Core/World/GridWorldManager.h"      // если FGridCell объявлен отдельно
 
 /**
  * Замороженное состояние игрового мира.
