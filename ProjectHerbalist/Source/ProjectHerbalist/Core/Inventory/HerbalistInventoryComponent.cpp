@@ -3,6 +3,8 @@
 #include "ProjectHerbalist.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "Core/HerbalistSettings.h"
+#include "Core/Simulation/Public/DeltaTypes.h"
+#include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
@@ -276,4 +278,52 @@ void UHerbalistInventoryComponent::MergeStack(FInventoryItem& Target, const FInv
     Target.bSubjectToDecay = Target.bSubjectToDecay && Source.bSubjectToDecay;
 
     Target.Count = NewCount;
+}
+
+FInventorySnapshot UHerbalistInventoryComponent::CaptureState() const
+{
+    FInventorySnapshot Snapshot;
+
+    // Используем уникальный ID компонента как идентификатор контейнера
+    int32 ContainerID = GetUniqueID();
+
+    // Просто копируем весь массив Items (глубокое копирование TArray с элементами FInventoryItem)
+    TArray<FInventoryItem> CopiedItems = Items;
+
+    Snapshot.ContainerContents.Add(ContainerID, CopiedItems);
+    return Snapshot;
+}
+
+void UHerbalistInventoryComponent::ApplyStateDelta(const FStateDelta& Delta)
+{
+    for (const FInventoryOperation& Op : Delta.InventoryOps)
+    {
+        if (Op.ContainerID != GetUniqueID())
+            continue;   // операция не для этого контейнера
+
+        switch (Op.OpType)
+        {
+        case EInventoryOpType::Add:
+            AddItem(Op.Ingredient, Op.Amount);
+            break;
+
+        case EInventoryOpType::Remove:
+            // Пока простейшая реализация – удаляем первый подходящий предмет
+            // (в будущем нужно будет учитывать точное совпадение состояния)
+            for (int32 i = 0; i < Items.Num(); ++i)
+            {
+                if (Items[i].IngredientID == Op.Ingredient.IngredientID)
+                {
+                    RemoveItem(i, FMath::Min(Op.Amount, Items[i].Count));
+                    break;
+                }
+            }
+            break;
+
+        case EInventoryOpType::Transfer:
+            // Отложим до полноценной реализации
+            UE_LOG(LogHerbalist, Warning, TEXT("ApplyStateDelta: Transfer operation not yet implemented"));
+            break;
+        }
+    }
 }

@@ -5,13 +5,14 @@
 #include "GameFramework/Actor.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/BiomeTypes.h"
-#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Math/RandomStream.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "GridWorldManager.generated.h"
 
 class UHarvestService;
 class AHerbalistResourceActor;
+struct FWorldSnapshot;
+struct FStateDelta;
 
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
@@ -20,6 +21,8 @@ class PROJECTHERBALIST_API AGridWorldManager : public AActor
 
 public:
     AGridWorldManager();
+	FWorldSnapshot CaptureState() const;
+	void ApplyStateDelta(const FStateDelta& Delta);
 
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;

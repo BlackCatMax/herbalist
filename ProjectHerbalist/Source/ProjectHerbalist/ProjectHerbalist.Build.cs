@@ -29,7 +29,9 @@ public class ProjectHerbalist : ModuleRules
         // Все инклюды в коде должны быть с префиксами, например: #include "Core/Data/IngredientRegistry.h"
         PublicIncludePaths.AddRange(new string[]
         {
-            "ProjectHerbalist"
+            "ProjectHerbalist",
+			"ProjectHerbalist/Core/Simulation/Public"
+
         });
     }
 }
