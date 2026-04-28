@@ -113,7 +113,6 @@ bool UInventorySlotWidget::TryMoveToOtherInventory()
     int32 RealIndex = FindRealIndex();
     if (RealIndex == -1) return false;
 
-    // Если открыт алхимический виджет
     if (PC->CurrentAlchemyWidget && PC->CurrentAlchemyWidget->IsInViewport())
     {
         UAlchemyTransferWidget* AlchemyWidget = Cast<UAlchemyTransferWidget>(PC->CurrentAlchemyWidget);
@@ -130,7 +129,6 @@ bool UInventorySlotWidget::TryMoveToOtherInventory()
         return false;
     }
 
-    // Если открыт трансферный виджет
     if (!PC->CurrentTransferWidget || !PC->CurrentTransferWidget->IsInViewport())
         return false;
 
