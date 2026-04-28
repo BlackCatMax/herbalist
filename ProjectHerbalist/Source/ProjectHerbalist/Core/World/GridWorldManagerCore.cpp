@@ -384,11 +384,17 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     FGridCell* Cell = GetCell(Actor->GetGridX(), Actor->GetGridY());
     if (!Cell) return;
 
-    // Удаляем актор из списка клетки
+    // Удаляем актор из клетки
     Cell->ResourceActors.Remove(Actor);
-    UE_LOG(LogHerbalist, Log, TEXT("Resource collected at cell (%d,%d), remaining: %d"), Cell->X, Cell->Y, Cell->ResourceActors.Num());
 
-    // Формируем команду Harvest для нового пайплайна
+    // Обновляем глобальное искажение для игрока (тултип)
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (PC && Cell)
+    {
+        PC->CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+    }
+
+    // Только команда в пайплайн – никакого прямого добавления!
     FCommandEntry Cmd;
     Cmd.Primitive             = ECommandPrimitive::Harvest;
     Cmd.Harvest.TargetCell    = FIntPoint(Cell->X, Cell->Y);
@@ -396,7 +402,6 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.Amount        = 1;
     QueueCommand(Cmd);
 
-    // Если ресурсов больше нет, запускаем регенерацию
     if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)
     {
         StartRegeneration(*Cell);

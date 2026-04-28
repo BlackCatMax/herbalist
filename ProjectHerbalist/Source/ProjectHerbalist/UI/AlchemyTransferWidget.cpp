@@ -4,12 +4,10 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Player/HerbalistPlayerController.h"
-#include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Storage/AlchemyTableActor.h"
-#include "Core/Pipeline/AlchemyPipelineFacade.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -64,7 +62,6 @@ void UAlchemyTransferWidget::NativeConstruct()
     IngredientSlot2->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     IngredientSlot3->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     ResultSlot->InitializeSlot(EAlchemySlotType::Result, 1);
-
     SetKeyboardFocus();
 }
 
@@ -79,129 +76,8 @@ void UAlchemyTransferWidget::NativeDestruct()
 
 void UAlchemyTransferWidget::OnMixClicked()
 {
-    if (bIsMixing) return;
-
-    if (ResultSlot->GetItem() && ResultSlot->GetCount() > 0)
-    {
-        SetStatusMessage(TEXT("Сначала заберите готовое зелье."));
-        return;
-    }
-
-    TArray<FInventoryItem> Ingredients;
-    if (!CollectIngredients(Ingredients) || Ingredients.Num() == 0)
-    {
-        SetStatusMessage(TEXT("Нет ингредиентов."));
-        return;
-    }
-
-    bIsMixing = true;
-
-    APlayerController* PC = GetOwningPlayer();
-    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
-    if (!HPC)
-    {
-        SetStatusMessage(TEXT("Ошибка системы."));
-        bIsMixing = false;
-        return;
-    }
-
-    UWorld* World = GetWorld();
-    if (!World)
-    {
-        SetStatusMessage(TEXT("Ошибка мира."));
-        bIsMixing = false;
-        return;
-    }
-
-    UGameInstance* GameInstance = World->GetGameInstance();
-    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
-
-    AGridWorldManager* WorldManager = nullptr;
-    for (TActorIterator<AGridWorldManager> It(World); It; ++It)
-    {
-        WorldManager = *It;
-        break;
-    }
-
-    FIntPoint TableCoords = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : FIntPoint(-1, -1);
-
-    FRealState CellState = FAlatyr::S0;
-    FEnvironment Env;
-    FMemoryState Memory;
-    float BiomeMorokField = 0.0f;
-    float BiomeZaryanaField = 0.0f;
-    FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
-    FGridCell* Cell = nullptr;
-    float GlobalDistortion = 0.3f;
-
-    if (WorldManager && TableCoords.X >= 0 && TableCoords.Y >= 0)
-    {
-        Cell = WorldManager->GetCell(TableCoords.X, TableCoords.Y);
-        if (Cell)
-        {
-            CellState = Cell->State;
-            Env = Cell->Environment;
-            Memory = Cell->Memory;
-            GlobalDistortion = Cell->Memory.AccumulatedDistortion;
-
-            if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
-            {
-                FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
-                if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
-                {
-                    BiomeMorokField = Node->MorokField;
-                    BiomeZaryanaField = Node->ZaryanaField;
-                    BiomeAxisDrift = Node->Memory.AxisDrift;
-                }
-            }
-        }
-    }
-    else
-    {
-        GlobalDistortion = HPC->CurrentGlobalDistortion;
-    }
-
-    FRngState Rng;
-    int32 Seed = 12345;
-    if (HPC && HPC->CurrentAlchemyTable)
-    {
-        FIntPoint Coords = HPC->CurrentAlchemyTable->GetGridCoords();
-        Seed = (Coords.X * 7919) ^ (Coords.Y * 7901);
-    }
-    Rng.Seed = Seed;
-
-    FAlchemyFacadeResult Result = FAlchemyPipelineFacade::Execute(
-        Ingredients,
-        CellState, Env, Memory,
-        GlobalDistortion,
-        IngredientSubsystem,
-        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift,
-        Rng);
-
-    FInventoryItem Potion;
-    switch (Result.Outcome)
-    {
-    case EAlchemyOutcome::BoiledWater:
-        Potion.IngredientID = FName(TEXT("BoiledWater"));
-        break;
-    case EAlchemyOutcome::Ash:
-    case EAlchemyOutcome::Catastrophe:
-        Potion.IngredientID = FName(TEXT("Ash"));
-        break;
-    default:
-        Potion.IngredientID = FName(TEXT("Potion"));
-        break;
-    }
-    Potion.State = Result.FinalState;
-    Potion.Count = 1;
-    Potion.CreationTime = World->GetTimeSeconds();
-    Potion.bSubjectToDecay = false;   // зелья не портятся
-
-    ResultSlot->AddItem(Potion, 1);
-    ClearIngredientSlots();
-    SetStatusMessage(TEXT("Готово."));
-
-    bIsMixing = false;
+    // ВРЕМЕННО ОТКЛЮЧЕНО (старый пайплайн удалён)
+    SetStatusMessage(TEXT("Алхимия временно недоступна"));
 }
 
 bool UAlchemyTransferWidget::CollectIngredients(TArray<FInventoryItem>& OutIngredients)

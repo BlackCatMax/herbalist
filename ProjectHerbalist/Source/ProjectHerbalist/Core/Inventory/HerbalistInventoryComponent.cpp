@@ -26,7 +26,6 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
     const float GlobalDecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
 
-    // Получаем реестр для индивидуальных множителей
     UIngredientRegistrySubsystem* IngredientReg = nullptr;
     if (UWorld* World = GetWorld())
     {
@@ -51,8 +50,6 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
             ApplyDecayToItem(Item, DecayUpdateInterval, GlobalDecayRate * IngredientDecay);
         }
     }
-    // Не дёргаем OnInventoryChanged каждый тик, чтобы не спамить UI;
-    // тултип обновится при следующем открытии инвентаря.
 }
 
 void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float DeltaTime, float DecayRate)
@@ -65,7 +62,6 @@ void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float 
     Item.State.Meta.Purity      = FMath::Max(Item.State.Meta.Purity      - DecayFactor * 0.2f, 0.0f);
     Item.State.Meta.Stability   = FMath::Max(Item.State.Meta.Stability   - DecayFactor * 0.1f, 0.0f);
 
-    // Лёгкое хаотичное смещение осей
     Item.State.Direction.Body   = FMath::Clamp(Item.State.Direction.Body   + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
     Item.State.Direction.Mind   = FMath::Clamp(Item.State.Direction.Mind   + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
     Item.State.Direction.Spirit = FMath::Clamp(Item.State.Direction.Spirit + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
@@ -187,9 +183,7 @@ bool UHerbalistInventoryComponent::TransferItemTo(int32 SourceIndex, UHerbalistI
     {
         SourceItem.Count--;
         if (SourceItem.Count <= 0)
-        {
             Items.RemoveAt(SourceIndex);
-        }
         OnInventoryChanged.Broadcast();
         return true;
     }
@@ -252,17 +246,17 @@ void UHerbalistInventoryComponent::MergeStack(FInventoryItem& Target, const FInv
 
     T.Magnitude = T.Magnitude * OldWeight + S.Magnitude * NewWeight;
 
-    T.Direction.Body = T.Direction.Body * OldWeight + S.Direction.Body * NewWeight;
-    T.Direction.Mind = T.Direction.Mind * OldWeight + S.Direction.Mind * NewWeight;
+    T.Direction.Body   = T.Direction.Body   * OldWeight + S.Direction.Body   * NewWeight;
+    T.Direction.Mind   = T.Direction.Mind   * OldWeight + S.Direction.Mind   * NewWeight;
     T.Direction.Spirit = T.Direction.Spirit * OldWeight + S.Direction.Spirit * NewWeight;
     T.Direction.Nature = T.Direction.Nature * OldWeight + S.Direction.Nature * NewWeight;
     T.Direction.NormalizeSum();
 
     T.Meta.Distortion = T.Meta.Distortion * OldWeight + S.Meta.Distortion * NewWeight;
-    T.Meta.Stability = T.Meta.Stability * OldWeight + S.Meta.Stability * NewWeight;
-    T.Meta.Purity = T.Meta.Purity * OldWeight + S.Meta.Purity * NewWeight;
-    T.Meta.Potency = T.Meta.Potency * OldWeight + S.Meta.Potency * NewWeight;
-    T.Meta.Resonance = T.Meta.Resonance * OldWeight + S.Meta.Resonance * NewWeight;
+    T.Meta.Stability  = T.Meta.Stability  * OldWeight + S.Meta.Stability  * NewWeight;
+    T.Meta.Purity     = T.Meta.Purity     * OldWeight + S.Meta.Purity     * NewWeight;
+    T.Meta.Potency    = T.Meta.Potency    * OldWeight + S.Meta.Potency    * NewWeight;
+    T.Meta.Resonance  = T.Meta.Resonance  * OldWeight + S.Meta.Resonance  * NewWeight;
     T.Meta.Corruption = T.Meta.Corruption * OldWeight + S.Meta.Corruption * NewWeight;
 
     float DistortionDiff = FMath::Abs(T.Meta.Distortion - S.Meta.Distortion);
@@ -271,59 +265,45 @@ void UHerbalistInventoryComponent::MergeStack(FInventoryItem& Target, const FInv
     float PurityDiff = FMath::Abs(T.Meta.Purity - S.Meta.Purity);
     T.Meta.Purity = FMath::Clamp(T.Meta.Purity - PurityDiff * 0.1f, 0.0f, 1.0f);
 
-    // Усредняем CreationTime
     Target.CreationTime = Target.CreationTime * OldWeight + Source.CreationTime * NewWeight;
-
-    // bSubjectToDecay остаётся true, если оба true; иначе false (если хоть один – зелье)
     Target.bSubjectToDecay = Target.bSubjectToDecay && Source.bSubjectToDecay;
 
     Target.Count = NewCount;
 }
 
+// ---- CaptureState & ApplyStateDelta (единственные правильные версии) ----
 FInventorySnapshot UHerbalistInventoryComponent::CaptureState() const
 {
     FInventorySnapshot Snapshot;
-
-    // Используем уникальный ID компонента как идентификатор контейнера
-    int32 ContainerID = GetUniqueID();
-
-    // Просто копируем весь массив Items (глубокое копирование TArray с элементами FInventoryItem)
-    TArray<FInventoryItem> CopiedItems = Items;
-
-    Snapshot.ContainerContents.Add(ContainerID, CopiedItems);
+    Snapshot.ContainerContents.Add(0, Items);   // 0 – ID игрока
     return Snapshot;
 }
 
 void UHerbalistInventoryComponent::ApplyStateDelta(const FStateDelta& Delta)
 {
+    bool bChanged = false;
     for (const FInventoryOperation& Op : Delta.InventoryOps)
     {
-        if (Op.ContainerID != GetUniqueID())
-            continue;   // операция не для этого контейнера
+        if (Op.ContainerID != 0) continue;   // только инвентарь игрока (ID = 0)
 
-        switch (Op.OpType)
+        if (Op.OpType == EInventoryOpType::Add)
         {
-        case EInventoryOpType::Add:
-            AddItem(Op.Ingredient, Op.Amount);
-            break;
-
-        case EInventoryOpType::Remove:
-            // Пока простейшая реализация – удаляем первый подходящий предмет
-            // (в будущем нужно будет учитывать точное совпадение состояния)
+            if (AddItem(Op.Ingredient, Op.Amount))
+                bChanged = true;
+        }
+        else if (Op.OpType == EInventoryOpType::Remove)
+        {
             for (int32 i = 0; i < Items.Num(); ++i)
             {
                 if (Items[i].IngredientID == Op.Ingredient.IngredientID)
                 {
-                    RemoveItem(i, FMath::Min(Op.Amount, Items[i].Count));
+                    if (RemoveItem(i, FMath::Min(Op.Amount, Items[i].Count)))
+                        bChanged = true;
                     break;
                 }
             }
-            break;
-
-        case EInventoryOpType::Transfer:
-            // Отложим до полноценной реализации
-            UE_LOG(LogHerbalist, Warning, TEXT("ApplyStateDelta: Transfer operation not yet implemented"));
-            break;
         }
     }
+    if (bChanged)
+        OnInventoryChanged.Broadcast();
 }
