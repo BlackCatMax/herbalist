@@ -6,6 +6,7 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Math/RandomStream.h"
+#include "Core/Simulation/Public/TraceTypes.h"
 #include "Core/Simulation/Public/PerceivedTypes.h"
 #include "Core/Simulation/Public/PerceptionComponent.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
@@ -24,6 +25,16 @@ class PROJECTHERBALIST_API AGridWorldManager : public AActor
 
 public:
     AGridWorldManager();
+	
+	// ---- Трассировка ----
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trace")
+    bool bEnableTrace = false;
+
+    UFUNCTION(Exec)
+    void DumpTrace();
+
+    UFUNCTION(Exec)
+    void ReplayLastTick();
 
     // ---- Snapshot / Delta ----
     FWorldSnapshot CaptureState() const;
@@ -88,7 +99,6 @@ public:
     // ---- Алхимия (старая, будет заменена) ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng);
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng);
-    void PropagateToNeighbors(int32 X, int32 Y, const FRealState& Delta, float Falloff, int32 Depth);
 
     // ---- Сбор ----
     FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
@@ -168,6 +178,9 @@ protected:
     inline int32 GetCellIndex(int32 X, int32 Y) const { return Y * GridSizeX + X; }
 
 private:
+    FTraceRingBuffer TraceBuffer;
+    int32 CurrentTickID = 0;
+
     // ---- Очередь команд нового пайплайна ----
     TArray<FCommandEntry> PendingCommands;
 

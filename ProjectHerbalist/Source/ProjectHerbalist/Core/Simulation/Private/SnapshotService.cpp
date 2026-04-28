@@ -2,7 +2,6 @@
 #include "SnapshotService.h"
 #include "Core/Simulation/Private/PipelineV2.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
-#include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"

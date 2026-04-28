@@ -7,7 +7,6 @@
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Player/HerbalistPlayerController.h"
-#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "ProjectHerbalist.h"
