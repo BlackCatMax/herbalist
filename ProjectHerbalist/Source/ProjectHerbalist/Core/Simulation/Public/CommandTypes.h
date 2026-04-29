@@ -34,13 +34,14 @@ struct FTransferCommand
     int32 Amount = 1;
 };
 
-// D – применить зелье/предмет к клетке (Apply)
+// D – применить зелье/предмет к клетке (Apply), либо создать зелье (крафт)
 struct FApplyCommand
 {
     ECommandPrimitive Type = ECommandPrimitive::Apply;
     FIntPoint TargetCell;
-    TArray<FInventoryItem> Ingredients;   // список используемых предметов
+    TArray<FInventoryItem> Ingredients;
     FIntent Intent;
+    bool bIsCrafting = false;   // true = крафт в инвентарь, false = применение на клетку
 };
 
 // S – сбор ресурса (Harvest)

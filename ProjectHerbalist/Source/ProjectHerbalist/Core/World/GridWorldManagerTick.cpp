@@ -1,5 +1,5 @@
 // Core/World/GridWorldManagerTick.cpp
-// Полный файл с трассировкой и реплеем
+// Полный файл с трассировкой, реплеем и восстановлением экологии
 
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
@@ -37,6 +37,11 @@ void AGridWorldManager::Tick(float DeltaTime)
     {
         TraceBuffer.Record(CurrentTickID, PreTickSnapshot, CommandsCopy, Delta);
     }
+
+    // ========================================================================
+    // ВОССТАНОВЛЕНИЕ ПАРАМЕТРОВ КЛЕТОК (ЭКОЛОГИЯ)
+    // ========================================================================
+    RegenerateCellParameters(DeltaTime);
 
     // Тик всегда активен для вызова нового пайплайна каждый кадр
     SetActorTickEnabled(true);

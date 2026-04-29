@@ -62,6 +62,13 @@ void UAlchemyTransferWidget::NativeConstruct()
     IngredientSlot2->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     IngredientSlot3->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     ResultSlot->InitializeSlot(EAlchemySlotType::Result, 1);
+
+    // Подписываемся на изменение инвентаря игрока, если он уже привязан
+    if (PlayerInventoryComponent)
+    {
+        PlayerInventoryComponent->OnInventoryChanged.AddDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
+    }
+
     SetKeyboardFocus();
 }
 
@@ -71,13 +78,78 @@ void UAlchemyTransferWidget::NativeDestruct()
     {
         MixButton->OnClicked.RemoveDynamic(this, &UAlchemyTransferWidget::OnMixClicked);
     }
+    if (PlayerInventoryComponent)
+    {
+        PlayerInventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
+    }
     Super::NativeDestruct();
 }
 
 void UAlchemyTransferWidget::OnMixClicked()
 {
-    // ВРЕМЕННО ОТКЛЮЧЕНО (старый пайплайн удалён)
-    SetStatusMessage(TEXT("Алхимия временно недоступна"));
+    if (bIsMixing) return;
+
+    if (ResultSlot->GetItem() && ResultSlot->GetCount() > 0)
+    {
+        SetStatusMessage(TEXT("Сначала заберите готовое зелье из слота результата."));
+        return;
+    }
+
+    TArray<FInventoryItem> Ingredients;
+    if (!CollectIngredients(Ingredients) || Ingredients.Num() == 0)
+    {
+        SetStatusMessage(TEXT("Нет ингредиентов."));
+        return;
+    }
+
+    bIsMixing = true;
+
+    APlayerController* PC = GetOwningPlayer();
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
+    if (!HPC)
+    {
+        SetStatusMessage(TEXT("Ошибка системы."));
+        bIsMixing = false;
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        SetStatusMessage(TEXT("Ошибка мира."));
+        bIsMixing = false;
+        return;
+    }
+
+    AGridWorldManager* WorldManager = nullptr;
+    for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+    {
+        WorldManager = *It;
+        break;
+    }
+    if (!WorldManager)
+    {
+        SetStatusMessage(TEXT("Не найден GridWorldManager."));
+        bIsMixing = false;
+        return;
+    }
+
+    // Запоминаем время крафта для последующего поиска созданного зелья
+    LastCraftTime = World->GetTimeSeconds();
+
+    FCommandEntry Cmd;
+    Cmd.Primitive = ECommandPrimitive::Apply;
+    Cmd.Apply.TargetCell = FIntPoint(-1, -1);
+    Cmd.Apply.Ingredients = Ingredients;
+    Cmd.Apply.Intent.Coherence = 0.5f;
+    Cmd.Apply.bIsCrafting = true;
+
+    WorldManager->QueueCommand(Cmd);
+
+    ClearIngredientSlots();
+    SetStatusMessage(TEXT("Зелье создаётся... Оно появится в слоте результата."));
+
+    bIsMixing = false;
 }
 
 bool UAlchemyTransferWidget::CollectIngredients(TArray<FInventoryItem>& OutIngredients)
@@ -126,4 +198,47 @@ FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
         }
     }
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+// -----------------------------------------------------------------------------
+// Отслеживание созданного зелья
+// -----------------------------------------------------------------------------
+
+void UAlchemyTransferWidget::OnInventoryChanged()
+{
+    CheckForNewPotion();
+}
+
+void UAlchemyTransferWidget::CheckForNewPotion()
+{
+    if (!PlayerInventoryComponent || LastCraftTime <= 0.0f)
+        return;
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    const TArray<FInventoryItem>& Items = PlayerInventoryComponent->GetItems();
+    for (const FInventoryItem& Item : Items)
+    {
+        if (Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0)
+        {
+            // Если время создания предмета больше времени крафта (с погрешностью 0.1 сек)
+            if (Item.CreationTime >= LastCraftTime - 0.1f)
+            {
+                ResultSlot->Clear();
+                ResultSlot->AddItem(Item, 1);
+                LastCraftTime = 0.0f;
+                SetStatusMessage(FString::Printf(TEXT("Создано зелье (сила: %.2f, искажение: %.2f)"),
+                    Item.State.Magnitude, Item.State.Meta.Distortion));
+                return;
+            }
+        }
+    }
+
+    float CurrentTime = World->GetTimeSeconds();
+    if (CurrentTime - LastCraftTime > 2.0f)
+    {
+        // Прошло больше 2 секунд, зелье не найдено – сбрасываем ожидание
+        LastCraftTime = 0.0f;
+    }
 }
