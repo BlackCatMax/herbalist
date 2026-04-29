@@ -1,12 +1,9 @@
-// AlchemyTableActor.h
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/Types/HerbalistCoreTypes.h"
 #include "AlchemyTableActor.generated.h"
-
-class UBoxComponent;
-class UAlchemyTransferWidget;
 
 UCLASS()
 class PROJECTHERBALIST_API AAlchemyTableActor : public AActor
@@ -15,22 +12,26 @@ class PROJECTHERBALIST_API AAlchemyTableActor : public AActor
 
 public:
     AAlchemyTableActor();
-    void OnInteract(class AHerbalistPlayerController* PC);
-    void SetGridCoords(const FIntPoint& InCoords) { GridCoords = InCoords; }
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Alchemy")
     FIntPoint GetGridCoords() const { return GridCoords; }
 
+    void OnInteract(class AHerbalistPlayerController* PlayerController);
+
+    void SetSlotItem(int32 SlotIndex, const FInventoryItem& Item);
+    FInventoryItem GetSlotItem(int32 SlotIndex) const;
+    void ClearSlot(int32 SlotIndex);
+    TArray<FInventoryItem> GetIngredientsForCraft() const;
+
+    void UpdateGridCoords();
+
 protected:
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    UStaticMeshComponent* Mesh;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    UBoxComponent* InteractionBox;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
-    TSubclassOf<UAlchemyTransferWidget> AlchemyWidgetClass;
+    UPROPERTY()
+    FIntPoint GridCoords = FIntPoint(-1, -1);
 
     UPROPERTY()
-    UAlchemyTransferWidget* AlchemyWidgetInstance = nullptr;
+    FInventoryItem StoredWater;
 
-    FIntPoint GridCoords;
+    UPROPERTY()
+    TArray<FInventoryItem> StoredIngredients;
 };

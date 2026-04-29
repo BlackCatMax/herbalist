@@ -23,21 +23,15 @@ void UAlchemyTransferWidget::BindInventory(UHerbalistInventoryComponent* InPlaye
 {
     PlayerInventoryComponent = InPlayerInventory;
     if (PlayerInventory)
-    {
         PlayerInventory->BindInventory(PlayerInventoryComponent);
-    }
 }
 
 bool UAlchemyTransferWidget::TryAddItemToSlot(const FInventoryItem& Item)
 {
-    if (WaterSlot->CanAcceptItem(Item) && WaterSlot->AddItem(Item, 1))
-        return true;
-    if (IngredientSlot1->CanAcceptItem(Item) && IngredientSlot1->AddItem(Item, 1))
-        return true;
-    if (IngredientSlot2->CanAcceptItem(Item) && IngredientSlot2->AddItem(Item, 1))
-        return true;
-    if (IngredientSlot3->CanAcceptItem(Item) && IngredientSlot3->AddItem(Item, 1))
-        return true;
+    if (WaterSlot->CanAcceptItem(Item) && WaterSlot->AddItem(Item, 1)) return true;
+    if (IngredientSlot1->CanAcceptItem(Item) && IngredientSlot1->AddItem(Item, 1)) return true;
+    if (IngredientSlot2->CanAcceptItem(Item) && IngredientSlot2->AddItem(Item, 1)) return true;
+    if (IngredientSlot3->CanAcceptItem(Item) && IngredientSlot3->AddItem(Item, 1)) return true;
     return false;
 }
 
@@ -54,58 +48,82 @@ void UAlchemyTransferWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     if (MixButton)
-    {
         MixButton->OnClicked.AddDynamic(this, &UAlchemyTransferWidget::OnMixClicked);
-    }
     WaterSlot->InitializeSlot(EAlchemySlotType::Water, 1);
     IngredientSlot1->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     IngredientSlot2->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     IngredientSlot3->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     ResultSlot->InitializeSlot(EAlchemySlotType::Result, 1);
 
-    // Подписываемся на изменение инвентаря игрока, если он уже привязан
     if (PlayerInventoryComponent)
-    {
         PlayerInventoryComponent->OnInventoryChanged.AddDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
-    }
 
+    LoadStateFromTable();
     SetKeyboardFocus();
 }
 
 void UAlchemyTransferWidget::NativeDestruct()
 {
+    SaveStateToTable();
     if (MixButton)
-    {
         MixButton->OnClicked.RemoveDynamic(this, &UAlchemyTransferWidget::OnMixClicked);
-    }
     if (PlayerInventoryComponent)
-    {
         PlayerInventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
-    }
     Super::NativeDestruct();
 }
 
 void UAlchemyTransferWidget::OnMixClicked()
 {
     if (bIsMixing) return;
-
     if (ResultSlot->GetItem() && ResultSlot->GetCount() > 0)
     {
         SetStatusMessage(TEXT("Сначала заберите готовое зелье из слота результата."));
         return;
     }
+    if (!WaterSlot->GetItem() || WaterSlot->GetCount() == 0)
+    {
+        SetStatusMessage(TEXT("Вода обязательна для варки зелья."));
+        return;
+    }
 
     TArray<FInventoryItem> Ingredients;
-    if (!CollectIngredients(Ingredients) || Ingredients.Num() == 0)
+    if (WaterSlot->GetItem())
     {
-        SetStatusMessage(TEXT("Нет ингредиентов."));
+        FInventoryItem WaterItem = *WaterSlot->GetItem();
+        WaterItem.Count = WaterSlot->GetCount();
+        Ingredients.Add(WaterItem);
+    }
+
+    auto AddIngredient = [&](UAlchemySlotWidget* IngSlot)
+    {
+        if (IngSlot && IngSlot->GetItem() && IngSlot->GetCount() > 0)
+        {
+            FInventoryItem Item = *IngSlot->GetItem();
+            Item.Count = IngSlot->GetCount();
+            Ingredients.Add(Item);
+        }
+    };
+    AddIngredient(IngredientSlot1);
+    AddIngredient(IngredientSlot2);
+    AddIngredient(IngredientSlot3);
+
+    bool bHasNonWater = false;
+    for (int32 i = 1; i < Ingredients.Num(); ++i)
+    {
+        if (Ingredients[i].IngredientID != FName(TEXT("Water")) && Ingredients[i].IngredientID != FName(TEXT("BoiledWater")))
+        {
+            bHasNonWater = true;
+            break;
+        }
+    }
+    if (!bHasNonWater)
+    {
+        SetStatusMessage(TEXT("Нужен хотя бы один ингредиент (не вода)."));
         return;
     }
 
     bIsMixing = true;
-
-    APlayerController* PC = GetOwningPlayer();
-    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
     if (!HPC)
     {
         SetStatusMessage(TEXT("Ошибка системы."));
@@ -134,7 +152,26 @@ void UAlchemyTransferWidget::OnMixClicked()
         return;
     }
 
-    // Запоминаем время крафта для последующего поиска созданного зелья
+    FIntPoint TableCoords = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : FIntPoint(-1, -1);
+    float MorokField = 0.0f, ZaryanaField = 0.0f;
+    FVector4 AxisDrift(0.25f, 0.25f, 0.25f, 0.25f);
+    if (WorldManager && TableCoords.X >= 0 && TableCoords.Y >= 0)
+    {
+        if (FGridCell* Cell = WorldManager->GetCell(TableCoords.X, TableCoords.Y))
+        {
+            if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
+            {
+                FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
+                if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
+                {
+                    MorokField = Node->MorokField;
+                    ZaryanaField = Node->ZaryanaField;
+                    AxisDrift = Node->Memory.AxisDrift;
+                }
+            }
+        }
+    }
+
     LastCraftTime = World->GetTimeSeconds();
 
     FCommandEntry Cmd;
@@ -143,31 +180,32 @@ void UAlchemyTransferWidget::OnMixClicked()
     Cmd.Apply.Ingredients = Ingredients;
     Cmd.Apply.Intent.Coherence = 0.5f;
     Cmd.Apply.bIsCrafting = true;
+    Cmd.Apply.BiomeMorokField = MorokField;
+    Cmd.Apply.BiomeZaryanaField = ZaryanaField;
+    Cmd.Apply.BiomeAxisDrift = AxisDrift;
 
     WorldManager->QueueCommand(Cmd);
-
     ClearIngredientSlots();
-    SetStatusMessage(TEXT("Зелье создаётся... Оно появится в слоте результата."));
-
+    SetStatusMessage(TEXT("Зелье создаётся..."));
     bIsMixing = false;
 }
 
 bool UAlchemyTransferWidget::CollectIngredients(TArray<FInventoryItem>& OutIngredients)
 {
     OutIngredients.Empty();
-    auto AddIfPresent = [&](UAlchemySlotWidget* InSlot)
+    auto AddPresent = [&](UAlchemySlotWidget* IngSlot)
     {
-        if (InSlot && InSlot->GetItem() && InSlot->GetCount() > 0)
+        if (IngSlot && IngSlot->GetItem() && IngSlot->GetCount() > 0)
         {
-            FInventoryItem Item = *InSlot->GetItem();
-            Item.Count = InSlot->GetCount();
+            FInventoryItem Item = *IngSlot->GetItem();
+            Item.Count = IngSlot->GetCount();
             OutIngredients.Add(Item);
         }
     };
-    AddIfPresent(WaterSlot);
-    AddIfPresent(IngredientSlot1);
-    AddIfPresent(IngredientSlot2);
-    AddIfPresent(IngredientSlot3);
+    AddPresent(WaterSlot);
+    AddPresent(IngredientSlot1);
+    AddPresent(IngredientSlot2);
+    AddPresent(IngredientSlot3);
     return OutIngredients.Num() > 0;
 }
 
@@ -181,17 +219,14 @@ void UAlchemyTransferWidget::ClearIngredientSlots()
 
 void UAlchemyTransferWidget::SetStatusMessage(const FString& Message)
 {
-    if (StatusText)
-        StatusText->SetText(FText::FromString(Message));
+    if (StatusText) StatusText->SetText(FText::FromString(Message));
 }
 
 FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
     if (InKeyEvent.GetKey() == EKeys::E)
     {
-        APlayerController* PC = GetOwningPlayer();
-        AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
-        if (HPC)
+        if (AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
         {
             HPC->CloseAnyWidget();
             return FReply::Handled();
@@ -200,10 +235,6 @@ FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
-// -----------------------------------------------------------------------------
-// Отслеживание созданного зелья
-// -----------------------------------------------------------------------------
-
 void UAlchemyTransferWidget::OnInventoryChanged()
 {
     CheckForNewPotion();
@@ -211,18 +242,14 @@ void UAlchemyTransferWidget::OnInventoryChanged()
 
 void UAlchemyTransferWidget::CheckForNewPotion()
 {
-    if (!PlayerInventoryComponent || LastCraftTime <= 0.0f)
-        return;
-
+    if (!PlayerInventoryComponent || LastCraftTime <= 0.0f) return;
     UWorld* World = GetWorld();
     if (!World) return;
-
     const TArray<FInventoryItem>& Items = PlayerInventoryComponent->GetItems();
     for (const FInventoryItem& Item : Items)
     {
         if (Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0)
         {
-            // Если время создания предмета больше времени крафта (с погрешностью 0.1 сек)
             if (Item.CreationTime >= LastCraftTime - 0.1f)
             {
                 ResultSlot->Clear();
@@ -234,11 +261,49 @@ void UAlchemyTransferWidget::CheckForNewPotion()
             }
         }
     }
-
     float CurrentTime = World->GetTimeSeconds();
-    if (CurrentTime - LastCraftTime > 2.0f)
+    if (CurrentTime - LastCraftTime > 2.0f) LastCraftTime = 0.0f;
+}
+
+void UAlchemyTransferWidget::SaveStateToTable()
+{
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    if (!HPC || !HPC->CurrentAlchemyTable) return;
+    AAlchemyTableActor* Table = HPC->CurrentAlchemyTable;
+    Table->SetSlotItem(0, WaterSlot->GetItem() ? *WaterSlot->GetItem() : FInventoryItem());
+
+    auto SaveIngredient = [&](UAlchemySlotWidget* IngSlot, int32 Index)
     {
-        // Прошло больше 2 секунд, зелье не найдено – сбрасываем ожидание
-        LastCraftTime = 0.0f;
-    }
+        if (IngSlot->GetItem())
+            Table->SetSlotItem(Index, *IngSlot->GetItem());
+        else
+            Table->ClearSlot(Index);
+    };
+    SaveIngredient(IngredientSlot1, 1);
+    SaveIngredient(IngredientSlot2, 2);
+    SaveIngredient(IngredientSlot3, 3);
+}
+
+void UAlchemyTransferWidget::LoadStateFromTable()
+{
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    if (!HPC || !HPC->CurrentAlchemyTable) return;
+    AAlchemyTableActor* Table = HPC->CurrentAlchemyTable;
+    FInventoryItem WaterItem = Table->GetSlotItem(0);
+    if (WaterItem.IsValid())
+        WaterSlot->AddItem(WaterItem, WaterItem.Count);
+    else
+        WaterSlot->Clear();
+
+    auto LoadIngredient = [&](UAlchemySlotWidget* IngSlot, int32 Index)
+    {
+        FInventoryItem Item = Table->GetSlotItem(Index);
+        if (Item.IsValid())
+            IngSlot->AddItem(Item, Item.Count);
+        else
+            IngSlot->Clear();
+    };
+    LoadIngredient(IngredientSlot1, 1);
+    LoadIngredient(IngredientSlot2, 2);
+    LoadIngredient(IngredientSlot3, 3);
 }

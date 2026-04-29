@@ -88,7 +88,6 @@ FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
 {
     FVector Flat = GetCellWorldPositionFlat(X, Y);
     float Z = GetCellHeight(X, Y);
-    // Центр отладочного бокса на уровне ландшафта
     return FVector(Flat.X, Flat.Y, Z);
 }
 
@@ -151,7 +150,6 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
     {
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
         
-        // 1. Влияние Морока (увеличивает Distortion)
         const float* MorokField = MorokFields.Find(BiomeID);
         if (MorokField)
         {
@@ -159,7 +157,6 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             Cell.TargetState.Meta.Distortion = FMath::Clamp(Cell.TargetState.Meta.Distortion + MorokInfluence, 0.f, 1.f);
         }
         
-        // 2. Влияние Заряны (повышает Stability и Purity)
         const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
         if (ZaryanaField)
         {
@@ -178,7 +175,6 @@ AGridWorldManager::AGridWorldManager()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = false;
-
     PerceptionComponent = CreateDefaultSubobject<UPerceptionComponent>(TEXT("PerceptionComp"));
 }
 
@@ -207,7 +203,6 @@ void AGridWorldManager::InitializeCells()
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
     UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
 
-    // Собираем все типы биомов
     TArray<EBiomeType> AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
     if (AllBiomes.Num() == 0)
     {
@@ -218,7 +213,6 @@ void AGridWorldManager::InitializeCells()
         };
     }
 
-    // Закрашиваем сетку блоками по 5x5 клеток
     const int32 BlockSize = 5;
     const int32 BlocksX = GridSizeX / BlockSize;
     const int32 BlocksY = GridSizeY / BlockSize;
@@ -245,9 +239,6 @@ void AGridWorldManager::InitializeCells()
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Размещение водоёмов (≈20% клеток)
-    // ------------------------------------------------------------------------
     int32 TargetWaterCount = FMath::Max(TotalCells / 5, 1);
     TArray<bool> IsWaterAlready;
     IsWaterAlready.Init(false, TotalCells);
@@ -260,7 +251,6 @@ void AGridWorldManager::InitializeCells()
         int32 StartX = WorldRNG.RandRange(0, GridSizeX - W);
         int32 StartY = WorldRNG.RandRange(0, GridSizeY - H);
 
-        // Проверяем, свободна ли область
         bool bAreaFree = true;
         for (int32 dy = 0; dy < H && bAreaFree; ++dy)
             for (int32 dx = 0; dx < W; ++dx)
@@ -269,7 +259,6 @@ void AGridWorldManager::InitializeCells()
 
         if (!bAreaFree) continue;
 
-        // Заливаем область водой
         for (int32 dy = 0; dy < H; ++dy)
         {
             for (int32 dx = 0; dx < W; ++dx)
@@ -302,12 +291,8 @@ void AGridWorldManager::InitializeCells()
         if (PlacedWater >= TargetWaterCount) break;
     }
 
-    // ========================================================================
-    // ВАЖНО: сначала кешируем высоты ландшафта, потом спавним ресурсы
-    // ========================================================================
     CacheCellHeights();
 
-    // Спавним ресурсы во всех не-водных клетках
     for (FGridCell& Cell : Cells)
     {
         if (!Cell.bIsWater)
@@ -337,7 +322,6 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         FVector Offset = FVector(FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
                                  FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
                                  0);
-        // Плоская позиция (X,Y) плюс высота ландшафта + небольшой подъём (5 см)
         FVector SpawnPos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
         SpawnPos.Z = GetCellHeight(Cell.X, Cell.Y) + 5.0f;
         SpawnPos += Offset;
@@ -397,17 +381,14 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     FGridCell* Cell = GetCell(Actor->GetGridX(), Actor->GetGridY());
     if (!Cell) return;
 
-    // Удаляем актор из клетки
     Cell->ResourceActors.Remove(Actor);
 
-    // Обновляем глобальное искажение для игрока (тултип)
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
     if (PC && Cell)
     {
         PC->CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
     }
 
-    // Только команда в пайплайн – никакого прямого добавления!
     FCommandEntry Cmd;
     Cmd.Primitive             = ECommandPrimitive::Harvest;
     Cmd.Harvest.TargetCell    = FIntPoint(Cell->X, Cell->Y);
@@ -426,7 +407,6 @@ FRealState AGridWorldManager::CollectWater(int32 X, int32 Y)
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell || !Cell->bIsWater || !HarvestService) return FRealState();
 
-    // Формируем команду Harvest для воды
     FCommandEntry Cmd;
     Cmd.Primitive             = ECommandPrimitive::Harvest;
     Cmd.Harvest.TargetCell    = FIntPoint(X, Y);
@@ -434,7 +414,6 @@ FRealState AGridWorldManager::CollectWater(int32 X, int32 Y)
     Cmd.Harvest.Amount        = 1;
     QueueCommand(Cmd);
 
-    // Возвращаем пустое состояние — реальный сбор произойдёт через новый пайплайн
     return FRealState();
 }
 
@@ -455,6 +434,7 @@ FWorldSnapshot AGridWorldManager::CaptureState() const
 
 void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
 {
+    // 1. Применяем все изменения из дельты к миру
     for (const auto& Pair : Delta.WorldChanges)
     {
         const FIntPoint& Coord = Pair.Key;
@@ -468,8 +448,101 @@ void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
             Cell->Biome       = NewCellData.Biome;
             Cell->bIsWater    = NewCellData.bIsWater;
             Cell->WaterTypeID = NewCellData.WaterTypeID;
-            Cell->HarvestStress = NewCellData.HarvestStress;     // добавить
-            Cell->Memory        = NewCellData.Memory;            // добавить
+            Cell->HarvestStress = NewCellData.HarvestStress;
+            Cell->Memory        = NewCellData.Memory;
+        }
+    }
+
+    // 2. Если это эффект зелья, запускаем распространение на соседние клетки
+	if (Delta.bIsPotionEffect && Delta.WorldChanges.Num() > 0)
+	{
+		const auto& FirstPair = *Delta.WorldChanges.CreateConstIterator();
+		const FIntPoint& Center = FirstPair.Key;
+		const FGridCell& NewCellData = FirstPair.Value;
+
+		FStateDelta PropagationDelta;
+		PropagatePotionEffect(Center, NewCellData.State, PropagationDepth, PropagationDelta);
+		UE_LOG(LogHerbalist, Warning, TEXT("PropagationDelta has %d changes"), PropagationDelta.WorldChanges.Num());
+
+		for (const auto& Pair : PropagationDelta.WorldChanges)
+		{
+			FGridCell* Cell = GetCell(Pair.Key.X, Pair.Key.Y);
+			if (Cell)
+			{
+				UE_LOG(LogHerbalist, Warning, TEXT("ApplyStateDelta: updating cell (%d,%d) Dist %.3f -> %.3f"),
+					Pair.Key.X, Pair.Key.Y, Cell->State.Meta.Distortion, Pair.Value.State.Meta.Distortion);
+				*Cell = Pair.Value;
+			}
+		}
+	}
+}
+
+// ============================================================================
+// ПРОПАГАЦИЯ ЭФФЕКТА ЗЕЛЬЯ НА СОСЕДНИЕ КЛЕТКИ
+// ============================================================================
+
+void AGridWorldManager::PropagatePotionEffect(const FIntPoint& Center, const FRealState& PotionState, int32 Depth, FStateDelta& OutDelta)
+{
+    UE_LOG(LogHerbalist, Warning, TEXT("PropagatePotionEffect: center=(%d,%d), Depth=%d"), Center.X, Center.Y, Depth);
+    if (Depth <= 0) return;
+
+    struct FQueueItem { FIntPoint Coord; float Strength; };
+    TQueue<FQueueItem> Queue;
+    TSet<FIntPoint> Visited;
+
+    Queue.Enqueue({Center, 1.0f});
+    Visited.Add(Center);
+
+    while (!Queue.IsEmpty())
+    {
+        FQueueItem Item;
+        Queue.Dequeue(Item);
+        if (Item.Strength < 0.05f) continue;
+
+        // ЛОГ 1: текущая обрабатываемая клетка
+        UE_LOG(LogHerbalist, Warning, TEXT("Propagation: processing cell (%d,%d), strength=%.2f"), Item.Coord.X, Item.Coord.Y, Item.Strength);
+
+        if (Item.Coord != Center)
+        {
+            FGridCell* Cell = GetCell(Item.Coord.X, Item.Coord.Y);
+            if (Cell)
+            {
+                // ЛОГ 2: состояние до изменения
+                UE_LOG(LogHerbalist, Warning, TEXT("Cell (%d,%d) before: Dist=%.3f, Purity=%.3f"), 
+                    Item.Coord.X, Item.Coord.Y, Cell->State.Meta.Distortion, Cell->State.Meta.Purity);
+
+                FGridCell Modified = *Cell;
+                Modified.State.Magnitude = FMath::Lerp(Cell->State.Magnitude, PotionState.Magnitude, Item.Strength);
+                Modified.State.Meta.Distortion = FMath::Lerp(Cell->State.Meta.Distortion, PotionState.Meta.Distortion, Item.Strength);
+                // ... (остальные параметры)
+
+                OutDelta.WorldChanges.Add(Item.Coord, Modified);
+
+                // ЛОГ 3: состояние после (берём из Modified)
+                UE_LOG(LogHerbalist, Warning, TEXT("Cell (%d,%d) after : Dist=%.3f, Purity=%.3f (strength=%.2f)"),
+                    Item.Coord.X, Item.Coord.Y, Modified.State.Meta.Distortion, Modified.State.Meta.Purity, Item.Strength);
+            }
+        }
+
+        int32 CurrentDist = FMath::Abs(Item.Coord.X - Center.X) + FMath::Abs(Item.Coord.Y - Center.Y);
+        if (CurrentDist >= Depth) continue;
+
+        FIntPoint Neighbors[4] = {
+            {Item.Coord.X + 1, Item.Coord.Y},
+            {Item.Coord.X - 1, Item.Coord.Y},
+            {Item.Coord.X, Item.Coord.Y + 1},
+            {Item.Coord.X, Item.Coord.Y - 1}
+        };
+        float NextStrength = Item.Strength * 0.5f;
+        for (const FIntPoint& Neighbor : Neighbors)
+        {
+            if (Neighbor.X >= 0 && Neighbor.X < GridSizeX && Neighbor.Y >= 0 && Neighbor.Y < GridSizeY && !Visited.Contains(Neighbor))
+            {
+                Visited.Add(Neighbor);
+                Queue.Enqueue({Neighbor, NextStrength});
+                // ЛОГ 4: добавляем соседа в очередь
+                UE_LOG(LogHerbalist, Warning, TEXT("Propagation: adding neighbor (%d,%d) with strength=%.2f"), Neighbor.X, Neighbor.Y, NextStrength);
+            }
         }
     }
 }
@@ -525,40 +598,39 @@ void AGridWorldManager::DrawGridDebug()
 
 void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
 {
-    const float RegenerationRate = 0.0005f;   // 0.05% в секунду
+    const float RegenerationRate = 0.0005f;
     const float DeltaRegen = RegenerationRate * DeltaTime;
 
     for (FGridCell& Cell : Cells)
     {
-        // 1. Восстанавливаем State в сторону TargetState (который обновляется графом)
-        //    Distortion
+        // Distortion
         if (Cell.State.Meta.Distortion > Cell.TargetState.Meta.Distortion)
             Cell.State.Meta.Distortion = FMath::Max(Cell.State.Meta.Distortion - DeltaRegen, Cell.TargetState.Meta.Distortion);
         else if (Cell.State.Meta.Distortion < Cell.TargetState.Meta.Distortion)
             Cell.State.Meta.Distortion = FMath::Min(Cell.State.Meta.Distortion + DeltaRegen, Cell.TargetState.Meta.Distortion);
         
-        //    Purity
+        // Purity
         if (Cell.State.Meta.Purity < Cell.TargetState.Meta.Purity)
             Cell.State.Meta.Purity = FMath::Min(Cell.State.Meta.Purity + DeltaRegen, Cell.TargetState.Meta.Purity);
         else if (Cell.State.Meta.Purity > Cell.TargetState.Meta.Purity)
             Cell.State.Meta.Purity = FMath::Max(Cell.State.Meta.Purity - DeltaRegen, Cell.TargetState.Meta.Purity);
         
-        //    Stability
+        // Stability
         if (Cell.State.Meta.Stability < Cell.TargetState.Meta.Stability)
             Cell.State.Meta.Stability = FMath::Min(Cell.State.Meta.Stability + DeltaRegen, Cell.TargetState.Meta.Stability);
         else if (Cell.State.Meta.Stability > Cell.TargetState.Meta.Stability)
             Cell.State.Meta.Stability = FMath::Max(Cell.State.Meta.Stability - DeltaRegen, Cell.TargetState.Meta.Stability);
         
-        //    Magnitude
+        // Magnitude
         if (Cell.State.Magnitude < Cell.TargetState.Magnitude)
             Cell.State.Magnitude = FMath::Min(Cell.State.Magnitude + DeltaRegen, Cell.TargetState.Magnitude);
         else if (Cell.State.Magnitude > Cell.TargetState.Magnitude)
             Cell.State.Magnitude = FMath::Max(Cell.State.Magnitude - DeltaRegen, Cell.TargetState.Magnitude);
         
-        // 2. Спад HarvestStress
+        // Спад HarvestStress
         Cell.HarvestStress = FMath::Max(Cell.HarvestStress - DeltaRegen * 2.0f, 0.0f);
         
-        // 3. Восстановление осей (плавно к TargetState.Direction)
+        // Восстановление осей к TargetState.Direction
         const FDirection& TargetDir = Cell.TargetState.Direction;
         Cell.State.Direction.Body   = FMath::Clamp(Cell.State.Direction.Body   + (TargetDir.Body   - Cell.State.Direction.Body) * 0.01f * DeltaTime, 0.0f, 1.0f);
         Cell.State.Direction.Mind   = FMath::Clamp(Cell.State.Direction.Mind   + (TargetDir.Mind   - Cell.State.Direction.Mind) * 0.01f * DeltaTime, 0.0f, 1.0f);
@@ -566,7 +638,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         Cell.State.Direction.Nature = FMath::Clamp(Cell.State.Direction.Nature + (TargetDir.Nature - Cell.State.Direction.Nature) * 0.01f * DeltaTime, 0.0f, 1.0f);
         Cell.State.Direction.NormalizeSum();
         
-        // 4. Синхронизация памяти клетки (для графа и тултипа)
+        // Синхронизация памяти
         Cell.Memory.AccumulatedDistortion = Cell.State.Meta.Distortion;
     }
 }

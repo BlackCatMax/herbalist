@@ -4,12 +4,13 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "BiomeGraphTypes.h"
+#include "Core/Simulation/Public/SnapshotTypes.h"
+#include "Core/Simulation/Public/DeltaTypes.h"
 #include "BiomeGraphSubsystem.generated.h"
 
 class UBiomeGraphAsset;
 class AGridWorldManager;
-class UMaterialParameterCollection;   // forward declaration
-struct FBiomeSnapshot;
+class UMaterialParameterCollection;
 struct FStateDelta;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnBiomeGraphStep, float);
@@ -22,7 +23,6 @@ class PROJECTHERBALIST_API UBiomeGraphSubsystem : public UWorldSubsystem
 public:
     virtual void OnWorldBeginPlay(UWorld& InWorld) override;
     virtual void Deinitialize() override;
-	void ApplyStateDelta(const FStateDelta& Delta);
 
     void InitializeFromAsset(UBiomeGraphAsset* Asset);
     bool IsInitialized() const { return bInitialized; }
@@ -40,13 +40,21 @@ public:
 
     void DebugPrintNodes() const;
     void ResetGraph();
-	
-	FBiomeSnapshot CaptureState() const;
+
+    FBiomeSnapshot CaptureState() const;
+    void ApplyStateDelta(const FStateDelta& Delta);
 
     const TMap<FName, FVector>& GetCachedBiomeCenters() const { return CachedBiomeCenters; }
 
-    // Визуализация через Material Parameter Collection
-    UFUNCTION(BlueprintCallable, Category = "BiomeGraph")
+    // ========== ДОБАВЛЯЕМ НОВЫЙ МЕТОД ==========
+    struct FBiomeContext
+    {
+        float MorokField = 0.0f;
+        float ZaryanaField = 0.0f;
+        FVector4 AxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
+    };
+    FBiomeContext ResolveContext(FName BiomeID) const;
+
     void UpdateVisualization();
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visualization")
@@ -82,14 +90,6 @@ protected:
     float CenterCacheTimer = 0.f;
     static constexpr float CenterCacheUpdateInterval = 2.0f;
     void UpdateBiomeCenters(AGridWorldManager* Grid);
-
-    enum class EBiomeGraphStepStage : uint8
-    {
-        GridToGraph,
-        Propagation,
-        GraphToGrid,
-        MemoryUpdate
-    };
 
     void InternalStep(float StepDeltaTime);
     void RecalculateFieldsFromGrid(AGridWorldManager* Grid);

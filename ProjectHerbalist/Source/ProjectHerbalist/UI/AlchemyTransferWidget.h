@@ -1,4 +1,3 @@
-// AlchemyTransferWidget.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -11,6 +10,7 @@ class UInventoryWidget;
 class UButton;
 class UTextBlock;
 class UHerbalistInventoryComponent;
+class AAlchemyTableActor;
 
 UCLASS()
 class PROJECTHERBALIST_API UAlchemyTransferWidget : public UUserWidget
@@ -64,12 +64,13 @@ protected:
     void SetStatusMessage(const FString& Message);
 
     bool bIsMixing = false;
-
-    // --- Новые поля для отслеживания созданного зелья ---
-    float LastCraftTime = 0.0f;   // время последнего крафта (в секундах мирового времени)
+    float LastCraftTime = 0.0f;
 
     UFUNCTION()
-    void OnInventoryChanged();    // обработчик изменения инвентаря
+    void OnInventoryChanged();
+    void CheckForNewPotion();
 
-    void CheckForNewPotion();     // проверяет, появилось ли новое зелье, и отображает в слоте результата
+    // Сохранение/загрузка состояния в алхимический стол
+    void SaveStateToTable();
+    void LoadStateFromTable();
 };

@@ -25,7 +25,7 @@ class PROJECTHERBALIST_API AHerbalistPlayerController : public APlayerController
 public:
     AHerbalistPlayerController();
 	
-	virtual void SetupInputComponent() override;
+    virtual void SetupInputComponent() override;
     virtual void BeginPlay() override;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
@@ -61,8 +61,8 @@ public:
     UFUNCTION(Exec)
     void MassHarvestTest(int32 X, int32 Y, int32 Count);
 	
-	UFUNCTION(Exec)
-	void TestNewHarvest(int32 X, int32 Y, FName IngredientID);
+    UFUNCTION(Exec)
+    void TestNewHarvest(int32 X, int32 Y, FName IngredientID);
 
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();
@@ -79,6 +79,9 @@ public:
 
     UFUNCTION(Exec)
     void TestNewApply(int32 X, int32 Y, FString IngredientList);
+
+    // Метод для открытия виджета алхимического стола
+    void OpenAlchemyWidget(AAlchemyTableActor* Table);
 
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -101,6 +104,9 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UInventoryWidget> InventoryWidgetClass;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UAlchemyTransferWidget> AlchemyWidgetClass;
 
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);

@@ -42,6 +42,11 @@ struct FApplyCommand
     TArray<FInventoryItem> Ingredients;
     FIntent Intent;
     bool bIsCrafting = false;   // true = крафт в инвентарь, false = применение на клетку
+
+    // ========== Контекст биома (для крафта и применения) ==========
+    float BiomeMorokField = 0.0f;      // поле Морока в биоме (0..1)
+    float BiomeZaryanaField = 0.0f;    // поле Заряны в биоме (0..1)
+    FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f); // дрейф осей
 };
 
 // S – сбор ресурса (Harvest)

@@ -28,4 +28,5 @@ struct FStateDelta
     TMap<FIntPoint, FGridCell> WorldChanges;
     TArray<FInventoryOperation> InventoryOps;
     TArray<FName> BiomeActivations;   // теперь FName, как в реальной системе
+    bool bIsPotionEffect = false;      // true, если дельта возникла из-за применения зелья на клетку
 };

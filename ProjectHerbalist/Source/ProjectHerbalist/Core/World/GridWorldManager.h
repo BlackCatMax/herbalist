@@ -144,6 +144,9 @@ public:
     // ---- Экология: восстановление клеток ----
     void RegenerateCellParameters(float DeltaTime);
 
+    // ---- Пропагация эффекта зелья на соседние клетки ----
+    void PropagatePotionEffect(const FIntPoint& Center, const FRealState& PotionState, int32 Depth, FStateDelta& OutDelta);
+
     // ---- Итерация по клеткам ----
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)

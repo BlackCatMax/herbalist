@@ -356,9 +356,21 @@ void UBiomeGraphSubsystem::ApplyStateDelta(const FStateDelta& Delta)
 {
     // В будущем здесь будет обновление MorokField, ZaryanaField и т.д.
     // Пока только логируем полученные активации
-    UE_LOG(LogBiomeGraph, Log, TEXT("ApplyStateDelta: received %d biome activations"), Delta.BiomeActivations.Num());
+    UE_LOG(LogBiomeGraph, Verbose, TEXT("ApplyStateDelta: received %d biome activations"), Delta.BiomeActivations.Num());
     for (const FName& BiomeID : Delta.BiomeActivations)
     {
         UE_LOG(LogBiomeGraph, Verbose, TEXT(" - %s"), *BiomeID.ToString());
     }
+}
+
+UBiomeGraphSubsystem::FBiomeContext UBiomeGraphSubsystem::ResolveContext(FName BiomeID) const
+{
+    FBiomeContext Result;
+    if (const FBiomeGraphNode* Node = GetNode(BiomeID))
+    {
+        Result.MorokField = Node->MorokField;
+        Result.ZaryanaField = Node->ZaryanaField;
+        Result.AxisDrift = Node->Memory.AxisDrift;
+    }
+    return Result;
 }
