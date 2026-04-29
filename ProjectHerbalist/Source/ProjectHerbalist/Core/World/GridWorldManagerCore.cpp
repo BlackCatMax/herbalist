@@ -143,17 +143,30 @@ TMap<FName, FVector> AGridWorldManager::GetBiomeCenters() const
     return Centers;
 }
 
-void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale)
+void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFields,
+                                             const TMap<FName, float>& ZaryanaFields,
+                                             float GlobalScale)
 {
     for (FGridCell& Cell : Cells)
     {
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
+        
+        // 1. Влияние Морока (увеличивает Distortion)
+        const float* MorokField = MorokFields.Find(BiomeID);
+        if (MorokField)
+        {
+            float MorokInfluence = *MorokField * 0.1f * GlobalScale;
+            Cell.TargetState.Meta.Distortion = FMath::Clamp(Cell.TargetState.Meta.Distortion + MorokInfluence, 0.f, 1.f);
+        }
+        
+        // 2. Влияние Заряны (повышает Stability и Purity)
         const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
-        if (!ZaryanaField) continue;
-
-        float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
-        Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
-        Cell.TargetState.Meta.Purity   = FMath::Clamp(Cell.TargetState.Meta.Purity   + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+        if (ZaryanaField)
+        {
+            float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
+            Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
+            Cell.TargetState.Meta.Purity    = FMath::Clamp(Cell.TargetState.Meta.Purity    + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+        }
     }
 }
 
@@ -455,6 +468,8 @@ void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
             Cell->Biome       = NewCellData.Biome;
             Cell->bIsWater    = NewCellData.bIsWater;
             Cell->WaterTypeID = NewCellData.WaterTypeID;
+            Cell->HarvestStress = NewCellData.HarvestStress;     // добавить
+            Cell->Memory        = NewCellData.Memory;            // добавить
         }
     }
 }
@@ -510,57 +525,49 @@ void AGridWorldManager::DrawGridDebug()
 
 void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
 {
-    // Скорость восстановления (в секунду) – 0.05% от шкалы
-    // Т.е. за 1 секунду параметр меняется на 0.0005
-    const float RegenerationRate = 0.0005f;
+    const float RegenerationRate = 0.0005f;   // 0.05% в секунду
     const float DeltaRegen = RegenerationRate * DeltaTime;
 
     for (FGridCell& Cell : Cells)
     {
-        // Получаем базовые (таргетные) значения для данного биома
-        FRealState TargetState = FBiomeDefaults::GetDefaultState(Cell.Biome);
+        // 1. Восстанавливаем State в сторону TargetState (который обновляется графом)
+        //    Distortion
+        if (Cell.State.Meta.Distortion > Cell.TargetState.Meta.Distortion)
+            Cell.State.Meta.Distortion = FMath::Max(Cell.State.Meta.Distortion - DeltaRegen, Cell.TargetState.Meta.Distortion);
+        else if (Cell.State.Meta.Distortion < Cell.TargetState.Meta.Distortion)
+            Cell.State.Meta.Distortion = FMath::Min(Cell.State.Meta.Distortion + DeltaRegen, Cell.TargetState.Meta.Distortion);
         
-        // 1. Восстановление Distortion (стремится к базовому)
-        if (Cell.State.Meta.Distortion > TargetState.Meta.Distortion)
-            Cell.State.Meta.Distortion = FMath::Max(Cell.State.Meta.Distortion - DeltaRegen, TargetState.Meta.Distortion);
-        else if (Cell.State.Meta.Distortion < TargetState.Meta.Distortion)
-            Cell.State.Meta.Distortion = FMath::Min(Cell.State.Meta.Distortion + DeltaRegen, TargetState.Meta.Distortion);
+        //    Purity
+        if (Cell.State.Meta.Purity < Cell.TargetState.Meta.Purity)
+            Cell.State.Meta.Purity = FMath::Min(Cell.State.Meta.Purity + DeltaRegen, Cell.TargetState.Meta.Purity);
+        else if (Cell.State.Meta.Purity > Cell.TargetState.Meta.Purity)
+            Cell.State.Meta.Purity = FMath::Max(Cell.State.Meta.Purity - DeltaRegen, Cell.TargetState.Meta.Purity);
         
-        // 2. Восстановление Purity
-        if (Cell.State.Meta.Purity < TargetState.Meta.Purity)
-            Cell.State.Meta.Purity = FMath::Min(Cell.State.Meta.Purity + DeltaRegen, TargetState.Meta.Purity);
-        else if (Cell.State.Meta.Purity > TargetState.Meta.Purity)
-            Cell.State.Meta.Purity = FMath::Max(Cell.State.Meta.Purity - DeltaRegen, TargetState.Meta.Purity);
+        //    Stability
+        if (Cell.State.Meta.Stability < Cell.TargetState.Meta.Stability)
+            Cell.State.Meta.Stability = FMath::Min(Cell.State.Meta.Stability + DeltaRegen, Cell.TargetState.Meta.Stability);
+        else if (Cell.State.Meta.Stability > Cell.TargetState.Meta.Stability)
+            Cell.State.Meta.Stability = FMath::Max(Cell.State.Meta.Stability - DeltaRegen, Cell.TargetState.Meta.Stability);
         
-        // 3. Восстановление Stability
-        if (Cell.State.Meta.Stability < TargetState.Meta.Stability)
-            Cell.State.Meta.Stability = FMath::Min(Cell.State.Meta.Stability + DeltaRegen, TargetState.Meta.Stability);
-        else if (Cell.State.Meta.Stability > TargetState.Meta.Stability)
-            Cell.State.Meta.Stability = FMath::Max(Cell.State.Meta.Stability - DeltaRegen, TargetState.Meta.Stability);
+        //    Magnitude
+        if (Cell.State.Magnitude < Cell.TargetState.Magnitude)
+            Cell.State.Magnitude = FMath::Min(Cell.State.Magnitude + DeltaRegen, Cell.TargetState.Magnitude);
+        else if (Cell.State.Magnitude > Cell.TargetState.Magnitude)
+            Cell.State.Magnitude = FMath::Max(Cell.State.Magnitude - DeltaRegen, Cell.TargetState.Magnitude);
         
-        // 4. Восстановление Magnitude
-        if (Cell.State.Magnitude < TargetState.Magnitude)
-            Cell.State.Magnitude = FMath::Min(Cell.State.Magnitude + DeltaRegen, TargetState.Magnitude);
-        else if (Cell.State.Magnitude > TargetState.Magnitude)
-            Cell.State.Magnitude = FMath::Max(Cell.State.Magnitude - DeltaRegen, TargetState.Magnitude);
-        
-        // 5. Спад HarvestStress (немного быстрее)
+        // 2. Спад HarvestStress
         Cell.HarvestStress = FMath::Max(Cell.HarvestStress - DeltaRegen * 2.0f, 0.0f);
         
-        // 6. Восстановление направлений осей (линейная интерполяция к базовым)
-        const FDirection& BaseDir = TargetState.Direction;
-        Cell.State.Direction.Body   = FMath::Clamp(Cell.State.Direction.Body   + (BaseDir.Body   - Cell.State.Direction.Body) * 0.01f * DeltaTime, 0.0f, 1.0f);
-        Cell.State.Direction.Mind   = FMath::Clamp(Cell.State.Direction.Mind   + (BaseDir.Mind   - Cell.State.Direction.Mind) * 0.01f * DeltaTime, 0.0f, 1.0f);
-        Cell.State.Direction.Spirit = FMath::Clamp(Cell.State.Direction.Spirit + (BaseDir.Spirit - Cell.State.Direction.Spirit) * 0.01f * DeltaTime, 0.0f, 1.0f);
-        Cell.State.Direction.Nature = FMath::Clamp(Cell.State.Direction.Nature + (BaseDir.Nature - Cell.State.Direction.Nature) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        // 3. Восстановление осей (плавно к TargetState.Direction)
+        const FDirection& TargetDir = Cell.TargetState.Direction;
+        Cell.State.Direction.Body   = FMath::Clamp(Cell.State.Direction.Body   + (TargetDir.Body   - Cell.State.Direction.Body) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        Cell.State.Direction.Mind   = FMath::Clamp(Cell.State.Direction.Mind   + (TargetDir.Mind   - Cell.State.Direction.Mind) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        Cell.State.Direction.Spirit = FMath::Clamp(Cell.State.Direction.Spirit + (TargetDir.Spirit - Cell.State.Direction.Spirit) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        Cell.State.Direction.Nature = FMath::Clamp(Cell.State.Direction.Nature + (TargetDir.Nature - Cell.State.Direction.Nature) * 0.01f * DeltaTime, 0.0f, 1.0f);
         Cell.State.Direction.NormalizeSum();
         
-        // 7. Синхронизация памяти клетки с текущим Distortion (для графа)
+        // 4. Синхронизация памяти клетки (для графа и тултипа)
         Cell.Memory.AccumulatedDistortion = Cell.State.Meta.Distortion;
-        
-        // 8. (Опционально) Обновление TargetState – чтобы плавно стремиться
-        //    В текущей версии TargetState не используется для восстановления, но можно синхронизировать:
-        Cell.TargetState = Cell.State;
     }
 }
 

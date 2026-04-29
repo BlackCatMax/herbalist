@@ -98,41 +98,33 @@ namespace Simulation
             return;
         }
         
-        // Обработка воды (как в Этапе 3)
+        // ====================================================================
+        // ВОДА: не деградирует – только добавляем предмет в инвентарь
+        // ====================================================================
         if (Cell->bIsWater)
         {
-            const float WaterDegradationStep = 0.001f;
-            const float WaterStressStep = 0.0005f;
-            
-            FGridCell Modified = *Cell;
-            Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + WaterStressStep, 0.0f, 1.0f);
-            Modified.State.Meta.Distortion = FMath::Clamp(Cell->State.Meta.Distortion + WaterDegradationStep, 0.0f, 1.0f);
-            Modified.State.Meta.Purity = FMath::Clamp(Cell->State.Meta.Purity - WaterDegradationStep, 0.0f, 1.0f);
-            Modified.State.Meta.Stability = FMath::Clamp(Cell->State.Meta.Stability - WaterDegradationStep, 0.0f, 1.0f);
-            Modified.State.Magnitude = FMath::Clamp(Cell->State.Magnitude - WaterDegradationStep * 0.5f, 0.0f, 1.0f);
-            Modified.Memory.AccumulatedDistortion = Modified.State.Meta.Distortion;
-            
             FInventoryItem WaterItem;
             WaterItem.IngredientID = Cell->WaterTypeID.IsNone() ? FName(TEXT("Water")) : Cell->WaterTypeID;
-            WaterItem.State = Cell->State;
-            WaterItem.State.Magnitude = FMath::Clamp(Cell->State.Magnitude - 0.001f, 0.0f, 1.0f);
+            WaterItem.State = Cell->State;                 // копируем состояние воды
             WaterItem.Count = 1;
             WaterItem.CreationTime = 0.0;
             WaterItem.bSubjectToDecay = true;
-            
+
             FInventoryOperation Op;
             Op.ContainerID = 0;
             Op.Ingredient = WaterItem;
             Op.OpType = EInventoryOpType::Add;
             Op.Amount = 1;
             OutDelta.InventoryOps.Add(Op);
-            OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
-            
+
+            // Не добавляем WorldChanges – клетка не меняется
             UE_LOG(LogHerbalist, Verbose, TEXT("Water harvested at (%d,%d)"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
             return;
         }
 
-        // Обработка растений (деградация)
+        // ====================================================================
+        // РАСТЕНИЯ: деградация (медленная)
+        // ====================================================================
         const float DegradationStep = 0.002f;
         const float StressStep = 0.001f;
         
@@ -218,7 +210,7 @@ namespace Simulation
             PotionItem.State = PotionState;
             PotionItem.Count = 1;
             PotionItem.CreationTime = 0.0;
-            PotionItem.bSubjectToDecay = false;   // зелья не портятся
+            PotionItem.bSubjectToDecay = false;
             
             FInventoryOperation AddOp;
             AddOp.ContainerID = 0;
@@ -232,7 +224,7 @@ namespace Simulation
             return;
         }
         
-        // 4. Иначе – применение на клетку (старая логика)
+        // 4. Иначе – применение на клетку
         const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
         if (!Cell)
         {
