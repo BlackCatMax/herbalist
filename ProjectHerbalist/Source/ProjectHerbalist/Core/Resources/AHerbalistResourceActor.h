@@ -19,11 +19,13 @@ class PROJECTHERBALIST_API AHerbalistResourceActor : public AActor
 
 public:
     AHerbalistResourceActor();
+	
+	FRealState GetBaseState() const { return BaseState; }
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Init(FName InIngredientID, const FText& InDisplayName, UStaticMesh* Mesh,
-        const FRealState& InBaseState, const FVector& Location,
-        AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
+    const FRealState& InBaseState, const FVector& Location,
+    AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Harvest();

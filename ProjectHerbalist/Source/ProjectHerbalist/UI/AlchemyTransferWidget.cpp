@@ -4,12 +4,10 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Player/HerbalistPlayerController.h"
-#include "Core/Pipeline/HerbalistPipeline.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Storage/AlchemyTableActor.h"
-#include "Core/Pipeline/AlchemyPipelineFacade.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -65,6 +63,12 @@ void UAlchemyTransferWidget::NativeConstruct()
     IngredientSlot3->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     ResultSlot->InitializeSlot(EAlchemySlotType::Result, 1);
 
+    // Подписываемся на изменение инвентаря игрока, если он уже привязан
+    if (PlayerInventoryComponent)
+    {
+        PlayerInventoryComponent->OnInventoryChanged.AddDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
+    }
+
     SetKeyboardFocus();
 }
 
@@ -73,6 +77,10 @@ void UAlchemyTransferWidget::NativeDestruct()
     if (MixButton)
     {
         MixButton->OnClicked.RemoveDynamic(this, &UAlchemyTransferWidget::OnMixClicked);
+    }
+    if (PlayerInventoryComponent)
+    {
+        PlayerInventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
     }
     Super::NativeDestruct();
 }
@@ -83,7 +91,7 @@ void UAlchemyTransferWidget::OnMixClicked()
 
     if (ResultSlot->GetItem() && ResultSlot->GetCount() > 0)
     {
-        SetStatusMessage(TEXT("Сначала заберите готовое зелье."));
+        SetStatusMessage(TEXT("Сначала заберите готовое зелье из слота результата."));
         return;
     }
 
@@ -113,93 +121,33 @@ void UAlchemyTransferWidget::OnMixClicked()
         return;
     }
 
-    UGameInstance* GameInstance = World->GetGameInstance();
-    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
-
     AGridWorldManager* WorldManager = nullptr;
     for (TActorIterator<AGridWorldManager> It(World); It; ++It)
     {
         WorldManager = *It;
         break;
     }
-
-    FIntPoint TableCoords = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : FIntPoint(-1, -1);
-
-    FRealState CellState = FAlatyr::S0;
-    FEnvironment Env;
-    FMemoryState Memory;
-    float BiomeMorokField = 0.0f;
-    float BiomeZaryanaField = 0.0f;
-    FVector4 BiomeAxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
-    FGridCell* Cell = nullptr;
-    float GlobalDistortion = 0.3f;
-
-    if (WorldManager && TableCoords.X >= 0 && TableCoords.Y >= 0)
+    if (!WorldManager)
     {
-        Cell = WorldManager->GetCell(TableCoords.X, TableCoords.Y);
-        if (Cell)
-        {
-            CellState = Cell->State;
-            Env = Cell->Environment;
-            Memory = Cell->Memory;
-            GlobalDistortion = Cell->Memory.AccumulatedDistortion;
-
-            if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
-            {
-                FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
-                if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
-                {
-                    BiomeMorokField = Node->MorokField;
-                    BiomeZaryanaField = Node->ZaryanaField;
-                    BiomeAxisDrift = Node->Memory.AxisDrift;
-                }
-            }
-        }
-    }
-    else
-    {
-        GlobalDistortion = HPC->CurrentGlobalDistortion;
+        SetStatusMessage(TEXT("Не найден GridWorldManager."));
+        bIsMixing = false;
+        return;
     }
 
-    FRngState Rng;
-    int32 Seed = 12345;
-    if (HPC && HPC->CurrentAlchemyTable)
-    {
-        FIntPoint Coords = HPC->CurrentAlchemyTable->GetGridCoords();
-        Seed = (Coords.X * 7919) ^ (Coords.Y * 7901);
-    }
-    Rng.Seed = Seed;
+    // Запоминаем время крафта для последующего поиска созданного зелья
+    LastCraftTime = World->GetTimeSeconds();
 
-    FAlchemyFacadeResult Result = FAlchemyPipelineFacade::Execute(
-        Ingredients,
-        CellState, Env, Memory,
-        GlobalDistortion,
-        IngredientSubsystem,
-        BiomeMorokField, BiomeZaryanaField, BiomeAxisDrift,
-        Rng);
+    FCommandEntry Cmd;
+    Cmd.Primitive = ECommandPrimitive::Apply;
+    Cmd.Apply.TargetCell = FIntPoint(-1, -1);
+    Cmd.Apply.Ingredients = Ingredients;
+    Cmd.Apply.Intent.Coherence = 0.5f;
+    Cmd.Apply.bIsCrafting = true;
 
-    FInventoryItem Potion;
-    switch (Result.Outcome)
-    {
-    case EAlchemyOutcome::BoiledWater:
-        Potion.IngredientID = FName(TEXT("BoiledWater"));
-        break;
-    case EAlchemyOutcome::Ash:
-    case EAlchemyOutcome::Catastrophe:
-        Potion.IngredientID = FName(TEXT("Ash"));
-        break;
-    default:
-        Potion.IngredientID = FName(TEXT("Potion"));
-        break;
-    }
-    Potion.State = Result.FinalState;
-    Potion.Count = 1;
-    Potion.CreationTime = World->GetTimeSeconds();
-    Potion.bSubjectToDecay = false;   // зелья не портятся
+    WorldManager->QueueCommand(Cmd);
 
-    ResultSlot->AddItem(Potion, 1);
     ClearIngredientSlots();
-    SetStatusMessage(TEXT("Готово."));
+    SetStatusMessage(TEXT("Зелье создаётся... Оно появится в слоте результата."));
 
     bIsMixing = false;
 }
@@ -250,4 +198,47 @@ FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
         }
     }
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+// -----------------------------------------------------------------------------
+// Отслеживание созданного зелья
+// -----------------------------------------------------------------------------
+
+void UAlchemyTransferWidget::OnInventoryChanged()
+{
+    CheckForNewPotion();
+}
+
+void UAlchemyTransferWidget::CheckForNewPotion()
+{
+    if (!PlayerInventoryComponent || LastCraftTime <= 0.0f)
+        return;
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    const TArray<FInventoryItem>& Items = PlayerInventoryComponent->GetItems();
+    for (const FInventoryItem& Item : Items)
+    {
+        if (Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0)
+        {
+            // Если время создания предмета больше времени крафта (с погрешностью 0.1 сек)
+            if (Item.CreationTime >= LastCraftTime - 0.1f)
+            {
+                ResultSlot->Clear();
+                ResultSlot->AddItem(Item, 1);
+                LastCraftTime = 0.0f;
+                SetStatusMessage(FString::Printf(TEXT("Создано зелье (сила: %.2f, искажение: %.2f)"),
+                    Item.State.Magnitude, Item.State.Meta.Distortion));
+                return;
+            }
+        }
+    }
+
+    float CurrentTime = World->GetTimeSeconds();
+    if (CurrentTime - LastCraftTime > 2.0f)
+    {
+        // Прошло больше 2 секунд, зелье не найдено – сбрасываем ожидание
+        LastCraftTime = 0.0f;
+    }
 }

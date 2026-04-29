@@ -8,8 +8,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "UI/ItemTooltipWidget.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
-
-extern FText GeneratePotionName(const FRealState& State);
+#include "Core/Types/HerbalistNameUtils.h"   // <-- добавлено
 
 void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCount)
 {

@@ -56,6 +56,8 @@ void UInventoryWidget::RefreshInventoryDisplay()
             SlotContainer->AddChildToVerticalBox(NewSlot);
         }
     }
+	
+	UE_LOG(LogHerbalist, Warning, TEXT("RefreshInventoryDisplay: %d items in inventory"), InventoryComponent ? InventoryComponent->GetItems().Num() : 0);
 }
 
 void UInventoryWidget::ClearSlots()

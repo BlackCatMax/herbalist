@@ -384,11 +384,17 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     FGridCell* Cell = GetCell(Actor->GetGridX(), Actor->GetGridY());
     if (!Cell) return;
 
-    // Удаляем актор из списка клетки
+    // Удаляем актор из клетки
     Cell->ResourceActors.Remove(Actor);
-    UE_LOG(LogHerbalist, Log, TEXT("Resource collected at cell (%d,%d), remaining: %d"), Cell->X, Cell->Y, Cell->ResourceActors.Num());
 
-    // Формируем команду Harvest для нового пайплайна
+    // Обновляем глобальное искажение для игрока (тултип)
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (PC && Cell)
+    {
+        PC->CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+    }
+
+    // Только команда в пайплайн – никакого прямого добавления!
     FCommandEntry Cmd;
     Cmd.Primitive             = ECommandPrimitive::Harvest;
     Cmd.Harvest.TargetCell    = FIntPoint(Cell->X, Cell->Y);
@@ -396,7 +402,6 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.Amount        = 1;
     QueueCommand(Cmd);
 
-    // Если ресурсов больше нет, запускаем регенерацию
     if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)
     {
         StartRegeneration(*Cell);
@@ -498,6 +503,66 @@ void AGridWorldManager::DrawGridDebug()
     }
 }
 #endif
+
+// ============================================================================
+// ЭКОЛОГИЯ: ВОССТАНОВЛЕНИЕ ПАРАМЕТРОВ КЛЕТОК
+// ============================================================================
+
+void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
+{
+    // Скорость восстановления (в секунду) – 0.05% от шкалы
+    // Т.е. за 1 секунду параметр меняется на 0.0005
+    const float RegenerationRate = 0.0005f;
+    const float DeltaRegen = RegenerationRate * DeltaTime;
+
+    for (FGridCell& Cell : Cells)
+    {
+        // Получаем базовые (таргетные) значения для данного биома
+        FRealState TargetState = FBiomeDefaults::GetDefaultState(Cell.Biome);
+        
+        // 1. Восстановление Distortion (стремится к базовому)
+        if (Cell.State.Meta.Distortion > TargetState.Meta.Distortion)
+            Cell.State.Meta.Distortion = FMath::Max(Cell.State.Meta.Distortion - DeltaRegen, TargetState.Meta.Distortion);
+        else if (Cell.State.Meta.Distortion < TargetState.Meta.Distortion)
+            Cell.State.Meta.Distortion = FMath::Min(Cell.State.Meta.Distortion + DeltaRegen, TargetState.Meta.Distortion);
+        
+        // 2. Восстановление Purity
+        if (Cell.State.Meta.Purity < TargetState.Meta.Purity)
+            Cell.State.Meta.Purity = FMath::Min(Cell.State.Meta.Purity + DeltaRegen, TargetState.Meta.Purity);
+        else if (Cell.State.Meta.Purity > TargetState.Meta.Purity)
+            Cell.State.Meta.Purity = FMath::Max(Cell.State.Meta.Purity - DeltaRegen, TargetState.Meta.Purity);
+        
+        // 3. Восстановление Stability
+        if (Cell.State.Meta.Stability < TargetState.Meta.Stability)
+            Cell.State.Meta.Stability = FMath::Min(Cell.State.Meta.Stability + DeltaRegen, TargetState.Meta.Stability);
+        else if (Cell.State.Meta.Stability > TargetState.Meta.Stability)
+            Cell.State.Meta.Stability = FMath::Max(Cell.State.Meta.Stability - DeltaRegen, TargetState.Meta.Stability);
+        
+        // 4. Восстановление Magnitude
+        if (Cell.State.Magnitude < TargetState.Magnitude)
+            Cell.State.Magnitude = FMath::Min(Cell.State.Magnitude + DeltaRegen, TargetState.Magnitude);
+        else if (Cell.State.Magnitude > TargetState.Magnitude)
+            Cell.State.Magnitude = FMath::Max(Cell.State.Magnitude - DeltaRegen, TargetState.Magnitude);
+        
+        // 5. Спад HarvestStress (немного быстрее)
+        Cell.HarvestStress = FMath::Max(Cell.HarvestStress - DeltaRegen * 2.0f, 0.0f);
+        
+        // 6. Восстановление направлений осей (линейная интерполяция к базовым)
+        const FDirection& BaseDir = TargetState.Direction;
+        Cell.State.Direction.Body   = FMath::Clamp(Cell.State.Direction.Body   + (BaseDir.Body   - Cell.State.Direction.Body) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        Cell.State.Direction.Mind   = FMath::Clamp(Cell.State.Direction.Mind   + (BaseDir.Mind   - Cell.State.Direction.Mind) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        Cell.State.Direction.Spirit = FMath::Clamp(Cell.State.Direction.Spirit + (BaseDir.Spirit - Cell.State.Direction.Spirit) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        Cell.State.Direction.Nature = FMath::Clamp(Cell.State.Direction.Nature + (BaseDir.Nature - Cell.State.Direction.Nature) * 0.01f * DeltaTime, 0.0f, 1.0f);
+        Cell.State.Direction.NormalizeSum();
+        
+        // 7. Синхронизация памяти клетки с текущим Distortion (для графа)
+        Cell.Memory.AccumulatedDistortion = Cell.State.Meta.Distortion;
+        
+        // 8. (Опционально) Обновление TargetState – чтобы плавно стремиться
+        //    В текущей версии TargetState не используется для восстановления, но можно синхронизировать:
+        Cell.TargetState = Cell.State;
+    }
+}
 
 void AGridWorldManager::DrawBiomeGraphDebug()
 {

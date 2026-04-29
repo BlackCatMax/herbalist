@@ -141,6 +141,9 @@ public:
     // ---- Восприятие ----
     const FPerceivedWorld* GetPerceivedWorld() const;
 
+    // ---- Экология: восстановление клеток ----
+    void RegenerateCellParameters(float DeltaTime);
+
     // ---- Итерация по клеткам ----
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)

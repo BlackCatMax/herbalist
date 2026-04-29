@@ -11,6 +11,7 @@
 #include "Input/Reply.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Core/Types/HerbalistCoreMath.h"
+#include "Core/Types/HerbalistNameUtils.h"
 #include "UI/InventoryDragDropController.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Engine/AssetManager.h"
@@ -57,42 +58,31 @@ void UInventorySlotWidget::UpdateDisplay()
         return;
     }
 
-    FString DisplayName = CachedItem.IngredientID.ToString();
-
-    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
-    UIngredientRegistrySubsystem* IngredientSubsystem = nullptr;
-    if (PC)
+    FString DisplayName;
+    if (CachedItem.IngredientID == FName(TEXT("Potion")))
     {
-        UGameInstance* GameInstance = PC->GetGameInstance();
-        IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+        DisplayName = GeneratePotionName(CachedItem.State).ToString();
     }
-
-    if (CachedItem.IngredientID != FName(TEXT("Potion")) &&
-        CachedItem.IngredientID != FName(TEXT("Water")) &&
-        !CachedItem.IngredientID.IsNone())
+    else
     {
-        if (IngredientSubsystem)
+        // Пытаемся получить красивое имя из реестра
+        AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+        UIngredientRegistrySubsystem* IngSub = nullptr;
+        if (PC && PC->GetGameInstance())
+            IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
+        if (IngSub)
         {
-            if (const FIngredientTableRow* Row = IngredientSubsystem->GetRow(CachedItem.IngredientID))
-            {
+            if (const FIngredientTableRow* Row = IngSub->GetRow(CachedItem.IngredientID))
                 DisplayName = Row->DisplayName.ToString();
-            }
+            else
+                DisplayName = CachedItem.IngredientID.ToString();
         }
-    }
-    else if (CachedItem.IngredientID == FName(TEXT("Potion")))
-    {
-        DisplayName = TEXT("Зелье");
-    }
-    else if (CachedItem.IngredientID == FName(TEXT("Water")))
-    {
-        DisplayName = TEXT("Вода");
+        else
+            DisplayName = CachedItem.IngredientID.ToString();
     }
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));
-    if (CountText)
-    {
-        CountText->SetText(CachedItem.Count > 1 ? FText::AsNumber(CachedItem.Count) : FText::GetEmpty());
-    }
+    if (CountText) CountText->SetText(CachedItem.Count > 1 ? FText::AsNumber(CachedItem.Count) : FText::GetEmpty());
     if (ItemIcon) ItemIcon->SetVisibility(ESlateVisibility::Visible);
 }
 

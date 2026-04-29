@@ -64,4 +64,12 @@ protected:
     void SetStatusMessage(const FString& Message);
 
     bool bIsMixing = false;
+
+    // --- Новые поля для отслеживания созданного зелья ---
+    float LastCraftTime = 0.0f;   // время последнего крафта (в секундах мирового времени)
+
+    UFUNCTION()
+    void OnInventoryChanged();    // обработчик изменения инвентаря
+
+    void CheckForNewPotion();     // проверяет, появилось ли новое зелье, и отображает в слоте результата
 };

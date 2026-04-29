@@ -97,24 +97,69 @@ namespace Simulation
             UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Harvest cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
             return;
         }
+        
+        // Обработка воды (как в Этапе 3)
         if (Cell->bIsWater)
         {
-            UE_LOG(LogHerbalist, Verbose, TEXT("PipelineV2: Skipped water cell (%d,%d)"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            const float WaterDegradationStep = 0.001f;
+            const float WaterStressStep = 0.0005f;
+            
+            FGridCell Modified = *Cell;
+            Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + WaterStressStep, 0.0f, 1.0f);
+            Modified.State.Meta.Distortion = FMath::Clamp(Cell->State.Meta.Distortion + WaterDegradationStep, 0.0f, 1.0f);
+            Modified.State.Meta.Purity = FMath::Clamp(Cell->State.Meta.Purity - WaterDegradationStep, 0.0f, 1.0f);
+            Modified.State.Meta.Stability = FMath::Clamp(Cell->State.Meta.Stability - WaterDegradationStep, 0.0f, 1.0f);
+            Modified.State.Magnitude = FMath::Clamp(Cell->State.Magnitude - WaterDegradationStep * 0.5f, 0.0f, 1.0f);
+            Modified.Memory.AccumulatedDistortion = Modified.State.Meta.Distortion;
+            
+            FInventoryItem WaterItem;
+            WaterItem.IngredientID = Cell->WaterTypeID.IsNone() ? FName(TEXT("Water")) : Cell->WaterTypeID;
+            WaterItem.State = Cell->State;
+            WaterItem.State.Magnitude = FMath::Clamp(Cell->State.Magnitude - 0.001f, 0.0f, 1.0f);
+            WaterItem.Count = 1;
+            WaterItem.CreationTime = 0.0;
+            WaterItem.bSubjectToDecay = true;
+            
+            FInventoryOperation Op;
+            Op.ContainerID = 0;
+            Op.Ingredient = WaterItem;
+            Op.OpType = EInventoryOpType::Add;
+            Op.Amount = 1;
+            OutDelta.InventoryOps.Add(Op);
+            OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
+            
+            UE_LOG(LogHerbalist, Verbose, TEXT("Water harvested at (%d,%d)"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
             return;
         }
 
+        // Обработка растений (деградация)
+        const float DegradationStep = 0.002f;
+        const float StressStep = 0.001f;
+        
+        FGridCell Modified = *Cell;
+        Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + StressStep, 0.0f, 1.0f);
+        Modified.State.Meta.Distortion = FMath::Clamp(Cell->State.Meta.Distortion + DegradationStep, 0.0f, 1.0f);
+        Modified.State.Meta.Purity      = FMath::Clamp(Cell->State.Meta.Purity      - DegradationStep, 0.0f, 1.0f);
+        Modified.State.Meta.Stability   = FMath::Clamp(Cell->State.Meta.Stability   - DegradationStep, 0.0f, 1.0f);
+        Modified.State.Magnitude        = FMath::Clamp(Cell->State.Magnitude        - DegradationStep * 0.5f, 0.0f, 1.0f);
+        
+        Modified.State.Direction.Nature = FMath::Clamp(Cell->State.Direction.Nature - 0.001f, 0.0f, 1.0f);
+        Modified.State.Direction.Body   = FMath::Clamp(Cell->State.Direction.Body   + 0.001f, 0.0f, 1.0f);
+        Modified.State.Direction.NormalizeSum();
+        Modified.Memory.AccumulatedDistortion = Modified.State.Meta.Distortion;
+        
         FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Rng);
-
+        
         FInventoryOperation Op;
-        Op.ContainerID = 0;   // игрок
+        Op.ContainerID = 0;
         Op.Ingredient = Harvested;
         Op.OpType = EInventoryOpType::Add;
         Op.Amount = Cmd.Amount;
         OutDelta.InventoryOps.Add(Op);
-
-        FGridCell Modified = *Cell;
-        Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.1f, 0.0f, 1.0f);
         OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
+        
+        UE_LOG(LogHerbalist, Verbose, TEXT("Harvest: cell (%d,%d) Dist=%.3f"),
+            Cmd.TargetCell.X, Cmd.TargetCell.Y, Modified.State.Meta.Distortion);
     }
 
     static void ProcessTransferCommand(const FTransferCommand& Cmd,
@@ -129,7 +174,6 @@ namespace Simulation
             return;
         }
 
-        // Remove из источника
         FInventoryOperation RemoveOp;
         RemoveOp.ContainerID = Cmd.SourceContainerID;
         RemoveOp.Ingredient = *SourceItem;
@@ -137,7 +181,6 @@ namespace Simulation
         RemoveOp.Amount = Cmd.Amount;
         OutDelta.InventoryOps.Add(RemoveOp);
 
-        // Add в цель
         FInventoryOperation AddOp;
         AddOp.ContainerID = Cmd.TargetContainerID;
         AddOp.Ingredient = *SourceItem;
@@ -147,40 +190,64 @@ namespace Simulation
         OutDelta.InventoryOps.Add(AddOp);
     }
 
-	static void ProcessApplyCommand(const FApplyCommand& Cmd,
-								   const FWorldSnapshot& WorldSnap,
-								   FRandomStream& Rng,
-								   FStateDelta& OutDelta)
-	{
-		const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
-		if (!Cell)
-		{
-			UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Apply target cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
-			return;
-		}
-
-		FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, Cmd.Intent, Rng);
-
-		// Удаляем использованные ингредиенты из инвентаря
-		for (const FInventoryItem& Ing : Cmd.Ingredients)
-		{
-			FInventoryOperation RemoveOp;
-			RemoveOp.ContainerID = 0;   // инвентарь игрока
-			RemoveOp.Ingredient = Ing;
-			RemoveOp.Ingredient.Count = 1;
-			RemoveOp.OpType = EInventoryOpType::Remove;
-			RemoveOp.Amount = 1;
-			OutDelta.InventoryOps.Add(RemoveOp);
-		}
-
-		FGridCell Modified = *Cell;
-		Modified.State = PotionState;
-		Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.2f, 0.f, 1.f);
-
-		OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
-		UE_LOG(LogHerbalist, Log, TEXT("PipelineV2: Apply to cell (%d,%d) - new state M=%.2f, Dist=%.2f"),
-			Cmd.TargetCell.X, Cmd.TargetCell.Y, PotionState.Magnitude, PotionState.Meta.Distortion);
-	}
+    static void ProcessApplyCommand(const FApplyCommand& Cmd,
+                                   const FWorldSnapshot& WorldSnap,
+                                   FRandomStream& Rng,
+                                   FStateDelta& OutDelta)
+    {
+        // 1. Вычисляем результирующее состояние зелья
+        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, Cmd.Intent, Rng);
+        
+        // 2. Удаляем использованные ингредиенты из инвентаря
+        for (const FInventoryItem& Ing : Cmd.Ingredients)
+        {
+            FInventoryOperation RemoveOp;
+            RemoveOp.ContainerID = 0;
+            RemoveOp.Ingredient = Ing;
+            RemoveOp.Ingredient.Count = 1;
+            RemoveOp.OpType = EInventoryOpType::Remove;
+            RemoveOp.Amount = 1;
+            OutDelta.InventoryOps.Add(RemoveOp);
+        }
+        
+        // 3. Если крафт – создаём зелье в инвентаре и выходим
+        if (Cmd.bIsCrafting)
+        {
+            FInventoryItem PotionItem;
+            PotionItem.IngredientID = FName(TEXT("Potion"));
+            PotionItem.State = PotionState;
+            PotionItem.Count = 1;
+            PotionItem.CreationTime = 0.0;
+            PotionItem.bSubjectToDecay = false;   // зелья не портятся
+            
+            FInventoryOperation AddOp;
+            AddOp.ContainerID = 0;
+            AddOp.Ingredient = PotionItem;
+            AddOp.OpType = EInventoryOpType::Add;
+            AddOp.Amount = 1;
+            OutDelta.InventoryOps.Add(AddOp);
+            
+            UE_LOG(LogHerbalist, Log, TEXT("Crafted potion: M=%.2f, Dist=%.2f, Purity=%.2f"),
+                PotionState.Magnitude, PotionState.Meta.Distortion, PotionState.Meta.Purity);
+            return;
+        }
+        
+        // 4. Иначе – применение на клетку (старая логика)
+        const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
+        if (!Cell)
+        {
+            UE_LOG(LogHerbalist, Warning, TEXT("Apply target cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            return;
+        }
+        
+        FGridCell Modified = *Cell;
+        Modified.State = PotionState;
+        Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + 0.2f, 0.f, 1.f);
+        OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
+        
+        UE_LOG(LogHerbalist, Log, TEXT("Applied potion to cell (%d,%d): M=%.2f, Dist=%.2f"),
+            Cmd.TargetCell.X, Cmd.TargetCell.Y, PotionState.Magnitude, PotionState.Meta.Distortion);
+    }
 
     // ---------------------------------------------------------
     // Главная точка входа
