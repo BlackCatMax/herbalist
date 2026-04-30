@@ -6,6 +6,7 @@
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
+#include "Core/Subsystems/HerbalistBootstrapSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
@@ -18,24 +19,13 @@ AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
 
 void AProjectHerbalistGameModeBase::BeginPlay()
 {
-    // Загрузка реестров ДО всего остального
     if (UGameInstance* GameInstance = GetGameInstance())
     {
-        if (UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>())
+        if (const UHerbalistBootstrapSubsystem* Bootstrap = GameInstance->GetSubsystem<UHerbalistBootstrapSubsystem>())
         {
-            UDataTable* IngredientTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_IngredientClass"));
-            if (IngredientTable)
+            if (!Bootstrap->IsBootstrapped())
             {
-                IngredientSubsystem->LoadFromDataTable(IngredientTable);
-            }
-        }
-
-        if (UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>())
-        {
-            UDataTable* WaterTypeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_WaterTypes"));
-            if (WaterTypeTable)
-            {
-                WaterSubsystem->LoadFromDataTable(WaterTypeTable);
+                UE_LOG(LogHerbalist, Error, TEXT("Bootstrap subsystem is not initialized"));
             }
         }
     }
