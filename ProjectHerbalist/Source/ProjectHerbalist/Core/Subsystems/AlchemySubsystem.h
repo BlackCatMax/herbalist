@@ -14,6 +14,4 @@ public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 
-    static constexpr const TCHAR* IngredientTablePath = TEXT("/Game/Herbalist/Data/DT_IngredientClass.DT_IngredientClass");
-    static constexpr const TCHAR* WaterTypeTablePath = TEXT("/Game/Herbalist/Data/DT_WaterTypes.DT_WaterTypes");
 };

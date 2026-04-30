@@ -5,6 +5,7 @@
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "ProjectHerbalist.h"
+#include "Core/HerbalistSettings.h"
 
 void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -25,10 +26,11 @@ void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
     }
     else
     {
-        UDataTable* IngredientTable = LoadObject<UDataTable>(nullptr, IngredientTablePath);
+        const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+        UDataTable* IngredientTable = Settings ? Settings->IngredientTableAsset.LoadSynchronous() : nullptr;
         if (!IngredientTable)
         {
-            UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load DT_IngredientClass from path: %s"), IngredientTablePath);
+            UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load IngredientTableAsset from Herbalist Settings"));
         }
         else
         {
@@ -44,10 +46,11 @@ void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
     }
     else
     {
-        UDataTable* WaterTypeTable = LoadObject<UDataTable>(nullptr, WaterTypeTablePath);
+        const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+        UDataTable* WaterTypeTable = Settings ? Settings->WaterTypeTableAsset.LoadSynchronous() : nullptr;
         if (!WaterTypeTable)
         {
-            UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load DT_WaterTypes from path: %s"), WaterTypeTablePath);
+            UE_LOG(LogHerbalist, Error, TEXT("[Herbalist] Failed to load WaterTypeTableAsset from Herbalist Settings"));
         }
         else
         {

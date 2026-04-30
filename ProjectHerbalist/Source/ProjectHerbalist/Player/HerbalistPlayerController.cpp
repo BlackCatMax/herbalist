@@ -15,6 +15,7 @@
 #include "UI/InventoryTransferWidget.h"
 #include "UI/InventoryWidget.h"
 #include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/HerbalistSettings.h"
 
 // ============================================================================
 // ЖИЗНЕННЫЙ ЦИКЛ
@@ -289,7 +290,10 @@ void AHerbalistPlayerController::OpenAlchemyWidget(AAlchemyTableActor* Table)
     if (!WidgetClass)
     {
         // Fallback: попробуем найти класс виджета по имени (если не задан в редакторе)
-        WidgetClass = LoadClass<UAlchemyTransferWidget>(nullptr, TEXT("/Game/UI/WBP_AlchemyTransfer.WBP_AlchemyTransfer_C"));
+        if (const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>())
+        {
+            WidgetClass = Settings->AlchemyTransferWidgetClass.LoadSynchronous();
+        }
         if (!WidgetClass)
         {
             UE_LOG(LogHerbalist, Error, TEXT("OpenAlchemyWidget: AlchemyWidgetClass not set and fallback widget not found. Please assign AlchemyWidgetClass in PlayerController Blueprint."));

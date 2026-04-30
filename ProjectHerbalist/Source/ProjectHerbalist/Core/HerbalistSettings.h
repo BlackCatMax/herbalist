@@ -3,7 +3,13 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "Engine/DataTable.h"
+#include "UObject/SoftObjectPtr.h"
 #include "HerbalistSettings.generated.h"
+
+
+class UBiomeGraphAsset;
+class UAlchemyTransferWidget;
 
 UCLASS(config = Game, defaultconfig, meta = (DisplayName = "Herbalist Settings"))
 class PROJECTHERBALIST_API UHerbalistSettings : public UDeveloperSettings
@@ -12,6 +18,23 @@ class PROJECTHERBALIST_API UHerbalistSettings : public UDeveloperSettings
 
 public:
     UHerbalistSettings();
+
+
+    // --- Asset references (replaces hardcoded runtime paths) ---
+    UPROPERTY(config, EditAnywhere, Category = "Assets")
+    TSoftObjectPtr<UDataTable> IngredientTableAsset;
+
+    UPROPERTY(config, EditAnywhere, Category = "Assets")
+    TSoftObjectPtr<UDataTable> WaterTypeTableAsset;
+
+    UPROPERTY(config, EditAnywhere, Category = "Assets")
+    TSoftObjectPtr<UDataTable> BiomeDefaultsTableAsset;
+
+    UPROPERTY(config, EditAnywhere, Category = "Assets")
+    TSoftObjectPtr<UBiomeGraphAsset> BiomeGraphAsset;
+
+    UPROPERTY(config, EditAnywhere, Category = "Assets")
+    TSoftClassPtr<UAlchemyTransferWidget> AlchemyTransferWidgetClass;
 
     // --- Pipeline coefficients ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))

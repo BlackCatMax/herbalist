@@ -10,6 +10,7 @@
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "Core/HerbalistSettings.h"
 
 AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
 {
@@ -18,12 +19,14 @@ AProjectHerbalistGameModeBase::AProjectHerbalistGameModeBase()
 
 void AProjectHerbalistGameModeBase::BeginPlay()
 {
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+
     // Загрузка реестров ДО всего остального
     if (UGameInstance* GameInstance = GetGameInstance())
     {
         if (UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>())
         {
-            UDataTable* IngredientTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_IngredientClass"));
+            UDataTable* IngredientTable = Settings ? Settings->IngredientTableAsset.LoadSynchronous() : nullptr;
             if (IngredientTable)
             {
                 IngredientSubsystem->LoadFromDataTable(IngredientTable);
@@ -32,7 +35,7 @@ void AProjectHerbalistGameModeBase::BeginPlay()
 
         if (UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>())
         {
-            UDataTable* WaterTypeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_WaterTypes"));
+            UDataTable* WaterTypeTable = Settings ? Settings->WaterTypeTableAsset.LoadSynchronous() : nullptr;
             if (WaterTypeTable)
             {
                 WaterSubsystem->LoadFromDataTable(WaterTypeTable);
@@ -46,7 +49,7 @@ void AProjectHerbalistGameModeBase::BeginPlay()
     {
         if (!Graph->IsInitialized())
         {
-            UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+            UBiomeGraphAsset* Asset = Settings ? Settings->BiomeGraphAsset.LoadSynchronous() : nullptr;
             if (Asset)
             {
                 Graph->InitializeFromAsset(Asset);
@@ -54,12 +57,12 @@ void AProjectHerbalistGameModeBase::BeginPlay()
             }
             else
             {
-                UE_LOG(LogHerbalist, Warning, TEXT("DA_BiomeGraph not found at /Game/Data/DA_BiomeGraph"));
+                UE_LOG(LogHerbalist, Warning, TEXT("BiomeGraph asset is not set or failed to load in Herbalist Settings"));
             }
         }
     }
 
-    UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults"));
+    UDataTable* BiomeTable = Settings ? Settings->BiomeDefaultsTableAsset.LoadSynchronous() : nullptr;
     if (BiomeTable)
     {
         FBiomeDefaults::SetBiomeTable(BiomeTable);
@@ -67,6 +70,6 @@ void AProjectHerbalistGameModeBase::BeginPlay()
     }
     else
     {
-        UE_LOG(LogHerbalist, Error, TEXT("Failed to load DT_BiomeDefaults! Biomes will not work correctly."));
+        UE_LOG(LogHerbalist, Error, TEXT("Failed to load BiomeDefaultsTableAsset from Herbalist Settings! Biomes will not work correctly."));
     }
 }
