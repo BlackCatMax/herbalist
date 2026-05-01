@@ -704,3 +704,17 @@ void AGridWorldManager::DrawBiomeGraphDebug()
     }
 #endif
 }
+
+bool AGridWorldManager::ApplyDelta(const FWorldDelta& Delta, FString& OutError)
+{
+    if (UWorld* World = GetWorld())
+    {
+        if (UWorldStateSubsystem* WorldState = World->GetSubsystem<UWorldStateSubsystem>())
+        {
+            return WorldState->ApplyWorldDelta(Delta, OutError);
+        }
+    }
+
+    OutError = TEXT("WorldStateSubsystem is unavailable");
+    return false;
+}

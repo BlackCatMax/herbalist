@@ -3,6 +3,9 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "ProjectHerbalist.h"
+#include "Core/World/WorldStateSubsystem.h"
+#include "Core/HerbalistSettings.h"
+#include "Engine/World.h"
 
 void UHerbalistBootstrapSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -15,6 +18,23 @@ void UHerbalistBootstrapSubsystem::Initialize(FSubsystemCollectionBase& Collecti
     }
 
     InitializeRegistries();
+
+    if (UWorld* World = GetWorld())
+    {
+        if (UWorldStateSubsystem* WorldState = World->GetSubsystem<UWorldStateSubsystem>())
+        {
+            const UHerbalistSettings* HerbalistSettings = GetDefault<UHerbalistSettings>();
+            WorldState->InitializeGrid(
+                HerbalistSettings ? HerbalistSettings->WorldGridSizeX : 20,
+                HerbalistSettings ? HerbalistSettings->WorldGridSizeY : 20,
+                HerbalistSettings ? HerbalistSettings->WorldCellSize : 100.0f);
+
+            if (HerbalistSettings)
+            {
+                WorldState->SetBiomeMaskTexture(HerbalistSettings->WorldBiomeMaskTexture.LoadSynchronous());
+            }
+        }
+    }
     bBootstrapped = true;
 }
 
