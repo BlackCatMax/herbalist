@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "Engine/Texture2D.h"
 #include "HerbalistSettings.generated.h"
 
 UCLASS(config = Game, defaultconfig, meta = (DisplayName = "Herbalist Settings"))
@@ -12,6 +13,20 @@ class PROJECTHERBALIST_API UHerbalistSettings : public UDeveloperSettings
 
 public:
     UHerbalistSettings();
+
+    // --- World ---
+
+    UPROPERTY(config, EditAnywhere, Category = "World")
+    int32 WorldGridSizeX = 20;
+
+    UPROPERTY(config, EditAnywhere, Category = "World")
+    int32 WorldGridSizeY = 20;
+
+    UPROPERTY(config, EditAnywhere, Category = "World")
+    float WorldCellSize = 100.0f;
+
+    UPROPERTY(config, EditAnywhere, Category = "World")
+    TSoftObjectPtr<UTexture2D> WorldBiomeMaskTexture;
 
     // --- Pipeline coefficients ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))

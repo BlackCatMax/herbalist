@@ -11,6 +11,7 @@
 #include "Core/Simulation/Public/PerceptionComponent.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/World/WorldStateSubsystem.h"
 #include "GridWorldManager.generated.h"
 
 class UHarvestService;
@@ -40,6 +41,8 @@ public:
     // ---- Snapshot / Delta ----
     FWorldSnapshot CaptureState() const;
     void ApplyStateDelta(const FStateDelta& Delta);
+
+    bool ApplyDelta(const FWorldDelta& Delta, FValidationReport& OutReport);
 
     // ---- Жизненный цикл ----
     virtual void BeginPlay() override;
