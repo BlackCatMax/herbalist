@@ -359,7 +359,7 @@ struct FMemoryState {
 
 Рефакторинг считается завершённым, когда:
 
-- [ ] Pipeline не ссылается на UE‑рантайм (нет `GetWorld()`, `GetSubsystem()`, `LoadObject`).
+- [x] Pipeline не ссылается на UE‑рантайм (нет `GetWorld()`, `GetSubsystem()`, `LoadObject`) — проверено `grep` по `PipelineV2.cpp` на дату 2026-08-12, совпадений нет; весь UE-рантайм-доступ (капчур/применение) вынесен в `SnapshotService`/`GridWorldManager`, как и задумано.
 - [ ] Весь мир замораживается в `Snapshot` до конца тика.
 - [ ] Единственная точка мутации — `World::ApplyDelta()`.
 - [ ] UI не имеет доступа к `S_real` и не вызывает игровые сервисы напрямую.
@@ -418,7 +418,9 @@ struct FMemoryState {
 5. **Harvest использовал не ту математику.** Существовал полноценный `UHarvestService::Harvest()` с отклонением от `FAlatyr::S0`, но он не вызывался нигде — реальный путь сбора (`GenerateHarvestResult`) просто джиттерил `Cell.State`. Теперь `GenerateHarvestResult` считает то же самое отклонение от S0 (`BiomeState - S0`, взвешенное `HarvestBiomeWeight`), но как чистая функция снапшота: базовые параметры ингредиента резолвятся один раз при харвест-акторе (`AHerbalistResourceActor::GetBaseState()`) и едут в `FHarvestCommand::BaseState`, не требуя обращения к `UIngredientRegistrySubsystem` внутри Pipeline. `UHarvestService::Harvest()` как класс не удалён (используется/может использоваться отдельно), но перестал быть единственно верной, но не вызываемой версией математики.
 6. **Bifurcation (Collapse/Purification)** — реализована по `BiomeSnap.CollapseThreshold`: при достижении порога — жребий, взвешенный текущей `Stability` (выше `Stability` → вероятнее очищение, а не коллапс), с целевыми значениями из `05_Systems.md` (Purification: Distortion→0.4, Purity/Stability +0.2; Collapse: Distortion→0.2, Stability −0.3, Corruption +0.2, `EAlchemyOutcome::Catastrophe`).
 
-**Ещё найдено, но не тронуто** — не баги, а отдельные фичи вне сегодняшнего скоупа: эволюция предметов в инвентаре со временем (`UHerbalistSettings::InventoryDecayRate` уже объявлен, но нигде не используется — «порча» ресурсов между сбором и варкой из `05_Systems.md` не реализована); `EnvironmentToxicityWeight`/`EnvironmentBlendWeight` (влияние `FEnvironment` клетки на алхимию — в GDD не описано достаточно детально, чтобы реализовать без домысливания); применение зелий к сущностям/произвольным объектам мира, а не только к клеткам (`05_Systems.md`: «игрок может применить любое зелье к любому объекту или существу» — сейчас только `ApplyPotionToCell`).
+**Поправка 2026-08-12 (аудит связности):** предыдущая версия этого абзаца ошибочно утверждала, что порча предметов в инвентаре не реализована. Это неверно — `UHerbalistInventoryComponent::TickComponent()`/`ApplyDecayToItem()` (тик каждые 0.2с) реально читает `Settings->InventoryDecayRate`, учитывает `IngredientTableRow::DecayRate` конкретного ингредиента и `Item.State.Meta.Stability`, увеличивает `Distortion`/`Corruption`, снижает `Purity`/`Stability`. Работает независимо от `CreationTime` (по тик-интервалу, не по `Now − CreationTime`), так что более ранний баг с `CreationTime≡0` на порчу не влиял.
+
+**Ещё найдено, но не тронуто** — не баги, а отдельные фичи вне сегодняшнего скоупа: `EnvironmentToxicityWeight`/`EnvironmentBlendWeight`/`BifurcationThreshold` в `UHerbalistSettings` объявлены, но нигде не читаются — `BifurcationThreshold`, в частности, дублирует уже подключённый `BiomeGraphAsset::CollapseThreshold` другим значением, что может сбить с толку при следующей правке (какой из двух порогов настоящий); применение зелий к сущностям/произвольным объектам мира, а не только к клеткам (`05_Systems.md`: «игрок может применить любое зелье к любому объекту или существу» — сейчас только `ApplyPotionToCell`).
 
 ### Портирование легаси-математики варки (2026-08-12)
 
@@ -431,6 +433,17 @@ struct FMemoryState {
 - `ZaryanaStrength = Coherence · (1 − EffectiveMorok)` — легаси-формула из `HerbalistPipeline.cpp::ApplyMorok`, теперь осмысленная, поскольку `Coherence` реальный, а не константа.
 
 Не портировано осознанно: **`BuildEnvironmentMeta()`** (`PipelineMeta.cpp`) существовала, но не вызывалась нигде даже в легаси-коде (`git grep` по `1539015` не находит вызовов) — это была мёртвая функция и до PipelineV2, портировать её означало бы придумывать точку интеграции с нуля, как и раньше. **Собственная точная формула Bifurcation** (легаси: `Distortion·0.3` в диапазоне `[0.1,0.4]` для Collapse, `Distortion·0.6` в `[0.3,0.5]` для Purification, триггер при `Distortion>0.92`) не портирована — сегодняшняя реализация (плоские целевые значения ≈0.2/≈0.4, триггер по `CollapseThreshold`) ближе к тексту `05_Systems.md`, чем легаси-код. **Delta-модель Apply** — легаси считал не абсолютное новое состояние клетки, а *дельту* к текущему (`NewDir = CurrentDir + DeltaDir`), что соответствует формализму GDD `S_real(t+1)=S_real(t)+ΔS`; сегодняшний `ComputeApplyResult` по-прежнему заменяет `Cell.State` целиком — это осталось как отдельный, не сегодняшний архитектурный долг.
+
+### Аудит связности + чистка мусора (2026-08-12)
+
+Отдельный проход агента по всей кодовой базе на мёртвый код, рассинхрон именований и неиспользуемые include. Исправлено:
+- Удалён мёртвый `FBiomeDefaults::GetRandomResourceForBiome` (0 вызовов, комментарий ссылался на несуществующий `FIngredientRegistry`).
+- Убраны неиспользуемые `#include`: `LandscapeInfo.h` (`GridWorldManagerCore.cpp`), `Engine/AssetManager.h`/`Engine/StreamableManager.h`/`Core/Types/HerbalistIngredient.h` (`InventorySlotWidget.cpp`).
+- Удалён осиротевший `UHerbalistSettings::BiomeMorokInfluence` — собственный побочный эффект сегодняшней сессии: был введён при первой версии `ComputeApplyResult`, заменён на `MorokMixStrengthFactor` при портировании легаси-формулы Morok, но само поле не убрали.
+- Поправлен вводящий в заблуждение комментарий `GridWorldManager.h` — `ApplyAlchemyResult` помечался как «старая алхимия, будет заменена», хотя это тонкая обёртка над новым командным пайплайном.
+- **Реальная находка, не просто чистка:** `EAlchemyOutcome` (Ash/BoiledWater/Catastrophe/Valid) считался в `ComputeApplyResult`, но при крафте `PotionItem.IngredientID` всегда жёстко ставился `"Potion"` независимо от `Outcome` — при этом UI (`AlchemySlotWidget`, `ItemTooltipWidget`) уже умел отображать `IngredientID == "Ash"`/`"BoiledWater"` отдельным именем («Зола»/«Кипячёная вода»), но эта ветка была недостижима: Pipeline никогда не создавал предмет с таким `IngredientID`. Теперь `IngredientID` при крафте берётся из `Outcome`. Заодно поправлен `AlchemyTransferWidget::CheckForNewPotion()` — она искала в инвентаре только `"Potion"` и не заметила бы вырожденный крафт (золу/кипячёную воду).
+
+Найдено, но не тронуто (архитектурная развилка, не чистка): `UHerbalistSettings::BifurcationThreshold`/`EnvironmentToxicityWeight`/`EnvironmentBlendWeight` — нечитаемые поля, но представляют нереализованную фичу (Environment→Meta), а не мусор; удалять не стал. `AlchemySlotWidget`/`AlchemyTransferWidget` всё ещё показывают `S_real` вместо `S_perceived` — тот же паттерн, что чинили в `InventorySlotWidget`, но отдельно не запрашивали. `HarvestTest`/`MassHarvestTest` — живые Exec-команды за мёртвой заглушкой (PR-9), сознательно оставлены как есть.
 
 ### Perception подключён к инвентарной UI (2026-08-12)
 

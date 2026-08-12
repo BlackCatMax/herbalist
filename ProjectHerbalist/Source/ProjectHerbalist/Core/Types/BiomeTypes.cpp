@@ -95,15 +95,3 @@ FRealState FBiomeDefaults::GetDefaultWaterState(EBiomeType Biome)
     if (!Row) return FRealState();
     return Row->DefaultWaterState;
 }
-
-FName FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng)
-{
-    // Устаревший метод, использующий AssetRegistry. Игнорируем, используйте FIngredientRegistry::GetRandomResourceForBiome.
-    static bool bWarned = false;
-    if (!bWarned)
-    {
-        UE_LOG(LogHerbalistBiome, Warning, TEXT("FBiomeDefaults::GetRandomResourceForBiome is deprecated and returns NAME_None. Use IngredientRegistry instead."));
-        bWarned = true;
-    }
-    return NAME_None;
-}

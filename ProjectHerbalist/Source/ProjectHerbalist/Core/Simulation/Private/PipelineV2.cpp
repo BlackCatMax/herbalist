@@ -641,8 +641,18 @@ namespace Simulation
         // 3. Если крафт – создаём зелье в инвентаре и выходим
         if (Cmd.bIsCrafting)
         {
+            // Ash/BoiledWater — не зелье, а вырожденный результат (05_Systems.md:
+            // "обязательность воды"/"только вода"). UI (AlchemySlotWidget,
+            // ItemTooltipWidget) уже умеет отображать эти IngredientID отдельно —
+            // раньше сюда всегда попадал "Potion" независимо от Outcome, и эти
+            // ветки в UI были недостижимы. Collapse (Catastrophe) остаётся
+            // "Potion" — по GDD это по-прежнему зелье, просто испорченное.
+            FName PotionIngredientID = FName(TEXT("Potion"));
+            if (Outcome == EAlchemyOutcome::Ash) PotionIngredientID = FName(TEXT("Ash"));
+            else if (Outcome == EAlchemyOutcome::BoiledWater) PotionIngredientID = FName(TEXT("BoiledWater"));
+
             FInventoryItem PotionItem;
-            PotionItem.IngredientID = FName(TEXT("Potion"));
+            PotionItem.IngredientID = PotionIngredientID;
             PotionItem.State = PotionState;
             PotionItem.Count = 1;
             PotionItem.CreationTime = WorldSnap.WorldTime;

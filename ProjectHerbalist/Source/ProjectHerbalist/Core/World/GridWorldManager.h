@@ -114,7 +114,8 @@ public:
     FVector GetCellWorldPositionFlat(int32 X, int32 Y) const;
     float GetCellHeight(int32 X, int32 Y) const;
 
-    // ---- Алхимия (старая, будет заменена) ----
+    // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
+    // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent);
 

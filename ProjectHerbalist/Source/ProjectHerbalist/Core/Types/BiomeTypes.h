@@ -3,7 +3,6 @@
 
 #include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
-#include "Math/RandomStream.h"
 
 struct FBiomeRow;
 
@@ -16,8 +15,6 @@ public:
     static FRealState GetDefaultState(EBiomeType Biome);
     static FEnvironment GetDefaultEnvironment(EBiomeType Biome);
     static FRealState GetDefaultWaterState(EBiomeType Biome);
-
-    static FName GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng);
 
     static FName BiomeTypeToName(EBiomeType Biome);
     static EBiomeType NameToBiomeType(FName Name);

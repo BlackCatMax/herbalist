@@ -213,10 +213,15 @@ void UAlchemyTransferWidget::CheckForNewPotion()
     UWorld* World = GetWorld();
     if (!World) return;
 
+    // Крафт может дать не только "Potion" — при вырожденных исходах (05_Systems.md)
+    // Pipeline создаёт "Ash"/"BoiledWater" вместо зелья, см. ProcessApplyCommand.
     const TArray<FInventoryItem>& Items = PlayerInventoryComponent->GetItems();
     for (const FInventoryItem& Item : Items)
     {
-        if (Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0)
+        const bool bIsCraftResult = Item.IngredientID == FName(TEXT("Potion"))
+            || Item.IngredientID == FName(TEXT("Ash"))
+            || Item.IngredientID == FName(TEXT("BoiledWater"));
+        if (bIsCraftResult && Item.Count > 0)
         {
             // Если время создания предмета больше времени крафта (с погрешностью 0.1 сек)
             if (Item.CreationTime >= LastCraftTime - 0.1f)

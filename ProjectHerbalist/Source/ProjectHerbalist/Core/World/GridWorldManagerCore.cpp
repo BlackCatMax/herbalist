@@ -1,7 +1,6 @@
 // Core/World/GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
 #include "Landscape.h"
-#include "LandscapeInfo.h"
 #include "EngineUtils.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"

@@ -15,9 +15,6 @@ public:
 
     // --- Pipeline coefficients ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float BiomeMorokInfluence = 0.3f;
-
-    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeZaryanaInfluence = 0.3f;
 
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
