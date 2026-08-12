@@ -39,7 +39,8 @@
         "Resonance": 0.5,
         "Corruption": 0.75
       }
-    }
+    },
+    "StressRecoveryMultiplier": 1.717
   },
   {
     "Name": "BroadleafForest",
@@ -81,7 +82,8 @@
         "Resonance": 0.5,
         "Corruption": 0.28
       }
-    }
+    },
+    "StressRecoveryMultiplier": 0.657
   },
   {
     "Name": "Floodplain",
@@ -123,7 +125,8 @@
         "Resonance": 0.5,
         "Corruption": 0.45
       }
-    }
+    },
+    "StressRecoveryMultiplier": 0.636
   },
   {
     "Name": "ForestSteppe",
@@ -165,7 +168,8 @@
         "Resonance": 0.5,
         "Corruption": 0.35
       }
-    }
+    },
+    "StressRecoveryMultiplier": 0.797
   },
   {
     "Name": "MixedForest",
@@ -207,7 +211,8 @@
         "Resonance": 0.5,
         "Corruption": 0.22
       }
-    }
+    },
+    "StressRecoveryMultiplier": 0.588
   },
   {
     "Name": "Steppe",
@@ -249,7 +254,8 @@
         "Resonance": 0.5,
         "Corruption": 0.42
       }
-    }
+    },
+    "StressRecoveryMultiplier": 1.296
   },
   {
     "Name": "Taiga",
@@ -291,7 +297,8 @@
         "Resonance": 0.5,
         "Corruption": 0.2
       }
-    }
+    },
+    "StressRecoveryMultiplier": 0.668
   },
   {
     "Name": "Tundra",
@@ -333,6 +340,7 @@
         "Resonance": 0.5,
         "Corruption": 0.2
       }
-    }
+    },
+    "StressRecoveryMultiplier": 1.642
   }
 ]

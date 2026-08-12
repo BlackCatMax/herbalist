@@ -526,8 +526,12 @@ namespace Simulation
         // РАСТЕНИЯ: деградация (медленная)
         // ====================================================================
         const float DegradationStep = 0.002f;
-        const float StressStep = 0.001f;
-        
+        // Прирост стресса из настроек: раньше здесь стояли захардкоженные 0.001,
+        // ровно равные тогдашнему спаду за секунду — след одного сбора стирался
+        // за секунду, и механика «сбор истощает место» не работала вовсе.
+        const UHerbalistSettings* HarvestSettings = GetHerbalistSettings();
+        const float StressStep = HarvestSettings ? HarvestSettings->HarvestStressIncrement : 0.1f;
+
         FGridCell Modified = *Cell;
         Modified.HarvestStress = FMath::Clamp(Cell->HarvestStress + StressStep, 0.0f, 1.0f);
         Modified.State.Meta.Distortion = FMath::Clamp(Cell->State.Meta.Distortion + DegradationStep, 0.0f, 1.0f);

@@ -85,9 +85,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
     bool bHarvestAffectsBiome = true;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
-    float HarvestStressIncrement = 0.1f;
+    // HarvestStressIncrement переехал в UHerbalistSettings: он нужен Pipeline'у
+    // (ProcessHarvestCommand), а тот до актора не достаёт. Здесь он был объявлен,
+    // но не использовался никогда — сбор прибавлял захардкоженные 0.001.
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Propagation")
     int32 PropagationDepth = 2;

@@ -66,6 +66,24 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HarvestConditionWeight = 0.4f;
 
+    // Насколько один сбор истощает клетку. Живёт здесь, а не на
+    // AGridWorldManager, потому что читается из Pipeline (ProcessHarvestCommand),
+    // которому до актора не дотянуться.
+    UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float HarvestStressIncrement = 0.1f;
+
+    // --- Время ---
+    // Длительность игровых суток в реальных минутах. До этого в проекте не было
+    // ни одной константы длины суток — только неиспользуемый ETimeOfDayMask.
+    UPROPERTY(config, EditAnywhere, Category = "Time", meta = (ClampMin = "1.0"))
+    float GameDayMinutes = 32.0f;
+
+    // За сколько игровых суток клетка со стрессом 1.0 полностью зарастает
+    // в биоме со множителем 1.0. Умножается на FBiomeRow::StressRecoveryMultiplier:
+    // болото держит след дольше, пойма промывает быстрее.
+    UPROPERTY(config, EditAnywhere, Category = "Time", meta = (ClampMin = "0.01"))
+    float StressRecoveryGameDays = 7.0f;
+
     // --- Inventory Decay ---
     // Скорость порчи: увеличение Distortion в секунду при отсутствии Stability.
     // Умножается на (1 - Stability) предмета, т.е. стабильные предметы портятся медленнее.

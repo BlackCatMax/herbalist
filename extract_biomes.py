@@ -86,6 +86,35 @@ def num(front, key, default=None):
     return float(m.group(0)) if m else default
 
 
+# Характер воды из авторского поля `type` компендиума. Стоячая вода держит след
+# сбора (трясина помнит), живая/проточная — промывает. Мёртвая солонцеватая не
+# промывает, но и Навью не держит.
+WATER_CHARACTER = [
+    (("стояч",), 1.35, "стоячая вода не уносит след"),
+    (("живая", "живой", "ключев", "разливн", "речн", "проточ"), 0.85, "живая проточная вода промывает"),
+    (("солонцеват", "жёстк", "жестк"), 1.10, "мёртвая вода не промывает"),
+]
+
+
+def water_multiplier(type_str):
+    low = (type_str or "").lower()
+    for keys, mult, why in WATER_CHARACTER:
+        if any(k in low for k in keys):
+            return mult, why
+    return 1.0, "нейтральная"
+
+
+def stress_recovery_multiplier(front, rows_for_mean=None):
+    """Скорость зарастания = Fertility * (1 - Distortion*0.7): место затягивает
+    рану своей жизненной силой, а Навь заживать мешает. Время ~ 1/скорость,
+    затем поправка на характер воды. Нормировку на среднее делает вызывающий."""
+    fert = num(front, "fertility", 0.5) or 0.5
+    dist = num(front, "distortion", 0.3) or 0.3
+    rate = max(fert * (1.0 - dist * 0.7), 1e-3)
+    wm, why = water_multiplier(front.get("type"))
+    return (1.0 / rate) * wm, why
+
+
 def body_table_values(text):
     """Числа из markdown-таблиц в теле документа — только чтобы сверить их с
     фронтматтером и доложить расхождения. Источником не являются."""
@@ -107,6 +136,7 @@ def main():
             old_rows = {r["Name"]: r for r in json.load(f)}
 
     rows, notes, diffs = [], [], []
+    recovery_raw = {}
 
     for ru, en in sorted(BIOME_MAP.items(), key=lambda kv: kv[1]):
         path = BIOMES_DIR / f"{ru}.md"
@@ -147,8 +177,15 @@ def main():
                  "Direction": {dt: num(front, fm, 0.25) for fm, dt in DIR_KEYS},
                  "Meta": {dt: num(front, fm, 0.0) for fm, dt in META_KEYS}},
             ),
+            # StressRecoveryMultiplier проставляется ниже: нужен полный набор
+            # биомов, чтобы нормировать на среднее.
         }
         rows.append(row)
+
+        # сырой (ненормированный) множитель + причина водной поправки
+        raw, why = stress_recovery_multiplier(front)
+        override = num(front, "stress_recovery_multiplier")
+        recovery_raw[en] = (raw, why, override)
 
         for section, keys in (("Meta", META_KEYS), ("Environment", ENV_KEYS)):
             for _, dt in keys:
@@ -163,7 +200,28 @@ def main():
         if prev.get("Magnitude") is not None and abs(row["Magnitude"] - prev["Magnitude"]) > 1e-6:
             diffs.append(f"  {en:<18}{'Magnitude':<17}{prev['Magnitude']:>6.2f} -> {row['Magnitude']:>6.2f}")
 
-    print(f"Биомов разобрано: {len(rows)}")
+    # Нормируем множители так, чтобы средний биом зарастал ровно за базовые
+    # StressRecoveryGameDays: тогда настройка означает то, что написано, а
+    # биомы лишь отклоняются от неё в обе стороны.
+    if recovery_raw:
+        mean_raw = sum(v[0] for v in recovery_raw.values()) / len(recovery_raw)
+        for row in rows:
+            entry = recovery_raw.get(row["Name"])
+            if not entry:
+                continue
+            raw, why, override = entry
+            row["StressRecoveryMultiplier"] = round(override if override is not None else raw / mean_raw, 3)
+
+        print("\nВремя зарастания стресса (база 7 игровых суток по 32 мин):")
+        print(f"  {'биом':<18}{'множ.':>8}{'суток':>8}{'минут':>8}   вода")
+        ordered = sorted(rows, key=lambda r: r.get("StressRecoveryMultiplier", 1.0))
+        for row in ordered:
+            m = row.get("StressRecoveryMultiplier", 1.0)
+            why = recovery_raw.get(row["Name"], (0, "", None))[1]
+            src = " (задано автором)" if recovery_raw.get(row["Name"], (0, "", None))[2] is not None else ""
+            print(f"  {row['Name']:<18}{m:>8.2f}{7*m:>8.1f}{7*m*32:>8.0f}   {why}{src}")
+
+    print(f"\nБиомов разобрано: {len(rows)}")
     if diffs:
         print(f"\nРасхождения компендиум <-> текущий DataTable ({len(diffs)}):")
         print("\n".join(diffs))

@@ -36,4 +36,12 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
     FRealState DefaultWaterState;        // состояние воды по умолчанию в этом биоме
+
+    // Во сколько раз это место зарастает дольше базового
+    // UHerbalistSettings::StressRecoveryGameDays. >1 — держит след дольше
+    // (болото: стоячая вода, Навь мешает заживать), <1 — быстрее (пойма:
+    // живая проточная вода промывает). Выводится из компендиума скриптом
+    // extract_biomes.py из Fertility/Distortion и характера воды (поле `type`).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome", meta = (ClampMin = "0.05"))
+    float StressRecoveryMultiplier = 1.0f;
 };

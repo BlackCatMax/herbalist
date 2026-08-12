@@ -7,6 +7,8 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Types/BiomeRow.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Engine/World.h"
@@ -572,6 +574,32 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
     const float RegenerationRate = 0.0005f;   // 0.05% в секунду
     const float DeltaRegen = RegenerationRate * DeltaTime;
 
+    // Спад HarvestStress: клетка со стрессом 1.0 полностью зарастает за
+    // StressRecoveryGameDays игровых суток, умноженные на множитель биома
+    // (болото со стоячей водой держит след дольше, пойма промывает быстрее).
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float RecoveryDays = Settings ? Settings->StressRecoveryGameDays : 7.0f;
+    const float DaySeconds = (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f;
+
+    // Множитель зависит только от типа биома, а не от клетки — тянем строку
+    // DataTable один раз на биом, а не 400 раз за кадр.
+    TMap<EBiomeType, float> StressDecayPerSecond;
+    auto GetStressDecay = [&](EBiomeType Biome) -> float
+    {
+        if (const float* Cached = StressDecayPerSecond.Find(Biome))
+        {
+            return *Cached;
+        }
+        float Multiplier = 1.0f;
+        if (const FBiomeRow* Row = FBiomeDefaults::GetBiomeRow(Biome))
+        {
+            Multiplier = FMath::Max(Row->StressRecoveryMultiplier, 0.05f);
+        }
+        const float Decay = 1.0f / FMath::Max(RecoveryDays * DaySeconds * Multiplier, KINDA_SMALL_NUMBER);
+        StressDecayPerSecond.Add(Biome, Decay);
+        return Decay;
+    };
+
     for (FGridCell& Cell : Cells)
     {
         // 1. Восстанавливаем State в сторону TargetState (который обновляется графом)
@@ -599,8 +627,8 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         else if (Cell.State.Magnitude > Cell.TargetState.Magnitude)
             Cell.State.Magnitude = FMath::Max(Cell.State.Magnitude - DeltaRegen, Cell.TargetState.Magnitude);
         
-        // 2. Спад HarvestStress
-        Cell.HarvestStress = FMath::Max(Cell.HarvestStress - DeltaRegen * 2.0f, 0.0f);
+        // 2. Спад HarvestStress — медленный, зависит от биома (см. выше)
+        Cell.HarvestStress = FMath::Max(Cell.HarvestStress - GetStressDecay(Cell.Biome) * DeltaTime, 0.0f);
         
         // 3. Восстановление осей (плавно к TargetState.Direction)
         const FDirection& TargetDir = Cell.TargetState.Direction;
