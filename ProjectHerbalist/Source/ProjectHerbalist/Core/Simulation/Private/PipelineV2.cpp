@@ -133,6 +133,165 @@ namespace Simulation
     }
 
     // ---------------------------------------------------------
+    // L1 (симплекс, сумма=1) <-> единичный 4D-вектор — нужен для Morok/Zaryana,
+    // где по легаси-коду требуется геометрия сферы (вращение/смешивание осей),
+    // а не барицентрические координаты. Легаси (Core/Pipeline/PipelineMorok.cpp,
+    // PipelineZaryana.cpp, до коммита 1539015) использовал отдельный тип
+    // FL2Direction с FRngState для вырожденного случая (ToL2/NormalizeL2,
+    // HerbalistCoreTypes.h) — здесь это не нужно: после FDirection::NormalizeSum()
+    // вектор гарантированно не нулевой (вырожденный случай уже даёт 0.25 по
+    // каждой оси), а Pipeline держит единый тип ГПСЧ (FRandomStream), не смешивая
+    // его с FRngState.
+    // ---------------------------------------------------------
+    static FVector4 DirectionToUnitVector(const FDirection& Dir)
+    {
+        const FVector4 V(Dir.Body, Dir.Mind, Dir.Spirit, Dir.Nature);
+        const float LenSq = V.X * V.X + V.Y * V.Y + V.Z * V.Z + V.W * V.W;
+        if (LenSq > KINDA_SMALL_NUMBER)
+        {
+            return V * FMath::InvSqrt(LenSq);
+        }
+        return FVector4(0.5f, 0.5f, 0.5f, 0.5f);
+    }
+
+    static FDirection UnitVectorToDirection(const FVector4& V)
+    {
+        FDirection Dir;
+        Dir.Body = V.X;
+        Dir.Mind = V.Y;
+        Dir.Spirit = V.Z;
+        Dir.Nature = V.W;
+        Dir.NormalizeSum();
+        return Dir;
+    }
+
+    // Портировано из легаси PipelineMorok.cpp::ApplyMorokDistortion — настоящее
+    // матричное смешивание осей ("обмен осями"), а не случайная перестановка.
+    static void ApplyMorokAxisMix(FVector4& Dir, float Distortion, FRandomStream& Rng)
+    {
+        const float Mix = Distortion * 0.7f;
+        const float Rnd = Rng.FRandRange(-1.f, 1.f);
+        const float K = Rnd * Distortion * 0.5f;
+
+        const float B = Dir.X, M = Dir.Y, S = Dir.Z, N = Dir.W;
+
+        Dir.X = (1.f - Mix) * B + K * M + Mix * S;
+        Dir.Y = -K * B + (1.f - Mix) * M + Mix * N;
+        Dir.Z = Mix * B + (1.f - Mix) * S + K * N;
+        Dir.W = Mix * M - K * S + (1.f - Mix) * N;
+
+        const float LengthScale = 1.f + Distortion * 0.5f;
+        Dir *= LengthScale;
+
+        const float MaxLenSq = 4.f;
+        const float LenSq = Dir.X * Dir.X + Dir.Y * Dir.Y + Dir.Z * Dir.Z + Dir.W * Dir.W;
+        if (LenSq > MaxLenSq)
+        {
+            Dir *= FMath::Sqrt(MaxLenSq / LenSq);
+        }
+    }
+
+    // Портировано из легаси PipelineZaryana.cpp::ApplyZaryanaStructuring — усиление
+    // осей выше среднего, подавление ниже среднего, мягкая tanh-нелинейность.
+    static void ApplyZaryanaAxisMix(FVector4& Dir, float ZaryanaStrength, const UHerbalistSettings* Settings)
+    {
+        const float BoostFactor = Settings ? Settings->ZaryanaBoostFactor : 0.5f;
+        const float SuppressFactor = Settings ? Settings->ZaryanaSuppressFactor : 0.3f;
+        const float Avg = (Dir.X + Dir.Y + Dir.Z + Dir.W) / 4.f;
+
+        auto Process = [&](double& V)
+        {
+            if (V > Avg) V *= (1.0 + ZaryanaStrength * BoostFactor);
+            else V *= (1.0 - ZaryanaStrength * SuppressFactor);
+        };
+        Process(Dir.X); Process(Dir.Y); Process(Dir.Z); Process(Dir.W);
+
+        const float Scale = 1.f + ZaryanaStrength * 0.8f;
+        Dir.X = FMath::Tanh(Dir.X * Scale);
+        Dir.Y = FMath::Tanh(Dir.Y * Scale);
+        Dir.Z = FMath::Tanh(Dir.Z * Scale);
+        Dir.W = FMath::Tanh(Dir.W * Scale);
+
+        const float LenSq = Dir.X * Dir.X + Dir.Y * Dir.Y + Dir.Z * Dir.Z + Dir.W * Dir.W;
+        if (LenSq > KINDA_SMALL_NUMBER)
+        {
+            Dir *= FMath::InvSqrt(LenSq);
+        }
+        else
+        {
+            Dir = FVector4(0.5f, 0.5f, 0.5f, 0.5f);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Intent/Coherence — портировано из легаси IntentResolver.cpp::ComputeIntentCoherence
+    // (последний живой коммит 1539015, до перехода на PipelineV2). Раньше Coherence
+    // был захардкожен как 0.5f во всех вызывающих местах — Pipeline теперь считает
+    // его сам из фактических ингредиентов (вес по позиции, согласие доминирующих
+    // осей, качество ингредиентов, бонус воды), вызывающий код это значение
+    // больше не задаёт (см. ProcessApplyCommand).
+    // ---------------------------------------------------------
+    static float ComputeIntentCoherence(const TArray<FInventoryItem>& Ingredients)
+    {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float WeightDecay = Settings ? Settings->FoldWeightDecay : 0.8f;
+
+        TArray<const FInventoryItem*> NonWater;
+        TArray<const FInventoryItem*> Water;
+        for (const FInventoryItem& Item : Ingredients)
+        {
+            (Item.bIsWater ? Water : NonWater).Add(&Item);
+        }
+
+        const int32 N = NonWater.Num();
+        if (N == 0) return 0.5f; // нет ингредиентов — нейтральное намерение
+
+        float AxisWeights[4] = { 0.f, 0.f, 0.f, 0.f };
+        float TotalWeight = 0.f;
+        float WeightedPurity = 0.f;
+        float WeightedStability = 0.f;
+        float Weight = 1.f;
+
+        for (const FInventoryItem* Item : NonWater)
+        {
+            const FDirection& Dir = Item->State.Direction;
+            const float Vals[4] = { Dir.Body, Dir.Mind, Dir.Spirit, Dir.Nature };
+            int32 Dominant = 0;
+            for (int32 i = 1; i < 4; ++i)
+            {
+                if (Vals[i] > Vals[Dominant]) Dominant = i;
+            }
+            AxisWeights[Dominant] += Weight;
+
+            WeightedPurity += Item->State.Meta.Purity * Weight;
+            WeightedStability += Item->State.Meta.Stability * Weight;
+
+            TotalWeight += Weight;
+            Weight *= WeightDecay;
+        }
+
+        float MaxAxisWeight = 0.f;
+        for (float W : AxisWeights) MaxAxisWeight = FMath::Max(MaxAxisWeight, W);
+        const float AxisAgreement = (TotalWeight > KINDA_SMALL_NUMBER) ? (MaxAxisWeight / TotalWeight) : 0.f;
+
+        const float IngredientQuality = (TotalWeight > KINDA_SMALL_NUMBER)
+            ? (WeightedPurity / TotalWeight + WeightedStability / TotalWeight) * 0.5f
+            : 0.f;
+
+        float WaterBonus = 0.f;
+        if (Water.Num() > 0)
+        {
+            float AvgWaterPurity = 0.f;
+            for (const FInventoryItem* W : Water) AvgWaterPurity += W->State.Meta.Purity;
+            AvgWaterPurity /= Water.Num();
+            WaterBonus = AvgWaterPurity * 0.2f;
+        }
+
+        const float Coherence = FMath::Lerp(AxisAgreement, IngredientQuality, 0.5f) + WaterBonus;
+        return FMath::Clamp(Coherence, 0.f, 1.f);
+    }
+
+    // ---------------------------------------------------------
     // Пайплайн варки зелья — 9 шагов из 05_Systems.md:
     // 1-2. Сбор параметров + Агрегация (Fold, с затуханием по порядку)
     // 3. Biome Context Injection (MorokField/ZaryanaField/Affinity/AxisDrift)
@@ -259,50 +418,39 @@ namespace Simulation
         // --- 5. Нормализация осей ---
         Result.Direction.NormalizeSum();
 
-        // --- 6. Morok: нелинейное искажение дельты + обмен осями ---
+        // --- 6-7. Morok/Zaryana — портировано из легаси PipelineMorok.cpp /
+        // PipelineZaryana.cpp / HerbalistPipeline.cpp::ApplyMorok (коммит 1539015).
+        // ZaryanaStrength тем выше, чем согласованнее Intent (Coherence) и чем
+        // ниже давление Морока в биоме — легаси-формула Coherence*(1-Distortion),
+        // но Coherence теперь настоящий (ComputeIntentCoherence), а не константа. ---
         const float Coherence = FMath::Clamp(Intent.Coherence, 0.f, 1.f);
-        const float BiomeMorokInfluence = Settings ? Settings->BiomeMorokInfluence : 0.3f;
         const float MorokMixStrengthFactor = Settings ? Settings->MorokMixStrengthFactor : 0.5f;
-        const float MorokPush = EffectiveMorok * BiomeMorokInfluence;
-        Result.Meta.Distortion = FMath::Clamp(
-            Result.Meta.Distortion * (1.f - Coherence) + Rng.FRandRange(0.f, 0.2f) * Coherence + MorokPush,
-            0.f, 1.f);
-
-        if (Rng.FRand() < EffectiveMorok * MorokMixStrengthFactor)
-        {
-            float* Axes[4] = { &Result.Direction.Body, &Result.Direction.Mind, &Result.Direction.Spirit, &Result.Direction.Nature };
-            const int32 A = Rng.RandRange(0, 3);
-            const int32 B = Rng.RandRange(0, 3);
-            if (A != B)
-            {
-                Swap(*Axes[A], *Axes[B]);
-            }
-        }
-
-        // --- 7. Zaryana: усиление доминирующей оси + стабильность/чистота.
-        // ZaryanaBoostFactor — вклад согласованности (Coherence) в стабилизацию,
-        // BiomeZaryanaInfluence — вклад поля биома, ZaryanaSuppressFactor — то,
-        // насколько Заряна подавляет уже накопленное искажение. ---
-        const float ZaryanaBoostFactor = Settings ? Settings->ZaryanaBoostFactor : 0.5f;
         const float BiomeZaryanaInfluence = Settings ? Settings->BiomeZaryanaInfluence : 0.3f;
-        const float ZaryanaSuppressFactor = Settings ? Settings->ZaryanaSuppressFactor : 0.3f;
+        const float ZaryanaStrength = FMath::Clamp(Coherence * (1.f - EffectiveMorok), 0.f, 1.f);
 
-        Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability * (1.f + Coherence * ZaryanaBoostFactor + EffectiveZaryana * BiomeZaryanaInfluence), 0.f, 1.f);
+        // Morok: насыщающий рост Distortion/Corruption (не может перескочить через 1,
+        // тем сильнее, чем ниже текущая Stability)
+        const float MorokFactor = EffectiveMorok * MorokMixStrengthFactor;
+        const float Noise = MorokFactor * (1.f - Result.Meta.Stability);
+        Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion + Noise * (1.f - Result.Meta.Distortion), 0.f, 1.f);
+        Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption + MorokFactor * (1.f - Result.Meta.Stability), 0.f, 1.f);
+
+        FVector4 UnitDir = DirectionToUnitVector(Result.Direction);
+        ApplyMorokAxisMix(UnitDir, EffectiveMorok, Rng);
+
+        // Zaryana: подавление искажения, усиление стабильности/чистоты
+        Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion * (1.f - ZaryanaStrength * 0.25f), 0.f, 1.f);
+        Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption * (1.f - ZaryanaStrength * 0.20f), 0.f, 1.f);
+        Result.Meta.Stability = FMath::Lerp(Result.Meta.Stability, 1.f, ZaryanaStrength * 0.15f);
+        Result.Meta.Purity = FMath::Clamp(Result.Meta.Purity + ZaryanaStrength * Result.Meta.Stability * 0.2f, 0.f, 1.f);
+
+        // Поле биома (EffectiveZaryana) — отдельная надбавка сверх Coherence-driven
+        // эффекта (Biome Context Injection, 14_Biome_Graph.md)
+        Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability + EffectiveZaryana * BiomeZaryanaInfluence * 0.3f, 0.f, 1.f);
         Result.Meta.Purity = FMath::Clamp(Result.Meta.Purity + EffectiveZaryana * BiomeZaryanaInfluence * 0.5f, 0.f, 1.f);
-        Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion - EffectiveZaryana * ZaryanaSuppressFactor, 0.f, 1.f);
 
-        if (EffectiveZaryana > KINDA_SMALL_NUMBER)
-        {
-            float* Axes[4] = { &Result.Direction.Body, &Result.Direction.Mind, &Result.Direction.Spirit, &Result.Direction.Nature };
-            int32 Dominant = 0;
-            for (int32 i = 1; i < 4; ++i)
-            {
-                if (*Axes[i] > *Axes[Dominant]) Dominant = i;
-            }
-            *Axes[Dominant] = FMath::Min(1.f, *Axes[Dominant] * (1.f + EffectiveZaryana * BiomeZaryanaInfluence));
-        }
-
-        Result.Direction.NormalizeSum();
+        ApplyZaryanaAxisMix(UnitDir, ZaryanaStrength, Settings);
+        Result.Direction = UnitVectorToDirection(UnitDir);
 
         // --- 8. Bifurcation: при критическом Distortion — Collapse или Purification.
         // Чем выше текущая Stability, тем вероятнее очищение, а не схлопывание. ---
@@ -450,10 +598,16 @@ namespace Simulation
             BiomeCtx = BiomeSnap.Contexts.Find(TargetBiomeID);
         }
 
-        // 1. Вычисляем результирующее состояние зелья
+        // 1. Вычисляем результирующее состояние зелья. Coherence считается
+        // Pipeline'ом из фактических ингредиентов (см. ComputeIntentCoherence) —
+        // то, что вызывающий код положил в Cmd.Intent.Coherence, не используется:
+        // Intent_system не может быть решением игрока/UI, только функцией процесса.
+        FIntent EffectiveIntent = Cmd.Intent;
+        EffectiveIntent.Coherence = ComputeIntentCoherence(Cmd.Ingredients);
+
         EAlchemyOutcome Outcome = EAlchemyOutcome::Valid;
         FVector4 AxisDeltaForFootprint;
-        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, Cmd.Intent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint);
+        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint);
 
         // 2. Удаляем использованные ингредиенты из инвентаря
         for (const FInventoryItem& Ing : Cmd.Ingredients)

@@ -488,6 +488,6 @@ void AHerbalistPlayerController::TestNewApply(int32 X, int32 Y, FString Ingredie
     Cmd.Primitive             = ECommandPrimitive::Apply;
     Cmd.Apply.TargetCell      = FIntPoint(X, Y);
     Cmd.Apply.Ingredients     = Items;
-    Cmd.Apply.Intent.Coherence = 0.5f;
+    // Coherence считается Pipeline'ом из Ingredients (ComputeIntentCoherence).
     Grid->QueueCommand(Cmd);
 }

@@ -137,7 +137,7 @@ void UAlchemyTransferWidget::OnMixClicked()
     Cmd.Primitive = ECommandPrimitive::Apply;
     Cmd.Apply.TargetCell = FIntPoint(-1, -1);
     Cmd.Apply.Ingredients = Ingredients;
-    Cmd.Apply.Intent.Coherence = 0.5f;
+    // Coherence считается Pipeline'ом из Ingredients (ComputeIntentCoherence).
     Cmd.Apply.bIsCrafting = true;
 
     WorldManager->QueueCommand(Cmd);

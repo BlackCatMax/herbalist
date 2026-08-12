@@ -65,8 +65,8 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
     FInventoryItem Ingredient2 = Inventory[1];
 
     TArray<FInventoryItem> Ingredients = { Ingredient1, Ingredient2 };
+    // Coherence считается Pipeline'ом из Ingredients (ComputeIntentCoherence), не отсюда.
     FIntent Intent;
-    Intent.Coherence = 0.5f;
 
     ApplyAlchemyResult(X, Y, Ingredients, Intent);
     UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) and two resources"), X, Y);
@@ -81,7 +81,6 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
 
     TArray<FInventoryItem> Ingredients = { PotionItem };
     FIntent Intent;
-    Intent.Coherence = 0.5f;
 
     ApplyAlchemyResult(X, Y, Ingredients, Intent);
 }
