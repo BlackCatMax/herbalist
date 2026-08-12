@@ -171,6 +171,8 @@ S([
 
 ## Структура папок
 
+### Целевая (из исходного дизайна, не реализована полностью)
+
 ```
 Source/ProjectHerbalist/
 ├── Core/
@@ -201,6 +203,38 @@ Source/ProjectHerbalist/
 │   └── ViewModel/                     (UICommandAdapters)
 └── Subsystems/                        (IngredientRegistry, WaterTypeRegistry, AlchemySubsystem)
 ```
+
+Ни `Gameplay/`, ни `Core/Biome/` (вместо этого — `Core/BiomeGraph/`), ни подпапки `UI/{Widgets,Controllers,ViewModel}`, ни подпапки `Simulation/{Pipeline,Snapshot,Delta,Tick,Trace}` в реальности не заведены — `Core/Simulation/` плоско делится на `Private/`/`Public/`, `UI/` и `Player/` не сгруппированы под `Gameplay/`. Полный перенос под эту структуру не проводился — слишком большой blast radius (каждый физический перенос файла в UE требует правки всех `#include`, ссылающихся на старый путь, десятки мест), и отдельно не запрашивался.
+
+### Фактическая (после точечной уборки 2026-08-12)
+
+```
+Source/ProjectHerbalist/
+├── Core/
+│   ├── BiomeGraph/                    (BiomeGraphAsset, BiomeGraphCommands, BiomeGraphSubsystem, BiomeGraphTypes)
+│   ├── Config/                        (HerbalistSettings — перенесён из Core/, лежал вне подпапок)
+│   ├── Data/                          (IngredientTableRow, WaterTypeRow)
+│   ├── Harvest/                       (HarvestService)
+│   ├── Inventory/                     (HerbalistInventoryComponent, InventoryDragDropOperation)
+│   ├── Resources/                     (AHerbalistResourceActor)
+│   ├── Simulation/
+│   │   ├── Private/                   (PipelineV2, SnapshotService, TraceReplay, PerceptionComponent.cpp, PerceptionService)
+│   │   └── Public/                    (CommandTypes, DeltaTypes, SnapshotTypes, TraceTypes, PerceivedTypes, PerceptionComponent.h, SnapshotService.h)
+│   ├── Storage/                       (AlchemyTableActor, StorageContainer)
+│   ├── Subsystems/                    (AlchemySubsystem, IngredientRegistrySubsystem, WaterTypeRegistrySubsystem)
+│   ├── Types/                         (BiomeRow, BiomeTypes, HerbalistCoreMath, HerbalistCoreTypes, HerbalistIngredient, HerbalistNameUtils)
+│   └── World/                         (GridWorldManager + GridWorldManager{Core,Alchemy,Harvest,Tick,Debug}.cpp)
+├── HerbalistLogChannels.h/.cpp
+├── Player/                            (HerbalistPlayerController)
+├── ProjectHerbalist.h/.cpp, ProjectHerbalistGameModeBase.h/.cpp
+└── UI/                                (AlchemySlotWidget, AlchemyTransferWidget, InventoryDragDropController,
+                                         InventorySlotWidget, InventoryTransferWidget, InventoryWidget, ItemTooltipWidget)
+```
+
+Сделано точечно, без риска правки десятков `#include`:
+- Удалён `Core/Simulation/Private/SimulationModule.cpp` — пустой файл (0 байт), забытая заглушка PR-0, ничего не содержал и никем не подключался.
+- `Core/HerbalistSettings.h/.cpp` → `Core/Config/HerbalistSettings.h/.cpp` — раньше лежал прямо в `Core/` вне какой-либо подпапки; поправлены все 3 `#include` (`HarvestService.cpp`, `HerbalistInventoryComponent.cpp`, `PipelineV2.cpp`).
+- `Core/CoreLock/Herbalist System Contract v1_1.md` → `herbalist_docs/Herbalist_Vault/03_Technical/Archive/` — markdown-документ убран из дерева C++ исходников в документацию, где ему и место; пустая `Core/CoreLock/` удалена.
 
 ---
 
@@ -392,7 +426,7 @@ struct FMemoryState {
 
 ### Судьба Contract v1.1
 
-Документ `Core/CoreLock/Herbalist System Contract v1_1.md` архивирован (см. пометку в самом файле). Его слои `SemanticResolver/IntentResolver/PhysicsPipeline/WorldStateApplier/WorldManifestor` и типы `FAlchemyAtom`/`AtomUID` не встречаются нигде в `Source/` — контракт описывал архитектуру, которая не была реализована и была молча заменена Pipeline V2. Единственная часть, подтверждённая кодом — `FMemoryState` — перенесена выше в «Критические структуры данных».
+Документ [`Herbalist System Contract v1_1.md`](herbalist_docs/Herbalist_Vault/03_Technical/Archive/Herbalist%20System%20Contract%20v1_1.md) архивирован и вынесен из `Source/` в документацию (см. пометку в самом файле; раньше жил в `Core/CoreLock/` — эта директория удалена как пустая). Его слои `SemanticResolver/IntentResolver/PhysicsPipeline/WorldStateApplier/WorldManifestor` и типы `FAlchemyAtom`/`AtomUID` не встречаются нигде в `Source/` — контракт описывал архитектуру, которая не была реализована и была молча заменена Pipeline V2. Единственная часть, подтверждённая кодом — `FMemoryState` — перенесена выше в «Критические структуры данных».
 
 ---
 

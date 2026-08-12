@@ -3,7 +3,7 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "Core/Types/BiomeTypes.h"
-#include "Core/HerbalistSettings.h"
+#include "Core/Config/HerbalistSettings.h"
 
 namespace Simulation
 {

@@ -5,7 +5,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Types/HerbalistIngredient.h"
-#include "Core/HerbalistSettings.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Engine/World.h"
 
 static constexpr float DEFAULT_BIOME_WEIGHT = 0.6f;

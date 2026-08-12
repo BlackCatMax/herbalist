@@ -3,7 +3,7 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "Core/Types/HerbalistCoreMath.h"
-#include "Core/HerbalistSettings.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"

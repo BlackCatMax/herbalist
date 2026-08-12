@@ -6,7 +6,7 @@
 > которая **не реализована в коде** — ни одного из перечисленных типов/классов нет нигде в
 > `Source/`. Фактически реализованный пайплайн (`PipelineV2`, `SnapshotService`,
 > `CommandTypes`/`DeltaTypes`) описан в актуальном документе
-> [`PROJECT HERBALIST - REFACTORING PIPELINE 2.md`](../../../../../PROJECT%20HERBALIST%20-%20REFACTORING%20PIPELINE%202.md)
+> [`PROJECT HERBALIST - REFACTORING PIPELINE 2.md`](../../../../PROJECT%20HERBALIST%20-%20REFACTORING%20PIPELINE%202.md)
 > (см. раздел «Фактический статус реализации»), который и является текущим источником истины.
 >
 > Единственная часть этого контракта, подтверждённая кодом — структура `FMemoryState` (§7),
