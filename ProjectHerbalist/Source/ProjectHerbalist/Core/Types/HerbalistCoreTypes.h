@@ -152,9 +152,38 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsWater = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FName WaterTypeID = NAME_None;
 
+    // Проявленная сущность (см. 02_GDD/16_Entity_Manifestation.md) — чисто
+    // презентационное поле (как HarvestStress/Memory), не часть Command/Delta
+    // цикла: выставляется/снимается в AGridWorldManager::UpdateEntityManifestations,
+    // тем же "внепайплайновым" каналом, что уже используют RegenerateCellParameters
+    // и ApplyBiomeInfluences. Пусто = ничего не проявлено.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
+    FName ManifestedEntityID = NAME_None;
+
     // Список акторов ресурсов в этой клетке (слабые указатели, чтобы не мешать сборщику)
     UPROPERTY()
     TArray<TWeakObjectPtr<class AHerbalistResourceActor>> ResourceActors;
+};
+
+// ========== Сущности-"хозяева" (Основной уровень, 16_Entity_Manifestation §16.3) ==========
+// Привязанный к конкретной клетке аккумулятор благосклонности — тот же принцип,
+// что Restoration у капищ в 15_Cycles_And_Shrines, но без полноценной системы
+// капищ: минимальная версия для одной клетки-"обиталища".
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FEntityLandmark
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
+    FName EntityID = NAME_None;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
+    FIntPoint Cell = FIntPoint(-1, -1);
+
+    // [-1, 1]: <0 — осквернено/разгневано, >0 — благосклонно. Растёт от бережного
+    // сбора (высокая Purity, низкий HarvestStress клетки), падает от истощения.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
+    float Respect = 0.0f;
 };
 
 USTRUCT(BlueprintType)

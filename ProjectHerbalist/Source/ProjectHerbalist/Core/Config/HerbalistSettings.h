@@ -89,6 +89,43 @@ public:
     // Умножается на (1 - Stability) предмета, т.е. стабильные предметы портятся медленнее.
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float InventoryDecayRate = 0.02f;
+
+    // --- Entity Manifestation (02_GDD/16_Entity_Manifestation.md) — вертикальный срез ---
+    // Гнильники (Низший, Болото): порог Corruption клетки для проявления зоны.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Gnilniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float GnilnikiCorruptionThreshold = 0.6f;
+
+    // На сколько зона Гнильников дополнительно тянет клетку к Corruption/Purity в секунду
+    // (самоусиливающаяся порча места, ограничена клиппом в ApplyStateDelta).
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Gnilniki", meta = (ClampMin = "0.0"))
+    float GnilnikiNudgeRate = 0.01f;
+
+    // Полевик (Основной, Лесостепь) — скорость роста/падения Respect в секунду.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0"))
+    float LandmarkRespectGainRate = 0.01f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0"))
+    float LandmarkRespectDecayRate = 0.02f;
+
+    // Граница HarvestStress клетки-обиталища, выше которой Respect только падает.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float LandmarkStressAngerThreshold = 0.6f;
+
+    // Берегиня (Легендарный, Речная пойма) — порог Memory.HistoryPurity водной
+    // клетки для проявления. Упрощённая версия без полноценной системы капищ
+    // (15_Cycles_And_Shrines §15.5) — тот же принцип, одна клетка вместо структуры.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BereginyaHistoryPurityThreshold = 0.75f;
+
+    // Скорость обновления Memory.HistoryPurity (медленная скользящая средняя от текущей Purity).
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float HistoryPurityLerpRate = 0.02f;
+
+    // Морочники (Опасная нечисть, повсеместно) — надбавка к воспринятому Distortion
+    // ночью (фаза “Ночь” из 15_Cycles §15.2). Используется только в UI/тултипах
+    // (PerceiveValue), не меняет S_real.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Morochniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float NightPerceptionDistortionBonus = 0.25f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

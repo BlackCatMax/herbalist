@@ -161,6 +161,28 @@ public:
     // ---- Экология: восстановление клеток ----
     void RegenerateCellParameters(float DeltaTime);
 
+    // ---- Проявление сущностей (02_GDD/16_Entity_Manifestation.md, вертикальный срез) ----
+    // Внепайплайновый канал, как и RegenerateCellParameters/ApplyBiomeInfluences —
+    // вызывается из Tick() каждый кадр, трогает State только через
+    // Delta.TargetStateNudges -> ApplyStateDelta (Single Writer соблюдён).
+    void UpdateEntityManifestations(float DeltaTime);
+
+    // ---- Суточный цикл (02_GDD/15_Cycles_And_Shrines.md §15.2) ----
+    // Минимальная реализация: только фаза суток для Морочников, без луны/сезона.
+    // Длительность суток берётся из UHerbalistSettings::GameDayMinutes (уже существовала,
+    // но была нигде не подключена к часам).
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetTimeOfDay01() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    bool IsNight() const;
+
+    // Воспринятое (S_Perceived) искажение для клетки: базовое Memory.AccumulatedDistortion
+    // + ночная надбавка (Морочники) + надбавка от местной проявленной сущности
+    // (Гнильники). Единая точка входа вместо прямого чтения Memory.AccumulatedDistortion.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Perception")
+    float ComputePerceptionDistortion(int32 X, int32 Y) const;
+
     // ---- Итерация по клеткам ----
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)
@@ -199,6 +221,20 @@ protected:
 
     UPROPERTY()
     TObjectPtr<UPerceptionComponent> PerceptionComponent;
+
+    // ---- Проявление сущностей (16_Entity_Manifestation §16.3, вертикальный срез) ----
+    // Клетки-"обиталища" с аккумулятором Respect (Полевик и т.п.).
+    // Заполняются автоматически в InitializeCells для тестируемых биомов среза;
+    // в продакшене должны стать ручно расставленны дизайнером.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Entities")
+    TArray<FEntityLandmark> EntityLandmarks;
+
+    // Накопленное мировое время для суточного цикла (15_Cycles_And_Shrines §15.2).
+    // Отдельно от GetWorld()->GetTimeSeconds(), чтобы длина суток не зависела от момента старта уровня.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Herbalist|Time")
+    float WorldTimeSeconds = 0.0f;
+
+    void SeedTestLandmarks();
 
     // ---- Инициализация ----
     UFUNCTION(BlueprintCallable, Category = "World|Init")

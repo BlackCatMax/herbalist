@@ -42,6 +42,13 @@ void AGridWorldManager::Tick(float DeltaTime)
     // ========================================================================
     RegenerateCellParameters(DeltaTime);
 
+    // ========================================================================
+    // ПРОЯВЛЕНИЕ СУЩНОСТЕЙ (16_Entity_Manifestation, вертикальный срез)
+    // Тот же внепайплайновый принцип, что и у RegenerateCellParameters выше;
+    // также продвигает часы суток (WorldTimeSeconds) для Морочников.
+    // ========================================================================
+    UpdateEntityManifestations(DeltaTime);
+
     // Тик всегда активен для вызова нового пайплайна каждый кадр
     SetActorTickEnabled(true);
 

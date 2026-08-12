@@ -336,6 +336,10 @@ void AGridWorldManager::InitializeCells()
         }
     }
 
+    // Вертикальный срез проявления сущностей (16_Entity_Manifestation) —
+    // авто-расстановка тестовых клеток-обиталищ.
+    SeedTestLandmarks();
+
     SetActorTickEnabled(true);
 }
 
@@ -420,11 +424,13 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     // Удаляем актор из клетки
     Cell->ResourceActors.Remove(Actor);
 
-    // Обновляем глобальное искажение для игрока (тултип)
+    // Обновляем глобальное искажение для игрока (тултип). ComputePerceptionDistortion
+    // учитывает не только Memory.AccumulatedDistortion, но и ночную надбавку
+    // (Морочники) и местные проявления (Низший уровень, Гнильники).
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
     if (PC && Cell)
     {
-        PC->CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+        PC->CurrentGlobalDistortion = ComputePerceptionDistortion(Cell->X, Cell->Y);
     }
 
     // Только команда в пайплайн – никакого прямого добавления!

@@ -121,9 +121,11 @@ void AHerbalistPlayerController::UpdateDistortionFromCell(int32 X, int32 Y)
     AGridWorldManager* WorldManager = FindWorldManager();
     if (!WorldManager) return;
 
-    if (const FGridCell* Cell = WorldManager->GetCell(X, Y))
+    // ComputePerceptionDistortion (16_Entity_Manifestation) — базовое Distortion
+    // клетки плюс ночная надбавка (Морочники) и местные проявления.
+    if (WorldManager->GetCell(X, Y))
     {
-        CurrentGlobalDistortion = Cell->Memory.AccumulatedDistortion;
+        CurrentGlobalDistortion = WorldManager->ComputePerceptionDistortion(X, Y);
     }
 }
 
