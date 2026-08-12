@@ -34,6 +34,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Simulation", meta = (ClampMin = "0.0", ClampMax = "2.0"))
     float GlobalInfluenceScale = 1.0f;
 
+    // Насколько сильно средний Distortion/Zaryana по клеткам биома "перетягивает"
+    // MorokField/ZaryanaField узла на каждом шаге: 0 = поле живёт только за счёт
+    // PropagateWaves (полная память, среднее по гриду не влияет), 1 = поведение
+    // до фикса (поле каждый шаг полностью перезаписывается средним, без памяти).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Simulation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float GridBlendFactor = 0.3f;
+
     UPROPERTY()
     int32 GraphVersion = 1;
 };

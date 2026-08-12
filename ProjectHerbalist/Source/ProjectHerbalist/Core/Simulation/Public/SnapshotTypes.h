@@ -12,6 +12,7 @@ struct FWorldSnapshot
 {
     TMap<FIntPoint, FGridCell> GridState;
     int32 WorldSeed = 0;
+    int32 TickIndex = 0;
 };
 
 /**

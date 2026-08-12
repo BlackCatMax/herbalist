@@ -66,6 +66,7 @@ protected:
     float CollapseThreshold = 0.85f;
     float FixedTimeStep = 0.2f;
     float GlobalInfluenceScale = 1.0f;
+    float GridBlendFactor = 0.3f;
 
     bool bInitialized = false;
     float TimeAccumulator = 0.f;

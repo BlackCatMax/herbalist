@@ -48,6 +48,7 @@ void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
     CollapseThreshold = Asset->CollapseThreshold;
     FixedTimeStep = Asset->FixedTimeStep;
     GlobalInfluenceScale = Asset->GlobalInfluenceScale;
+    GridBlendFactor = Asset->GridBlendFactor;
 
     BuildAdjacencyList();
     bInitialized = true;
@@ -170,8 +171,14 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
         int32 Count = CountMap[BiomeID];
         if (Count > 0)
         {
-            Pair.Value.MorokField = FMath::Clamp(MorokSum[BiomeID] / Count, 0.f, 1.f);
-            Pair.Value.ZaryanaField = FMath::Clamp(ZaryanaSum[BiomeID] / Count, 0.f, 1.f);
+            // Смешиваем со средним по гриду, а не перезаписываем: иначе вклад
+            // соседей, добавленный PropagateWaves на предыдущем шаге, стирается
+            // здесь же на следующем шаге, и поле не может по-настоящему
+            // распространяться дальше одного узла за раз (см. аудит математики).
+            const float GridAvgMorok = FMath::Clamp(MorokSum[BiomeID] / Count, 0.f, 1.f);
+            const float GridAvgZaryana = FMath::Clamp(ZaryanaSum[BiomeID] / Count, 0.f, 1.f);
+            Pair.Value.MorokField = FMath::Clamp(FMath::Lerp(Pair.Value.MorokField, GridAvgMorok, GridBlendFactor), 0.f, 1.f);
+            Pair.Value.ZaryanaField = FMath::Clamp(FMath::Lerp(Pair.Value.ZaryanaField, GridAvgZaryana, GridBlendFactor), 0.f, 1.f);
         }
     }
 

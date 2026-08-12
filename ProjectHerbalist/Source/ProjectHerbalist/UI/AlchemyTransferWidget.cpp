@@ -10,7 +10,6 @@
 #include "Core/Storage/AlchemyTableActor.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Engine/World.h"
-#include "EngineUtils.h"
 #include "ProjectHerbalist.h"
 
 UAlchemyTransferWidget::UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer)
@@ -121,12 +120,9 @@ void UAlchemyTransferWidget::OnMixClicked()
         return;
     }
 
-    AGridWorldManager* WorldManager = nullptr;
-    for (TActorIterator<AGridWorldManager> It(World); It; ++It)
-    {
-        WorldManager = *It;
-        break;
-    }
+    // Виджет не ходит в мир напрямую — берёт уже закэшированный у контроллера
+    // (HerbalistPlayerController::FindWorldManager), а не через TActorIterator.
+    AGridWorldManager* WorldManager = HPC->FindWorldManager();
     if (!WorldManager)
     {
         SetStatusMessage(TEXT("Не найден GridWorldManager."));

@@ -19,6 +19,42 @@ void AGridWorldManager::Tick(float DeltaTime)
         Graph->StepSimulation(DeltaTime);
     }
 
+    // ========================================================================
+    // ПАЙПЛАЙН НА ФИКСИРОВАННОМ ШАГЕ
+    // Command Intake -> Snapshot -> Pipeline -> Delta -> World Apply выполняются
+    // с шагом SimulationFixedTimeStep, а не на каждом рендер-кадре — количество
+    // симуляционных тиков в секунду больше не зависит от FPS (см. Tick Execution
+    // Model в архитектурном документе). При просадке FPS ниже шага может пройти
+    // несколько шагов симуляции за один Tick() — цикл ниже их все отработает.
+    // ========================================================================
+    SimulationTimeAccumulator += DeltaTime;
+    while (SimulationTimeAccumulator >= SimulationFixedTimeStep)
+    {
+        SimulationTimeAccumulator -= SimulationFixedTimeStep;
+        RunSimulationStep();
+    }
+
+    // ========================================================================
+    // ВОССТАНОВЛЕНИЕ ПАРАМЕТРОВ КЛЕТОК (ЭКОЛОГИЯ)
+    // Непрерывный процесс релаксации к TargetState, не часть пайплайна —
+    // идёт каждый кадр с реальным DeltaTime, как и раньше.
+    // ========================================================================
+    RegenerateCellParameters(DeltaTime);
+
+    // Тик всегда активен для вызова нового пайплайна каждый кадр
+    SetActorTickEnabled(true);
+
+#if WITH_EDITOR
+    if (bEnableDebugDraw)
+    {
+        DrawGridDebug();
+        DrawBiomeGraphDebug();
+    }
+#endif
+}
+
+void AGridWorldManager::RunSimulationStep()
+{
     // Снапшот мира для трассировки (если включено)
     FWorldSnapshot PreTickSnapshot;
     if (bEnableTrace)
@@ -38,22 +74,7 @@ void AGridWorldManager::Tick(float DeltaTime)
         TraceBuffer.Record(CurrentTickID, PreTickSnapshot, CommandsCopy, Delta);
     }
 
-    // ========================================================================
-    // ВОССТАНОВЛЕНИЕ ПАРАМЕТРОВ КЛЕТОК (ЭКОЛОГИЯ)
-    // ========================================================================
-    RegenerateCellParameters(DeltaTime);
-
-    // Тик всегда активен для вызова нового пайплайна каждый кадр
-    SetActorTickEnabled(true);
     CurrentTickID++;
-
-#if WITH_EDITOR
-    if (bEnableDebugDraw)
-    {
-        DrawGridDebug();
-        DrawBiomeGraphDebug();
-    }
-#endif
 }
 
 void AGridWorldManager::DumpTrace()

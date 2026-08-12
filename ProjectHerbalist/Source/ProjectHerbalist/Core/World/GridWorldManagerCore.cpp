@@ -18,6 +18,7 @@
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Simulation/Public/PerceptionComponent.h"
+#include "Templates/TypeHash.h"
 
 // ============================================================================
 // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (ЛАНДШАФТ)
@@ -147,27 +148,44 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
                                              const TMap<FName, float>& ZaryanaFields,
                                              float GlobalScale)
 {
-    for (FGridCell& Cell : Cells)
+    // Единственный писатель в состояние клеток — ApplyStateDelta(). BiomeGraph не
+    // мутирует Cells напрямую, а собирает Delta.TargetStateNudges, точно как Pipeline
+    // собирает Delta.WorldChanges — так FStateDelta действительно единственный
+    // источник изменений мира (Single Writer, Causal Execution Spec).
+    FStateDelta Delta;
+
+    for (const FGridCell& Cell : Cells)
     {
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
-        
+        FRealState NewTarget = Cell.TargetState;
+        bool bChanged = false;
+
         // 1. Влияние Морока (увеличивает Distortion)
         const float* MorokField = MorokFields.Find(BiomeID);
         if (MorokField)
         {
             float MorokInfluence = *MorokField * 0.1f * GlobalScale;
-            Cell.TargetState.Meta.Distortion = FMath::Clamp(Cell.TargetState.Meta.Distortion + MorokInfluence, 0.f, 1.f);
+            NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + MorokInfluence, 0.f, 1.f);
+            bChanged = true;
         }
-        
+
         // 2. Влияние Заряны (повышает Stability и Purity)
         const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
         if (ZaryanaField)
         {
             float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
-            Cell.TargetState.Meta.Stability = FMath::Clamp(Cell.TargetState.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
-            Cell.TargetState.Meta.Purity    = FMath::Clamp(Cell.TargetState.Meta.Purity    + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+            NewTarget.Meta.Stability = FMath::Clamp(NewTarget.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
+            NewTarget.Meta.Purity    = FMath::Clamp(NewTarget.Meta.Purity    + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+            bChanged = true;
+        }
+
+        if (bChanged)
+        {
+            Delta.TargetStateNudges.Add(FIntPoint(Cell.X, Cell.Y), NewTarget);
         }
     }
+
+    ApplyStateDelta(Delta);
 }
 
 // ============================================================================
@@ -185,7 +203,7 @@ AGridWorldManager::AGridWorldManager()
 void AGridWorldManager::BeginPlay()
 {
     Super::BeginPlay();
-    WorldRNG.Initialize(12345);
+    WorldRNG.Initialize(RngBaseSeed);
     HarvestService = NewObject<UHarvestService>(this);
 
     if (Cells.Num() == 0)
@@ -449,7 +467,15 @@ FWorldSnapshot AGridWorldManager::CaptureState() const
     {
         Snapshot.GridState.Add(FIntPoint(Cell.X, Cell.Y), Cell);
     }
-    Snapshot.WorldSeed = WorldRNG.GetCurrentSeed();
+
+    // Сид пайплайна выводится из (RngBaseSeed, TickIndex), а не из WorldRNG:
+    // WorldRNG используется генерацией мира/ресурсов и продвигается нерегулярно
+    // (только при спавне/восстановлении ресурсов), из-за чего Pipeline получал бы
+    // один и тот же "случайный" джиттер для всех Harvest/Apply команд между такими
+    // событиями. HashCombine даёт детерминированный, но уникальный на каждый тик сид,
+    // который к тому же переживает Trace/Replay (он хранится в самом снапшоте).
+    Snapshot.TickIndex = CurrentTickID;
+    Snapshot.WorldSeed = static_cast<int32>(HashCombine(static_cast<uint32>(RngBaseSeed), static_cast<uint32>(CurrentTickID)));
     return Snapshot;
 }
 
@@ -470,6 +496,16 @@ void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
             Cell->WaterTypeID = NewCellData.WaterTypeID;
             Cell->HarvestStress = NewCellData.HarvestStress;     // добавить
             Cell->Memory        = NewCellData.Memory;            // добавить
+        }
+    }
+
+    // Мягкие правки TargetState (BiomeGraph и подобные continuous-field источники) —
+    // трогают только цель релаксации, не сам State.
+    for (const auto& Pair : Delta.TargetStateNudges)
+    {
+        if (FGridCell* Cell = GetCell(Pair.Key.X, Pair.Key.Y))
+        {
+            Cell->TargetState = Pair.Value;
         }
     }
 }

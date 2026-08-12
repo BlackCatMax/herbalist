@@ -433,46 +433,34 @@ void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
 
 void AHerbalistPlayerController::TestNewHarvest(int32 X, int32 Y, FName IngredientID)
 {
-    if (!GetWorld()) return;
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-    {
-        AGridWorldManager* Grid = *It;
-        if (Grid)
-        {
-            FCommandEntry Cmd;
-            Cmd.Primitive                = ECommandPrimitive::Harvest;
-            Cmd.Harvest.TargetCell       = FIntPoint(X, Y);
-            Cmd.Harvest.IngredientID     = IngredientID;
-            Cmd.Harvest.Amount           = 1;
-            Grid->QueueCommand(Cmd);
-            return;
-        }
-    }
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+
+    FCommandEntry Cmd;
+    Cmd.Primitive                = ECommandPrimitive::Harvest;
+    Cmd.Harvest.TargetCell       = FIntPoint(X, Y);
+    Cmd.Harvest.IngredientID     = IngredientID;
+    Cmd.Harvest.Amount           = 1;
+    Grid->QueueCommand(Cmd);
 }
 
 void AHerbalistPlayerController::TestNewTransfer(FName IngredientID, int32 Amount)
 {
-    if (!GetWorld()) return;
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-    {
-        AGridWorldManager* Grid = *It;
-        if (Grid)
-        {
-            FCommandEntry Cmd;
-            Cmd.Primitive                     = ECommandPrimitive::Transfer;
-            Cmd.Transfer.SourceContainerID    = 0;
-            Cmd.Transfer.TargetContainerID    = 1;
-            Cmd.Transfer.IngredientID         = IngredientID;
-            Cmd.Transfer.Amount               = Amount;
-            Grid->QueueCommand(Cmd);
-            return;
-        }
-    }
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+
+    FCommandEntry Cmd;
+    Cmd.Primitive                     = ECommandPrimitive::Transfer;
+    Cmd.Transfer.SourceContainerID    = 0;
+    Cmd.Transfer.TargetContainerID    = 1;
+    Cmd.Transfer.IngredientID         = IngredientID;
+    Cmd.Transfer.Amount               = Amount;
+    Grid->QueueCommand(Cmd);
 }
 
 void AHerbalistPlayerController::TestNewApply(int32 X, int32 Y, FString IngredientList)
 {
-    if (!GetWorld() || !InventoryComponent) return;
+    if (!InventoryComponent) return;
 
     TArray<FInventoryItem> Items;
     TArray<FString> Names;
@@ -492,18 +480,13 @@ void AHerbalistPlayerController::TestNewApply(int32 X, int32 Y, FString Ingredie
 
     if (Items.Num() == 0) return;
 
-    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-    {
-        AGridWorldManager* Grid = *It;
-        if (Grid)
-        {
-            FCommandEntry Cmd;
-            Cmd.Primitive             = ECommandPrimitive::Apply;
-            Cmd.Apply.TargetCell      = FIntPoint(X, Y);
-            Cmd.Apply.Ingredients     = Items;
-            Cmd.Apply.Intent.Coherence = 0.5f;
-            Grid->QueueCommand(Cmd);
-            return;
-        }
-    }
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+
+    FCommandEntry Cmd;
+    Cmd.Primitive             = ECommandPrimitive::Apply;
+    Cmd.Apply.TargetCell      = FIntPoint(X, Y);
+    Cmd.Apply.Ingredients     = Items;
+    Cmd.Apply.Intent.Coherence = 0.5f;
+    Grid->QueueCommand(Cmd);
 }

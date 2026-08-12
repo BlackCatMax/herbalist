@@ -7,7 +7,7 @@
 // ПРИМЕНЕНИЕ АЛХИМИИ (ЧЕРЕЗ КОМАНДЫ НОВОГО ПАЙПЛАЙНА)
 // ============================================================================
 
-void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng)
+void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent)
 {
     if (Ingredients.Num() == 0) return;
 
@@ -25,7 +25,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
 // ПЕРЕГРУЗКА ДЛЯ СЫРЫХ СОСТОЯНИЙ
 // ============================================================================
 
-void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng)
+void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent)
 {
     TArray<FInventoryItem> Items;
     Items.Reserve(Ingredients.Num());
@@ -37,7 +37,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealS
         Item.Count        = 1;
         Items.Add(MoveTemp(Item));
     }
-    ApplyAlchemyResult(X, Y, Items, Intent, Rng);
+    ApplyAlchemyResult(X, Y, Items, Intent);
 }
 
 // ============================================================================
@@ -66,10 +66,8 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
     TArray<FInventoryItem> Ingredients = { Ingredient1, Ingredient2 };
     FIntent Intent;
     Intent.Coherence = 0.5f;
-    FRngState Rng;
-    Rng.Seed = 12345;
 
-    ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
+    ApplyAlchemyResult(X, Y, Ingredients, Intent);
     UE_LOG(LogHerbalist, Log, TEXT("Queued Apply command for cell (%d,%d) and two resources"), X, Y);
 }
 
@@ -84,8 +82,5 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     FIntent Intent;
     Intent.Coherence = 0.5f;
 
-    FRngState Rng;
-    Rng.Seed = (X * 7919) ^ (Y * 7901) ^ static_cast<int32>(GetCell(X, Y) ? GetCell(X, Y)->Memory.AccumulatedDistortion * 10000.0f : 0.0f);
-
-    ApplyAlchemyResult(X, Y, Ingredients, Intent, Rng);
+    ApplyAlchemyResult(X, Y, Ingredients, Intent);
 }

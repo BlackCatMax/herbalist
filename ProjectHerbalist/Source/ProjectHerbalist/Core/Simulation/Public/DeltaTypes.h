@@ -28,4 +28,10 @@ struct FStateDelta
     TMap<FIntPoint, FGridCell> WorldChanges;
     TArray<FInventoryOperation> InventoryOps;
     TArray<FName> BiomeActivations;   // теперь FName, как в реальной системе
+
+    // Мягкая правка TargetState клетки (BiomeGraph и подобные continuous-field
+    // источники) — в отличие от WorldChanges, не трогает Cell.State, только
+    // цель, к которой State плавно подтягивается в RegenerateCellParameters.
+    // Оба поля идут через один ApplyStateDelta() — единственную точку записи в мир.
+    TMap<FIntPoint, FRealState> TargetStateNudges;
 };

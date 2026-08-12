@@ -26,7 +26,8 @@
 10. [Критические структуры данных](#критические-структуры-данных)
 11. [План миграции (PR план)](#план-миграции-pr-план)
 12. [Критерии готовности](#критерии-готовности)
-13. [Глоссарий](#глоссарий)
+13. [Фактический статус реализации](#фактический-статус-реализации)
+14. [Глоссарий](#глоссарий)
 
 ---
 
@@ -253,6 +254,19 @@ struct FCommandIR {
 };
 ```
 
+### `FMemoryState` (перенесено из архивного Contract v1.1 §7 — единственная часть контракта, подтверждённая кодом)
+Моделирует память искажения клетки. Соответствует `HerbalistCoreTypes.h`.
+```cpp
+struct FMemoryState {
+    float AccumulatedDistortion;      // I-1: меняется только через DistortionVelocity, не скачком
+    float StabilityMemory;
+    float HistoryPurity;
+    float DistortionVelocity;
+    float TimeOfLastDistortionChange;
+};
+```
+Не входит в `FMemoryState`: параметры инвентаря, координаты капищ, погода/сезоны, параметры сущностей, флаги квестов.
+
 ---
 
 ## План миграции (PR план)
@@ -318,6 +332,50 @@ struct FCommandIR {
 - [ ] `FStateDelta` полностью описывает результат тика.
 - [ ] Включённая трассировка гарантирует идентичность при повторе.
 - [ ] Новые механики добавляются только как комбинации примитивов `Q/T/D/S/B`.
+
+---
+
+## Фактический статус реализации
+
+> Зафиксировано аудитом кода 2026-08-12 (сессия по согласованию архитектурных документов).
+> Ниже — не план, а снимок того, что реально есть в `Source/ProjectHerbalist` на момент аудита,
+> сверенный построчно с планом миграции выше. Обновлять при следующих значимых PR.
+
+### Статус по PR
+
+| PR | Заявлено | Факт |
+|----|----------|------|
+| PR-0 Foundation | Директории + `LogHerbalistSimulation` | ✅ Директории есть (`Core/Simulation/{Public,Private}`), лог-категория — `LogHerbalist` (общая, не отдельная `LogHerbalistSimulation`) |
+| PR-1 Snapshot Layer | `FWorldSnapshot/FInventorySnapshot/FBiomeSnapshot`, `CaptureSnapshot()` без изменения логики | ⚠️ Структуры существуют, но не совпадают с документом: нет `TickIndex`, нет `FRngState GlobalRngState` — вместо этого `int32 WorldSeed`, который **не продвигается между тиками** (см. ниже) |
+| PR-2 Delta Layer | `FStateDelta`, `ApplyDelta()` — «пока не используется» | ✅ Реализовано и **уже используется** (план недооценил свою же скорость) — `ApplyStateDelta()` в `GridWorldManagerCore.cpp` |
+| PR-3 Command System | `FCommand/FCommandGraph/ECommandType/CommandBus`, дублирование старой логики на переходный период | ⚠️ Есть `FCommandEntry/FCommandGraph`, но `ECommandPrimitive` — плоский enum игровых действий (`Harvest, Transfer, Apply, Talk, Wait`), а не композируемые примитивы Q/T/D/S/B из раздела «Command Algebra». Отдельного `CommandBus` нет — его роль играет `AGridWorldManager::QueueCommand()`. Старая логика не дублируется, а прямо застаблена (см. PR-9) |
+| PR-4 Pipeline V2 | `HerbalistPipelineV2`, стадии Morok/Zaryana/Fold/IntentResolver как чистые функции | ⚠️ `PipelineV2.cpp` существует и чист (не трогает UE-рантайм) — но внутри всего 3 обработчика команд (`ProcessHarvestCommand/ProcessTransferCommand/ProcessApplyCommand`), никаких отдельных стадий Morok/Zaryana/Fold/IntentResolver нет |
+| PR-5 Bridge | `LegacyPipelineAdapter`, старый и новый Pipeline параллельно | ➖ Пропущен по факту — легаси-методы (`HarvestFromCell`, `HarvestTest`) не мостятся, а сразу превращены в no-op заглушки с `UE_LOG(Warning, "deprecated")` |
+| PR-6 World Apply Reduction | `GridWorldManager` теряет алхимию, остаётся только `ApplyDelta()` | ⚠️ Вычисления действительно вынесены в Pipeline, но публичные методы `ApplyAlchemyResult(...)` в `GridWorldManagerAlchemy.cpp` остались как тонкие обёртки над `QueueCommand` — с неиспользуемым параметром `FRngState& Rng` (мёртвый код, вводит в заблуждение) |
+| PR-7 BiomeGraph Post-step | `Propagate(Delta)` после World Apply, не влияет на Pipeline напрямую | ❌ Наоборот: `AGridWorldManager::Tick()` вызывает `BiomeGraphSubsystem::StepSimulation()` **до** сбора команд и выполнения Pipeline в этом же кадре, и `StepSimulation → ApplyFieldsToGrid → Grid->ApplyBiomeInfluences()` пишет прямо в `Cell.TargetState`, **в обход `FStateDelta`**. Это нарушает Single Writer (Causal Execution Spec, «только Delta изменяет World») |
+| PR-8 Perception Layer | UI переключается на `S_Perceived`, доступ к `S_real` закрыт | ❌ `PerceptionComponent`/`FPerceptionService` посчитаны и кэшируются каждые 0.5с, но **ни один UI-виджет их не читает** — весь `UI/` работает через `InventoryComponent->GetItems()` (сырое `S_real`). `ComputePerceivedInventory()` вообще не искажает данные. Слой посчитан, но не подключён |
+| PR-9 Legacy Removal | Удаление старого Pipeline | ⚠️ Вычисления удалены, но сигнатуры (`HarvestFromCell`, `HarvestTest`, `MassHarvestTest`) оставлены как мёртвые заглушки вместо полного удаления |
+| PR-10 Trace & Replay | `TraceRecorder/ReplayExecutor`, хеш-контроль | ⚠️ `FTraceRingBuffer` и `ReplayAndCompare()` реализованы и реально работают, но сравнение идёт по избранным полям (`Magnitude`, `Meta.Distortion`), а не по хешу полного состояния, как заявлено в разделе Execution Trace & Replay Engine |
+
+### Критические баги, найденные при аудите
+
+1. ✅ **[ИСПРАВЛЕНО 2026-08-12] RNG был de-facto заморожен между тиками.** `AGridWorldManager::CaptureState()` брал `WorldRNG.GetCurrentSeed()` — а `WorldRNG` продвигается (мутирует внутренний `Seed`) только при спорадических вызовах `FRand()/RandRange()` во время генерации мира и восстановления ресурсов (`SpawnResourcesInCell`), а не каждый симуляционный тик. Между такими событиями `FWorldSnapshot.WorldSeed` не менялся, и `SnapshotService::ExecuteTick()` каждый тик создавал `FRandomStream` заново с одним и тем же сидом — джиттер в `GenerateHarvestResult`/`ComputeApplyResult` получался бит-в-бит одинаковым для всех Harvest/Apply-команд подряд, пока где-то рядом не восстановится ресурс.
+   **Фикс:** `FWorldSnapshot` получил поле `TickIndex`; `CaptureState()` теперь выводит `WorldSeed = HashCombine(RngBaseSeed, CurrentTickID)` — детерминированно, уникально на каждый тик, не зависит от несвязанных систем (world-gen RNG остался только для генерации мира). `RngBaseSeed` — новый `UPROPERTY` на `AGridWorldManager` (по умолчанию 12345, редактируем в редакторе/BP). Replay не сломан: сид хранится в самом `FTraceFrame.WorldSnapshot`, а не пересчитывается заново. См. `GridWorldManagerCore.cpp: CaptureState()`.
+   Полноценный перенос `FRngState GlobalRngState` внутри `FWorldSnapshot` (state carried forward, а не производный от TickIndex) по-прежнему не сделан — текущий фикс закрывает наблюдаемый баг вариативности, но не полностью соответствует буквальной формулировке доку. Оставлено на будущее, если понадобится RNG-состояние, не завязанное на номер тика.
+2. ✅ **[ИСПРАВЛЕНО 2026-08-12] Pipeline был подвешен на `AActor::Tick()`** — количество «тиков симуляции» в секунду зависело от FPS, что противоречило Tick Execution Model.
+   **Фикс:** `AGridWorldManager` получил `SimulationFixedTimeStep` (0.05с по умолчанию, настраивается) и аккумулятор `SimulationTimeAccumulator`. Тело одного тика вынесено в `RunSimulationStep()` и вызывается из `Tick()` в цикле `while (Accumulator >= FixedTimeStep)` — при просадке FPS ниже шага за один рендер-кадр отрабатывает несколько симуляционных тиков подряд, при высоком FPS — не чаще шага. `CurrentTickID` теперь считает именно симуляционные тики, а не рендер-кадры (что также усиливает фикс RNG выше — сиды по-настоящему привязаны к тикам симуляции). `RegenerateCellParameters` (непрерывная релаксация к `TargetState`) намеренно оставлена на каждом кадре с реальным `DeltaTime` — это не часть Pipeline, а continuous field, ей не нужен дискретный шаг. Отдельного класса `SimulationTickManager` не заведено — аккумулятор живёт прямо в `AGridWorldManager`, что проще и достаточно, пока Pipeline управляет только одним ГридWorldManager.
+3. ✅ **[ИСПРАВЛЕНО 2026-08-12] BiomeGraph нарушал Single Writer** — писал в `Cell.TargetState` напрямую, минуя `FStateDelta` (см. PR-7 выше).
+   **Фикс:** `FStateDelta` получил поле `TargetStateNudges` (мягкая правка цели релаксации — в отличие от `WorldChanges`, не трогает `Cell.State`, только `TargetState`). `AGridWorldManager::ApplyBiomeInfluences()` больше не мутирует `Cells` в цикле — строит `FStateDelta` и проводит его через `ApplyStateDelta()`, ту же единственную точку записи, что использует Pipeline. Математика и результат не изменились, изменился только путь записи.
+   Заодно исправлена смежная находка математического аудита: `RecalculateFieldsFromGrid()` каждый шаг **перезаписывал** `MorokField/ZaryanaField` средним по гриду, стирая вклад соседей, добавленный `PropagateWaves` на предыдущем шаге, — поле не могло по-настоящему распространяться дальше одного узла за раз. Теперь используется `FMath::Lerp(Field, GridAverage, GridBlendFactor)` — новый параметр (по умолчанию 0.3, настраивается в `UBiomeGraphAsset`), поле сохраняет память между шагами.
+4. ⚠️ **[ЧАСТИЧНО ИСПРАВЛЕНО 2026-08-12] UI обращался к геймплейным акторам напрямую.** `AlchemyTransferWidget.cpp` делал собственный `TActorIterator<AGridWorldManager>` внутри виджета. Заодно тот же паттерн нашёлся продублированным трижды в `HerbalistPlayerController.cpp` (`TestNewHarvest/TestNewTransfer/TestNewApply`), хотя в том же классе уже был кэширующий `FindWorldManager()`.
+   **Фикс:** все четыре места переведены на существующий `AHerbalistPlayerController::FindWorldManager()` (кэш + один `TActorIterator` на весь PlayerController вместо поиска в каждом месте заново).
+   Не сделано: `ViewModel`/`UICommandAdapters` слоя как такового по-прежнему нет — виджет всё ещё напрямую типизирован на `AGridWorldManager` и сам собирает `FCommandEntry`/вызывает `QueueCommand`. Устранён конкретный баг (лишний, не переиспользуемый поиск актора), но не сама архитектурная граница L3↔L0 из документа.
+
+5. ✅ **[ИСПРАВЛЕНО 2026-08-12] Мёртвый параметр `FRngState& Rng` в `ApplyAlchemyResult`.** Обе перегрузки принимали `Rng`, но никогда его не использовали — вызывающий код (`ApplyPotionToCell`) даже честно вычислял содержательный сид из координат клетки и `Memory.AccumulatedDistortion`, который затем молча отбрасывался. Параметр удалён из обеих перегрузок и всех вызовов.
+
+### Судьба Contract v1.1
+
+Документ `Core/CoreLock/Herbalist System Contract v1_1.md` архивирован (см. пометку в самом файле). Его слои `SemanticResolver/IntentResolver/PhysicsPipeline/WorldStateApplier/WorldManifestor` и типы `FAlchemyAtom`/`AtomUID` не встречаются нигде в `Source/` — контракт описывал архитектуру, которая не была реализована и была молча заменена Pipeline V2. Единственная часть, подтверждённая кодом — `FMemoryState` — перенесена выше в «Критические структуры данных».
 
 ---
 

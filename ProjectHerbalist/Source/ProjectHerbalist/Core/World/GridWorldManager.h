@@ -65,6 +65,21 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     float CellHeight = 10.0f;
 
+    // Базовый сид для детерминированного пайплайна (Simulation::ExecutePipeline).
+    // Не используется для процедурной генерации мира (см. WorldRNG) — по сиду
+    // и номеру тика (CurrentTickID) каждый тик получает свой уникальный, но
+    // воспроизводимый RNG-сид, независимый от несвязанных систем (спавн ресурсов и т.п.).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
+    int32 RngBaseSeed = 12345;
+
+    // Фиксированный шаг симуляционного пайплайна (Command Intake -> ... -> World Apply),
+    // в секундах. Не зависит от FPS: сколько бы кадров ни прошло за это время,
+    // Pipeline выполнится ровно один раз (см. Tick Execution Model). Не путать с
+    // BiomeGraphSubsystem::FixedTimeStep — у распространения биомов свой, более
+    // крупный шаг, он не связан с этим.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
+    float SimulationFixedTimeStep = 0.05f;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
     float ResourceRegrowthTime = 10.0f;
 
@@ -100,8 +115,8 @@ public:
     float GetCellHeight(int32 X, int32 Y) const;
 
     // ---- Алхимия (старая, будет заменена) ----
-    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent, FRngState& Rng);
-    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent, FRngState& Rng);
+    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
+    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent);
 
     // ---- Сбор ----
     FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
@@ -196,6 +211,10 @@ protected:
 private:
     FTraceRingBuffer TraceBuffer;
     int32 CurrentTickID = 0;
+
+    // ---- Фиксированный шаг симуляции ----
+    float SimulationTimeAccumulator = 0.0f;
+    void RunSimulationStep();
 
     // ---- Очередь команд нового пайплайна ----
     TArray<FCommandEntry> PendingCommands;

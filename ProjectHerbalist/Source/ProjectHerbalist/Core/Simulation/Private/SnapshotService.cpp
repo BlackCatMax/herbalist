@@ -133,7 +133,8 @@ namespace Simulation
         FInventorySnapshot InvSnap = CaptureInventory();
         FBiomeSnapshot BiomeSnap = CaptureBiomes();   // пока не используется
 
-        // 2. Инициализация ГПСЧ из сида мира (пока WorldSeed = 0)
+        // 2. Инициализация ГПСЧ из сида тика (WorldSeed = HashCombine(RngBaseSeed, TickIndex),
+        //    см. AGridWorldManager::CaptureState) — уникален для каждого тика, воспроизводим при реплее
         FRandomStream Rng(WorldSnap.WorldSeed);
 
         // 3. Запуск детерминированного пайплайна
