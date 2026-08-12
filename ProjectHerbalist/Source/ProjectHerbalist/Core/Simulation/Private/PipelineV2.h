@@ -12,6 +12,7 @@ namespace Simulation
     PROJECTHERBALIST_API FStateDelta ExecutePipeline(
         const FWorldSnapshot& WorldSnapshot,
         const FInventorySnapshot& InventorySnapshot,
+        const FBiomeSnapshot& BiomeSnapshot,
         const FCommandGraph& Commands,
         FRandomStream& Rng);
 }

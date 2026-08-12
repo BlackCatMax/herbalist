@@ -25,10 +25,30 @@ struct FInventorySnapshot
 };
 
 /**
+ * Контекст одного узла биом-графа на момент снапшота — то, что Pipeline
+ * должен учитывать при Biome Context Injection (05_Systems.md, 14_Biome_Graph.md),
+ * не обращаясь к UBiomeGraphSubsystem напрямую.
+ */
+struct FBiomeFieldContext
+{
+    float MorokField = 0.f;
+    float ZaryanaField = 0.f;
+    float MorokAffinity = 0.5f;
+    float ZaryanaAffinity = 0.5f;
+    FVector4 AxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);
+};
+
+/**
  * Замороженное состояние биомного графа.
  */
 struct FBiomeSnapshot
 {
     // Список идентификаторов (FName) активных в данный момент биомов
     TArray<FName> ActiveBiomeIds;
+
+    // Поля/аффинити/дрейф осей на биом — заполняется из UBiomeGraphSubsystem::CaptureState()
+    TMap<FName, FBiomeFieldContext> Contexts;
+
+    // Порог бифуркации (Collapse/Purification), общий на граф (пока не per-node)
+    float CollapseThreshold = 0.85f;
 };

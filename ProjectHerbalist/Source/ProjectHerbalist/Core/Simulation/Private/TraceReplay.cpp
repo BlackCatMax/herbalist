@@ -12,7 +12,7 @@ namespace Simulation
         FCommandGraph Graph;
         Graph.Commands = Frame.Commands;
 
-        FStateDelta ReplayedDelta = ExecutePipeline(Frame.WorldSnapshot, InvSnap, Graph, Rng);
+        FStateDelta ReplayedDelta = ExecutePipeline(Frame.WorldSnapshot, InvSnap, Frame.BiomeSnapshot, Graph, Rng);
 
         // Сравниваем изменения мира
         if (ReplayedDelta.WorldChanges.Num() != Frame.GeneratedDelta.WorldChanges.Num())

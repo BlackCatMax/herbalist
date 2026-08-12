@@ -51,6 +51,12 @@ struct FHarvestCommand
     FIntPoint TargetCell;
     FName IngredientID;
     int32 Amount = 1;
+
+    // Базовые параметры ингредиента (IngredientTableRow::BaseState), резолвятся
+    // вне Pipeline (у AHerbalistResourceActor уже есть на момент сбора — см.
+    // AGridWorldManager::OnResourceCollected) — нужны для расчёта отклонения от
+    // S0 как в UHarvestService::Harvest, без обращения к реестрам внутри Pipeline.
+    FRealState BaseState;
 };
 
 // B – базовое действие / диалог (Talk) – пока заглушка

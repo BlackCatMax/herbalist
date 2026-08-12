@@ -131,14 +131,14 @@ namespace Simulation
         // 1. Захват состояния
         FWorldSnapshot WorldSnap = CaptureWorld();
         FInventorySnapshot InvSnap = CaptureInventory();
-        FBiomeSnapshot BiomeSnap = CaptureBiomes();   // пока не используется
+        FBiomeSnapshot BiomeSnap = CaptureBiomes();
 
         // 2. Инициализация ГПСЧ из сида тика (WorldSeed = HashCombine(RngBaseSeed, TickIndex),
         //    см. AGridWorldManager::CaptureState) — уникален для каждого тика, воспроизводим при реплее
         FRandomStream Rng(WorldSnap.WorldSeed);
 
         // 3. Запуск детерминированного пайплайна
-        FStateDelta Delta = ExecutePipeline(WorldSnap, InvSnap, Commands, Rng);
+        FStateDelta Delta = ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, Commands, Rng);
 
         // 4. Применение полученной дельты
         ApplyDeltaToWorld(Delta);

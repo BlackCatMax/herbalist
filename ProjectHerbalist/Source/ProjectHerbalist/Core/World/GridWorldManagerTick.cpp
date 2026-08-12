@@ -55,11 +55,16 @@ void AGridWorldManager::Tick(float DeltaTime)
 
 void AGridWorldManager::RunSimulationStep()
 {
-    // Снапшот мира для трассировки (если включено)
+    // Снапшот мира и биом-графа для трассировки (если включено)
     FWorldSnapshot PreTickSnapshot;
+    FBiomeSnapshot PreBiomeSnapshot;
     if (bEnableTrace)
     {
         PreTickSnapshot = CaptureState();
+        if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
+        {
+            PreBiomeSnapshot = Graph->CaptureState();
+        }
     }
 
     // Построение и выполнение графа команд нового пайплайна
@@ -68,10 +73,25 @@ void AGridWorldManager::RunSimulationStep()
     PendingCommands.Empty();
     FStateDelta Delta = Simulation::FSnapshotService::ExecuteTick(CmdGraph);
 
+    // Footprint (14_Biome_Graph.md): Pipeline — чистая функция, сам в
+    // UBiomeGraphSubsystem не пишет, только формирует Delta.Footprints.
+    // Применение — здесь, вне Pipeline, где обращение к UObject-подсистеме допустимо.
+    if (Delta.Footprints.Num() > 0)
+    {
+        if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
+        {
+            for (const FBiomeFootprintEntry& Footprint : Delta.Footprints)
+            {
+                Graph->RecordFootprint(Footprint.BiomeID, Footprint.MorokImpact, Footprint.ZaryanaImpact,
+                    Footprint.AxisDelta, SimulationFixedTimeStep);
+            }
+        }
+    }
+
     // Запись кадра трассировки
     if (bEnableTrace)
     {
-        TraceBuffer.Record(CurrentTickID, PreTickSnapshot, CommandsCopy, Delta);
+        TraceBuffer.Record(CurrentTickID, PreTickSnapshot, PreBiomeSnapshot, CommandsCopy, Delta);
     }
 
     CurrentTickID++;

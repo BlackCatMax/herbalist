@@ -431,6 +431,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.TargetCell    = FIntPoint(Cell->X, Cell->Y);
     Cmd.Harvest.IngredientID  = Actor->GetIngredientID();
     Cmd.Harvest.Amount        = 1;
+    Cmd.Harvest.BaseState     = Actor->GetBaseState();
     QueueCommand(Cmd);
 
     if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)

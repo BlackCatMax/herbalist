@@ -15,6 +15,7 @@ struct FTraceFrame
 {
     int32 TickID = 0;
     FWorldSnapshot WorldSnapshot;
+    FBiomeSnapshot BiomeSnapshot;
     TArray<FCommandEntry> Commands;
     FStateDelta GeneratedDelta;    // дельта, полученная при выполнении
 };
@@ -30,7 +31,7 @@ struct FTraceRingBuffer
     TArray<FTraceFrame> Frames;
     int32 WriteIndex = 0;
 
-    void Record(int32 TickID, const FWorldSnapshot& WorldSnap, const TArray<FCommandEntry>& Commands, const FStateDelta& Delta)
+    void Record(int32 TickID, const FWorldSnapshot& WorldSnap, const FBiomeSnapshot& BiomeSnap, const TArray<FCommandEntry>& Commands, const FStateDelta& Delta)
     {
         if (Frames.Num() < MaxFrames)
         {
@@ -40,6 +41,7 @@ struct FTraceRingBuffer
         FTraceFrame& Frame = Frames[WriteIndex % MaxFrames];
         Frame.TickID         = TickID;
         Frame.WorldSnapshot  = WorldSnap;
+        Frame.BiomeSnapshot  = BiomeSnap;
         Frame.Commands       = Commands;
         Frame.GeneratedDelta  = Delta;
         WriteIndex++;

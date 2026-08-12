@@ -351,10 +351,19 @@ void UBiomeGraphSubsystem::UpdateVisualization()
 FBiomeSnapshot UBiomeGraphSubsystem::CaptureState() const
 {
     FBiomeSnapshot Snapshot;
-    // Активные биомы – это просто ключи нашей карты Nodes
+    Snapshot.CollapseThreshold = CollapseThreshold;
+
     for (const auto& Pair : Nodes)
     {
         Snapshot.ActiveBiomeIds.Add(Pair.Key);
+
+        FBiomeFieldContext Ctx;
+        Ctx.MorokField      = Pair.Value.MorokField;
+        Ctx.ZaryanaField    = Pair.Value.ZaryanaField;
+        Ctx.MorokAffinity   = Pair.Value.MorokAffinity;
+        Ctx.ZaryanaAffinity = Pair.Value.ZaryanaAffinity;
+        Ctx.AxisDrift       = Pair.Value.Memory.AxisDrift;
+        Snapshot.Contexts.Add(Pair.Key, Ctx);
     }
     return Snapshot;
 }

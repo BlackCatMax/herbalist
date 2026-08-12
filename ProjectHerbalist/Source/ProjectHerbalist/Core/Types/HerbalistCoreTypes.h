@@ -208,6 +208,13 @@ struct PROJECTHERBALIST_API FInventoryItem
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     bool bSubjectToDecay = true;
 
+    // Является ли водой — нужно Pipeline'у для правил варки (05_Systems.md:
+    // обязательность воды, разбавление, штраф >80% воды), не требует обращения
+    // к реестрам (UIngredientRegistrySubsystem/UWaterTypeRegistrySubsystem),
+    // проставляется один раз при харвесте.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bIsWater = false;
+
     bool IsEmpty() const { return IngredientID.IsNone() || Count <= 0; }
     void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; CreationTime = 0.0f; bSubjectToDecay = true; }
     bool IsValid() const { return !IngredientID.IsNone() && Count > 0; }

@@ -23,6 +23,18 @@ struct FInventoryOperation
 /**
  * Главная структура дельты – результат обработки одного тика симуляции.
  */
+// След алхимического воздействия в биом-графе (05_Systems.md "Biome Context
+// Injection", 14_Biome_Graph.md "След игрока (Footprint)") — Pipeline лишь
+// формирует эти данные, реальный вызов UBiomeGraphSubsystem::RecordFootprint()
+// происходит вне Pipeline (там, где уже разрешено трогать UE-рантайм).
+struct FBiomeFootprintEntry
+{
+    FName BiomeID;
+    float MorokImpact = 0.f;
+    float ZaryanaImpact = 0.f;
+    FVector4 AxisDelta = FVector4(0.f, 0.f, 0.f, 0.f);
+};
+
 struct FStateDelta
 {
     TMap<FIntPoint, FGridCell> WorldChanges;
@@ -34,4 +46,6 @@ struct FStateDelta
     // цель, к которой State плавно подтягивается в RegenerateCellParameters.
     // Оба поля идут через один ApplyStateDelta() — единственную точку записи в мир.
     TMap<FIntPoint, FRealState> TargetStateNudges;
+
+    TArray<FBiomeFootprintEntry> Footprints;
 };
