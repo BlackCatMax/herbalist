@@ -33,6 +33,7 @@ bool FPipelineV2HarvestTest::RunTest(const FString& Parameters)
     WorldSnap.WorldSeed = 12345;
 
     FInventorySnapshot InvSnap;
+    FBiomeSnapshot BiomeSnap;
 
     // 2. Строим граф команд
     FCommandGraph CmdGraph;
@@ -48,7 +49,7 @@ bool FPipelineV2HarvestTest::RunTest(const FString& Parameters)
     int32 SeedBefore = Rng.GetCurrentSeed();
 
     // 4. Запуск пайплайна
-    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, CmdGraph, Rng);
+    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdGraph, Rng);
 
     // 5. Проверки
     const FGridCell* Modified = Delta.WorldChanges.Find(FIntPoint(5, 7));
@@ -77,7 +78,7 @@ bool FPipelineV2HarvestTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FPipelineV2HarvestWaterTest,
-    "ProjectHerbalist.PipelineV2.HarvestWaterIgnored",
+    "ProjectHerbalist.PipelineV2.HarvestWater",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FPipelineV2HarvestWaterTest::RunTest(const FString& Parameters)
@@ -90,6 +91,7 @@ bool FPipelineV2HarvestWaterTest::RunTest(const FString& Parameters)
     WorldSnap.GridState.Add(FIntPoint(3,3), WaterCell);
 
     FInventorySnapshot InvSnap;
+    FBiomeSnapshot BiomeSnap;
     FCommandGraph CmdGraph;
     FCommandEntry CmdEntry;
     CmdEntry.Primitive = ECommandPrimitive::Harvest;
@@ -99,9 +101,12 @@ bool FPipelineV2HarvestWaterTest::RunTest(const FString& Parameters)
     CmdGraph.AddCommand(CmdEntry);
 
     FRandomStream Rng(42);
-    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, CmdGraph, Rng);
+    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdGraph, Rng);
 
-    TestEqual(TEXT("No inventory ops"), Delta.InventoryOps.Num(), 0);
+    // Вода не деградирует (клетка не меняется), но предмет в инвентарь добавляется —
+    // см. ProcessHarvestCommand: ветка bIsWater кладёт один InventoryOp и выходит
+    // до WorldChanges.
+    TestEqual(TEXT("One inventory operation"), Delta.InventoryOps.Num(), 1);
     TestEqual(TEXT("No world changes"), Delta.WorldChanges.Num(), 0);
     return true;
 }

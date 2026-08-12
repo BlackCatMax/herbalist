@@ -92,7 +92,8 @@ namespace Simulation
         Result.IngredientID = IngredientID;
         Result.State = State;
         Result.Count = 1;
-        Result.CreationTime = 0.0;
+        // CreationTime проставляет вызывающая сторона (ProcessHarvestCommand) из
+        // WorldSnap.WorldTime — здесь его не знаем.
         Result.bSubjectToDecay = true;
         return Result;
     }
@@ -292,10 +293,13 @@ namespace Simulation
     }
 
     // ---------------------------------------------------------
-    // Пайплайн варки зелья — 9 шагов из 05_Systems.md:
+    // Пайплайн варки зелья — по мотивам 9 шагов из 05_Systems.md. Фактический
+    // порядок выполнения ниже (не совпадает с нумерацией GDD дословно, но
+    // семантически эквивалентен — вода трогает только Magnitude/Purity, биом
+    // только Direction, порядок между ними не влияет на результат):
     // 1-2. Сбор параметров + Агрегация (Fold, с затуханием по порядку)
-    // 3. Biome Context Injection (MorokField/ZaryanaField/Affinity/AxisDrift)
     // 4. Применение воды (обязательность, "только вода", разбавление, штраф >80%)
+    // 3. Biome Context Injection (MorokField/ZaryanaField/Affinity/AxisDrift)
     // 5. Нормализация осей
     // 6. Morok (нелинейное искажение + обмен осями)
     // 7. Zaryana (усиление доминирующей оси, стабильность/чистота)
@@ -504,7 +508,7 @@ namespace Simulation
             WaterItem.IngredientID = Cell->WaterTypeID.IsNone() ? FName(TEXT("Water")) : Cell->WaterTypeID;
             WaterItem.State = Cell->State;                 // копируем состояние воды
             WaterItem.Count = 1;
-            WaterItem.CreationTime = 0.0;
+            WaterItem.CreationTime = WorldSnap.WorldTime;
             WaterItem.bSubjectToDecay = true;
             WaterItem.bIsWater = true;
 
@@ -539,7 +543,8 @@ namespace Simulation
         Modified.Memory.AccumulatedDistortion = Modified.State.Meta.Distortion;
         
         FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Rng);
-        
+        Harvested.CreationTime = WorldSnap.WorldTime;
+
         FInventoryOperation Op;
         Op.ContainerID = 0;
         Op.Ingredient = Harvested;
@@ -640,7 +645,7 @@ namespace Simulation
             PotionItem.IngredientID = FName(TEXT("Potion"));
             PotionItem.State = PotionState;
             PotionItem.Count = 1;
-            PotionItem.CreationTime = 0.0;
+            PotionItem.CreationTime = WorldSnap.WorldTime;
             PotionItem.bSubjectToDecay = false;
 
             FInventoryOperation AddOp;

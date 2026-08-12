@@ -13,5 +13,6 @@ public class ProjectHerbalistEditorTarget : TargetRules
         bOverrideBuildEnvironment = true;
 
         ExtraModuleNames.Add("ProjectHerbalist");
+        ExtraModuleNames.Add("ProjectHerbalistTests");
     }
 }

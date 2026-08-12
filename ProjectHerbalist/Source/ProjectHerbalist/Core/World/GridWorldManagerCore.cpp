@@ -478,6 +478,7 @@ FWorldSnapshot AGridWorldManager::CaptureState() const
     // который к тому же переживает Trace/Replay (он хранится в самом снапшоте).
     Snapshot.TickIndex = CurrentTickID;
     Snapshot.WorldSeed = static_cast<int32>(HashCombine(static_cast<uint32>(RngBaseSeed), static_cast<uint32>(CurrentTickID)));
+    Snapshot.WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
     return Snapshot;
 }
 

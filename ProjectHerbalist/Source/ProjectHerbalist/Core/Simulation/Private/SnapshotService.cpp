@@ -28,6 +28,27 @@ namespace Simulation
         return nullptr;
     }
 
+    // Кэш, чтобы не гонять TActorIterator (перебор всех акторов уровня) на каждый
+    // тик — CaptureWorld()/ApplyDeltaToWorld() вызываются 20 раз/сек. TWeakObjectPtr
+    // сам инвалидируется при смене уровня/уничтожении актора, поэтому явного
+    // сброса на BeginPlay не требуется (тот же паттерн, что уже в
+    // HerbalistPlayerController::FindWorldManager / BiomeGraphSubsystem::FindGridWorldManager).
+    static TWeakObjectPtr<AGridWorldManager> CachedGridWorldManager;
+
+    static AGridWorldManager* FindGridWorldManager(UWorld* World)
+    {
+        if (CachedGridWorldManager.IsValid())
+        {
+            return CachedGridWorldManager.Get();
+        }
+        for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+        {
+            CachedGridWorldManager = *It;
+            return *It;
+        }
+        return nullptr;
+    }
+
     // ----- Захват состояния -----
     FWorldSnapshot FSnapshotService::CaptureWorld()
     {
@@ -35,14 +56,9 @@ namespace Simulation
         UWorld* World = GetSimulationWorld();
         if (!World) return Snapshot;
 
-        for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+        if (AGridWorldManager* Grid = FindGridWorldManager(World))
         {
-            AGridWorldManager* Grid = *It;
-            if (Grid)
-            {
-                Snapshot = Grid->CaptureState();
-                break;   // берём первый попавшийся
-            }
+            Snapshot = Grid->CaptureState();
         }
         return Snapshot;
     }
@@ -82,14 +98,9 @@ namespace Simulation
         UWorld* World = GetSimulationWorld();
         if (!World) return;
 
-        for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+        if (AGridWorldManager* Grid = FindGridWorldManager(World))
         {
-            AGridWorldManager* Grid = *It;
-            if (Grid)
-            {
-                Grid->ApplyStateDelta(Delta);
-                break;
-            }
+            Grid->ApplyStateDelta(Delta);
         }
     }
 
@@ -128,6 +139,15 @@ namespace Simulation
     // ----- Выполнение одного тика симуляции -----
     FStateDelta FSnapshotService::ExecuteTick(const FCommandGraph& Commands)
     {
+        // Пустой граф команд гарантированно даёт пустую Delta (ExecutePipeline
+        // просто не итерирует ничего) — не тратим снапшот всего мира/инвентаря/
+        // биомов и применение пустой дельты на тик, где игрок ничего не делал.
+        // Это большинство тиков при 20Гц фиксированном шаге.
+        if (Commands.Commands.Num() == 0)
+        {
+            return FStateDelta();
+        }
+
         // 1. Захват состояния
         FWorldSnapshot WorldSnap = CaptureWorld();
         FInventorySnapshot InvSnap = CaptureInventory();

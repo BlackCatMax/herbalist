@@ -13,6 +13,10 @@ struct FWorldSnapshot
     TMap<FIntPoint, FGridCell> GridState;
     int32 WorldSeed = 0;
     int32 TickIndex = 0;
+
+    // Игровое время на момент снапшота (GetWorld()->GetTimeSeconds()) — нужно
+    // Pipeline'у для FInventoryItem::CreationTime, не обращаясь к UWorld напрямую.
+    float WorldTime = 0.f;
 };
 
 /**

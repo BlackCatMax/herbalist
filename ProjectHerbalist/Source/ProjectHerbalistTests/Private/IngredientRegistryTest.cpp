@@ -1,8 +1,14 @@
-#include "Core/Data/IngredientRegistry.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
-#include "Core/Pipeline/AlchemyTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Engine/DataTable.h"
+
+// Раньше классификация ингредиентов жила в статическом FIngredientRegistry
+// (Core/Data/IngredientRegistry.h) — этого файла давно нет в Source/, он ушёл
+// вместе со всем кластером Core/Pipeline/* при переходе на PipelineV2. Тесты
+// ниже переписаны на актуальный UIngredientRegistrySubsystem с тем же составом
+// проверок; тест FAlchemyAtom убран — этого типа сегодня не существует, и
+// придумывать его заново только ради теста не было запрошено.
 
 #if WITH_AUTOMATION_TESTS
 
@@ -12,16 +18,16 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_UnknownReturnsUnknown,
 
 bool FHerbalistRegistry_UnknownReturnsUnknown::RunTest(const FString& Parameters)
 {
-    FIngredientRegistry::Reset();
+    UIngredientRegistrySubsystem* Registry = NewObject<UIngredientRegistrySubsystem>();
 
     UDataTable* Table = NewObject<UDataTable>();
     Table->RowStruct = FIngredientTableRow::StaticStruct();
-    FIngredientRegistry::Initialize(Table);
+    Registry->LoadFromDataTable(Table);
 
-    EIngredientClass Result = FIngredientRegistry::Classify(FName(TEXT("NonExistent")));
+    EIngredientClass Result = Registry->Classify(FName(TEXT("NonExistent")));
     TestEqual(TEXT("Unknown ingredient -> Unknown class"), Result, EIngredientClass::Unknown);
 
-    FIngredientRegistry::Reset();
+    Registry->Reset();
     return true;
 }
 
@@ -31,7 +37,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_KnownWaterClassifiesCorrectl
 
 bool FHerbalistRegistry_KnownWaterClassifiesCorrectly::RunTest(const FString& Parameters)
 {
-    FIngredientRegistry::Reset();
+    UIngredientRegistrySubsystem* Registry = NewObject<UIngredientRegistrySubsystem>();
 
     UDataTable* Table = NewObject<UDataTable>();
     Table->RowStruct = FIngredientTableRow::StaticStruct();
@@ -40,12 +46,12 @@ bool FHerbalistRegistry_KnownWaterClassifiesCorrectly::RunTest(const FString& Pa
     Row.Class = EIngredientClass::Water;
     Table->AddRow(FName(TEXT("Water_Spring")), Row);
 
-    FIngredientRegistry::Initialize(Table);
+    Registry->LoadFromDataTable(Table);
 
-    EIngredientClass Result = FIngredientRegistry::Classify(FName(TEXT("Water_Spring")));
+    EIngredientClass Result = Registry->Classify(FName(TEXT("Water_Spring")));
     TestEqual(TEXT("Water_Spring -> Water"), Result, EIngredientClass::Water);
 
-    FIngredientRegistry::Reset();
+    Registry->Reset();
     return true;
 }
 
@@ -55,7 +61,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_FungusClassifiesCorrectly,
 
 bool FHerbalistRegistry_FungusClassifiesCorrectly::RunTest(const FString& Parameters)
 {
-    FIngredientRegistry::Reset();
+    UIngredientRegistrySubsystem* Registry = NewObject<UIngredientRegistrySubsystem>();
 
     UDataTable* Table = NewObject<UDataTable>();
     Table->RowStruct = FIngredientTableRow::StaticStruct();
@@ -64,12 +70,12 @@ bool FHerbalistRegistry_FungusClassifiesCorrectly::RunTest(const FString& Parame
     Row.Class = EIngredientClass::Fungus;
     Table->AddRow(FName(TEXT("Deathcap")), Row);
 
-    FIngredientRegistry::Initialize(Table);
+    Registry->LoadFromDataTable(Table);
 
-    EIngredientClass Result = FIngredientRegistry::Classify(FName(TEXT("Deathcap")));
+    EIngredientClass Result = Registry->Classify(FName(TEXT("Deathcap")));
     TestEqual(TEXT("Deathcap -> Fungus"), Result, EIngredientClass::Fungus);
 
-    FIngredientRegistry::Reset();
+    Registry->Reset();
     return true;
 }
 
@@ -79,7 +85,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_EssenceClassifiesCorrectly,
 
 bool FHerbalistRegistry_EssenceClassifiesCorrectly::RunTest(const FString& Parameters)
 {
-    FIngredientRegistry::Reset();
+    UIngredientRegistrySubsystem* Registry = NewObject<UIngredientRegistrySubsystem>();
 
     UDataTable* Table = NewObject<UDataTable>();
     Table->RowStruct = FIngredientTableRow::StaticStruct();
@@ -88,36 +94,12 @@ bool FHerbalistRegistry_EssenceClassifiesCorrectly::RunTest(const FString& Param
     Row.Class = EIngredientClass::Essence;
     Table->AddRow(FName(TEXT("FireElementalEssence")), Row);
 
-    FIngredientRegistry::Initialize(Table);
+    Registry->LoadFromDataTable(Table);
 
-    EIngredientClass Result = FIngredientRegistry::Classify(FName(TEXT("FireElementalEssence")));
+    EIngredientClass Result = Registry->Classify(FName(TEXT("FireElementalEssence")));
     TestEqual(TEXT("FireElementalEssence -> Essence"), Result, EIngredientClass::Essence);
 
-    FIngredientRegistry::Reset();
-    return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAtom_UnknownClassCreatesValidAtom,
-    "Herbalist.Atom.UnknownClassCreatesValidAtom",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
-
-bool FHerbalistAtom_UnknownClassCreatesValidAtom::RunTest(const FString& Parameters)
-{
-    FIngredientRegistry::Reset();
-
-    UDataTable* Table = NewObject<UDataTable>();
-    Table->RowStruct = FIngredientTableRow::StaticStruct();
-    FIngredientRegistry::Initialize(Table);
-
-    FAlchemyAtom Atom(FName(TEXT("MysterySubstance")), false, FRealState(),
-                      EAtomOrigin::Harvest, 0.5f, 100.0f);
-
-    TestEqual(TEXT("Atom Class == Unknown"), Atom.Class, EIngredientClass::Unknown);
-    TestTrue(TEXT("Atom UID is valid"), Atom.AtomUID.IsValid());
-    TestEqual(TEXT("Atom Origin preserved"), Atom.OriginContext, EAtomOrigin::Harvest);
-    TestEqual(TEXT("Atom SourceID preserved"), Atom.SourceID, FName(TEXT("MysterySubstance")));
-
-    FIngredientRegistry::Reset();
+    Registry->Reset();
     return true;
 }
 
@@ -127,7 +109,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_IsKnownDistinguishesKnownFro
 
 bool FHerbalistRegistry_IsKnownDistinguishesKnownFromUnknown::RunTest(const FString& Parameters)
 {
-    FIngredientRegistry::Reset();
+    UIngredientRegistrySubsystem* Registry = NewObject<UIngredientRegistrySubsystem>();
 
     UDataTable* Table = NewObject<UDataTable>();
     Table->RowStruct = FIngredientTableRow::StaticStruct();
@@ -136,12 +118,12 @@ bool FHerbalistRegistry_IsKnownDistinguishesKnownFromUnknown::RunTest(const FStr
     Row.Class = EIngredientClass::Plant;
     Table->AddRow(FName(TEXT("Nightshade")), Row);
 
-    FIngredientRegistry::Initialize(Table);
+    Registry->LoadFromDataTable(Table);
 
-    TestTrue(TEXT("Nightshade is known"), FIngredientRegistry::IsKnown(FName(TEXT("Nightshade"))));
-    TestFalse(TEXT("NonExistent is not known"), FIngredientRegistry::IsKnown(FName(TEXT("NonExistent"))));
+    TestTrue(TEXT("Nightshade is known"), Registry->IsKnown(FName(TEXT("Nightshade"))));
+    TestFalse(TEXT("NonExistent is not known"), Registry->IsKnown(FName(TEXT("NonExistent"))));
 
-    FIngredientRegistry::Reset();
+    Registry->Reset();
     return true;
 }
 
