@@ -3,22 +3,9 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/HerbalistNameUtils.h"
 
-// Локальная функция искажения
-static float PerceiveValue(float RealValue, float GlobalDistortion, FRandomStream& Rng)
-{
-    if (GlobalDistortion <= 0.0f) return RealValue;
-    // Шум в диапазоне +/- GlobalDistortion * 0.5
-    float Noise = Rng.FRandRange(-GlobalDistortion * 0.5f, GlobalDistortion * 0.5f);
-    return FMath::Clamp(RealValue + Noise, 0.0f, 1.0f);
-}
-
-void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistortion)
+void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
 {
     if (Item.IsEmpty()) return;
-
-    // Генератор случайных чисел с seed на основе ID предмета и искажения
-    uint32 Seed = GetTypeHash(Item.IngredientID) ^ static_cast<uint32>(GlobalDistortion * 10000.0f);
-    FRandomStream Rng(Seed);
 
     // --- Имя предмета ---
     FString Name;
@@ -36,18 +23,13 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, float GlobalDistort
     if (NameText) NameText->SetText(FText::FromString(Name));
     if (TypeText) TypeText->SetText(FText::FromString(TEXT("Ингредиент")));
 
-    // Вспомогательная лямбда
-    auto SetLine = [&](UTextBlock* TextBlock, float RealValue, const FString& Label)
+    // Item уже искажён (S_perceived) — просто отображаем, без второго слоя шума
+    // и без сравнения с реальным значением: игрок не должен иметь возможность
+    // сверить искажённое число с настоящим.
+    auto SetLine = [](UTextBlock* TextBlock, float Value, const FString& Label)
     {
         if (!TextBlock) return;
-        float Perceived = PerceiveValue(RealValue, GlobalDistortion, Rng);
-        FString Text = FString::Printf(TEXT("%s: %.3f (%.3f)"), *Label, Perceived, RealValue);
-        TextBlock->SetText(FText::FromString(Text));
-        // Подсветка, если искажение сильное
-        FLinearColor Color = FMath::Abs(Perceived - RealValue) > 0.05f 
-            ? FLinearColor(1.0f, 0.3f, 0.3f) 
-            : FLinearColor(0.9f, 0.9f, 0.9f);
-        TextBlock->SetColorAndOpacity(Color);
+        TextBlock->SetText(FText::FromString(FString::Printf(TEXT("%s: %.2f"), *Label, Value)));
     };
 
     SetLine(MagnitudeText,    Item.State.Magnitude,          TEXT("Сила"));

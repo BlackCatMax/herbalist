@@ -13,7 +13,11 @@ class PROJECTHERBALIST_API UItemTooltipWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-    void SetItem(const FInventoryItem& Item, float GlobalDistortion);
+    // Item — уже искажённая (S_perceived) версия предмета, см.
+    // AGridWorldManager::GetPerceivedInventory(). Виджет ничего сам не
+    // искажает и не имеет доступа к реальному значению — по дизайну
+    // (01_Introduction.md: игрок никогда не видит S_real напрямую).
+    void SetItem(const FInventoryItem& Item);
 
 protected:
     UPROPERTY(meta = (BindWidget))

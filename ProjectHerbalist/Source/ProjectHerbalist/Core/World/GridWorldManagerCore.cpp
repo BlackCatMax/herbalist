@@ -531,6 +531,11 @@ const FPerceivedWorld* AGridWorldManager::GetPerceivedWorld() const
     return PerceptionComponent ? &PerceptionComponent->GetPerceivedWorld() : nullptr;
 }
 
+const FPerceivedInventory* AGridWorldManager::GetPerceivedInventory() const
+{
+    return PerceptionComponent ? &PerceptionComponent->GetPerceivedInventory() : nullptr;
+}
+
 // ============================================================================
 // ОТЛАДОЧНАЯ ОТРИСОВКА
 // ============================================================================

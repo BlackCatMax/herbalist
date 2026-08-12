@@ -18,6 +18,7 @@
 #include "Engine/StreamableManager.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
+#include "Core/World/GridWorldManager.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
@@ -48,6 +49,25 @@ int32 UInventorySlotWidget::FindRealIndex() const
     return -1;
 }
 
+bool UInventorySlotWidget::TryGetPerceivedItem(FInventoryItem& OutItem) const
+{
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    if (!HPC) return false;
+
+    AGridWorldManager* WorldManager = HPC->FindWorldManager();
+    const FPerceivedInventory* PerceivedInv = WorldManager ? WorldManager->GetPerceivedInventory() : nullptr;
+    if (!PerceivedInv) return false;
+
+    const int32 RealIndex = FindRealIndex();
+    if (RealIndex == -1) return false;
+
+    const TArray<FInventoryItem>* PerceivedItems = PerceivedInv->ContainerContents.Find(0);
+    if (!PerceivedItems || !PerceivedItems->IsValidIndex(RealIndex)) return false;
+
+    OutItem = (*PerceivedItems)[RealIndex];
+    return true;
+}
+
 void UInventorySlotWidget::UpdateDisplay()
 {
     if (CachedItem.IsEmpty())
@@ -61,7 +81,11 @@ void UInventorySlotWidget::UpdateDisplay()
     FString DisplayName;
     if (CachedItem.IngredientID == FName(TEXT("Potion")))
     {
-        DisplayName = GeneratePotionName(CachedItem.State).ToString();
+        // Имя зелья зависит от State (доминирующая ось, Distortion/Purity) —
+        // должно строиться по искажённому восприятию, а не по реальному составу.
+        FInventoryItem Perceived;
+        const FRealState& StateForName = TryGetPerceivedItem(Perceived) ? Perceived.State : CachedItem.State;
+        DisplayName = GeneratePotionName(StateForName).ToString();
     }
     else
     {
@@ -222,13 +246,11 @@ void UInventorySlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const
 
     if (ActiveTooltip)
     {
-        float GlobalDistortion = 0.3f;
-        if (AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
-        {
-            GlobalDistortion = HPC->CurrentGlobalDistortion;
-        }
-
-        ActiveTooltip->SetItem(CachedItem, GlobalDistortion);
+        // Тултип получает уже искажённую версию предмета (S_perceived) — если
+        // Perception ещё не тикнул ни разу, деградируем к реальному значению,
+        // чтобы тултип не был пустым в первые доли секунды игры.
+        FInventoryItem Perceived;
+        ActiveTooltip->SetItem(TryGetPerceivedItem(Perceived) ? Perceived : CachedItem);
 
         FVector2D MousePos = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorld());
         ActiveTooltip->SetPositionInViewport(MousePos + FVector2D(15, 15));

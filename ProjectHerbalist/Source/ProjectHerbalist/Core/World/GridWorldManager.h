@@ -155,6 +155,7 @@ public:
 
     // ---- Восприятие ----
     const FPerceivedWorld* GetPerceivedWorld() const;
+    const FPerceivedInventory* GetPerceivedInventory() const;
 
     // ---- Экология: восстановление клеток ----
     void RegenerateCellParameters(float DeltaTime);

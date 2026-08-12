@@ -43,6 +43,14 @@ protected:
 
 private:
     int32 FindRealIndex() const;
+
+    // Искажённая (S_perceived) версия CachedItem — из
+    // AGridWorldManager::GetPerceivedInventory(), по индексу того же слота в
+    // контейнере 0 (инвентарь игрока). false, если Perception ещё не тикнул
+    // ни разу (первые ~0.5с игры) — тогда экран деградирует к реальному
+    // значению, а не остаётся пустым.
+    bool TryGetPerceivedItem(FInventoryItem& OutItem) const;
+
     int32 SlotIndex = -1;
 
     UPROPERTY()
