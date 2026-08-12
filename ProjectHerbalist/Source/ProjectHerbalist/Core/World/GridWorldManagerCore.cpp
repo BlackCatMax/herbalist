@@ -13,6 +13,7 @@
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "TimerManager.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
@@ -37,11 +38,11 @@ void AGridWorldManager::FindAndCacheLandscape()
     }
     if (!CachedLandscape)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("No Landscape found in level. Grid cells will use flat Z."));
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("No Landscape found in level. Grid cells will use flat Z."));
     }
     else
     {
-        UE_LOG(LogHerbalist, Log, TEXT("Landscape found: %s"), *CachedLandscape->GetName());
+        UE_LOG(LogHerbalistWorld, Log, TEXT("Landscape found: %s"), *CachedLandscape->GetName());
     }
 }
 
@@ -69,7 +70,7 @@ void AGridWorldManager::CacheCellHeights()
             CachedCellHeights[Idx] = Z;
         }
     }
-    UE_LOG(LogHerbalist, Log, TEXT("Cached %d cell heights from landscape"), TotalCells);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("Cached %d cell heights from landscape"), TotalCells);
 }
 
 float AGridWorldManager::GetCellHeight(int32 X, int32 Y) const
@@ -368,7 +369,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         {
             NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y);
             Cell.ResourceActors.Add(NewActor);
-            UE_LOG(LogHerbalist, Verbose, TEXT("Spawned %s at cell (%d,%d) with Z=%.1f"), *IngredientID.ToString(), Cell.X, Cell.Y, SpawnPos.Z);
+            UE_LOG(LogHerbalistWorld, Verbose, TEXT("Spawned %s at cell (%d,%d) with Z=%.1f"), *IngredientID.ToString(), Cell.X, Cell.Y, SpawnPos.Z);
         }
     }
 }
@@ -392,7 +393,7 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     {
         NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y);
         Cell->ResourceActors.Add(NewActor);
-        UE_LOG(LogHerbalist, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
+        UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
     }
 }
 

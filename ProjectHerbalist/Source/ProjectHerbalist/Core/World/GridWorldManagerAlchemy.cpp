@@ -1,6 +1,7 @@
 // Core/World/GridWorldManagerAlchemy.cpp
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Player/HerbalistPlayerController.h"
 
 // ============================================================================
@@ -18,7 +19,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     Cmd.Apply.Intent         = Intent;
     QueueCommand(Cmd);
 
-    UE_LOG(LogHerbalist, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());
 }
 
 // ============================================================================
@@ -49,14 +50,14 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
     if (!PC || !PC->InventoryComponent)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("No player controller or inventory component found"));
+        UE_LOG(LogHerbalistAlchemy, Warning, TEXT("No player controller or inventory component found"));
         return;
     }
 
     TArray<FInventoryItem> Inventory = PC->InventoryComponent->GetItems();
     if (Inventory.Num() < 2)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Need at least 2 resources in inventory"));
+        UE_LOG(LogHerbalistAlchemy, Warning, TEXT("Need at least 2 resources in inventory"));
         return;
     }
 
@@ -68,7 +69,7 @@ void AGridWorldManager::ApplyTest(int32 X, int32 Y)
     Intent.Coherence = 0.5f;
 
     ApplyAlchemyResult(X, Y, Ingredients, Intent);
-    UE_LOG(LogHerbalist, Log, TEXT("Queued Apply command for cell (%d,%d) and two resources"), X, Y);
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) and two resources"), X, Y);
 }
 
 void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& PotionState)

@@ -1,6 +1,7 @@
 // HarvestService.cpp
 #include "HarvestService.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Types/HerbalistIngredient.h"
@@ -19,7 +20,7 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     UWorld* World = GetWorld();
     if (!World)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("Harvest: No World available"));
+        UE_LOG(LogHerbalistHarvest, Error, TEXT("Harvest: No World available"));
         return FRealState();
     }
 
@@ -27,13 +28,13 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
     if (!Row)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: Ingredient not found in registry '%s'"), *IngredientID.ToString());
+        UE_LOG(LogHerbalistHarvest, Warning, TEXT("Harvest: Ingredient not found in registry '%s'"), *IngredientID.ToString());
         return FRealState();
     }
     FRealState Base = Row->BaseState;
     if (Base.Magnitude < 0.01f && Base.Meta.Distortion < 0.01f)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Harvest: invalid base params for '%s', aborting"), *IngredientID.ToString());
+        UE_LOG(LogHerbalistHarvest, Warning, TEXT("Harvest: invalid base params for '%s', aborting"), *IngredientID.ToString());
         return FRealState();
     }
 
@@ -82,7 +83,7 @@ FRealState UHarvestService::Harvest(FName IngredientID, const FRealState& BiomeS
     Result.Meta.Resonance = FMath::Clamp(Result.Meta.Resonance, 0.0f, 1.0f);
     Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption, 0.0f, 1.0f);
 
-    UE_LOG(LogHerbalist, Log, TEXT("[HARVEST] ID=%s Mag=%.3f Dist=%.3f Stab=%.3f Pur=%.3f"),
+    UE_LOG(LogHerbalistHarvest, Log, TEXT("[HARVEST] ID=%s Mag=%.3f Dist=%.3f Stab=%.3f Pur=%.3f"),
         *IngredientID.ToString(), Result.Magnitude, Result.Meta.Distortion, Result.Meta.Stability, Result.Meta.Purity);
     return Result;
 }

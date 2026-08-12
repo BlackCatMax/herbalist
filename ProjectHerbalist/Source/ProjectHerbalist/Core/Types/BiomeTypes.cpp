@@ -1,6 +1,7 @@
 // BiomeTypes.cpp
 #include "BiomeTypes.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Core/Types/BiomeRow.h"
 #include "Engine/DataTable.h"
@@ -101,7 +102,7 @@ FName FBiomeDefaults::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream&
     static bool bWarned = false;
     if (!bWarned)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("FBiomeDefaults::GetRandomResourceForBiome is deprecated and returns NAME_None. Use IngredientRegistry instead."));
+        UE_LOG(LogHerbalistBiome, Warning, TEXT("FBiomeDefaults::GetRandomResourceForBiome is deprecated and returns NAME_None. Use IngredientRegistry instead."));
         bWarned = true;
     }
     return NAME_None;

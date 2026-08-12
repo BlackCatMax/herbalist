@@ -1,6 +1,7 @@
 #include "WaterTypeRegistrySubsystem.h"
 #include "Engine/DataTable.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 
 void UWaterTypeRegistrySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -18,14 +19,14 @@ void UWaterTypeRegistrySubsystem::LoadFromDataTable(UDataTable* WaterTypeTable)
     if (bInitialized) return;
     if (!WaterTypeTable)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("WaterTypeTable is null"));
+        UE_LOG(LogHerbalistData, Error, TEXT("WaterTypeTable is null"));
         bInitialized = true;
         return;
     }
 
     if (WaterTypeTable->GetRowStruct() != FWaterTypeRow::StaticStruct())
     {
-        UE_LOG(LogHerbalist, Error, TEXT("WaterTypeTable row structure mismatch"));
+        UE_LOG(LogHerbalistData, Error, TEXT("WaterTypeTable row structure mismatch"));
         bInitialized = true;
         return;
     }
@@ -42,7 +43,7 @@ void UWaterTypeRegistrySubsystem::LoadFromDataTable(UDataTable* WaterTypeTable)
 
     BuildCache();
     bInitialized = true;
-    UE_LOG(LogHerbalist, Log, TEXT("WaterTypeRegistrySubsystem initialized with %d water types"), WaterTypeMap.Num());
+    UE_LOG(LogHerbalistData, Log, TEXT("WaterTypeRegistrySubsystem initialized with %d water types"), WaterTypeMap.Num());
 }
 
 void UWaterTypeRegistrySubsystem::BuildCache()

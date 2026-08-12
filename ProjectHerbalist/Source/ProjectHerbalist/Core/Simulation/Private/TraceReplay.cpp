@@ -2,6 +2,7 @@
 #include "TraceReplay.h"
 #include "PipelineV2.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 
 namespace Simulation
 {
@@ -17,7 +18,7 @@ namespace Simulation
         // Сравниваем изменения мира
         if (ReplayedDelta.WorldChanges.Num() != Frame.GeneratedDelta.WorldChanges.Num())
         {
-            UE_LOG(LogHerbalist, Warning, TEXT("ReplayAndCompare: WorldChanges count mismatch. Original: %d, Replay: %d"),
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: WorldChanges count mismatch. Original: %d, Replay: %d"),
                 Frame.GeneratedDelta.WorldChanges.Num(), ReplayedDelta.WorldChanges.Num());
             return false;
         }
@@ -28,14 +29,14 @@ namespace Simulation
             const FGridCell* ReplayedCell = ReplayedDelta.WorldChanges.Find(Coord);
             if (!ReplayedCell)
             {
-                UE_LOG(LogHerbalist, Warning, TEXT("ReplayAndCompare: Missing cell (%d,%d) in replayed delta"), Coord.X, Coord.Y);
+                UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: Missing cell (%d,%d) in replayed delta"), Coord.X, Coord.Y);
                 return false;
             }
 
             if (ReplayedCell->State.Magnitude != Pair.Value.State.Magnitude ||
                 ReplayedCell->State.Meta.Distortion != Pair.Value.State.Meta.Distortion)
             {
-                UE_LOG(LogHerbalist, Warning, TEXT("ReplayAndCompare: Cell (%d,%d) state mismatch"), Coord.X, Coord.Y);
+                UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: Cell (%d,%d) state mismatch"), Coord.X, Coord.Y);
                 return false;
             }
         }
@@ -43,11 +44,11 @@ namespace Simulation
         // Сравниваем операции инвентаря
         if (ReplayedDelta.InventoryOps.Num() != Frame.GeneratedDelta.InventoryOps.Num())
         {
-            UE_LOG(LogHerbalist, Warning, TEXT("ReplayAndCompare: InventoryOps count mismatch"));
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: InventoryOps count mismatch"));
             return false;
         }
 
-        UE_LOG(LogHerbalist, Log, TEXT("ReplayAndCompare: SUCCESS — delta is deterministic"));
+        UE_LOG(LogHerbalistSimulation, Log, TEXT("ReplayAndCompare: SUCCESS — delta is deterministic"));
         return true;
     }
 }

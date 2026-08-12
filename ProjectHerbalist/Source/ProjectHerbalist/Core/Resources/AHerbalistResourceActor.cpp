@@ -11,6 +11,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "TimerManager.h"
 
 AHerbalistResourceActor::AHerbalistResourceActor()
@@ -57,7 +58,7 @@ void AHerbalistResourceActor::BeginPlay()
         FVector LocalLoc = GetActorLocation() - WorldManager->GetActorLocation();
         GridX = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
         GridY = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
-        UE_LOG(LogHerbalist, Verbose, TEXT("%s: Auto-assigned to cell (%d,%d)"),
+        UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: Auto-assigned to cell (%d,%d)"),
             *GetName(), GridX, GridY);
     }
 }
@@ -75,7 +76,7 @@ void AHerbalistResourceActor::FindAndSetWorldManager()
 
     if (!WorldManager)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: No GridWorldManager found in level"), *GetName());
+        UE_LOG(LogHerbalistHarvest, Warning, TEXT("%s: No GridWorldManager found in level"), *GetName());
     }
 }
 
@@ -99,11 +100,11 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
     else
     {
         MeshComponent->SetVisibility(false);
-        UE_LOG(LogHerbalist, Verbose, TEXT("%s: No mesh provided for ingredient %s"),
+        UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: No mesh provided for ingredient %s"),
             *GetName(), *IngredientID.ToString());
     }
 
-    UE_LOG(LogHerbalist, Verbose, TEXT("%s: Initialized at cell (%d,%d) with ingredient %s"),
+    UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: Initialized at cell (%d,%d) with ingredient %s"),
         *GetName(), GridX, GridY, *IngredientID.ToString());
 }
 
@@ -120,20 +121,20 @@ void AHerbalistResourceActor::Harvest()
 {
     if (bIsBeingHarvested)
     {
-        UE_LOG(LogHerbalist, Verbose, TEXT("%s: Already being harvested"), *GetName());
+        UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: Already being harvested"), *GetName());
         return;
     }
 
     if (!WorldManager)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - No WorldManager"), *GetName());
+        UE_LOG(LogHerbalistHarvest, Warning, TEXT("%s: Cannot harvest - No WorldManager"), *GetName());
         return;
     }
 
     FGridCell* Cell = WorldManager->GetCell(GridX, GridY);
     if (!Cell)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("%s: Cannot harvest - Invalid cell (%d,%d)"),
+        UE_LOG(LogHerbalistHarvest, Warning, TEXT("%s: Cannot harvest - Invalid cell (%d,%d)"),
             *GetName(), GridX, GridY);
         return;
     }

@@ -1,6 +1,7 @@
 // Core/Simulation/Private/PipelineV2.cpp
 #include "PipelineV2.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/HerbalistSettings.h"
 
@@ -342,7 +343,7 @@ namespace Simulation
         const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
         if (!Cell)
         {
-            UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Harvest cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("PipelineV2: Harvest cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
             return;
         }
         
@@ -367,7 +368,7 @@ namespace Simulation
             OutDelta.InventoryOps.Add(Op);
 
             // Не добавляем WorldChanges – клетка не меняется
-            UE_LOG(LogHerbalist, Verbose, TEXT("Water harvested at (%d,%d)"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            UE_LOG(LogHerbalistSimulation, Verbose, TEXT("Water harvested at (%d,%d)"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
             return;
         }
 
@@ -399,7 +400,7 @@ namespace Simulation
         OutDelta.InventoryOps.Add(Op);
         OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
         
-        UE_LOG(LogHerbalist, Verbose, TEXT("Harvest: cell (%d,%d) Dist=%.3f"),
+        UE_LOG(LogHerbalistSimulation, Verbose, TEXT("Harvest: cell (%d,%d) Dist=%.3f"),
             Cmd.TargetCell.X, Cmd.TargetCell.Y, Modified.State.Meta.Distortion);
     }
 
@@ -410,7 +411,7 @@ namespace Simulation
         const FInventoryItem* SourceItem = FindItemInSnapshot(InvSnap, Cmd.SourceContainerID, Cmd.IngredientID);
         if (!SourceItem)
         {
-            UE_LOG(LogHerbalist, Warning, TEXT("PipelineV2: Transfer source item %s not found in container %d"),
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("PipelineV2: Transfer source item %s not found in container %d"),
                 *Cmd.IngredientID.ToString(), Cmd.SourceContainerID);
             return;
         }
@@ -495,7 +496,7 @@ namespace Simulation
             AddOp.Amount = 1;
             OutDelta.InventoryOps.Add(AddOp);
 
-            UE_LOG(LogHerbalist, Log, TEXT("Crafted potion: Outcome=%d M=%.2f, Dist=%.2f, Purity=%.2f"),
+            UE_LOG(LogHerbalistSimulation, Log, TEXT("Crafted potion: Outcome=%d M=%.2f, Dist=%.2f, Purity=%.2f"),
                 (int32)Outcome, PotionState.Magnitude, PotionState.Meta.Distortion, PotionState.Meta.Purity);
             return;
         }
@@ -503,7 +504,7 @@ namespace Simulation
         // 4. Иначе – применение на клетку
         if (!TargetCell)
         {
-            UE_LOG(LogHerbalist, Warning, TEXT("Apply target cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("Apply target cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
             return;
         }
 
@@ -512,7 +513,7 @@ namespace Simulation
         Modified.HarvestStress = FMath::Clamp(TargetCell->HarvestStress + 0.2f, 0.f, 1.f);
         OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
 
-        UE_LOG(LogHerbalist, Log, TEXT("Applied potion to cell (%d,%d): Outcome=%d M=%.2f, Dist=%.2f"),
+        UE_LOG(LogHerbalistSimulation, Log, TEXT("Applied potion to cell (%d,%d): Outcome=%d M=%.2f, Dist=%.2f"),
             Cmd.TargetCell.X, Cmd.TargetCell.Y, (int32)Outcome, PotionState.Magnitude, PotionState.Meta.Distortion);
     }
 

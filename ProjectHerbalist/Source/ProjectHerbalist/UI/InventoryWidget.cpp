@@ -1,5 +1,6 @@
 #include "UI/InventoryWidget.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "UI/InventorySlotWidget.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
@@ -57,7 +58,7 @@ void UInventoryWidget::RefreshInventoryDisplay()
         }
     }
 	
-	UE_LOG(LogHerbalist, Warning, TEXT("RefreshInventoryDisplay: %d items in inventory"), InventoryComponent ? InventoryComponent->GetItems().Num() : 0);
+	UE_LOG(LogHerbalistUI, Warning, TEXT("RefreshInventoryDisplay: %d items in inventory"), InventoryComponent ? InventoryComponent->GetItems().Num() : 0);
 }
 
 void UInventoryWidget::ClearSlots()

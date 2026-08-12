@@ -386,6 +386,10 @@ struct FMemoryState {
 
 **Ещё найдено, но не тронуто** — не баги, а отдельные фичи вне сегодняшнего скоупа: эволюция предметов в инвентаре со временем (`UHerbalistSettings::InventoryDecayRate` уже объявлен, но нигде не используется — «порча» ресурсов между сбором и варкой из `05_Systems.md` не реализована); `EnvironmentToxicityWeight`/`EnvironmentBlendWeight` (влияние `FEnvironment` клетки на алхимию — в GDD не описано достаточно детально, чтобы реализовать без домысливания); применение зелий к сущностям/произвольным объектам мира, а не только к клеткам (`05_Systems.md`: «игрок может применить любое зелье к любому объекту или существу» — сейчас только `ApplyPotionToCell`).
 
+### Централизованное логирование (2026-08-12)
+
+Раньше в проекте была одна категория на всё — `LogHerbalist` (91 вызов в 19 файлах) плюс самодельный локальный `LogBiomeGraph`. Даже обещанная в PR-0 этого документа `LogHerbalistSimulation` так и не была заведена. Теперь: `Source/ProjectHerbalist/HerbalistLogChannels.h/.cpp` объявляет по категории на подсистему — `LogHerbalistSimulation` (Pipeline/Snapshot/Delta/Trace), `LogHerbalistBiome` (BiomeGraph, заменил `LogBiomeGraph`), `LogHerbalistHarvest`, `LogHerbalistAlchemy`, `LogHerbalistInventory`, `LogHerbalistWorld` (GridWorldManager), `LogHerbalistUI`, `LogHerbalistPlayer`, `LogHerbalistData` (реестры/DataTable). `LogHerbalist` оставлен как общая категория для модуля/GameMode. Все 91 существующих вызова `UE_LOG` переведены на новые категории — теперь можно фильтровать Output Log по подсистеме (`log LogHerbalistBiome Verbose` и т.д.) вместо разбора одного общего потока.
+
 ### Судьба Contract v1.1
 
 Документ `Core/CoreLock/Herbalist System Contract v1_1.md` архивирован (см. пометку в самом файле). Его слои `SemanticResolver/IntentResolver/PhysicsPipeline/WorldStateApplier/WorldManifestor` и типы `FAlchemyAtom`/`AtomUID` не встречаются нигде в `Source/` — контракт описывал архитектуру, которая не была реализована и была молча заменена Pipeline V2. Единственная часть, подтверждённая кодом — `FMemoryState` — перенесена выше в «Критические структуры данных».

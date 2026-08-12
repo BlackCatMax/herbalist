@@ -3,6 +3,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "DrawDebugHelpers.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Simulation/Public/SnapshotService.h"
@@ -107,7 +108,7 @@ void AGridWorldManager::ReplayLastTick()
     const FTraceFrame* Frame = TraceBuffer.GetLastFrame();
     if (!Frame)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("ReplayLastTick: No trace frames recorded"));
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("ReplayLastTick: No trace frames recorded"));
         return;
     }
 

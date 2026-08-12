@@ -1,5 +1,6 @@
 #include "Core/Storage/StorageContainer.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Player/HerbalistPlayerController.h"
 #include "UI/InventoryTransferWidget.h"
 #include "Engine/World.h"
@@ -21,18 +22,18 @@ void AStorageContainer::BeginPlay()
 
 void AStorageContainer::OnInteract(APlayerController* PlayerController)
 {
-    UE_LOG(LogHerbalist, Log, TEXT("AStorageContainer::OnInteract called"));
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("AStorageContainer::OnInteract called"));
 
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(PlayerController);
     if (!PC)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("Failed to cast PlayerController to AHerbalistPlayerController"));
+        UE_LOG(LogHerbalistAlchemy, Error, TEXT("Failed to cast PlayerController to AHerbalistPlayerController"));
         return;
     }
 
     if (TransferWidgetInstance && TransferWidgetInstance->IsInViewport())
     {
-        UE_LOG(LogHerbalist, Log, TEXT("Closing TransferWidget"));
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("Closing TransferWidget"));
         TransferWidgetInstance->RemoveFromParent();
         TransferWidgetInstance = nullptr;
         PC->CurrentTransferWidget = nullptr;
@@ -46,13 +47,13 @@ void AStorageContainer::OnInteract(APlayerController* PlayerController)
 
     if (PC->bIsAnyWidgetOpen)
     {
-        UE_LOG(LogHerbalist, Log, TEXT("Another widget is open, cannot open storage"));
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("Another widget is open, cannot open storage"));
         return;
     }
 
     if (!PC->InventoryComponent || !InventoryComponent || !TransferWidgetClass)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("Missing components"));
+        UE_LOG(LogHerbalistAlchemy, Error, TEXT("Missing components"));
         return;
     }
 
@@ -62,11 +63,11 @@ void AStorageContainer::OnInteract(APlayerController* PlayerController)
         TransferWidgetInstance = nullptr;
     }
 
-    UE_LOG(LogHerbalist, Log, TEXT("Creating TransferWidget instance"));
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("Creating TransferWidget instance"));
     TransferWidgetInstance = CreateWidget<UInventoryTransferWidget>(GetWorld(), TransferWidgetClass);
     if (!TransferWidgetInstance)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("Failed to create TransferWidget"));
+        UE_LOG(LogHerbalistAlchemy, Error, TEXT("Failed to create TransferWidget"));
         return;
     }
 
@@ -81,5 +82,5 @@ void AStorageContainer::OnInteract(APlayerController* PlayerController)
     PC->SetIgnoreLookInput(true);
     PC->bIsAnyWidgetOpen = true;
 
-    UE_LOG(LogHerbalist, Log, TEXT("TransferWidget opened successfully"));
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("TransferWidget opened successfully"));
 }

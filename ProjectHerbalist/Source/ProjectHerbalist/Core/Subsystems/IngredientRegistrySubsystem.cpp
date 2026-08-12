@@ -2,6 +2,7 @@
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Engine/DataTable.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 
 void UIngredientRegistrySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -19,7 +20,7 @@ void UIngredientRegistrySubsystem::LoadFromDataTable(UDataTable* IngredientTable
     if (bInitialized) return;
     if (!IngredientTable)
     {
-        UE_LOG(LogHerbalist, Error, TEXT("IngredientTable is null"));
+        UE_LOG(LogHerbalistData, Error, TEXT("IngredientTable is null"));
         bInitialized = true;
         return;
     }
@@ -36,7 +37,7 @@ void UIngredientRegistrySubsystem::LoadFromDataTable(UDataTable* IngredientTable
 
     BuildCache();
     bInitialized = true;
-    UE_LOG(LogHerbalist, Log, TEXT("IngredientRegistrySubsystem loaded %d ingredients"), Rows.Num());
+    UE_LOG(LogHerbalistData, Log, TEXT("IngredientRegistrySubsystem loaded %d ingredients"), Rows.Num());
 }
 
 void UIngredientRegistrySubsystem::BuildCache()

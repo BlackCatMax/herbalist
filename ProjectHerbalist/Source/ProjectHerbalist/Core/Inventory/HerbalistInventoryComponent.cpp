@@ -1,6 +1,7 @@
 // HerbalistInventoryComponent.cpp
 #include "HerbalistInventoryComponent.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "Core/HerbalistSettings.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
@@ -73,7 +74,7 @@ bool UHerbalistInventoryComponent::AddItem(const FInventoryItem& Item, int32 Amo
 {
     if (Amount <= 0 || Item.IngredientID.IsNone() || Item.Count <= 0)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("AddItem: invalid parameters"));
+        UE_LOG(LogHerbalistInventory, Warning, TEXT("AddItem: invalid parameters"));
         return false;
     }
 
@@ -97,7 +98,7 @@ bool UHerbalistInventoryComponent::AddItem(const FInventoryItem& Item, int32 Amo
     {
         if (Items.Num() >= MaxSlots)
         {
-            UE_LOG(LogHerbalist, Warning, TEXT("AddItem: inventory full, %d items not added"), Remaining);
+            UE_LOG(LogHerbalistInventory, Warning, TEXT("AddItem: inventory full, %d items not added"), Remaining);
             break;
         }
 

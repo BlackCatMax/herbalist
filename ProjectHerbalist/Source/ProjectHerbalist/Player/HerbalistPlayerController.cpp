@@ -11,6 +11,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "UI/AlchemyTransferWidget.h"
 #include "UI/InventoryTransferWidget.h"
 #include "UI/InventoryWidget.h"
@@ -193,7 +194,7 @@ void AHerbalistPlayerController::Harvest()
     if (!Cell || !Cell->bIsWater) return;
 
     WorldManager->CollectWater(X, Y);
-    UE_LOG(LogHerbalist, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
 }
 
 bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Resource)
@@ -202,13 +203,13 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
 
     if (!CanHarvestActor(Resource))
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Too far to harvest %s"), *Resource->GetName());
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Too far to harvest %s"), *Resource->GetName());
         return false;
     }
 
     if (Resource->IsBeingHarvested())
     {
-        UE_LOG(LogHerbalist, Verbose, TEXT("%s is already being harvested"), *Resource->GetName());
+        UE_LOG(LogHerbalistPlayer, Verbose, TEXT("%s is already being harvested"), *Resource->GetName());
         return false;
     }
 
@@ -240,7 +241,7 @@ void AHerbalistPlayerController::OnRightClick()
     if (WorldManager)
     {
         WorldManager->SelectCell(X, Y);
-        UE_LOG(LogHerbalist, Log, TEXT("Cell info: %s"), *WorldManager->GetSelectedCellInfo());
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Cell info: %s"), *WorldManager->GetSelectedCellInfo());
     }
 }
 

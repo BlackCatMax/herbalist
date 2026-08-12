@@ -1,6 +1,7 @@
 // GridWorldManagerDebug.cpp
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Core/Harvest/HarvestService.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Player/HerbalistPlayerController.h"
@@ -14,11 +15,11 @@ void AGridWorldManager::SelectCell(int32 X, int32 Y)
     {
         SelectedX = X;
         SelectedY = Y;
-        UE_LOG(LogHerbalist, Log, TEXT("Selected cell (%d, %d)"), X, Y);
+        UE_LOG(LogHerbalistWorld, Log, TEXT("Selected cell (%d, %d)"), X, Y);
     }
     else
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("Invalid cell (%d, %d)"), X, Y);
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("Invalid cell (%d, %d)"), X, Y);
     }
 }
 
@@ -71,7 +72,7 @@ void AGridWorldManager::ShowInventory()
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
     if (!PC || !PC->InventoryComponent)
     {
-        UE_LOG(LogHerbalist, Warning, TEXT("No player controller or inventory component found"));
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("No player controller or inventory component found"));
         return;
     }
 
@@ -79,7 +80,7 @@ void AGridWorldManager::ShowInventory()
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
     TArray<FInventoryItem> Inventory = PC->InventoryComponent->GetItems();
-    UE_LOG(LogHerbalist, Log, TEXT("=== INVENTORY (%d items) ==="), Inventory.Num());
+    UE_LOG(LogHerbalistWorld, Log, TEXT("=== INVENTORY (%d items) ==="), Inventory.Num());
     for (int32 i = 0; i < Inventory.Num(); ++i)
     {
         const FInventoryItem& Item = Inventory[i];
@@ -108,7 +109,7 @@ void AGridWorldManager::ShowInventory()
         {
             Name = Item.IngredientID.ToString();
         }
-        UE_LOG(LogHerbalist, Log, TEXT("[%d] %s x%d: Mag=%.2f, Dist=%.2f, Pot=%.2f Res=%.2f Cor=%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[%d] %s x%d: Mag=%.2f, Dist=%.2f, Pot=%.2f Res=%.2f Cor=%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
             i, *Name, Item.Count, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
             Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);
     }

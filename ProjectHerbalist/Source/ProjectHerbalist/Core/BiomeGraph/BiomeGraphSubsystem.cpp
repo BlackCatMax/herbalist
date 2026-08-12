@@ -9,8 +9,7 @@
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "ProjectHerbalist.h"
-
-DEFINE_LOG_CATEGORY_STATIC(LogBiomeGraph, Log, All);
+#include "HerbalistLogChannels.h"
 
 void UBiomeGraphSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
@@ -33,7 +32,7 @@ void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
 {
     if (!Asset)
     {
-        UE_LOG(LogBiomeGraph, Error, TEXT("InitializeFromAsset: Asset is null"));
+        UE_LOG(LogHerbalistBiome, Error, TEXT("InitializeFromAsset: Asset is null"));
         return;
     }
 
@@ -53,7 +52,7 @@ void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
     BuildAdjacencyList();
     bInitialized = true;
 
-    UE_LOG(LogBiomeGraph, Log, TEXT("Initialized with %d nodes, %d edges"), Nodes.Num(), Edges.Num());
+    UE_LOG(LogHerbalistBiome, Log, TEXT("Initialized with %d nodes, %d edges"), Nodes.Num(), Edges.Num());
 }
 
 void UBiomeGraphSubsystem::BuildAdjacencyList()
@@ -112,7 +111,7 @@ void UBiomeGraphSubsystem::ForceStep()
 {
     if (!bInitialized || Nodes.Num() == 0) return;
     InternalStep(FixedTimeStep);
-    UE_LOG(LogBiomeGraph, Log, TEXT("ForceStep executed"));
+    UE_LOG(LogHerbalistBiome, Log, TEXT("ForceStep executed"));
 }
 
 void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
@@ -120,7 +119,7 @@ void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
     AGridWorldManager* Grid = FindGridWorldManager();
     if (!Grid)
     {
-        UE_LOG(LogBiomeGraph, Warning, TEXT("InternalStep: GridWorldManager not found"));
+        UE_LOG(LogHerbalistBiome, Warning, TEXT("InternalStep: GridWorldManager not found"));
         return;
     }
 
@@ -182,7 +181,7 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
         }
     }
 
-    UE_LOG(LogBiomeGraph, VeryVerbose, TEXT("RecalculateFieldsFromGrid completed"));
+    UE_LOG(LogHerbalistBiome, VeryVerbose, TEXT("RecalculateFieldsFromGrid completed"));
 }
 
 void UBiomeGraphSubsystem::PropagateWaves()
@@ -216,7 +215,7 @@ void UBiomeGraphSubsystem::PropagateWaves()
         Pair.Value.ZaryanaField = FMath::Clamp(PrevZaryana[Pair.Key] + DeltaZaryana[Pair.Key], 0.f, 1.f);
     }
 
-    UE_LOG(LogBiomeGraph, VeryVerbose, TEXT("PropagateWaves completed"));
+    UE_LOG(LogHerbalistBiome, VeryVerbose, TEXT("PropagateWaves completed"));
 }
 
 void UBiomeGraphSubsystem::ApplyFieldsToGrid(AGridWorldManager* Grid)
@@ -232,7 +231,7 @@ void UBiomeGraphSubsystem::ApplyFieldsToGrid(AGridWorldManager* Grid)
 
     Grid->ApplyBiomeInfluences(MorokFields, ZaryanaFields, GlobalInfluenceScale);
 
-    UE_LOG(LogBiomeGraph, VeryVerbose, TEXT("ApplyFieldsToGrid completed"));
+    UE_LOG(LogHerbalistBiome, VeryVerbose, TEXT("ApplyFieldsToGrid completed"));
 }
 
 void UBiomeGraphSubsystem::UpdateMemories(float StepDeltaTime)
@@ -267,7 +266,7 @@ void UBiomeGraphSubsystem::RecordFootprint(FName BiomeID, float MorokImpact, flo
     Node->Memory.AxisDrift.W = FMath::Clamp(Node->Memory.AxisDrift.W, 0.f, 1.f);
 
     // Уровень Log – теперь Footprint виден всегда
-    UE_LOG(LogBiomeGraph, Log, TEXT("Footprint on %s: Morok=%.3f, Zaryana=%.3f, Axis=(%.2f,%.2f,%.2f,%.2f)"),
+    UE_LOG(LogHerbalistBiome, Log, TEXT("Footprint on %s: Morok=%.3f, Zaryana=%.3f, Axis=(%.2f,%.2f,%.2f,%.2f)"),
         *BiomeID.ToString(), MorokImpact, ZaryanaImpact, AxisDelta.X, AxisDelta.Y, AxisDelta.Z, AxisDelta.W);
 }
 
@@ -281,15 +280,15 @@ void UBiomeGraphSubsystem::DebugPrintNodes() const
 {
     if (!bInitialized)
     {
-        UE_LOG(LogBiomeGraph, Warning, TEXT("Graph not initialized"));
+        UE_LOG(LogHerbalistBiome, Warning, TEXT("Graph not initialized"));
         return;
     }
 
-    UE_LOG(LogBiomeGraph, Log, TEXT("=== BIOME GRAPH STATE (%d nodes) ==="), Nodes.Num());
+    UE_LOG(LogHerbalistBiome, Log, TEXT("=== BIOME GRAPH STATE (%d nodes) ==="), Nodes.Num());
     for (const auto& Pair : Nodes)
     {
         const FBiomeGraphNode& Node = Pair.Value;
-        UE_LOG(LogBiomeGraph, Log, TEXT("[%s] MorokField=%.3f, ZaryanaField=%.3f, MorokAff=%.3f, Stab=%.3f, Mem: MorokHist=%.3f, Inst=%.3f"),
+        UE_LOG(LogHerbalistBiome, Log, TEXT("[%s] MorokField=%.3f, ZaryanaField=%.3f, MorokAff=%.3f, Stab=%.3f, Mem: MorokHist=%.3f, Inst=%.3f"),
             *Pair.Key.ToString(),
             Node.MorokField, Node.ZaryanaField, Node.MorokAffinity, Node.Stability,
             Node.Memory.MorokHistory, Node.Memory.Instability);
@@ -304,7 +303,7 @@ void UBiomeGraphSubsystem::ResetGraph()
         Pair.Value.ZaryanaField = 0.f;
         Pair.Value.Memory = FBiomeMemory();
     }
-    UE_LOG(LogBiomeGraph, Log, TEXT("Graph reset"));
+    UE_LOG(LogHerbalistBiome, Log, TEXT("Graph reset"));
 }
 
 // ============================================================================
@@ -315,7 +314,7 @@ void UBiomeGraphSubsystem::UpdateVisualization()
 {
     if (!bInitialized || Nodes.Num() == 0)
     {
-        UE_LOG(LogBiomeGraph, Verbose, TEXT("UpdateVisualization: graph not initialized or empty"));
+        UE_LOG(LogHerbalistBiome, Verbose, TEXT("UpdateVisualization: graph not initialized or empty"));
         return;
     }
 
@@ -345,7 +344,7 @@ void UBiomeGraphSubsystem::UpdateVisualization()
     UKismetMaterialLibrary::SetVectorParameterValue(World, MPC, "MorokColor", MorokColor);
     UKismetMaterialLibrary::SetVectorParameterValue(World, MPC, "ZaryanaColor", ZaryanaColor);
 
-    UE_LOG(LogBiomeGraph, Verbose, TEXT("UpdateVisualization: Morok=%.2f, Zaryana=%.2f"), AvgMorok, AvgZaryana);
+    UE_LOG(LogHerbalistBiome, Verbose, TEXT("UpdateVisualization: Morok=%.2f, Zaryana=%.2f"), AvgMorok, AvgZaryana);
 }
 
 FBiomeSnapshot UBiomeGraphSubsystem::CaptureState() const
@@ -372,9 +371,9 @@ void UBiomeGraphSubsystem::ApplyStateDelta(const FStateDelta& Delta)
 {
     // В будущем здесь будет обновление MorokField, ZaryanaField и т.д.
     // Пока только логируем полученные активации
-    UE_LOG(LogBiomeGraph, Log, TEXT("ApplyStateDelta: received %d biome activations"), Delta.BiomeActivations.Num());
+    UE_LOG(LogHerbalistBiome, Log, TEXT("ApplyStateDelta: received %d biome activations"), Delta.BiomeActivations.Num());
     for (const FName& BiomeID : Delta.BiomeActivations)
     {
-        UE_LOG(LogBiomeGraph, Verbose, TEXT(" - %s"), *BiomeID.ToString());
+        UE_LOG(LogHerbalistBiome, Verbose, TEXT(" - %s"), *BiomeID.ToString());
     }
 }
