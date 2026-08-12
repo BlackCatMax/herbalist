@@ -54,9 +54,12 @@ struct FHarvestCommand
 
     // Базовые параметры ингредиента (IngredientTableRow::BaseState), резолвятся
     // вне Pipeline (у AHerbalistResourceActor уже есть на момент сбора — см.
-    // AGridWorldManager::OnResourceCollected) — нужны для расчёта отклонения от
-    // S0 как в UHarvestService::Harvest, без обращения к реестрам внутри Pipeline.
+    // AGridWorldManager::OnResourceCollected), чтобы Pipeline не обращался к реестрам.
     FRealState BaseState;
+
+    // IngredientTableRow::Resilience — насколько трава сопротивляется характеру
+    // места при сборе (0 = целиком принимает биом, 1 = остаётся собой).
+    float Resilience = 0.f;
 };
 
 // B – базовое действие / диалог (Talk) – пока заглушка

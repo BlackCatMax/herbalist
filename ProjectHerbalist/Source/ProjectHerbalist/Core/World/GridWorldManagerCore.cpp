@@ -366,7 +366,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
         if (NewActor)
         {
-            NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y);
+            NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y, Row->Resilience);
             Cell.ResourceActors.Add(NewActor);
             UE_LOG(LogHerbalistWorld, Verbose, TEXT("Spawned %s at cell (%d,%d) with Z=%.1f"), *IngredientID.ToString(), Cell.X, Cell.Y, SpawnPos.Z);
         }
@@ -390,7 +390,7 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
     if (NewActor)
     {
-        NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y);
+        NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y, Row->Resilience);
         Cell->ResourceActors.Add(NewActor);
         UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
     }
@@ -432,6 +432,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.IngredientID  = Actor->GetIngredientID();
     Cmd.Harvest.Amount        = 1;
     Cmd.Harvest.BaseState     = Actor->GetBaseState();
+    Cmd.Harvest.Resilience    = Actor->GetResilience();
     QueueCommand(Cmd);
 
     if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)

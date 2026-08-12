@@ -26,67 +26,65 @@ namespace Simulation
         return nullptr;
     }
 
-    // Результат сбора = базовые параметры ингредиента, смещённые отклонением
-    // текущего состояния клетки от S0 (Алатыря) — та же математика, что в
-    // UHarvestService::Harvest, но как чистая функция снапшота (без обращения
-    // к UIngredientRegistrySubsystem/UHerbalistSettings через World/Subsystem;
-    // BaseState уже резолвлен вне Pipeline, см. FHarvestCommand::BaseState).
+    // Результат сбора = природа ингредиента, подтянутая к состоянию места:
+    //     Result = Lerp(BaseState, CellState, k)
+    //
+    // Ровно то, что описывает 05_Systems.md: «ресурсы не существуют до момента
+    // сбора как фиксированные сущности — они формируются в момент взаимодействия
+    // как результат преобразования локального состояния».
+    //
+    // Почему именно интерполяция, а не прежнее `Base + k*(Biome - S0)`:
+    // результат Lerp всегда лежит между Base и Cell, оба из [0,1] — выйти за
+    // границы **невозможно по построению**, кламп не нужен. Прежняя аддитивная
+    // форма была неограниченной (диапазон [-k, 1+k]) и на реальных данных
+    // упиралась в кламп в 44% замеров: у сильных трав параметры уже стоят у
+    // края, и любой толчок биома в ту же сторону выбивал их за единицу — из-за
+    // чего Potency/Resonance становились константой во всех биомах сразу.
+    //
+    // S0 (Алатырь) из формулы сбора ушёл намеренно: он плохо работал началом
+    // координат (лежит вне диапазона реальных биомов по всем шести мета-осям),
+    // и теперь свободен для своей настоящей роли — недостижимого ориентира, до
+    // которого меряют расстояние в прогрессии.
     static FInventoryItem GenerateHarvestResult(const FGridCell& Cell,
                                                FName IngredientID,
                                                const FRealState& IngredientBaseState,
+                                               float IngredientResilience,
                                                FRandomStream& Rng)
     {
         const UHerbalistSettings* Settings = GetHerbalistSettings();
-        const float k_biome = Settings ? Settings->HarvestBiomeWeight : 0.6f;
+        const float BiomeWeight = Settings ? Settings->HarvestBiomeWeight : 0.4f;
 
-        const FRealState& S0 = FAlatyr::S0;
         const FRealState& BiomeState = Cell.State;
 
-        // Если базовое состояние ингредиента не было резолвлено (нулевое) —
-        // деградируем к прежнему поведению: биом как единственный источник.
+        // Если базовое состояние ингредиента не резолвлено (нулевое) —
+        // деградируем к биому как единственному источнику.
         const bool bHasBase = IngredientBaseState.Magnitude > KINDA_SMALL_NUMBER || IngredientBaseState.Meta.Distortion > KINDA_SMALL_NUMBER;
         const FRealState& Base = bHasBase ? IngredientBaseState : BiomeState;
 
-        FRealState BiomeDelta;
-        BiomeDelta.Direction.Body = BiomeState.Direction.Body - S0.Direction.Body;
-        BiomeDelta.Direction.Mind = BiomeState.Direction.Mind - S0.Direction.Mind;
-        BiomeDelta.Direction.Spirit = BiomeState.Direction.Spirit - S0.Direction.Spirit;
-        BiomeDelta.Direction.Nature = BiomeState.Direction.Nature - S0.Direction.Nature;
-        BiomeDelta.Magnitude = BiomeState.Magnitude - S0.Magnitude;
-        BiomeDelta.Meta.Distortion = BiomeState.Meta.Distortion - S0.Meta.Distortion;
-        BiomeDelta.Meta.Stability = BiomeState.Meta.Stability - S0.Meta.Stability;
-        BiomeDelta.Meta.Purity = BiomeState.Meta.Purity - S0.Meta.Purity;
-        BiomeDelta.Meta.Potency = BiomeState.Meta.Potency - S0.Meta.Potency;
-        BiomeDelta.Meta.Resonance = BiomeState.Meta.Resonance - S0.Meta.Resonance;
-        BiomeDelta.Meta.Corruption = BiomeState.Meta.Corruption - S0.Meta.Corruption;
+        // Сопротивляемость травы гасит влияние места: Resilience=1 — трава
+        // собирается ровно собой, Resilience=0 — целиком принимает биом.
+        const float K = FMath::Clamp(BiomeWeight * (1.f - FMath::Clamp(IngredientResilience, 0.f, 1.f)), 0.f, 1.f);
+        auto Blend = [K](float BaseValue, float CellValue) { return BaseValue + (CellValue - BaseValue) * K; };
 
         FRealState State;
-        State.Direction.Body = Base.Direction.Body + k_biome * BiomeDelta.Direction.Body;
-        State.Direction.Mind = Base.Direction.Mind + k_biome * BiomeDelta.Direction.Mind;
-        State.Direction.Spirit = Base.Direction.Spirit + k_biome * BiomeDelta.Direction.Spirit;
-        State.Direction.Nature = Base.Direction.Nature + k_biome * BiomeDelta.Direction.Nature;
-        State.Magnitude = Base.Magnitude + k_biome * BiomeDelta.Magnitude;
-        State.Meta.Stability = Base.Meta.Stability + k_biome * BiomeDelta.Meta.Stability;
-        State.Meta.Purity = Base.Meta.Purity + k_biome * BiomeDelta.Meta.Purity;
-        State.Meta.Potency = Base.Meta.Potency + k_biome * BiomeDelta.Meta.Potency;
-        State.Meta.Resonance = Base.Meta.Resonance + k_biome * BiomeDelta.Meta.Resonance;
-        State.Meta.Corruption = Base.Meta.Corruption + k_biome * BiomeDelta.Meta.Corruption;
+        State.Direction.Body   = Blend(Base.Direction.Body,   BiomeState.Direction.Body);
+        State.Direction.Mind   = Blend(Base.Direction.Mind,   BiomeState.Direction.Mind);
+        State.Direction.Spirit = Blend(Base.Direction.Spirit, BiomeState.Direction.Spirit);
+        State.Direction.Nature = Blend(Base.Direction.Nature, BiomeState.Direction.Nature);
+        State.Magnitude        = Blend(Base.Magnitude,        BiomeState.Magnitude);
+        State.Meta.Distortion  = Blend(Base.Meta.Distortion,  BiomeState.Meta.Distortion);
+        State.Meta.Stability   = Blend(Base.Meta.Stability,   BiomeState.Meta.Stability);
+        State.Meta.Purity      = Blend(Base.Meta.Purity,      BiomeState.Meta.Purity);
+        State.Meta.Potency     = Blend(Base.Meta.Potency,     BiomeState.Meta.Potency);
+        State.Meta.Resonance   = Blend(Base.Meta.Resonance,   BiomeState.Meta.Resonance);
+        State.Meta.Corruption  = Blend(Base.Meta.Corruption,  BiomeState.Meta.Corruption);
 
-        const float P_Base = 1.f - Base.Meta.Distortion;
-        const float P_Biome = 1.f - BiomeState.Meta.Distortion * k_biome;
-        State.Meta.Distortion = 1.f - FMath::Clamp(P_Base * P_Biome, 0.f, 1.f);
-
-        // Небольшой джиттер поверх — условия сбора (FConditionModifier), которые
-        // здесь не передаются игроком явно, приближаем случайным шумом.
+        // Джиттер — условия сбора (FConditionModifier), которые игрок явно не
+        // задаёт. Единственное место, где кламп ещё нужен: шум добавляется
+        // поверх и сам по себе границ не соблюдает.
         State.Magnitude = FMath::Clamp(State.Magnitude + Rng.FRandRange(-0.03f, 0.03f), 0.0f, 1.0f);
 
         State.Direction.NormalizeSum();
-        State.Meta.Distortion = FMath::Clamp(State.Meta.Distortion, 0.f, 1.f);
-        State.Meta.Stability = FMath::Clamp(State.Meta.Stability, 0.f, 1.f);
-        State.Meta.Purity = FMath::Clamp(State.Meta.Purity, 0.f, 1.f);
-        State.Meta.Potency = FMath::Clamp(State.Meta.Potency, 0.f, 1.f);
-        State.Meta.Resonance = FMath::Clamp(State.Meta.Resonance, 0.f, 1.f);
-        State.Meta.Corruption = FMath::Clamp(State.Meta.Corruption, 0.f, 1.f);
 
         FInventoryItem Result;
         Result.IngredientID = IngredientID;
@@ -542,7 +540,7 @@ namespace Simulation
         Modified.State.Direction.NormalizeSum();
         Modified.Memory.AccumulatedDistortion = Modified.State.Meta.Distortion;
         
-        FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Rng);
+        FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Cmd.Resilience, Rng);
         Harvested.CreationTime = WorldSnap.WorldTime;
 
         FInventoryOperation Op;

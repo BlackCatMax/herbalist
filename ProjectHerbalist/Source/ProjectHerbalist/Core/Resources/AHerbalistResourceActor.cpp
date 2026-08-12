@@ -82,11 +82,13 @@ void AHerbalistResourceActor::FindAndSetWorldManager()
 
 void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayName,
     UStaticMesh* Mesh, const FRealState& InBaseState, const FVector& Location,
-    AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY)
+    AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY,
+    float InResilience)
 {
     IngredientID = InIngredientID;
     DisplayName = InDisplayName;
     BaseState = InBaseState;
+    Resilience = InResilience;
     WorldManager = InWorldManager;
     GridX = InGridX;
     GridY = InGridY;

@@ -55,8 +55,13 @@ public:
     float BifurcationThreshold = 0.85f;
 
     // --- Harvest ---
+    // Насколько собранная трава подтягивается к состоянию места:
+    // 0 = трава ровно своя (BaseState), 1 = трава целиком становится местом.
+    // Гасится сопротивляемостью ингредиента (IngredientTableRow::Resilience).
+    // 0.4, а не 0.6: при 0.6 место перебивало вид, и разные травы в одном
+    // биоме сходились друг к другу, теряя собственный характер.
     UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float HarvestBiomeWeight = 0.6f;
+    float HarvestBiomeWeight = 0.4f;
 
     UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HarvestConditionWeight = 0.4f;

@@ -21,11 +21,13 @@ public:
     AHerbalistResourceActor();
 	
 	FRealState GetBaseState() const { return BaseState; }
+	float GetResilience() const { return Resilience; }
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Init(FName InIngredientID, const FText& InDisplayName, UStaticMesh* Mesh,
     const FRealState& InBaseState, const FVector& Location,
-    AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
+    AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY,
+    float InResilience = 0.0f);
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Harvest();
@@ -93,6 +95,10 @@ protected:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
     FRealState BaseState;
+
+    // Копия IngredientTableRow::Resilience — чтобы на момент сбора не лезть в реестр
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float Resilience = 0.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Effects")
     UParticleSystem* HarvestParticleSystem;

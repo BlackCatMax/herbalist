@@ -54,6 +54,13 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay", meta = (ClampMin = "0.0", ClampMax = "10.0"))
     float DecayRate = 1.0f;
 
+    // Сопротивляемость месту при сборе: насколько трава держит свою природу
+    // вопреки биому. 0 = полностью принимает характер места (эффективный вес
+    // биома = HarvestBiomeWeight), 1 = не поддаётся вовсе (собирается ровно
+    // своим BaseState). Сильные/своевольные травы фольклора — ближе к 1.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float Resilience = 0.0f;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
     FName Element;
 
