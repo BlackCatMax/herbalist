@@ -9,51 +9,51 @@
 	"Nodes": [
 		{
 			"BiomeID": "Tundra",
-			"MorokAffinity": 0.5,
-			"ZaryanaAffinity": 0.5,
+			"MorokAffinity": 0.20000000298023224,
+			"ZaryanaAffinity": 0.69999998807907104,
 			"Stability": 0.5
 		},
 		{
 			"BiomeID": "Taiga",
-			"MorokAffinity": 0.5,
-			"ZaryanaAffinity": 0.5,
-			"Stability": 0.5
+			"MorokAffinity": 0.18000000715255737,
+			"ZaryanaAffinity": 0.80000001192092896,
+			"Stability": 0.69999998807907104
 		},
 		{
 			"BiomeID": "MixedForest",
-			"MorokAffinity": 0.5,
-			"ZaryanaAffinity": 0.5,
-			"Stability": 0.5
+			"MorokAffinity": 0.2199999988079071,
+			"ZaryanaAffinity": 0.75,
+			"Stability": 0.64999997615814209
 		},
 		{
 			"BiomeID": "BroadleafForest",
-			"MorokAffinity": 0.5,
-			"ZaryanaAffinity": 0.5,
-			"Stability": 0.5
+			"MorokAffinity": 0.2800000011920929,
+			"ZaryanaAffinity": 0.69999998807907104,
+			"Stability": 0.60000002384185791
 		},
 		{
 			"BiomeID": "ForestSteppe",
-			"MorokAffinity": 0.5,
-			"ZaryanaAffinity": 0.5,
-			"Stability": 0.5
+			"MorokAffinity": 0.34999999403953552,
+			"ZaryanaAffinity": 0.60000002384185791,
+			"Stability": 0.55000001192092896
 		},
 		{
 			"BiomeID": "Steppe",
-			"MorokAffinity": 0.5,
+			"MorokAffinity": 0.41999998688697815,
 			"ZaryanaAffinity": 0.5,
 			"Stability": 0.5
 		},
 		{
 			"BiomeID": "Floodplain",
-			"MorokAffinity": 0.5,
-			"ZaryanaAffinity": 0.5,
-			"Stability": 0.5
+			"MorokAffinity": 0.44999998807907104,
+			"ZaryanaAffinity": 0.55000001192092896,
+			"Stability": 0.44999998807907104
 		},
 		{
 			"BiomeID": "Bog",
-			"MorokAffinity": 0.5,
-			"ZaryanaAffinity": 0.5,
-			"Stability": 0.5
+			"MorokAffinity": 0.69999998807907104,
+			"ZaryanaAffinity": 0.34999999403953552,
+			"Stability": 0.34999999403953552
 		}
 	],
 	"Edges": [
@@ -65,15 +65,81 @@
 		},
 		{
 			"FromBiome": "Taiga",
+			"ToBiome": "Tundra",
+			"MorokLeak": 0.25,
+			"ZaryanaFlow": 0.25
+		},
+		{
+			"FromBiome": "Taiga",
 			"ToBiome": "MixedForest",
 			"MorokLeak": 0.10000000149011612,
 			"ZaryanaFlow": 0.10000000149011612
+		},
+		{
+			"FromBiome": "MixedForest",
+			"ToBiome": "Taiga",
+			"MorokLeak": 0.10000000149011612,
+			"ZaryanaFlow": 0.10000000149011612
+		},
+		{
+			"FromBiome": "MixedForest",
+			"ToBiome": "BroadleafForest",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
+		},
+		{
+			"FromBiome": "BroadleafForest",
+			"ToBiome": "MixedForest",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
+		},
+		{
+			"FromBiome": "BroadleafForest",
+			"ToBiome": "ForestSteppe",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
+		},
+		{
+			"FromBiome": "ForestSteppe",
+			"ToBiome": "BroadleafForest",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
+		},
+		{
+			"FromBiome": "ForestSteppe",
+			"ToBiome": "Steppe",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
+		},
+		{
+			"FromBiome": "Steppe",
+			"ToBiome": "ForestSteppe",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
 		},
 		{
 			"FromBiome": "Steppe",
 			"ToBiome": "Floodplain",
 			"MorokLeak": 0.10000000149011612,
 			"ZaryanaFlow": 0.10000000149011612
+		},
+		{
+			"FromBiome": "Floodplain",
+			"ToBiome": "Steppe",
+			"MorokLeak": 0.10000000149011612,
+			"ZaryanaFlow": 0.10000000149011612
+		},
+		{
+			"FromBiome": "Floodplain",
+			"ToBiome": "Bog",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
+		},
+		{
+			"FromBiome": "Bog",
+			"ToBiome": "Floodplain",
+			"MorokLeak": 0.15000000596046448,
+			"ZaryanaFlow": 0.15000000596046448
 		}
 	]
 }
