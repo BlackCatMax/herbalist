@@ -2,7 +2,6 @@
 #include "AHerbalistResourceActor.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Core/Harvest/HarvestService.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/World/GridWorldManager.h"

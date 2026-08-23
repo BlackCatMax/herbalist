@@ -16,7 +16,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogHerbalistSimulation, Log, All);
 // Биомный граф: распространение полей, память, footprint (Core/BiomeGraph, BiomeTypes).
 DECLARE_LOG_CATEGORY_EXTERN(LogHerbalistBiome, Log, All);
 
-// Сбор ресурсов: HarvestService, ресурсные акторы, харвест-команды GridWorldManager.
+// Сбор ресурсов: ресурсные акторы, харвест-команды GridWorldManager.
 DECLARE_LOG_CATEGORY_EXTERN(LogHerbalistHarvest, Log, All);
 
 // Алхимия/варка: AlchemySubsystem, контейнеры/столы, Apply-команды GridWorldManager.

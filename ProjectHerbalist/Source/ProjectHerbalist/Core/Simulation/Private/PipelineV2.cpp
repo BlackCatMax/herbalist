@@ -426,23 +426,45 @@ namespace Simulation
         // ниже давление Морока в биоме — легаси-формула Coherence*(1-Distortion),
         // но Coherence теперь настоящий (ComputeIntentCoherence), а не константа. ---
         const float Coherence = FMath::Clamp(Intent.Coherence, 0.f, 1.f);
-        const float MorokMixStrengthFactor = Settings ? Settings->MorokMixStrengthFactor : 0.5f;
+        const float MorokPressure = Settings ? Settings->MorokPressure : 1.0f;
         const float BiomeZaryanaInfluence = Settings ? Settings->BiomeZaryanaInfluence : 0.3f;
         const float ZaryanaStrength = FMath::Clamp(Coherence * (1.f - EffectiveMorok), 0.f, 1.f);
 
-        // Morok: насыщающий рост Distortion/Corruption (не может перескочить через 1,
-        // тем сильнее, чем ниже текущая Stability)
-        const float MorokFactor = EffectiveMorok * MorokMixStrengthFactor;
-        const float Noise = MorokFactor * (1.f - Result.Meta.Stability);
-        Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion + Noise * (1.f - Result.Meta.Distortion), 0.f, 1.f);
-        Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption + MorokFactor * (1.f - Result.Meta.Stability), 0.f, 1.f);
+        // Morok и Zaryana — одна операция в две стороны: возведение параметра
+        // из [0,1] в степень. Морок понижает показатель (тянет к 1), Заряна
+        // повышает (тянет к 0). Свойства, ради которых выбрана эта форма:
+        //
+        //   * ограничена [0,1] ПО ПОСТРОЕНИЮ (x^p при x,p>0 не покидает отрезок) —
+        //     клампы здесь больше не нужны, как и в GenerateHarvestResult;
+        //   * x=0 и x=1 — неподвижные точки: абсолютно чистое неуязвимо для
+        //     Морока, абсолютно искажённое не вытянуть Заряной;
+        //   * Морок УСИЛИВАЕТ уже имеющееся, а не впрыскивает своё —
+        //     03_Narrative: "Морок не действует как отдельная сущность.
+        //     Он проявляется через поведение системы, изменяя её структуру".
+        //
+        // Прежняя форма (D += Noise*(1-D)) была насыщающей: чем грязнее смесь,
+        // тем МЕНЬШЕ мог добавить Морок. На замерах злого состава (D=0.82)
+        // весь диапазон влияния мира составлял 0.072 — исход определялся
+        // ингредиентами примерно вчетверо сильнее, чем местом, вопреки
+        // Core Lock §2, а Bifurcation не срабатывал ни разу за 200 варок даже
+        // при MorokAffinity=1.0. Насыщение убрано: показатель степени зависит
+        // от давления Морока и гасится Stability — 03_Narrative,
+        // "нестабильность усиливается в нарушенной среде, она ослабевает
+        // в согласованных условиях".
+        const float MorokExponent = EffectiveMorok * MorokPressure * (1.f - Result.Meta.Stability);
+        auto ApplyMorokPush = [MorokExponent](float Value)
+        {
+            return (Value > KINDA_SMALL_NUMBER) ? FMath::Pow(Value, 1.f / (1.f + MorokExponent)) : Value;
+        };
+        Result.Meta.Distortion = ApplyMorokPush(Result.Meta.Distortion);
+        Result.Meta.Corruption = ApplyMorokPush(Result.Meta.Corruption);
 
         FVector4 UnitDir = DirectionToUnitVector(Result.Direction);
         ApplyMorokAxisMix(UnitDir, EffectiveMorok, Rng);
 
-        // Zaryana: подавление искажения, усиление стабильности/чистоты
-        Result.Meta.Distortion = FMath::Clamp(Result.Meta.Distortion * (1.f - ZaryanaStrength * 0.25f), 0.f, 1.f);
-        Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption * (1.f - ZaryanaStrength * 0.20f), 0.f, 1.f);
+        // Zaryana: обратная операция — тот же показатель, но в другую сторону.
+        Result.Meta.Distortion = FMath::Pow(Result.Meta.Distortion, 1.f + ZaryanaStrength * 0.25f);
+        Result.Meta.Corruption = FMath::Pow(Result.Meta.Corruption, 1.f + ZaryanaStrength * 0.20f);
         Result.Meta.Stability = FMath::Lerp(Result.Meta.Stability, 1.f, ZaryanaStrength * 0.15f);
         Result.Meta.Purity = FMath::Clamp(Result.Meta.Purity + ZaryanaStrength * Result.Meta.Stability * 0.2f, 0.f, 1.f);
 

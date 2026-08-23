@@ -13,7 +13,6 @@
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "GridWorldManager.generated.h"
 
-class UHarvestService;
 class AHerbalistResourceActor;
 class ALandscape;
 struct FWorldSnapshot;
@@ -151,7 +150,6 @@ public:
     void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale);
 
     // ---- Ресурсы ----
-    UHarvestService* GetHarvestService() const { return HarvestService; }
     void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
 
     // ---- Восприятие ----
@@ -215,9 +213,6 @@ protected:
     TSet<int32> RegrowingCells;
     TMap<int32, float> LastHarvestTimeMap;
     const float HarvestCooldown = 0.2f;
-
-    UPROPERTY()
-    UHarvestService* HarvestService;
 
     UPROPERTY()
     TObjectPtr<UPerceptionComponent> PerceptionComponent;

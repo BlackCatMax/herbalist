@@ -5,7 +5,6 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
-#include "Core/Harvest/HarvestService.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Types/BiomeRow.h"
 #include "Core/Config/HerbalistSettings.h"
@@ -206,7 +205,6 @@ void AGridWorldManager::BeginPlay()
 {
     Super::BeginPlay();
     WorldRNG.Initialize(RngBaseSeed);
-    HarvestService = NewObject<UHarvestService>(this);
 
     if (Cells.Num() == 0)
     {
@@ -452,7 +450,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
 FRealState AGridWorldManager::CollectWater(int32 X, int32 Y)
 {
     FGridCell* Cell = GetCell(X, Y);
-    if (!Cell || !Cell->bIsWater || !HarvestService) return FRealState();
+    if (!Cell || !Cell->bIsWater) return FRealState();
 
     // Формируем команду Harvest для воды
     FCommandEntry Cmd;

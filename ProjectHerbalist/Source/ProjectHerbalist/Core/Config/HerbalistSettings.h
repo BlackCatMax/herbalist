@@ -36,8 +36,16 @@ public:
     float FoldWeightDecay = 0.8f;
 
     // --- Morok ---
-    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Morok", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float MorokMixStrengthFactor = 0.5f;
+    // Давление Морока: во сколько раз сильна его хватка при полном EffectiveMorok
+    // и нулевой Stability. Входит показателем степени (PipelineV2::ComputeApplyResult),
+    // а не слагаемым, поэтому диапазон шире 1.0.
+    //
+    // Переименовано из MorokMixStrengthFactor: прежнее имя врало — осевым
+    // смешиванием (ApplyMorokAxisMix) этот коэффициент никогда не управлял,
+    // туда идёт EffectiveMorok напрямую. Смысл тоже изменился вместе с формулой,
+    // поэтому имя менять было обязательно, а не косметически.
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Morok", meta = (ClampMin = "0.0", ClampMax = "4.0"))
+    float MorokPressure = 1.0f;
 
     // --- Zaryana ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -62,9 +70,6 @@ public:
     // биоме сходились друг к другу, теряя собственный характер.
     UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HarvestBiomeWeight = 0.4f;
-
-    UPROPERTY(config, EditAnywhere, Category = "Harvest", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float HarvestConditionWeight = 0.4f;
 
     // Насколько один сбор истощает клетку. Живёт здесь, а не на
     // AGridWorldManager, потому что читается из Pipeline (ProcessHarvestCommand),

@@ -2,7 +2,6 @@
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
-#include "Core/Harvest/HarvestService.h"
 #include "Core/Types/HerbalistIngredient.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"

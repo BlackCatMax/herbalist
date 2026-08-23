@@ -125,7 +125,19 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // Memory.HistoryPurity — медленная скользящая средняя от текущей Purity.
         // Поле уже существовало в FMemoryState, но нигде не обновлялось (см.
         // 16_Entity_Manifestation §16.4, упрощённый аналог Restoration капищ).
-        Cell.Memory.HistoryPurity = FMath::Lerp(Cell.Memory.HistoryPurity, Cell.State.Meta.Purity, HistoryPurityRate);
+        //
+        // Считается только для Речной поймы: это порог появления Берегини, и
+        // больше HistoryPurity никто не читает. Раньше гонялось по всем клеткам.
+        //
+        // Сходимость через 1-exp(-rate*dt), а не rate*dt: линейная форма при
+        // больших DeltaTime перелетает цель, а без DeltaTime вовсе (как было)
+        // скорость сходимости зависела от FPS — порог Берегини достигался на
+        // разных машинах за разное время.
+        if (Cell.Biome == EBiomeType::Floodplain)
+        {
+            const float PurityAlpha = 1.0f - FMath::Exp(-HistoryPurityRate * DeltaTime);
+            Cell.Memory.HistoryPurity = FMath::Lerp(Cell.Memory.HistoryPurity, Cell.State.Meta.Purity, PurityAlpha);
+        }
 
         bool bChanged = false;
         FRealState NewTarget = Cell.TargetState;
@@ -139,8 +151,12 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // Самоусиливающаяся порча места — тянем TargetState дальше, чем
                 // клетка уже есть, а не жёстко фиксируем; ApplyStateDelta/
                 // RegenerateCellParameters сами доведут State до цели.
-                NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + GnilnikiNudgeRate, 0.0f, 1.0f);
-                NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity - GnilnikiNudgeRate * 0.5f, 0.0f, 1.0f);
+                // *DeltaTime: настройка задана "в секунду". Без него порча шла
+                // за кадр, то есть на 60 FPS в 60 раз быстрее заявленного и
+                // с прямой зависимостью скорости порчи мира от частоты кадров.
+                const float GnilnikiStep = GnilnikiNudgeRate * DeltaTime;
+                NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + GnilnikiStep, 0.0f, 1.0f);
+                NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity - GnilnikiStep * 0.5f, 0.0f, 1.0f);
                 bChanged = true;
             }
             else if (Cell.ManifestedEntityID == EntityID_Gnilniki)
