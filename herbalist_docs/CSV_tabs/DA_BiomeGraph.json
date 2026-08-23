@@ -1,0 +1,79 @@
+{
+	"GlobalMorokDecay": 0.0099999997764825821,
+	"GlobalZaryanaDecay": 0.004999999888241291,
+	"PotionCollapseThreshold": 0.85000002384185791,
+	"BiomeCollapseThreshold": 0.89999997615814209,
+	"FixedTimeStep": 0.20000000298023224,
+	"GlobalInfluenceScale": 1,
+	"GridBlendFactor": 0.30000001192092896,
+	"Nodes": [
+		{
+			"BiomeID": "Tundra",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		},
+		{
+			"BiomeID": "Taiga",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		},
+		{
+			"BiomeID": "MixedForest",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		},
+		{
+			"BiomeID": "BroadleafForest",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		},
+		{
+			"BiomeID": "ForestSteppe",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		},
+		{
+			"BiomeID": "Steppe",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		},
+		{
+			"BiomeID": "Floodplain",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		},
+		{
+			"BiomeID": "Bog",
+			"MorokAffinity": 0.5,
+			"ZaryanaAffinity": 0.5,
+			"Stability": 0.5
+		}
+	],
+	"Edges": [
+		{
+			"FromBiome": "Tundra",
+			"ToBiome": "Taiga",
+			"MorokLeak": 0.25,
+			"ZaryanaFlow": 0.25
+		},
+		{
+			"FromBiome": "Taiga",
+			"ToBiome": "MixedForest",
+			"MorokLeak": 0.10000000149011612,
+			"ZaryanaFlow": 0.10000000149011612
+		},
+		{
+			"FromBiome": "Steppe",
+			"ToBiome": "Floodplain",
+			"MorokLeak": 0.10000000149011612,
+			"ZaryanaFlow": 0.10000000149011612
+		}
+	]
+}

@@ -181,8 +181,22 @@ Harvest/Apply(крафт)-командам, `ShowJournal()` как первый 
    Регрессия: `Herbalist.Save.CaptureIsSparse`, `Herbalist.Save.ApplyRestoresEarlierSnapshot` —
    первые автотесты проекта, реально спавнящие `AGridWorldManager` в мир
    (`DispatchBeginPlay()`), а не только чистые функции/подсистемы без мира.
-2. **`DA_BiomeGraph` → JSON** (§4). Дёшево, паттерн готов, разблокирует настройку
-   Морока, которую мы только что переписали вслепую.
+2. ✅ **`DA_BiomeGraph` → JSON** (§4) — ВЫПОЛНЕНО 2026-08-24, экспорт-направление.
+   `UBiomeGraphExportCommandlet` (`ProjectHerbalistTests`, `-run=BiomeGraphExport`)
+   читает живой asset через `LoadObject` (у `UDataAsset`, в отличие от
+   `UDataTable`, нет штатного Import/Export) и пишет `herbalist_docs/CSV_tabs/DA_BiomeGraph.json`.
+   Импорт (JSON -> запись пакета обратно) сознательно не сделан — экспорт закрывает
+   названную боль «не ревьюится», запись пакета через `UPackage::SavePackage`
+   рискованнее, отдельная задача при необходимости.
+
+   **Первый же экспорт вскрыл именно то, чего боялся ROADMAP:** у всех 8 узлов
+   `MorokAffinity = ZaryanaAffinity = Stability = 0.5` — это дефолты C++-структуры,
+   их НИКТО никогда не задавал осознанно. Bifurcation сейчас биом-слеп: болото
+   рискует испортить варку ровно так же, как тундра, вопреки всему лору и
+   `DT_BiomeDefaults` (Corruption Болота 0.70 против, например, 0.10-0.20 у леса).
+   Плюс всего 3 рёбра из возможных: Tundra-Taiga-MixedForest и Steppe-Floodplain
+   связаны, **Болото не соединено вообще ни с одним биомом** — Морок/Заряна не
+   могут ни утечь из него, ни в него прийти.
 3. **Достроить `S_Perceived` до котла** — два виджета по образцу
    `InventorySlotWidget`, плюс назвать Морочников в UI (закрывает крит §1.3 аудита).
 

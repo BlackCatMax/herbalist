@@ -18,7 +18,8 @@ public class ProjectHerbalistTests : ModuleRules
 
         PrivateDependencyModuleNames.AddRange(new string[]
         {
-            "AutomationTest"
+            "AutomationTest",
+            "Json"   // BiomeGraphExportCommandlet.cpp
         });
 
         // GEditor/UEditorEngine (SaveSystemTest.cpp — GetEditorWorldContext) — только
