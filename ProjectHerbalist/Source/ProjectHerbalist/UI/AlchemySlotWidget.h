@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Math/RandomStream.h"
 #include "AlchemySlotWidget.generated.h"
 
 UENUM(BlueprintType)
@@ -31,6 +32,13 @@ public:
     int32 GetCount() const { return Count; }
     EAlchemySlotType GetSlotType() const { return SlotType; }
 
+    // Искажённая версия StoredItem.State, посчитанная один раз при AddItem —
+    // тот же экземпляр, что видит сам слот в UpdateDisplay. Наружу, чтобы
+    // AlchemyTransferWidget мог сослаться на неё в статусной строке, а не
+    // считать восприятие заново своим RNG (иначе цифры в слоте и в тосте
+    // разъехались бы — два независимых броска шума на одно и то же событие).
+    const FRealState& GetPerceivedState() const { return PerceivedState; }
+
     virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
     virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
     virtual void NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
@@ -53,4 +61,13 @@ protected:
     int32 Count = 0;
     int32 MaxCount = 1;
     bool bHasItem = false;
+
+    // Искажённая версия StoredItem.State для отображения (07_UX: котёл не должен
+    // раскрывать S_real). Отдельный фиксированный сид, не WorldRNG — предметы
+    // здесь уже вне мира/инвентарного контейнера, у котла нет доступа к живому
+    // потоку AGridWorldManager (protected), а плодить публичный геттер ради этого
+    // не хотелось. Тот же принцип, что HerbalistInventoryComponent::DecayRng:
+    // детерминированность самого по себе шума, не завязанная на симуляцию.
+    FRandomStream PerceptionRng = FRandomStream(20260824);
+    FRealState PerceivedState;
 };

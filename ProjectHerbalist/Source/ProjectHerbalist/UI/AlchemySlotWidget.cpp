@@ -9,6 +9,7 @@
 #include "UI/ItemTooltipWidget.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Core/Types/HerbalistNameUtils.h"   // <-- добавлено
+#include "Core/Simulation/Private/PerceptionService.h"
 
 void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCount)
 {
@@ -49,6 +50,10 @@ bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
         StoredItem = Item;
         bHasItem = true;
         Count = FMath::Min(Amount, MaxCount);
+        // Считаем один раз, на входе в слот — не при каждом UpdateDisplay,
+        // иначе имя зелья/ингредиента мигало бы новым искажением на любой
+        // перерисовке (ROADMAP.md §3.1: иллюзия должна быть устойчивой).
+        PerceivedState = Simulation::FPerceptionService::PerceiveRealState(StoredItem.State, PerceptionRng);
     }
     else
     {
@@ -80,6 +85,7 @@ void UAlchemySlotWidget::Clear()
     bHasItem = false;
     Count = 0;
     StoredItem = FInventoryItem();
+    PerceivedState = FRealState();
     UpdateDisplay();
 }
 
@@ -165,13 +171,26 @@ void UAlchemySlotWidget::UpdateDisplay()
 
     if (IconImage) IconImage->SetVisibility(ESlateVisibility::Visible);
 
-    UIngredientRegistrySubsystem* IngSub = nullptr;
-    if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
+    // Имя зелья зависит от State (доминирующая ось, Distortion/Purity) — должно
+    // строиться по искажённому восприятию, а не по реальному составу (тот же
+    // принцип, что уже в InventorySlotWidget::UpdateDisplay). Остальные
+    // названия (Ash/BoiledWater/Water/из реестра) от State не зависят — там
+    // нечему течь.
+    FString DisplayName;
+    if (StoredItem.IngredientID == FName(TEXT("Potion")))
     {
-        if (PC->GetGameInstance())
-            IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
+        DisplayName = GeneratePotionName(PerceivedState).ToString();
     }
-    const FString DisplayName = GetItemDisplayName(StoredItem, IngSub);
+    else
+    {
+        UIngredientRegistrySubsystem* IngSub = nullptr;
+        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
+        {
+            if (PC->GetGameInstance())
+                IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
+        }
+        DisplayName = GetItemDisplayName(StoredItem, IngSub);
+    }
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));
 
