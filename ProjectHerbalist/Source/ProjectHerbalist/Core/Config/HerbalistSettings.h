@@ -120,6 +120,14 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|Morochniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float NightPerceptionDistortionBonus = 0.25f;
 
+    // Общий запас гистерезиса для порогов проявления сущностей (Corruption у
+    // Гнильников, HistoryPurity у Берегини, Respect у Полевика). Порог входа —
+    // Threshold + запас, порог выхода — Threshold − запас: значение, дрожащее у
+    // самой границы (из-за DeltaTime-шума или встречных Nudge от других систем),
+    // не заставляет хозяина мигать проявлением каждый тик (DESIGN_World_State.md §14).
+    UPROPERTY(config, EditAnywhere, Category = "Entities", meta = (ClampMin = "0.0", ClampMax = "0.3"))
+    float EntityManifestationHysteresis = 0.05f;
+
     // --- Spawning (DESIGN_World_State.md §15, звено 3) ---
     // Резкость спада пригодности ингредиента в GetRandomResourceForBiome:
     // Suitability = exp(-Falloff * Distance(CellState, BaseState)^2). 2.0 подобрано

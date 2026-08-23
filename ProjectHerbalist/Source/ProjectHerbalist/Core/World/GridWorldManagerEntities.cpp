@@ -25,6 +25,38 @@ namespace
     const FName EntityID_Gnilniki(TEXT("Гнильники"));
     const FName EntityID_Polevik(TEXT("Полевик"));
     const FName EntityID_Bereginya(TEXT("Берегиня"));
+
+    // Ранг бестиария (см. заголовок файла: Низший/Основной/Легендарный) решает,
+    // кто вытесняет кого при совпадении условий в одной клетке (DESIGN_World_State.md
+    // §14) — "вытеснение вместо миграции": никто не переезжает, просто более
+    // редкая/сильная сущность выигрывает проекцию, если условия обеих выполнены
+    // одновременно. Выше число — выше приоритет.
+    int32 GetEntityManifestationPriority(FName EntityID)
+    {
+        if (EntityID == EntityID_Bereginya) return 2;  // Легендарный
+        if (EntityID == EntityID_Polevik)   return 1;  // Основной
+        if (EntityID == EntityID_Gnilniki)  return 0;  // Низший
+        return -1;
+    }
+
+    // Клетка свободна для CandidateID, если она либо не занята, либо уже занята
+    // им же (переподтверждение), либо занята кем-то менее приоритетным (вытесняем).
+    bool CanManifest(const FGridCell& Cell, FName CandidateID)
+    {
+        return Cell.ManifestedEntityID.IsNone()
+            || Cell.ManifestedEntityID == CandidateID
+            || GetEntityManifestationPriority(CandidateID) > GetEntityManifestationPriority(Cell.ManifestedEntityID);
+    }
+
+    // Триггер Шмитта: порог входа выше порога выхода на 2×Margin, чтобы Value,
+    // колеблющееся у самой границы Threshold, не переключало bCurrentlyActive
+    // каждый тик. bCurrentlyActive — было ли это конкретное условие уже активно
+    // в предыдущем тике (для проявлений сущностей это Cell.ManifestedEntityID ==
+    // <эта сущность>, читается в месте вызова).
+    bool PassesHysteresisThreshold(bool bCurrentlyActive, float Value, float Threshold, float Margin)
+    {
+        return bCurrentlyActive ? (Value > Threshold - Margin) : (Value > Threshold + Margin);
+    }
 }
 
 // ============================================================================
@@ -118,6 +150,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float RespectGainRate     = Settings ? Settings->LandmarkRespectGainRate          : 0.01f;
     const float RespectDecayRate    = Settings ? Settings->LandmarkRespectDecayRate         : 0.02f;
     const float StressAngerThreshold= Settings ? Settings->LandmarkStressAngerThreshold     : 0.6f;
+    const float HysteresisMargin    = Settings ? Settings->EntityManifestationHysteresis    : 0.05f;
 
     FStateDelta Delta;
 
@@ -147,7 +180,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // --- Гнильники: Низший, амбиентная зона, Болото ---
         if (Cell.Biome == EBiomeType::Bog && !Cell.bIsWater)
         {
-            if (Cell.State.Meta.Corruption > GnilnikiThreshold)
+            const bool bWasActive = Cell.ManifestedEntityID == EntityID_Gnilniki;
+            const bool bEligible = PassesHysteresisThreshold(bWasActive, Cell.State.Meta.Corruption, GnilnikiThreshold, HysteresisMargin);
+
+            if (bEligible && CanManifest(Cell, EntityID_Gnilniki))
             {
                 Cell.ManifestedEntityID = EntityID_Gnilniki;
                 // Самоусиливающаяся порча места — тянем TargetState дальше, чем
@@ -161,9 +197,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity - GnilnikiStep * 0.5f, 0.0f, 1.0f);
                 bChanged = true;
             }
-            else if (Cell.ManifestedEntityID == EntityID_Gnilniki)
+            else if (bWasActive)
             {
-                // Порог больше не пройден — зона рассеивается.
+                // Порог больше не пройден (с учётом гистерезиса) или клетку
+                // отобрал более приоритетный хозяин — проекция прекращается.
                 Cell.ManifestedEntityID = NAME_None;
             }
         }
@@ -171,7 +208,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // --- Берегиня: Легендарный, порог мирового состояния, Речная пойма ---
         if (Cell.Biome == EBiomeType::Floodplain && Cell.bIsWater)
         {
-            if (Cell.Memory.HistoryPurity > BereginyaThreshold)
+            const bool bWasActive = Cell.ManifestedEntityID == EntityID_Bereginya;
+            const bool bEligible = PassesHysteresisThreshold(bWasActive, Cell.Memory.HistoryPurity, BereginyaThreshold, HysteresisMargin);
+
+            if (bEligible && CanManifest(Cell, EntityID_Bereginya))
             {
                 Cell.ManifestedEntityID = EntityID_Bereginya;
                 // Благословлённая вода — Purity подтягивается к минимум 0.9, но
@@ -185,7 +225,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 }
                 bChanged = true;
             }
-            else if (Cell.ManifestedEntityID == EntityID_Bereginya)
+            else if (bWasActive)
             {
                 Cell.ManifestedEntityID = NAME_None;
             }
@@ -219,7 +259,17 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         FRealState NewTarget = Cell->TargetState;
         bool bChanged = false;
 
-        if (Landmark.Respect > 0.5f)
+        // Respect отходит от нуля медленно (Gain/DecayRate * DeltaTime) и должен
+        // пройти через нейтральную зону (-0.3..0.5), прежде чем сменить знак —
+        // поэтому его текущий знак надёжно указывает, к какому порогу гистерезиса
+        // (благословение или порча) относится bWasActive, без отдельного флага.
+        const bool bWasActive = Cell->ManifestedEntityID == Landmark.EntityID;
+        const bool bWasBlessed = bWasActive && Landmark.Respect >= 0.0f;
+        const bool bWasCursed  = bWasActive && Landmark.Respect < 0.0f;
+        const bool bBlessEligible = PassesHysteresisThreshold(bWasBlessed, Landmark.Respect, 0.5f, HysteresisMargin);
+        const bool bCurseEligible = PassesHysteresisThreshold(bWasCursed, -Landmark.Respect, 0.3f, HysteresisMargin);
+
+        if (bBlessEligible && CanManifest(*Cell, Landmark.EntityID))
         {
             // Благословлённое зерно (08_Content/бестиарий: "повышенная Potency и Purity").
             NewTarget.Meta.Potency = FMath::Clamp(NewTarget.Meta.Potency + RespectGainRate * DeltaTime, 0.0f, 1.0f);
@@ -227,7 +277,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             Cell->ManifestedEntityID = Landmark.EntityID;
             bChanged = true;
         }
-        else if (Landmark.Respect < -0.3f)
+        else if (bCurseEligible && CanManifest(*Cell, Landmark.EntityID))
         {
             // "Порча посевов, наведение усталости" — переведено в Stability, а не
             // в новую придуманную ось "усталости".
@@ -235,8 +285,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             Cell->ManifestedEntityID = Landmark.EntityID;
             bChanged = true;
         }
-        else if (Cell->ManifestedEntityID == Landmark.EntityID)
+        else if (bWasActive)
         {
+            // Нейтральная зона (с учётом гистерезиса) или клетку отобрал более
+            // приоритетный хозяин — проекция прекращается.
             Cell->ManifestedEntityID = NAME_None;
         }
 
