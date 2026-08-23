@@ -3,6 +3,7 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Types/HerbalistCoreMath.h"
 #include "Core/Config/HerbalistSettings.h"
 
 namespace Simulation
@@ -717,6 +718,13 @@ namespace Simulation
 
         FGridCell Modified = *TargetCell;
         Modified.State = PotionState;
+
+        // Передозировка (обсуждение в сессии 2026-08-24) — см. HerbalistCoreMath.h.
+        const UHerbalistSettings* OverdoseSettings = GetHerbalistSettings();
+        HerbalistCore::Math::ApplyOverdosePenalty(Modified.State,
+            OverdoseSettings ? OverdoseSettings->PotionOverdoseThreshold : 0.75f,
+            OverdoseSettings ? OverdoseSettings->PotionOverdosePenalty : 0.5f);
+
         Modified.HarvestStress = FMath::Clamp(TargetCell->HarvestStress + 0.2f, 0.f, 1.f);
         OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
 

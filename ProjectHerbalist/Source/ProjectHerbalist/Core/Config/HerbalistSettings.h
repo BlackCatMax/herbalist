@@ -128,6 +128,18 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities", meta = (ClampMin = "0.0", ClampMax = "0.3"))
     float EntityManifestationHysteresis = 0.05f;
 
+    // --- Передозировка зелий (обсуждение в сессии 2026-08-24) ---
+    // Компендиум ("сок его — сильное сердечное зелье, но и яд лютый", Ландыш;
+    // тот же паттерн у Полярного мака и Чистотела) — сила лекарства и его яд
+    // одна ось. Выше порога Potency зелье при применении на клетку не лечит
+    // сильнее, а начинает вредить — риск/выгода мощных зелий, без отдельной
+    // "тёмной" механики: порчей по-прежнему ведает Морок, это про дозу, не про скверну.
+    UPROPERTY(config, EditAnywhere, Category = "Alchemy|Overdose", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float PotionOverdoseThreshold = 0.75f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Alchemy|Overdose", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float PotionOverdosePenalty = 0.5f;
+
     // --- Бистабильная релаксация (обсуждение в сессии 2026-08-24, DESIGN_World_State.md) ---
     // Раньше только Гнильники сдвигали цель релаксации к порче, и только для
     // Болота. Общий случай: любая клетка, чей Corruption проходит порог входа,

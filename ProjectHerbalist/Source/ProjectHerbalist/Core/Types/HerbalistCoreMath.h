@@ -63,6 +63,26 @@ namespace HerbalistCore::Math
         return bCurrentlyActive ? (Value > Threshold - Margin) : (Value > Threshold + Margin);
     }
 
+    // Передозировка (обсуждение в сессии 2026-08-24, компендиум: "сок его —
+    // сильное сердечное зелье, но и яд лютый" — Ландыш, тот же паттерн у
+    // Полярного мака и Чистотела: сила лекарства и его яд — одна ось, не
+    // отдельное "злое" растение против "доброго"). Чрезмерная Potency при
+    // применении зелья не лечит линейно до бесконечности — после порога
+    // начинает вредить месту вместо того, чтобы его исцелить, тем же
+    // "испорченным" профилем осей, что и бистабильная деградация клетки
+    // (GridWorldManagerCore.cpp) — единый язык для "вреда" по всему проекту.
+    // Мутирует State на месте; вызывающий код решает, к чему её применяют.
+    inline void ApplyOverdosePenalty(FRealState& State, float Threshold, float Penalty)
+    {
+        if (State.Meta.Potency <= Threshold) return;
+        const float Overdose = (State.Meta.Potency - Threshold) / FMath::Max(1.0f - Threshold, KINDA_SMALL_NUMBER);
+        const float P = Overdose * Penalty;
+        State.Meta.Stability  = Clamp01(State.Meta.Stability  - P);
+        State.Meta.Purity     = Clamp01(State.Meta.Purity     - P);
+        State.Meta.Distortion = Clamp01(State.Meta.Distortion + P);
+        State.Meta.Corruption = Clamp01(State.Meta.Corruption + P);
+    }
+
     // Сравнение двух состояний с заданными допусками
     bool AreStatesSimilar(const FRealState& A, const FRealState& B,
         float MagnitudeThreshold = 0.15f,
