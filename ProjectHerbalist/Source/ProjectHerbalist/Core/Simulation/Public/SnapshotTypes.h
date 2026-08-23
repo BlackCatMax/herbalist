@@ -2,7 +2,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Core/Types/HerbalistCoreTypes.h"    // FInventoryItem, FGridCell (должны быть здесь)
+#include "Core/Types/HerbalistCoreTypes.h"    // FInventoryItem, FGridCell
+#include "Core/Shrine/ShrineTypes.h"          // FShrine (должны быть здесь)
 
 /**
  * Замороженное состояние игрового мира.
@@ -17,6 +18,12 @@ struct FWorldSnapshot
     // Игровое время на момент снапшота (GetWorld()->GetTimeSeconds()) — нужно
     // Pipeline'у для FInventoryItem::CreationTime, не обращаясь к UWorld напрямую.
     float WorldTime = 0.f;
+
+    // Капища (02_GDD/15_Cycles_And_Shrines.md §15.5, эффект 2) — тот же принцип,
+    // что уже есть у Biome Context Injection (FBiomeSnapshot ниже): Pipeline
+    // остаётся чистой функцией, читает контекст из снапшота, а не лезет в
+    // AGridWorldManager напрямую.
+    TArray<FShrine> Shrines;
 };
 
 /**

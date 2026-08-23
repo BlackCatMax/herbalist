@@ -1,10 +1,13 @@
 // AlchemyTableActor.cpp
 #include "AlchemyTableActor.h"
 #include "ProjectHerbalist.h"
+#include "HerbalistLogChannels.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Player/HerbalistPlayerController.h"
 #include "UI/AlchemyTransferWidget.h"
+#include "Core/World/GridWorldManager.h"
+#include "EngineUtils.h"
 
 AAlchemyTableActor::AAlchemyTableActor()
 {
@@ -16,6 +19,32 @@ AAlchemyTableActor::AAlchemyTableActor()
     InteractionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionBox->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
+}
+
+void AAlchemyTableActor::BeginPlay()
+{
+    Super::BeginPlay();
+
+    // Капище v1 (02_GDD/15_Cycles_And_Shrines.md §15.5) — не отдельная сущность,
+    // ищущаяся в мире: "особая аура" привязана к самому месту варки. Каждый
+    // стол автоматически регистрирует капище на своей клетке. GridCoords тоже
+    // раньше была объявлена (SetGridCoords), но никогда никем не вызывалась —
+    // закрываем это заодно, не отдельной задачей.
+    for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+    {
+        AGridWorldManager* WorldManager = *It;
+        int32 X, Y;
+        if (WorldManager->WorldPositionToCell(GetActorLocation(), X, Y))
+        {
+            GridCoords = FIntPoint(X, Y);
+            WorldManager->RegisterShrine(GridCoords, EShrineType::Ancestral);
+        }
+        else
+        {
+            UE_LOG(LogHerbalistWorld, Warning, TEXT("AlchemyTableActor at %s is outside the grid — no shrine registered"), *GetActorLocation().ToString());
+        }
+        break;
+    }
 }
 
 void AAlchemyTableActor::OnInteract(AHerbalistPlayerController* PC)

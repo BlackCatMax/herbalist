@@ -121,6 +121,19 @@ void AGridWorldManager::ShowInventory()
     }
 }
 
+void AGridWorldManager::ShowShrines()
+{
+    // Первый живой потребитель капищ (15_Cycles_And_Shrines §15.5) — до какого
+    // бы то ни было UI проверяем сам факт роста/спада Restoration.
+    UE_LOG(LogHerbalistWorld, Log, TEXT("=== SHRINES (%d) ==="), Shrines.Num());
+    for (int32 i = 0; i < Shrines.Num(); ++i)
+    {
+        const FShrine& S = Shrines[i];
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[%d] (%d,%d) type=%d Restoration=%.3f"),
+            i, S.Cell.X, S.Cell.Y, (int32)S.Type, S.Restoration);
+    }
+}
+
 void AGridWorldManager::ShowJournal()
 {
     // Первый живой потребитель Травника (07_UX §7.2.4) — до UI/подсветки

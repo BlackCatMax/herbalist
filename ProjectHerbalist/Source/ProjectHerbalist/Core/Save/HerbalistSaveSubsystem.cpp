@@ -46,6 +46,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->GameClockSeconds = WorldManager->GetGameClockSeconds();
     Save->Cells = WorldManager->CaptureSaveCells();
     Save->EntityLandmarks = WorldManager->GetEntityLandmarks();
+    Save->Shrines = WorldManager->GetShrines();
 
     if (AHerbalistPlayerController* PC = World ? Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()) : nullptr)
     {
@@ -104,6 +105,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetCurrentTickID(Save->CurrentTickID);
     WorldManager->SetGameClockSeconds(Save->GameClockSeconds);
     WorldManager->SetEntityLandmarks(Save->EntityLandmarks);
+    WorldManager->SetShrines(Save->Shrines);
     WorldManager->ApplySaveCells(Save->Cells);
 
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()))

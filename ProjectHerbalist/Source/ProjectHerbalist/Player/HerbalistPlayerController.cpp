@@ -107,15 +107,7 @@ void AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& Ou
     AGridWorldManager* WorldManager = FindWorldManager();
     if (!WorldManager) return;
 
-    const FVector LocalLoc = Hit.Location - WorldManager->GetActorLocation();
-    const int32 X = FMath::FloorToInt(LocalLoc.X / WorldManager->CellSize);
-    const int32 Y = FMath::FloorToInt(LocalLoc.Y / WorldManager->CellSize);
-
-    if (X >= 0 && X < WorldManager->GridSizeX && Y >= 0 && Y < WorldManager->GridSizeY)
-    {
-        OutX = X;
-        OutY = Y;
-    }
+    WorldManager->WorldPositionToCell(Hit.Location, OutX, OutY);
 }
 
 void AHerbalistPlayerController::UpdateDistortionFromCell(int32 X, int32 Y)

@@ -128,6 +128,34 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities", meta = (ClampMin = "0.0", ClampMax = "0.3"))
     float EntityManifestationHysteresis = 0.05f;
 
+    // --- Капища (02_GDD/15_Cycles_And_Shrines.md §15.5) ---
+    // Вклад в Restoration от одной варки прямо на клетке капища:
+    // OfferingGain × (Coherence−0.5) × 2 × (1−Distortion). При Coherence=1 и
+    // чистом результате — максимум; ниже 0.5 — вклад отрицательный.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ShrineOfferingGain = 0.05f;
+
+    // Горизонт полного угасания заброшенного капища — то же число, что уже
+    // задаёт лунный цикл (§15.3), не новая величина.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "1.0"))
+    float ShrineNeglectDecayDays = 28.0f;
+
+    // Радиус влияния (эффекты 1/2/4) в клетках — шире радиуса подношения
+    // (только собственная клетка капища). Тот же порядок величины, что у
+    // PropagationDepth биомного графа.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "1"))
+    int32 ShrineInfluenceRadius = 3;
+
+    // Множитель надбавки к Coherence варки в радиусе влияния (эффект 2,
+    // §11.7): Coherence_итог = Coherence + Restoration × ShrineCoherenceBonus.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ShrineCoherenceBonus = 0.15f;
+
+    // Насколько сильно полностью восстановленное капище снижает эффективный
+    // InventoryDecayRate в своём радиусе (эффект 4): до вдвое при Restoration=1.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ShrineInventoryProtection = 0.5f;
+
     // --- Spawning (DESIGN_World_State.md §15, звено 3) ---
     // Резкость спада пригодности ингредиента в GetRandomResourceForBiome:
     // Suitability = exp(-Falloff * Distance(CellState, BaseState)^2). 2.0 подобрано

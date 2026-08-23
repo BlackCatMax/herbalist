@@ -11,6 +11,7 @@
 #include "Core/Simulation/Public/PerceptionComponent.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/Shrine/ShrineTypes.h"
 #include "GridWorldManager.generated.h"
 
 class AHerbalistResourceActor;
@@ -114,6 +115,11 @@ public:
     FVector GetCellWorldPositionFlat(int32 X, int32 Y) const;
     float GetCellHeight(int32 X, int32 Y) const;
 
+    // Обратное к GetCellWorldPosition — было продублировано в
+    // AHerbalistPlayerController::GetCellFromHit, теперь общий метод (тем же
+    // используется AAlchemyTableActor::BeginPlay для привязки капища к клетке).
+    bool WorldPositionToCell(const FVector& WorldPos, int32& OutX, int32& OutY) const;
+
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
@@ -141,6 +147,9 @@ public:
 
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowJournal();
+
+    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
+    void ShowShrines();
 
     void SelectCell(int32 X, int32 Y);
     FString GetSelectedCellInfo() const;
@@ -193,6 +202,20 @@ public:
     // (Гнильники). Единая точка входа вместо прямого чтения Memory.AccumulatedDistortion.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Perception")
     float ComputePerceptionDistortion(int32 X, int32 Y) const;
+
+    // ---- Капища (02_GDD/15_Cycles_And_Shrines.md §15.5, v1: эффекты 1/2/4) ----
+    // Капище не ищется отдельно — оно есть там, где стоит котёл
+    // (AAlchemyTableActor::BeginPlay регистрирует его на своей клетке).
+    // Повторная регистрация на уже занятой клетке не создаёт дубликат.
+    void RegisterShrine(const FIntPoint& Cell, EShrineType Type);
+    const TArray<FShrine>& GetShrines() const { return Shrines; }
+    FShrine* FindShrineAt(const FIntPoint& Cell);
+    void SetShrines(const TArray<FShrine>& InShrines) { Shrines = InShrines; }
+
+    // Спад Restoration при небрежении (§15.5) — public, тем же принципом, что
+    // RegenerateCellParameters/UpdateEntityManifestations выше: вызывается из
+    // Tick() каждый кадр, но и напрямую тестируемо без полной PIE-сессии.
+    void UpdateShrines(float DeltaTime);
 
     // ---- Сохранения (Core/Save/HerbalistSaveTypes.h) ----
     TArray<FSavedCellState> CaptureSaveCells() const;
@@ -257,6 +280,9 @@ protected:
     TArray<FEntityLandmark> EntityLandmarks;
 
     void SeedTestLandmarks();
+
+    // ---- Капища ----
+    TArray<FShrine> Shrines;
 
     // ---- Инициализация ----
     UFUNCTION(BlueprintCallable, Category = "World|Init")

@@ -20,6 +20,7 @@
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Simulation/Public/PerceptionComponent.h"
 #include "Templates/TypeHash.h"
+#include "Core/Types/HerbalistCoreMath.h"
 
 // ============================================================================
 // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (ЛАНДШАФТ)
@@ -92,6 +93,24 @@ FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
     float Z = GetCellHeight(X, Y);
     // Центр отладочного бокса на уровне ландшафта
     return FVector(Flat.X, Flat.Y, Z);
+}
+
+bool AGridWorldManager::WorldPositionToCell(const FVector& WorldPos, int32& OutX, int32& OutY) const
+{
+    OutX = -1;
+    OutY = -1;
+
+    const FVector LocalLoc = WorldPos - GetActorLocation();
+    const int32 X = FMath::FloorToInt(LocalLoc.X / CellSize);
+    const int32 Y = FMath::FloorToInt(LocalLoc.Y / CellSize);
+
+    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY)
+    {
+        OutX = X;
+        OutY = Y;
+        return true;
+    }
+    return false;
 }
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
@@ -489,6 +508,7 @@ FWorldSnapshot AGridWorldManager::CaptureState() const
     Snapshot.TickIndex = CurrentTickID;
     Snapshot.WorldSeed = static_cast<int32>(HashCombine(static_cast<uint32>(RngBaseSeed), static_cast<uint32>(CurrentTickID)));
     Snapshot.WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+    Snapshot.Shrines = Shrines;
     return Snapshot;
 }
 
@@ -633,17 +653,39 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         FRealState& S = Cell.State;
         const FRealState& T = Cell.TargetState;
 
+        // Капище, эффект 1 (§15.5: "снижают сопротивление среды... повышают
+        // устойчивость изменений"). Релаксация всегда движется к TargetState —
+        // "приближает ли шаг к S0" определяется тем, ближе ли сама TargetState
+        // к S0, чем текущая State, без гипотетического пробного шага. Clamp
+        // на -0.95 — Influence может быть отрицательным (осквернённое капище,
+        // Restoration < 0), (1+Influence) не должен доходить до нуля в знаменателе.
+        float CellDeltaRegen = DeltaRegen;
+        float DirectionRateMultiplier = 1.0f;
+        if (Shrines.Num() > 0)
+        {
+            const float Influence = HerbalistCore::Shrine::GetInfluenceAt(
+                FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3);
+            if (Influence != 0.0f)
+            {
+                const float SafeInfluence = FMath::Clamp(Influence, -0.95f, 1.0f);
+                const bool bApproachingS0 = HerbalistCore::Math::Distance(T, FAlatyr::S0) < HerbalistCore::Math::Distance(S, FAlatyr::S0);
+                const float Modulation = bApproachingS0 ? (1.0f + SafeInfluence) : (1.0f / (1.0f + SafeInfluence));
+                CellDeltaRegen *= Modulation;
+                DirectionRateMultiplier = Modulation;
+            }
+        }
+
         // 1. Отклонение по Meta + Magnitude — единым шагом на все семь осей
         // вместо прежних четырёх. bChanged нужен только для раннего выхода
         // из релаксации Direction ниже, спад HarvestStress идёт независимо.
         bool bChanged = false;
-        bChanged |= MoveToward(S.Meta.Distortion, T.Meta.Distortion, DeltaRegen);
-        bChanged |= MoveToward(S.Meta.Purity,     T.Meta.Purity,     DeltaRegen);
-        bChanged |= MoveToward(S.Meta.Stability,  T.Meta.Stability,  DeltaRegen);
-        bChanged |= MoveToward(S.Meta.Potency,    T.Meta.Potency,    DeltaRegen);
-        bChanged |= MoveToward(S.Meta.Resonance,  T.Meta.Resonance,  DeltaRegen);
-        bChanged |= MoveToward(S.Meta.Corruption, T.Meta.Corruption, DeltaRegen);
-        bChanged |= MoveToward(S.Magnitude,       T.Magnitude,       DeltaRegen);
+        bChanged |= MoveToward(S.Meta.Distortion, T.Meta.Distortion, CellDeltaRegen);
+        bChanged |= MoveToward(S.Meta.Purity,     T.Meta.Purity,     CellDeltaRegen);
+        bChanged |= MoveToward(S.Meta.Stability,  T.Meta.Stability,  CellDeltaRegen);
+        bChanged |= MoveToward(S.Meta.Potency,    T.Meta.Potency,    CellDeltaRegen);
+        bChanged |= MoveToward(S.Meta.Resonance,  T.Meta.Resonance,  CellDeltaRegen);
+        bChanged |= MoveToward(S.Meta.Corruption, T.Meta.Corruption, CellDeltaRegen);
+        bChanged |= MoveToward(S.Magnitude,       T.Magnitude,       CellDeltaRegen);
 
         // 2. Спад HarvestStress — медленный, зависит от биома (см. выше)
         const bool bStressDecaying = Cell.HarvestStress > 0.0f;
@@ -661,10 +703,11 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
                                   + FMath::Abs(S.Direction.Nature - TargetDir.Nature);
         if (DirDeviation > KINDA_SMALL_NUMBER)
         {
-            S.Direction.Body   = FMath::Clamp(S.Direction.Body   + (TargetDir.Body   - S.Direction.Body) * 0.01f * DeltaTime, 0.0f, 1.0f);
-            S.Direction.Mind   = FMath::Clamp(S.Direction.Mind   + (TargetDir.Mind   - S.Direction.Mind) * 0.01f * DeltaTime, 0.0f, 1.0f);
-            S.Direction.Spirit = FMath::Clamp(S.Direction.Spirit + (TargetDir.Spirit - S.Direction.Spirit) * 0.01f * DeltaTime, 0.0f, 1.0f);
-            S.Direction.Nature = FMath::Clamp(S.Direction.Nature + (TargetDir.Nature - S.Direction.Nature) * 0.01f * DeltaTime, 0.0f, 1.0f);
+            const float DirRate = 0.01f * DirectionRateMultiplier;
+            S.Direction.Body   = FMath::Clamp(S.Direction.Body   + (TargetDir.Body   - S.Direction.Body) * DirRate * DeltaTime, 0.0f, 1.0f);
+            S.Direction.Mind   = FMath::Clamp(S.Direction.Mind   + (TargetDir.Mind   - S.Direction.Mind) * DirRate * DeltaTime, 0.0f, 1.0f);
+            S.Direction.Spirit = FMath::Clamp(S.Direction.Spirit + (TargetDir.Spirit - S.Direction.Spirit) * DirRate * DeltaTime, 0.0f, 1.0f);
+            S.Direction.Nature = FMath::Clamp(S.Direction.Nature + (TargetDir.Nature - S.Direction.Nature) * DirRate * DeltaTime, 0.0f, 1.0f);
             S.Direction.NormalizeSum();
         }
 

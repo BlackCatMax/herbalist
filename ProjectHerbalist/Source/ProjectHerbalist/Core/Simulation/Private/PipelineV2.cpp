@@ -634,6 +634,20 @@ namespace Simulation
         FIntent EffectiveIntent = Cmd.Intent;
         EffectiveIntent.Coherence = ComputeIntentCoherence(Cmd.Ingredients);
 
+        // Капище, эффект 2 (02_GDD/15_Cycles_And_Shrines.md §15.5, 11_Intent_Evolution
+        // §11.7) — надбавка к Coherence в радиусе влияния. Читается независимо от
+        // TargetCell/BiomeCtx выше: тот пуст при крафте намеренно (Biome Context
+        // Injection — только "варка в мире"), а капище должно видеть клетку котла
+        // даже при крафте, это и есть единственный способ подношению вообще сработать.
+        const UHerbalistSettings* ShrineSettings = GetHerbalistSettings();
+        const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(
+            Cmd.TargetCell, WorldSnap.Shrines, ShrineSettings ? ShrineSettings->ShrineInfluenceRadius : 3);
+        if (ShrineInfluence > 0.0f)
+        {
+            const float Bonus = ShrineSettings ? ShrineSettings->ShrineCoherenceBonus : 0.15f;
+            EffectiveIntent.Coherence = FMath::Clamp(EffectiveIntent.Coherence + ShrineInfluence * Bonus, 0.0f, 1.0f);
+        }
+
         EAlchemyOutcome Outcome = EAlchemyOutcome::Valid;
         FVector4 AxisDeltaForFootprint;
         FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint);
@@ -687,6 +701,7 @@ namespace Simulation
             AddOp.Ingredient = PotionItem;
             AddOp.OpType = EInventoryOpType::Add;
             AddOp.Amount = 1;
+            AddOp.Coherence = EffectiveIntent.Coherence;
             OutDelta.InventoryOps.Add(AddOp);
 
             UE_LOG(LogHerbalistSimulation, Log, TEXT("Crafted potion: Outcome=%d M=%.2f, Dist=%.2f, Purity=%.2f"),

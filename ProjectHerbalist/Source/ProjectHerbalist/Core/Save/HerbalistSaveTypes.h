@@ -15,6 +15,7 @@
 #include "GameFramework/SaveGame.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Journal/JournalTypes.h"
+#include "Core/Shrine/ShrineTypes.h"
 #include "HerbalistSaveTypes.generated.h"
 
 USTRUCT()
@@ -79,6 +80,9 @@ public:
 
     UPROPERTY()
     TArray<FEntityLandmark> EntityLandmarks;
+
+    UPROPERTY()
+    TArray<FShrine> Shrines;
 
     UPROPERTY()
     TArray<FInventoryItem> InventoryItems;

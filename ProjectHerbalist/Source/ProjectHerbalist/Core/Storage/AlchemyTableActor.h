@@ -20,6 +20,7 @@ public:
     FIntPoint GetGridCoords() const { return GridCoords; }
 
 protected:
+    virtual void BeginPlay() override;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     UStaticMeshComponent* Mesh;
 

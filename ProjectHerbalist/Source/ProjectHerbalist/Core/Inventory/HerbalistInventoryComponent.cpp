@@ -8,6 +8,8 @@
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
+#include "Core/World/GridWorldManager.h"
+#include "EngineUtils.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 {
@@ -27,6 +29,35 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
 
     const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
     const float GlobalDecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
+
+    // Капище, эффект 4 (15_Cycles_And_Shrines §15.5, компендиум Болота: "Длительное
+    // пребывание без защиты капищ быстро накапливает порчу в инвентаре") — в
+    // радиусе влияния действующего (Restoration > 0) капища эффективный
+    // InventoryDecayRate снижается пропорционально его Restoration.
+    float ShrineProtection = 0.0f;
+    if (APlayerController* OwnerPC = Cast<APlayerController>(GetOwner()))
+    {
+        if (APawn* Pawn = OwnerPC->GetPawn())
+        {
+            for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+            {
+                AGridWorldManager* WorldManager = *It;
+                const int32 RadiusCells = Settings ? Settings->ShrineInfluenceRadius : 3;
+                const float RadiusWorld = RadiusCells * WorldManager->CellSize;
+                for (const FShrine& S : WorldManager->GetShrines())
+                {
+                    if (S.Restoration <= 0.0f) continue;   // защита, не осквернение
+                    const float Dist = FVector::Dist(Pawn->GetActorLocation(), WorldManager->GetCellWorldPositionFlat(S.Cell.X, S.Cell.Y));
+                    if (Dist <= RadiusWorld)
+                    {
+                        ShrineProtection = FMath::Max(ShrineProtection, S.Restoration);
+                    }
+                }
+                break;
+            }
+        }
+    }
+    const float EffectiveGlobalDecayRate = GlobalDecayRate * (1.0f - ShrineProtection * (Settings ? Settings->ShrineInventoryProtection : 0.5f));
 
     UIngredientRegistrySubsystem* IngredientReg = nullptr;
     UWaterTypeRegistrySubsystem* WaterReg = nullptr;
@@ -65,7 +96,7 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
                     IngredientDecay = Row->DecayRate;
                 }
             }
-            ApplyDecayToItem(Item, DecayUpdateInterval, GlobalDecayRate * IngredientDecay);
+            ApplyDecayToItem(Item, DecayUpdateInterval, EffectiveGlobalDecayRate * IngredientDecay);
         }
     }
 }
