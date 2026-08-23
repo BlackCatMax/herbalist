@@ -19,6 +19,10 @@ void AGridWorldManager::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
+    // Игровые часы — не GetWorld()->GetTimeSeconds() (см. GridWorldManager.h):
+    // должны пережить сохранение/загрузку, а движковое время level-relative.
+    GameClockSeconds += DeltaTime;
+
     if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
     {
         Graph->StepSimulation(DeltaTime);

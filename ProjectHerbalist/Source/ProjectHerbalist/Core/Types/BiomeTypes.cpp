@@ -11,7 +11,22 @@ static UDataTable* BiomeDataTable = nullptr;
 
 void FBiomeDefaults::SetBiomeTable(UDataTable* InTable)
 {
+    // BiomeDataTable — сырой static-указатель вне UPROPERTY/UObject, GC его не
+    // видит вообще. LoadObject() в ProjectHerbalistGameModeBase::BeginPlay
+    // отдаёт объект без единой закреплённой ссылки на него — ближайший проход
+    // сборщика мусора (по умолчанию ~60 сек) собирал таблицу, а следующий вызов
+    // GetBiomeRow() падал в EXCEPTION_ACCESS_VIOLATION (обнаружено при первом
+    // headless-прогоне в режиме -game дольше минуты — прежде тестировалось
+    // только короткими PIE-сессиями/автотестами, где GC не успевал сработать).
+    if (BiomeDataTable && BiomeDataTable != InTable)
+    {
+        BiomeDataTable->RemoveFromRoot();
+    }
     BiomeDataTable = InTable;
+    if (BiomeDataTable)
+    {
+        BiomeDataTable->AddToRoot();
+    }
 }
 
 const FBiomeRow* FBiomeDefaults::GetBiomeRow(EBiomeType Biome)

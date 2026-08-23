@@ -407,6 +407,10 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
         if (!Cell.bIsWater)
         {
             SpawnResourcesInCell(Cell);
+            // В отличие от исходного броска в InitializeCells (тот безопасно
+            // переигрывается заново из RngBaseSeed), это отросшее — не то же
+            // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
+            MarkCellDirty(Cell.X, Cell.Y);
         }
     }, ResourceRegrowthTime, false);
 }
@@ -420,6 +424,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
 
     // Удаляем актор из клетки
     Cell->ResourceActors.Remove(Actor);
+    MarkCellDirty(Cell->X, Cell->Y);   // ростер ресурсов отличается от начального броска
 
     // Обновляем глобальное искажение для игрока (тултип). ComputePerceptionDistortion
     // учитывает не только Memory.AccumulatedDistortion, но и ночную надбавку
@@ -504,6 +509,7 @@ void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
             Cell->WaterTypeID = NewCellData.WaterTypeID;
             Cell->HarvestStress = NewCellData.HarvestStress;     // добавить
             Cell->Memory        = NewCellData.Memory;            // добавить
+            MarkCellDirty(Coord.X, Coord.Y);
         }
     }
 
@@ -514,6 +520,7 @@ void AGridWorldManager::ApplyStateDelta(const FStateDelta& Delta)
         if (FGridCell* Cell = GetCell(Pair.Key.X, Pair.Key.Y))
         {
             Cell->TargetState = Pair.Value;
+            MarkCellDirty(Pair.Key.X, Pair.Key.Y);
         }
     }
 }
@@ -639,6 +646,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         bChanged |= MoveToward(S.Magnitude,       T.Magnitude,       DeltaRegen);
 
         // 2. Спад HarvestStress — медленный, зависит от биома (см. выше)
+        const bool bStressDecaying = Cell.HarvestStress > 0.0f;
         Cell.HarvestStress = FMath::Max(Cell.HarvestStress - GetStressDecay(Cell.Biome) * DeltaTime, 0.0f);
 
         // 3. Направление — та же идея (движение к отклонению-нулю), но
@@ -662,6 +670,13 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
 
         // 4. Синхронизация памяти клетки (для графа и тултипа)
         Cell.Memory.AccumulatedDistortion = S.Meta.Distortion;
+
+        // Сохранения (Core/Save/): релаксация — единственный писатель State/
+        // HarvestStress вне ApplyStateDelta, помечаем клетку тронутой отдельно.
+        if (bChanged || DirDeviation > KINDA_SMALL_NUMBER || bStressDecaying)
+        {
+            MarkCellDirty(Cell.X, Cell.Y);
+        }
     }
 }
 

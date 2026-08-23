@@ -21,6 +21,14 @@ public class ProjectHerbalistTests : ModuleRules
             "AutomationTest"
         });
 
+        // GEditor/UEditorEngine (SaveSystemTest.cpp — GetEditorWorldContext) — только
+        // в редакторских сборках, этот модуль в других не собирается, но не полагаемся
+        // на это молча.
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.Add("UnrealEd");
+        }
+
         // Путь к приватной папке основного модуля относительно Source
         string SimPrivatePath = Path.Combine(ModuleDirectory, "..", "ProjectHerbalist", "Core", "Simulation", "Private");
         PrivateIncludePaths.Add(SimPrivatePath);

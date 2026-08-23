@@ -67,12 +67,14 @@ float AGridWorldManager::GetTimeOfDay01() const
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
-    // Раньше здесь был отдельный счётчик WorldTimeSeconds — дублировал уже
-    // существующий FWorldSnapshot::WorldTime (= GetWorld()->GetTimeSeconds()),
-    // который используется для CreationTime предметов. Оба и так level-relative,
-    // второй источник времени был не нужен (AUDIT_AND_REFACTORING_PLAN §3.4).
-    const float NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-    return FMath::Fmod(NowSeconds, DayLengthSeconds) / DayLengthSeconds;
+    // GameClockSeconds, не GetWorld()->GetTimeSeconds() — правка 2026-08-23:
+    // движковое время обнуляется при перезапуске сессии, а фаза суток должна
+    // переживать сохранение/загрузку (см. комментарий у GameClockSeconds в
+    // GridWorldManager.h). Раньше здесь читалось прямо GetTimeSeconds() как
+    // единственный источник, которым также помечен CreationTime предметов —
+    // тот пока НЕ переведён на GameClockSeconds, это малый, самостоятельный
+    // косметический разъезд (AUDIT_AND_REFACTORING_PLAN §3.4), не блокирует.
+    return FMath::Fmod(GameClockSeconds, DayLengthSeconds) / DayLengthSeconds;
 }
 
 bool AGridWorldManager::IsNight() const

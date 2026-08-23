@@ -4,6 +4,7 @@
 #include "Core/Storage/AlchemyTableActor.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/World/GridWorldManager.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -421,6 +422,28 @@ void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
 void AHerbalistPlayerController::ShowInventory()
 {
     Inventory();
+}
+
+void AHerbalistPlayerController::SaveGame()
+{
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UHerbalistSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UHerbalistSaveSubsystem>())
+        {
+            SaveSubsystem->SaveGame();
+        }
+    }
+}
+
+void AHerbalistPlayerController::LoadGame()
+{
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UHerbalistSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UHerbalistSaveSubsystem>())
+        {
+            SaveSubsystem->LoadGame();
+        }
+    }
 }
 
 void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)

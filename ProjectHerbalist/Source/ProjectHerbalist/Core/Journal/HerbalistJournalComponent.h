@@ -36,6 +36,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Journal")
     TArray<FJournalEntry> GetEntriesForIngredient(FName IngredientID) const;
 
+    // Точное восстановление из сохранения (Core/Save/HerbalistSaveTypes.h).
+    void RestoreEntries(const TArray<FJournalEntry>& InEntries) { Entries = InEntries; }
+
     UPROPERTY(BlueprintAssignable, Category = "Journal")
     FOnJournalEntryAdded OnJournalEntryAdded;
 

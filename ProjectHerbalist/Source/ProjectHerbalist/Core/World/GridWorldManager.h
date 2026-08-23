@@ -17,6 +17,7 @@ class AHerbalistResourceActor;
 class ALandscape;
 struct FWorldSnapshot;
 struct FStateDelta;
+struct FSavedCellState;
 
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
@@ -178,11 +179,30 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     bool IsNight() const;
 
+    // Игровые часы, независимые от GetWorld()->GetTimeSeconds() (движковое,
+    // level-relative, обнуляется при перезапуске сессии) — нужны, чтобы фаза
+    // суток (и будущая погода через UltraDynamicSky, ROADMAP.md Фаза D §12)
+    // переживала сохранение/загрузку, а не начинала каждую сессию с рассвета.
+    // Копится в Tick() на DeltaTime, восстанавливается из сейва при загрузке.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetGameClockSeconds() const { return GameClockSeconds; }
+    void SetGameClockSeconds(float InSeconds) { GameClockSeconds = InSeconds; }
+
     // Воспринятое (S_Perceived) искажение для клетки: базовое Memory.AccumulatedDistortion
     // + ночная надбавка (Морочники) + надбавка от местной проявленной сущности
     // (Гнильники). Единая точка входа вместо прямого чтения Memory.AccumulatedDistortion.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Perception")
     float ComputePerceptionDistortion(int32 X, int32 Y) const;
+
+    // ---- Сохранения (Core/Save/HerbalistSaveTypes.h) ----
+    TArray<FSavedCellState> CaptureSaveCells() const;
+    void ApplySaveCells(const TArray<FSavedCellState>& InCells);
+
+    const TArray<FEntityLandmark>& GetEntityLandmarks() const { return EntityLandmarks; }
+    void SetEntityLandmarks(const TArray<FEntityLandmark>& InLandmarks) { EntityLandmarks = InLandmarks; }
+
+    int32 GetCurrentTickID() const { return CurrentTickID; }
+    void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
     // ---- Итерация по клеткам ----
     template<typename TFunc>
@@ -217,6 +237,15 @@ protected:
     TMap<int32, float> LastHarvestTimeMap;
     const float HarvestCooldown = 0.2f;
 
+    float GameClockSeconds = 0.0f;
+
+    // Клетки, отклонившиеся от детерминированной генерации (DESIGN_World_State.md
+    // §3 Вариант A + разбор открытых миров — Valheim/Skyrim и т.п. сохраняют
+    // только тронутое, не весь мир). Липкая: раз клетка тронута, остаётся в
+    // сейве даже после релаксации обратно к базе — дешевле и надёжнее, чем
+    // сверять на выходе "а не совпало ли снова с базой ровно".
+    TSet<int32> DirtyCellIndices;
+
     UPROPERTY()
     TObjectPtr<UPerceptionComponent> PerceptionComponent;
 
@@ -236,6 +265,7 @@ protected:
     // ---- Маркеры состояния ----
     void MarkRegrowing(int32 X, int32 Y) { RegrowingCells.Add(Y * GridSizeX + X); }
     void UnmarkRegrowing(int32 X, int32 Y) { RegrowingCells.Remove(Y * GridSizeX + X); }
+    void MarkCellDirty(int32 X, int32 Y) { DirtyCellIndices.Add(Y * GridSizeX + X); }
 
     inline int32 GetCellIndex(int32 X, int32 Y) const { return Y * GridSizeX + X; }
 

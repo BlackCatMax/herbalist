@@ -84,6 +84,14 @@ public:
     UFUNCTION(Exec)
     void TestNewApply(int32 X, int32 Y, FString IngredientList);
 
+    // Сохранения v1 (Core/Save/HerbalistSaveSubsystem.h) — тонкие обёртки над
+    // подсистемой, тем же паттерном, что HarvestTest/ApplyTest над пайплайном.
+    UFUNCTION(Exec)
+    void SaveGame();
+
+    UFUNCTION(Exec)
+    void LoadGame();
+
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;

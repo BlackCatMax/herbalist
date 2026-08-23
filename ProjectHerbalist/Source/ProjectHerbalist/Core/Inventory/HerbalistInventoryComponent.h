@@ -53,8 +53,13 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void Clear();
-	
+
 	FInventorySnapshot CaptureState() const;
+
+    // Точное восстановление из сохранения (Core/Save/HerbalistSaveTypes.h) —
+    // в отличие от AddItem, не пытается стекать/сливать слоты с уже
+    // существующим содержимым, просто ставит ровно то, что было сохранено.
+    void RestoreItems(const TArray<FInventoryItem>& InItems) { Items = InItems; }
 
     UPROPERTY(BlueprintAssignable, Category = "Inventory")
     FOnInventoryChanged OnInventoryChanged;
