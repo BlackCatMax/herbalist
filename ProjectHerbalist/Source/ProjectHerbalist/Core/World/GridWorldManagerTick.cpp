@@ -113,79 +113,94 @@ void AGridWorldManager::RunSimulationStep()
         }
     }
 
-    // Травник (07_UX §7.2.4, ROADMAP.md §2.1) + подношение капищу (15_Cycles_And_Shrines
-    // §15.5) — оба вне детерминированного пайплайна, как и Footprint выше:
-    // презентационная фиксация и медленный накопитель, не часть Command/Delta
-    // цикла. Сопоставляем команды Harvest/Apply(крафт) из CommandsCopy с
-    // добавленными предметами из Delta.InventoryOps по порядку — Pipeline
-    // формирует их последовательно 1:1 для одиночного сбора/варки, этого
-    // достаточно для v1. Полная привязка результата к исходной команде
+    // Травник (07_UX §7.2.4, ROADMAP.md §2.1) — вне детерминированного
+    // пайплайна, как и Footprint выше: презентационная фиксация, не часть
+    // Command/Delta цикла. Сопоставляем команды Harvest/Apply(крафт) из
+    // CommandsCopy с добавленными предметами из Delta.InventoryOps по порядку —
+    // Pipeline формирует их последовательно 1:1 для одиночного сбора/варки,
+    // этого достаточно для v1. Полная привязка результата к исходной команде
     // потребовала бы прокидывать ID команды через весь Pipeline — излишне
-    // для обоих потребителей, которые и так презентационный/накопительный слой.
+    // для журнала, который и так презентационный слой.
     if (Delta.InventoryOps.Num() > 0)
     {
-        AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()))
+        {
+            if (PC->JournalComponent)
+            {
+                int32 OpIndex = 0;
+                for (const FCommandEntry& Cmd : CommandsCopy)
+                {
+                    const bool bIsHarvest = Cmd.Primitive == ECommandPrimitive::Harvest;
+                    const bool bIsCraft = Cmd.Primitive == ECommandPrimitive::Apply && Cmd.Apply.bIsCrafting;
+                    if (!bIsHarvest && !bIsCraft) continue;
 
-        int32 OpIndex = 0;
+                    // Ищем следующий Add-оп в инвентарь игрока (ContainerID 0) —
+                    // Ash/BoiledWater из провальной варки тоже сюда попадают,
+                    // это осознанно: неудача — тоже опыт, который стоит записать.
+                    while (OpIndex < Delta.InventoryOps.Num()
+                        && !(Delta.InventoryOps[OpIndex].OpType == EInventoryOpType::Add
+                            && Delta.InventoryOps[OpIndex].ContainerID == 0))
+                    {
+                        ++OpIndex;
+                    }
+                    if (OpIndex >= Delta.InventoryOps.Num()) break;
+
+                    const FInventoryItem& Produced = Delta.InventoryOps[OpIndex].Ingredient;
+                    ++OpIndex;
+
+                    FJournalEntry Entry;
+                    Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
+                    Entry.IngredientID = Produced.IngredientID;
+                    Entry.Count = Produced.Count;
+                    // Искажённое состояние, замороженное сейчас — см. предупреждение
+                    // в JournalTypes.h. WorldRNG, не FMath:: — тот же класс бага
+                    // с недетерминированным ГПСЧ уже дважды находился и чинился
+                    // в этой сессии (спавн ресурсов, порча инвентаря).
+                    Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, WorldRNG);
+                    const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
+                    Entry.Cell = TargetCell;
+                    if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))
+                    {
+                        Entry.Biome = Cell->Biome;
+                    }
+                    Entry.bWasNight = IsNight();
+                    Entry.GameTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+
+                    PC->JournalComponent->AddEntry(Entry);
+                }
+            }
+        }
+    }
+
+    // Подношение капищу (15_Cycles_And_Shrines §15.5) — правка по итогам
+    // обсуждения в сессии 2026-08-24: варка сама по себе больше не считается
+    // подношением (варят всегда в одной точке — котле, у самого факта крафта
+    // нет смысловой связи с конкретной клеткой мира). Влиять на клетки могут
+    // только применённые зелья (Apply, не крафт) и капища/Гнильники —
+    // подношение теперь тоже идёт через Apply: игрок должен физически
+    // поднести (применить) зелье на клетку капища, как полил бы им сохнущее
+    // дерево. Delta.WorldChanges, не InventoryOps — Apply-на-клетку не кладёт
+    // предмет в инвентарь, только меняет Cell.State напрямую.
+    if (Delta.WorldChanges.Num() > 0 && Shrines.Num() > 0)
+    {
         for (const FCommandEntry& Cmd : CommandsCopy)
         {
-            const bool bIsHarvest = Cmd.Primitive == ECommandPrimitive::Harvest;
-            const bool bIsCraft = Cmd.Primitive == ECommandPrimitive::Apply && Cmd.Apply.bIsCrafting;
-            if (!bIsHarvest && !bIsCraft) continue;
+            const bool bIsApplyToCell = Cmd.Primitive == ECommandPrimitive::Apply && !Cmd.Apply.bIsCrafting;
+            if (!bIsApplyToCell) continue;
 
-            // Ищем следующий Add-оп в инвентарь игрока (ContainerID 0) —
-            // Ash/BoiledWater из провальной варки тоже сюда попадают,
-            // это осознанно: неудача — тоже опыт, который стоит записать.
-            while (OpIndex < Delta.InventoryOps.Num()
-                && !(Delta.InventoryOps[OpIndex].OpType == EInventoryOpType::Add
-                    && Delta.InventoryOps[OpIndex].ContainerID == 0))
-            {
-                ++OpIndex;
-            }
-            if (OpIndex >= Delta.InventoryOps.Num()) break;
+            FShrine* Shrine = FindShrineAt(Cmd.Apply.TargetCell);
+            if (!Shrine) continue;
 
-            const FInventoryOperation& ProducedOp = Delta.InventoryOps[OpIndex];
-            const FInventoryItem& Produced = ProducedOp.Ingredient;
-            ++OpIndex;
+            const FGridCell* Modified = Delta.WorldChanges.Find(Cmd.Apply.TargetCell);
+            if (!Modified) continue;
 
-            const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
-
-            if (PC && PC->JournalComponent)
-            {
-                FJournalEntry Entry;
-                Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
-                Entry.IngredientID = Produced.IngredientID;
-                Entry.Count = Produced.Count;
-                // Искажённое состояние, замороженное сейчас — см. предупреждение
-                // в JournalTypes.h. WorldRNG, не FMath:: — тот же класс бага
-                // с недетерминированным ГПСЧ уже дважды находился и чинился
-                // в этой сессии (спавн ресурсов, порча инвентаря).
-                Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, WorldRNG);
-                Entry.Cell = TargetCell;
-                if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))
-                {
-                    Entry.Biome = Cell->Biome;
-                }
-                Entry.bWasNight = IsNight();
-                Entry.GameTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-
-                PC->JournalComponent->AddEntry(Entry);
-            }
-
-            // Подношение капищу (§15.5 "Restoration: рост и спад") — только
-            // варка (не сбор), только удавшаяся (не Ash/BoiledWater — вырожденный
-            // исход не подношение), и только если TargetCell — клетка самого
-            // капища (радиус подношения = собственная клетка, не радиус влияния).
-            if (bIsCraft && Produced.IngredientID == FName(TEXT("Potion")))
-            {
-                if (FShrine* Shrine = FindShrineAt(TargetCell))
-                {
-                    const UHerbalistSettings* Settings = GetHerbalistSettings();
-                    const float OfferingGain = Settings ? Settings->ShrineOfferingGain : 0.05f;
-                    const float DeltaRestoration = OfferingGain * (ProducedOp.Coherence - 0.5f) * 2.0f * (1.0f - Produced.State.Meta.Distortion);
-                    Shrine->Restoration = FMath::Clamp(Shrine->Restoration + DeltaRestoration, -1.0f, 1.0f);
-                }
-            }
+            // Чистое зелье (высокая Purity, низкая Corruption) — благословение,
+            // скверное — осквернение: тот же знак, что уже определяет "хороший"/
+            // "плохой" результат везде в проекте, без отдельной оси качества.
+            const UHerbalistSettings* Settings = GetHerbalistSettings();
+            const float OfferingGain = Settings ? Settings->ShrineOfferingGain : 0.05f;
+            const float DeltaRestoration = OfferingGain * (Modified->State.Meta.Purity - Modified->State.Meta.Corruption);
+            Shrine->Restoration = FMath::Clamp(Shrine->Restoration + DeltaRestoration, -1.0f, 1.0f);
         }
     }
 

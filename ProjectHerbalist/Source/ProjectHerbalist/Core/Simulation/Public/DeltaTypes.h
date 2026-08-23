@@ -18,12 +18,6 @@ struct FInventoryOperation
     FInventoryItem Ingredient;
     EInventoryOpType OpType = EInventoryOpType::Add;
     int32 Amount = 1;
-
-    // Только для крафта (Add): Coherence, который Pipeline уже посчитал
-    // (ComputeIntentCoherence) — вынесено наружу, чтобы капище-подношение
-    // (RunSimulationStep) не считало его заново отдельным путём и не
-    // рисковало разъехаться с тем, что реально использовал ComputeApplyResult.
-    float Coherence = 0.0f;
 };
 
 /**
