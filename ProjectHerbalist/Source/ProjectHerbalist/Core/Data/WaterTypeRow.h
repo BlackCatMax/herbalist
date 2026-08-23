@@ -47,6 +47,14 @@ struct PROJECTHERBALIST_API FWaterTypeRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water")
     EWaterSpecialEffect SpecialEffect = EWaterSpecialEffect::None;
 
+    // Множитель скорости порчи в инвентаре (05_Systems.md: "вода портится
+    // быстрее сухих трав"). Раньше вода резолвилась через
+    // UIngredientRegistrySubsystem (таблицу трав/грибов/минералов), где её
+    // не было вовсе — множитель тихо падал на дефолт 1.0, как у обычной
+    // травы. 2.0 — вдвое быстрее среднего DecayRate ингредиента (1.0).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats", meta = (ClampMin = "0.0", ClampMax = "10.0"))
+    float DecayRate = 2.0f;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float Rarity = 1.0f;
 };

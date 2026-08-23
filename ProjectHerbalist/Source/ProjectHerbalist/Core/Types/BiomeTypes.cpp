@@ -2,7 +2,6 @@
 #include "BiomeTypes.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
-#include "Core/Types/HerbalistIngredient.h"
 #include "Core/Types/BiomeRow.h"
 #include "Engine/DataTable.h"
 #include "AssetRegistry/AssetRegistryModule.h"

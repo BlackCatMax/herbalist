@@ -44,7 +44,8 @@ void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
     Edges = Asset->Edges;
     GlobalMorokDecay = Asset->GlobalMorokDecay;
     GlobalZaryanaDecay = Asset->GlobalZaryanaDecay;
-    CollapseThreshold = Asset->CollapseThreshold;
+    PotionCollapseThreshold = Asset->PotionCollapseThreshold;
+    BiomeCollapseThreshold = Asset->BiomeCollapseThreshold;
     FixedTimeStep = Asset->FixedTimeStep;
     GlobalInfluenceScale = Asset->GlobalInfluenceScale;
     GridBlendFactor = Asset->GridBlendFactor;
@@ -350,7 +351,7 @@ void UBiomeGraphSubsystem::UpdateVisualization()
 FBiomeSnapshot UBiomeGraphSubsystem::CaptureState() const
 {
     FBiomeSnapshot Snapshot;
-    Snapshot.CollapseThreshold = CollapseThreshold;
+    Snapshot.CollapseThreshold = PotionCollapseThreshold;
 
     for (const auto& Pair : Nodes)
     {

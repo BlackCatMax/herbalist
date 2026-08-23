@@ -1,4 +1,6 @@
 #include "HerbalistNameUtils.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Data/IngredientTableRow.h"
 
 FText GeneratePotionName(const FRealState& State)
 {
@@ -29,4 +31,32 @@ FText GeneratePotionName(const FRealState& State)
         Quality = TEXT("Очищенное");
 
     return FText::FromString(FString::Printf(TEXT("%s %s зелье"), *Quality, *MainAxis));
+}
+
+FString GetItemDisplayName(const FInventoryItem& Item, UIngredientRegistrySubsystem* Registry)
+{
+    if (Item.IngredientID == FName(TEXT("Potion")))
+    {
+        return GeneratePotionName(Item.State).ToString();
+    }
+    if (Item.IngredientID == FName(TEXT("Ash")))
+    {
+        return TEXT("Зола");
+    }
+    if (Item.IngredientID == FName(TEXT("BoiledWater")))
+    {
+        return TEXT("Кипячёная вода");
+    }
+    if (Item.IngredientID == FName(TEXT("Water")))
+    {
+        return TEXT("Вода");
+    }
+    if (Registry)
+    {
+        if (const FIngredientTableRow* Row = Registry->GetRow(Item.IngredientID))
+        {
+            return Row->DisplayName.ToString();
+        }
+    }
+    return Item.IngredientID.ToString();
 }

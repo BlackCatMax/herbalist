@@ -33,6 +33,26 @@ namespace HerbalistCore::Math
         return FMath::Sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
     }
 
+    // Полное евклидово расстояние по всем 11 скалярным осям состояния —
+    // Direction (4) + Magnitude + шесть мета-осей. Не нормализовано в [0,1]
+    // (максимум ~sqrt(11) при полностью противоположных состояниях по всем
+    // осям сразу) — конкретная нормировка появится вместе с первым реальным
+    // потребителем (Distance(S_real, S0) как метрика прогрессии/капищ,
+   // 00_Core_Lock §1.1, ROADMAP §2.3), а не придумывается заранее без него.
+    inline float Distance(const FRealState& A, const FRealState& B)
+    {
+        const float DirSq = FMath::Square(Distance(A.Direction, B.Direction));
+        const float dMag  = A.Magnitude       - B.Magnitude;
+        const float dDist = A.Meta.Distortion - B.Meta.Distortion;
+        const float dStab = A.Meta.Stability  - B.Meta.Stability;
+        const float dPur  = A.Meta.Purity     - B.Meta.Purity;
+        const float dPot  = A.Meta.Potency    - B.Meta.Potency;
+        const float dRes  = A.Meta.Resonance  - B.Meta.Resonance;
+        const float dCor  = A.Meta.Corruption - B.Meta.Corruption;
+        return FMath::Sqrt(DirSq + dMag*dMag + dDist*dDist + dStab*dStab
+                          + dPur*dPur + dPot*dPot + dRes*dRes + dCor*dCor);
+    }
+
     // Сравнение двух состояний с заданными допусками
     bool AreStatesSimilar(const FRealState& A, const FRealState& B,
         float MagnitudeThreshold = 0.15f,

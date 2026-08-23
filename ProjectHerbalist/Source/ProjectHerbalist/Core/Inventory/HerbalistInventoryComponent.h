@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Math/RandomStream.h"
 #include "HerbalistInventoryComponent.generated.h"
 
 struct FInventorySnapshot;
@@ -72,4 +73,12 @@ protected:
     // Периодичность обновления (в секундах)
     static constexpr float DecayUpdateInterval = 1.0f;
     float TimeSinceLastDecayUpdate = 0.0f;
+
+    // Джиттер осей при порче раньше брался из глобального FMath::FRandRange —
+    // недетерминированно, не воспроизводимо по сиду (тот же класс бага, что и
+    // у спавна ресурсов, AUDIT_AND_REFACTORING_PLAN §1.3/META_AUDIT §1.1).
+    // Сид фиксированный, не WorldRNG: инвентарь — состояние актора-владельца,
+    // не сетки мира, но детерминизм внутри одной сессии всё равно нужен для
+    // трассировки/реплея.
+    FRandomStream DecayRng = FRandomStream(20260823);
 };

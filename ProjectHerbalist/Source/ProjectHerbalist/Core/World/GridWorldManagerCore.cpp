@@ -257,7 +257,6 @@ void AGridWorldManager::InitializeCells()
             Cell.X            = X;
             Cell.Y            = Y;
             Cell.HarvestStress = 0.0f;
-            Cell.bEntityTriggered = false;
             Cell.bIsWater     = false;
             Cell.WaterTypeID  = NAME_None;
         }
@@ -350,14 +349,14 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
-    int32 NumResources = FMath::RandRange(1, 3);
+    int32 NumResources = WorldRNG.RandRange(1, 3);
     for (int32 i = 0; i < NumResources; ++i)
     {
         FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell.Biome, WorldRNG) : NAME_None;
         if (IngredientID.IsNone()) continue;
 
-        FVector Offset = FVector(FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
-                                 FMath::FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
+        FVector Offset = FVector(WorldRNG.FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
+                                 WorldRNG.FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
                                  0);
         // Плоская позиция (X,Y) плюс высота ландшафта + небольшой подъём (5 см)
         FVector SpawnPos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
@@ -604,46 +603,65 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         return Decay;
     };
 
+    // Шаг 1 новой модели хранения (DESIGN_World_State.md §5): State хранится
+    // как отклонение от TargetState, а не как независимая величина — сама
+    // релаксация сводится к затуханию этого отклонения, и клетки с нулевым
+    // отклонением можно не трогать вовсе. Раньше здесь были явные if/else
+    // Min/Max по четырём осям из семи (Potency/Resonance/Corruption вообще
+    // не восстанавливались к TargetState — молчаливый пробел, закрытый этим
+    // же проходом заодно, без отдельной задачи). Direction/TargetState как
+    // хранимые поля пока остаются (полный переход на процедурную базу —
+    // отдельные, более крупные шаги 2-3 того же плана), меняется только
+    // форма релаксации внутри них.
+    auto MoveToward = [](float& Current, float Target, float Step) -> bool
+    {
+        if (Current == Target) return false;
+        if (Current < Target) Current = FMath::Min(Current + Step, Target);
+        else                  Current = FMath::Max(Current - Step, Target);
+        return true;
+    };
+
     for (FGridCell& Cell : Cells)
     {
-        // 1. Восстанавливаем State в сторону TargetState (который обновляется графом)
-        //    Distortion
-        if (Cell.State.Meta.Distortion > Cell.TargetState.Meta.Distortion)
-            Cell.State.Meta.Distortion = FMath::Max(Cell.State.Meta.Distortion - DeltaRegen, Cell.TargetState.Meta.Distortion);
-        else if (Cell.State.Meta.Distortion < Cell.TargetState.Meta.Distortion)
-            Cell.State.Meta.Distortion = FMath::Min(Cell.State.Meta.Distortion + DeltaRegen, Cell.TargetState.Meta.Distortion);
-        
-        //    Purity
-        if (Cell.State.Meta.Purity < Cell.TargetState.Meta.Purity)
-            Cell.State.Meta.Purity = FMath::Min(Cell.State.Meta.Purity + DeltaRegen, Cell.TargetState.Meta.Purity);
-        else if (Cell.State.Meta.Purity > Cell.TargetState.Meta.Purity)
-            Cell.State.Meta.Purity = FMath::Max(Cell.State.Meta.Purity - DeltaRegen, Cell.TargetState.Meta.Purity);
-        
-        //    Stability
-        if (Cell.State.Meta.Stability < Cell.TargetState.Meta.Stability)
-            Cell.State.Meta.Stability = FMath::Min(Cell.State.Meta.Stability + DeltaRegen, Cell.TargetState.Meta.Stability);
-        else if (Cell.State.Meta.Stability > Cell.TargetState.Meta.Stability)
-            Cell.State.Meta.Stability = FMath::Max(Cell.State.Meta.Stability - DeltaRegen, Cell.TargetState.Meta.Stability);
-        
-        //    Magnitude
-        if (Cell.State.Magnitude < Cell.TargetState.Magnitude)
-            Cell.State.Magnitude = FMath::Min(Cell.State.Magnitude + DeltaRegen, Cell.TargetState.Magnitude);
-        else if (Cell.State.Magnitude > Cell.TargetState.Magnitude)
-            Cell.State.Magnitude = FMath::Max(Cell.State.Magnitude - DeltaRegen, Cell.TargetState.Magnitude);
-        
+        FRealState& S = Cell.State;
+        const FRealState& T = Cell.TargetState;
+
+        // 1. Отклонение по Meta + Magnitude — единым шагом на все семь осей
+        // вместо прежних четырёх. bChanged нужен только для раннего выхода
+        // из релаксации Direction ниже, спад HarvestStress идёт независимо.
+        bool bChanged = false;
+        bChanged |= MoveToward(S.Meta.Distortion, T.Meta.Distortion, DeltaRegen);
+        bChanged |= MoveToward(S.Meta.Purity,     T.Meta.Purity,     DeltaRegen);
+        bChanged |= MoveToward(S.Meta.Stability,  T.Meta.Stability,  DeltaRegen);
+        bChanged |= MoveToward(S.Meta.Potency,    T.Meta.Potency,    DeltaRegen);
+        bChanged |= MoveToward(S.Meta.Resonance,  T.Meta.Resonance,  DeltaRegen);
+        bChanged |= MoveToward(S.Meta.Corruption, T.Meta.Corruption, DeltaRegen);
+        bChanged |= MoveToward(S.Magnitude,       T.Magnitude,       DeltaRegen);
+
         // 2. Спад HarvestStress — медленный, зависит от биома (см. выше)
         Cell.HarvestStress = FMath::Max(Cell.HarvestStress - GetStressDecay(Cell.Biome) * DeltaTime, 0.0f);
-        
-        // 3. Восстановление осей (плавно к TargetState.Direction)
-        const FDirection& TargetDir = Cell.TargetState.Direction;
-        Cell.State.Direction.Body   = FMath::Clamp(Cell.State.Direction.Body   + (TargetDir.Body   - Cell.State.Direction.Body) * 0.01f * DeltaTime, 0.0f, 1.0f);
-        Cell.State.Direction.Mind   = FMath::Clamp(Cell.State.Direction.Mind   + (TargetDir.Mind   - Cell.State.Direction.Mind) * 0.01f * DeltaTime, 0.0f, 1.0f);
-        Cell.State.Direction.Spirit = FMath::Clamp(Cell.State.Direction.Spirit + (TargetDir.Spirit - Cell.State.Direction.Spirit) * 0.01f * DeltaTime, 0.0f, 1.0f);
-        Cell.State.Direction.Nature = FMath::Clamp(Cell.State.Direction.Nature + (TargetDir.Nature - Cell.State.Direction.Nature) * 0.01f * DeltaTime, 0.0f, 1.0f);
-        Cell.State.Direction.NormalizeSum();
-        
+
+        // 3. Направление — та же идея (движение к отклонению-нулю), но
+        // Direction нормализуется отдельно (NormalizeSum), поэтому не
+        // укладывается в MoveToward построчно; пропускаем полностью, если
+        // отклонение уже пренебрежимо мало — это и есть "не обходить клетки
+        // с нулевым отклонением" из плана.
+        const FDirection& TargetDir = T.Direction;
+        const float DirDeviation = FMath::Abs(S.Direction.Body - TargetDir.Body)
+                                  + FMath::Abs(S.Direction.Mind - TargetDir.Mind)
+                                  + FMath::Abs(S.Direction.Spirit - TargetDir.Spirit)
+                                  + FMath::Abs(S.Direction.Nature - TargetDir.Nature);
+        if (DirDeviation > KINDA_SMALL_NUMBER)
+        {
+            S.Direction.Body   = FMath::Clamp(S.Direction.Body   + (TargetDir.Body   - S.Direction.Body) * 0.01f * DeltaTime, 0.0f, 1.0f);
+            S.Direction.Mind   = FMath::Clamp(S.Direction.Mind   + (TargetDir.Mind   - S.Direction.Mind) * 0.01f * DeltaTime, 0.0f, 1.0f);
+            S.Direction.Spirit = FMath::Clamp(S.Direction.Spirit + (TargetDir.Spirit - S.Direction.Spirit) * 0.01f * DeltaTime, 0.0f, 1.0f);
+            S.Direction.Nature = FMath::Clamp(S.Direction.Nature + (TargetDir.Nature - S.Direction.Nature) * 0.01f * DeltaTime, 0.0f, 1.0f);
+            S.Direction.NormalizeSum();
+        }
+
         // 4. Синхронизация памяти клетки (для графа и тултипа)
-        Cell.Memory.AccumulatedDistortion = Cell.State.Meta.Distortion;
+        Cell.Memory.AccumulatedDistortion = S.Meta.Distortion;
     }
 }
 

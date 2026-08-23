@@ -20,10 +20,6 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeAxisDriftWeight = 0.1f;
 
-    // --- Environment Influence ---
-    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Environment", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float EnvironmentBlendWeight = 0.4f;
-
     // --- Water blending ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Water", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MaxWaterRatio = 0.8f;
@@ -53,14 +49,6 @@ public:
 
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ZaryanaSuppressFactor = 0.3f;
-
-    // --- Distortion ---
-    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Distortion", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float EnvironmentToxicityWeight = 0.5f;
-
-    // --- Bifurcation ---
-    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Bifurcation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float BifurcationThreshold = 0.85f;
 
     // --- Harvest ---
     // Насколько собранная трава подтягивается к состоянию места:
@@ -102,14 +90,14 @@ public:
 
     // На сколько зона Гнильников дополнительно тянет клетку к Corruption/Purity в секунду
     // (самоусиливающаяся порча места, ограничена клиппом в ApplyStateDelta).
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Gnilniki", meta = (ClampMin = "0.0"))
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Gnilniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float GnilnikiNudgeRate = 0.01f;
 
     // Полевик (Основной, Лесостепь) — скорость роста/падения Respect в секунду.
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0"))
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float LandmarkRespectGainRate = 0.01f;
 
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0"))
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float LandmarkRespectDecayRate = 0.02f;
 
     // Граница HarvestStress клетки-обиталища, выше которой Respect только падает.

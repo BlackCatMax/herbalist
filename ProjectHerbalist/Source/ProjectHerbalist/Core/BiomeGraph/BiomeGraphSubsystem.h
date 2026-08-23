@@ -63,7 +63,8 @@ protected:
 
     float GlobalMorokDecay = 0.01f;
     float GlobalZaryanaDecay = 0.005f;
-    float CollapseThreshold = 0.85f;
+    float PotionCollapseThreshold = 0.85f;
+    float BiomeCollapseThreshold = 0.9f;   // не читается нигде — 14_Biome_Graph §14.7, резерв
     float FixedTimeStep = 0.2f;
     float GlobalInfluenceScale = 1.0f;
     float GridBlendFactor = 0.3f;

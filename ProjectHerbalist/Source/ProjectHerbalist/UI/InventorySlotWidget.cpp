@@ -86,20 +86,14 @@ void UInventorySlotWidget::UpdateDisplay()
     }
     else
     {
-        // Пытаемся получить красивое имя из реестра
+        // GetItemDisplayName сама разбирает Ash/BoiledWater/Water; раньше эта
+        // ветка их не знала и показывала сырой IngredientID латиницей
+        // (AUDIT_AND_REFACTORING_PLAN §2.4), пока AlchemySlotWidget их уже понимал.
         AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
         UIngredientRegistrySubsystem* IngSub = nullptr;
         if (PC && PC->GetGameInstance())
             IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
-        if (IngSub)
-        {
-            if (const FIngredientTableRow* Row = IngSub->GetRow(CachedItem.IngredientID))
-                DisplayName = Row->DisplayName.ToString();
-            else
-                DisplayName = CachedItem.IngredientID.ToString();
-        }
-        else
-            DisplayName = CachedItem.IngredientID.ToString();
+        DisplayName = GetItemDisplayName(CachedItem, IngSub);
     }
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));

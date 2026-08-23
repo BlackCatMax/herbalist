@@ -16,7 +16,6 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
-#include "Core/Types/BiomeTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -36,7 +35,12 @@ float AGridWorldManager::GetTimeOfDay01() const
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
-    return FMath::Fmod(WorldTimeSeconds, DayLengthSeconds) / DayLengthSeconds;
+    // Раньше здесь был отдельный счётчик WorldTimeSeconds — дублировал уже
+    // существующий FWorldSnapshot::WorldTime (= GetWorld()->GetTimeSeconds()),
+    // который используется для CreationTime предметов. Оба и так level-relative,
+    // второй источник времени был не нужен (AUDIT_AND_REFACTORING_PLAN §3.4).
+    const float NowSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+    return FMath::Fmod(NowSeconds, DayLengthSeconds) / DayLengthSeconds;
 }
 
 bool AGridWorldManager::IsNight() const
@@ -106,8 +110,6 @@ void AGridWorldManager::SeedTestLandmarks()
 
 void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
 {
-    WorldTimeSeconds += DeltaTime;
-
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float GnilnikiThreshold   = Settings ? Settings->GnilnikiCorruptionThreshold      : 0.6f;
     const float GnilnikiNudgeRate   = Settings ? Settings->GnilnikiNudgeRate                : 0.01f;
@@ -172,10 +174,15 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             if (Cell.Memory.HistoryPurity > BereginyaThreshold)
             {
                 Cell.ManifestedEntityID = EntityID_Bereginya;
-                // Благословлённая вода — Purity подтягивается к максимуму, но не
-                // мгновенно и с потолком (не 1.0 — оставляет пространство Zaryana
-                // в самой варке, а не обнуляет её роль).
-                NewTarget.Meta.Purity = FMath::Clamp(FMath::Max(NewTarget.Meta.Purity, 0.9f), 0.0f, 0.97f);
+                // Благословлённая вода — Purity подтягивается к минимум 0.9, но
+                // не выше: только floor, без верхнего клампа. Раньше здесь стоял
+                // Clamp(..., 0.97) — если Purity УЖЕ была выше 0.97 (например, от
+                // самой Заряны при варке), формула её тихо понижала, хотя смысл
+                // был обратный — не мешать, а подтягивать вверх.
+                if (NewTarget.Meta.Purity < 0.9f)
+                {
+                    NewTarget.Meta.Purity = 0.9f;
+                }
                 bChanged = true;
             }
             else if (Cell.ManifestedEntityID == EntityID_Bereginya)

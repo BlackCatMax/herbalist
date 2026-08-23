@@ -7,6 +7,7 @@
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 {
@@ -28,11 +29,13 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     const float GlobalDecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
 
     UIngredientRegistrySubsystem* IngredientReg = nullptr;
+    UWaterTypeRegistrySubsystem* WaterReg = nullptr;
     if (UWorld* World = GetWorld())
     {
         if (UGameInstance* GI = World->GetGameInstance())
         {
             IngredientReg = GI->GetSubsystem<UIngredientRegistrySubsystem>();
+            WaterReg = GI->GetSubsystem<UWaterTypeRegistrySubsystem>();
         }
     }
 
@@ -40,8 +43,22 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     {
         if (Item.bSubjectToDecay)
         {
+            // Вода живёт в отдельной таблице (FWaterTypeRow), не в
+            // FIngredientTableRow — резолвить нужно по bIsWater, иначе
+            // множитель воды тихо падает на дефолт 1.0, как у обычной травы
+            // (05_Systems.md требует, чтобы вода портилась быстрее).
             float IngredientDecay = 1.0f;
-            if (IngredientReg)
+            if (Item.bIsWater)
+            {
+                if (WaterReg)
+                {
+                    if (const FWaterTypeRow* Row = WaterReg->GetWaterType(Item.IngredientID))
+                    {
+                        IngredientDecay = Row->DecayRate;
+                    }
+                }
+            }
+            else if (IngredientReg)
             {
                 if (const FIngredientTableRow* Row = IngredientReg->GetRow(Item.IngredientID))
                 {
@@ -63,10 +80,10 @@ void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float 
     Item.State.Meta.Purity      = FMath::Max(Item.State.Meta.Purity      - DecayFactor * 0.2f, 0.0f);
     Item.State.Meta.Stability   = FMath::Max(Item.State.Meta.Stability   - DecayFactor * 0.1f, 0.0f);
 
-    Item.State.Direction.Body   = FMath::Clamp(Item.State.Direction.Body   + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
-    Item.State.Direction.Mind   = FMath::Clamp(Item.State.Direction.Mind   + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
-    Item.State.Direction.Spirit = FMath::Clamp(Item.State.Direction.Spirit + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
-    Item.State.Direction.Nature = FMath::Clamp(Item.State.Direction.Nature + FMath::FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.Body   = FMath::Clamp(Item.State.Direction.Body   + DecayRng.FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.Mind   = FMath::Clamp(Item.State.Direction.Mind   + DecayRng.FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.Spirit = FMath::Clamp(Item.State.Direction.Spirit + DecayRng.FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
+    Item.State.Direction.Nature = FMath::Clamp(Item.State.Direction.Nature + DecayRng.FRandRange(-0.01f, 0.01f) * Instability, 0.0f, 1.0f);
     Item.State.Direction.NormalizeSum();
 }
 

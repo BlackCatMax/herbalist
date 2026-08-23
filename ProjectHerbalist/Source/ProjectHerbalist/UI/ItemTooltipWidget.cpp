@@ -2,26 +2,29 @@
 #include "Components/TextBlock.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/HerbalistNameUtils.h"
+#include "Player/HerbalistPlayerController.h"
 
 void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
 {
     if (Item.IsEmpty()) return;
 
-    // --- Имя предмета ---
-    FString Name;
-    if (Item.IngredientID == FName(TEXT("Potion")))
-        Name = GeneratePotionName(Item.State).ToString();
-    else if (Item.IngredientID == FName(TEXT("Ash")))
-        Name = TEXT("Зола");
-    else if (Item.IngredientID == FName(TEXT("BoiledWater")))
-        Name = TEXT("Кипячёная вода");
-    else if (Item.IngredientID == FName(TEXT("Water")))
-        Name = TEXT("Вода");
-    else
-        Name = Item.IngredientID.ToString();  // временно, потом заменим на DisplayName
+    // Раньше здесь были ещё раз захардкожены ветки Ash/BoiledWater/Water —
+    // третье место с той же дублированной логикой (AUDIT_AND_REFACTORING_PLAN
+    // §2.4 нашёл её в двух других виджетах, эта третья не была найдена и там,
+    // и в мета-аудите). Общий хелпер вместо третьей копии.
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    if (NameText) NameText->SetText(FText::FromString(GetItemDisplayName(Item, nullptr)));
 
-    if (NameText) NameText->SetText(FText::FromString(Name));
-    if (TypeText) TypeText->SetText(FText::FromString(TEXT("Ингредиент")));
+    // Морочники (16_Entity_Manifestation §16.5) — раньше PC->CurrentGlobalDistortion
+    // считался честно, но не был виден игроку нигде (AUDIT §1.4/META_AUDIT §6).
+    // Минимальный шаг: назвать источник там, где он уже ощутимо искажает —
+    // используем существующую строку типа предмета, без новых полей в Blueprint.
+    FString TypeLine = TEXT("Ингредиент");
+    if (PC && PC->CurrentGlobalDistortion > 0.4f)
+    {
+        TypeLine += TEXT(" · Морочники путают чувства");
+    }
+    if (TypeText) TypeText->SetText(FText::FromString(TypeLine));
 
     // Item уже искажён (S_perceived) — просто отображаем, без второго слоя шума
     // и без сравнения с реальным значением: игрок не должен иметь возможность

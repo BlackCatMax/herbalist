@@ -25,7 +25,12 @@ enum class EAlchemyOutcome : uint8
     Valid,
     BoiledWater,
     Ash,
-    Catastrophe
+    Catastrophe,
+    // Ветка Bifurcation "Purification" (05_Systems.md) — раньше делила
+    // значение Valid с обычной удачной варкой, из-за чего ничто ниже по
+    // цепочке (UI, RecordFootprint) не могло отличить редкое драматичное
+    // очищение от рядового успеха, вопреки прямому требованию ГДД.
+    Purified
 };
 
 // ========== Базовые структуры ==========
@@ -148,7 +153,6 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FEnvironment Environment;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FMemoryState Memory;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) float HarvestStress = 0.0f;
-    UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEntityTriggered = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIsWater = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FName WaterTypeID = NAME_None;
 

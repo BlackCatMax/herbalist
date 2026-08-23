@@ -165,27 +165,13 @@ void UAlchemySlotWidget::UpdateDisplay()
 
     if (IconImage) IconImage->SetVisibility(ESlateVisibility::Visible);
 
-    FString DisplayName;
-    if (StoredItem.IngredientID == FName(TEXT("Potion")))
+    UIngredientRegistrySubsystem* IngSub = nullptr;
+    if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
     {
-        DisplayName = GeneratePotionName(StoredItem.State).ToString();
+        if (PC->GetGameInstance())
+            IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
     }
-    else if (StoredItem.IngredientID == FName(TEXT("Ash")))
-    {
-        DisplayName = TEXT("Зола");
-    }
-    else if (StoredItem.IngredientID == FName(TEXT("BoiledWater")))
-    {
-        DisplayName = TEXT("Кипячёная вода");
-    }
-    else if (StoredItem.IngredientID == FName(TEXT("Water")))
-    {
-        DisplayName = TEXT("Вода");
-    }
-    else
-    {
-        DisplayName = StoredItem.IngredientID.ToString();
-    }
+    const FString DisplayName = GetItemDisplayName(StoredItem, IngSub);
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));
 

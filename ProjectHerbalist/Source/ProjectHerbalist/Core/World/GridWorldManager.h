@@ -224,11 +224,6 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Entities")
     TArray<FEntityLandmark> EntityLandmarks;
 
-    // Накопленное мировое время для суточного цикла (15_Cycles_And_Shrines §15.2).
-    // Отдельно от GetWorld()->GetTimeSeconds(), чтобы длина суток не зависела от момента старта уровня.
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Herbalist|Time")
-    float WorldTimeSeconds = 0.0f;
-
     void SeedTestLandmarks();
 
     // ---- Инициализация ----

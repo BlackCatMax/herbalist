@@ -25,8 +25,21 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Simulation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float GlobalZaryanaDecay = 0.005f;
 
+    // Порог Bifurcation ОДНОЙ ВАРКИ (05_Systems.md, Collapse/Purification) —
+    // переименовано из CollapseThreshold: старое имя не говорило, что это
+    // порог именно зелья, а не биома, хотя это два разных по масштабу и
+    // канону явления (13_World_Pipeline vs 14_Biome_Graph §14.7/§14.9,
+    // META_AUDIT §8).
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Collapse", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float CollapseThreshold = 0.85f;
+    float PotionCollapseThreshold = 0.85f;
+
+    // Порог коллапса/возрождения ЦЕЛОГО БИОМА (14_Biome_Graph §14.7 —
+    // "зарезервировано, но не активировано"). Заведён заранее, отдельно от
+    // PotionCollapseThreshold: варка и судьба целого биома — события разного
+    // масштаба и драматичности, не должны срабатывать от одного числа.
+    // Пока не читается нигде — механика Collapse/Rebirth не реализована.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Collapse", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BiomeCollapseThreshold = 0.9f;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Simulation", meta = (ClampMin = "0.05", ClampMax = "2.0"))
     float FixedTimeStep = 0.2f;

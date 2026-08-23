@@ -44,8 +44,9 @@ void AGridWorldManager::Tick(float DeltaTime)
 
     // ========================================================================
     // ПРОЯВЛЕНИЕ СУЩНОСТЕЙ (16_Entity_Manifestation, вертикальный срез)
-    // Тот же внепайплайновый принцип, что и у RegenerateCellParameters выше;
-    // также продвигает часы суток (WorldTimeSeconds) для Морочников.
+    // Тот же внепайплайновый принцип, что и у RegenerateCellParameters выше.
+    // Суточная фаза для Морочников берётся из GetWorld()->GetTimeSeconds()
+    // напрямую (GetTimeOfDay01), отдельных часов больше нет.
     // ========================================================================
     UpdateEntityManifestations(DeltaTime);
 

@@ -486,7 +486,7 @@ namespace Simulation
                 Result.Meta.Distortion = 0.4f;
                 Result.Meta.Purity = FMath::Clamp(Result.Meta.Purity + 0.2f, 0.f, 1.f);
                 Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability + 0.2f, 0.f, 1.f);
-                OutOutcome = EAlchemyOutcome::Valid;
+                OutOutcome = EAlchemyOutcome::Purified;
             }
             else
             {

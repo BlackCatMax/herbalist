@@ -2,10 +2,10 @@
 #include "Core/World/GridWorldManager.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
-#include "Core/Types/HerbalistIngredient.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
+#include "Core/Types/HerbalistCoreMath.h"
 
 
 void AGridWorldManager::SelectCell(int32 X, int32 Y)
@@ -31,11 +31,17 @@ FString AGridWorldManager::GetSelectedCellInfo() const
     {
         ResourceStr = Cell->ResourceActors[0]->GetIngredientID().ToString();
     }
-    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, Resource=%s"),
+    // Distance(S_real, S0) — раньше был написан и не подключён ни к чему
+    // (META_AUDIT §1.4). Первый живой потребитель: отладочная строка
+    // выделенной клетки. Не нормализовано в [0,1] — см. HerbalistCoreMath.h.
+    const float DistanceToS0 = HerbalistCore::Math::Distance(Cell->State, FAlatyr::S0);
+
+    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, DistToS0=%.2f, Resource=%s"),
         SelectedX, SelectedY,
         Cell->State.Magnitude,
         Cell->State.Meta.Distortion,
         Cell->HarvestStress,
+        DistanceToS0,
         *ResourceStr);
 }
 
