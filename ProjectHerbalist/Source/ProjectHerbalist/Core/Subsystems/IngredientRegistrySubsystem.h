@@ -26,7 +26,11 @@ public:
     bool IsKnown(FName IngredientID) const;
 
     TArray<FName> GetResourcesForBiome(EBiomeType Biome) const;
-    FName GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng) const;
+
+    // Пригодность (DESIGN_World_State.md §15, звено 3): AllowedBiomes уже решил,
+    // КТО может расти здесь (кэш CachedResourcesByBiome) — CellState решает,
+    // СКОЛЬКО шансов у каждого кандидата, через близость к его BaseState.
+    FName GetRandomResourceForBiome(EBiomeType Biome, const FRealState& CellState, FRandomStream& Rng) const;
 
     void Reset();
 

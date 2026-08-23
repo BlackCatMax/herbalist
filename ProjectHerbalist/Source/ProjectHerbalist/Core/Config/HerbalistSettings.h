@@ -119,6 +119,16 @@ public:
     // (PerceiveValue), не меняет S_real.
     UPROPERTY(config, EditAnywhere, Category = "Entities|Morochniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float NightPerceptionDistortionBonus = 0.25f;
+
+    // --- Spawning (DESIGN_World_State.md §15, звено 3) ---
+    // Резкость спада пригодности ингредиента в GetRandomResourceForBiome:
+    // Suitability = exp(-Falloff * Distance(CellState, BaseState)^2). 2.0 подобрано
+    // так, чтобы типичный разброс Purity/Corruption внутри одного биома в компендиуме
+    // (~0.45, см. таблицу Болота в DESIGN_World_State.md §15) давал заметный, но не
+    // нулевой перекос: трава-полюс биома в клетке, близкой к его эталону, ещё
+    // всходит, просто редко.
+    UPROPERTY(config, EditAnywhere, Category = "Spawning", meta = (ClampMin = "0.0"))
+    float IngredientSuitabilityFalloff = 2.0f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

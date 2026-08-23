@@ -139,4 +139,57 @@ bool FHerbalistRegistry_IsKnownDistinguishesKnownFromUnknown::RunTest(const FStr
     return true;
 }
 
+// Регрессия для DESIGN_World_State.md §15 (звено 3): GetRandomResourceForBiome
+// должен смещать выбор к кандидату, чей BaseState ближе к состоянию клетки, а не
+// раздавать шансы поровну по RarityWeight, как было до этой правки. Проверяем
+// направление эффекта (CloseCount заметно больше FarCount), а не точное
+// соотношение — оно завязано на IngredientSuitabilityFalloff и может тюниться
+// отдельно от этой проверки.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_SuitabilityBiasesTowardCloserBaseState,
+    "Herbalist.Registry.SuitabilityBiasesTowardCloserBaseState",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRegistry_SuitabilityBiasesTowardCloserBaseState::RunTest(const FString& Parameters)
+{
+    UDataTable* Table = MakeIngredientTable();
+
+    // Белокрыльник: почти точная копия эталона испорченного Болота.
+    FIngredientTableRow CloseRow;
+    CloseRow.AllowedBiomes = { EBiomeType::Bog };
+    CloseRow.RarityWeight = 1;
+    CloseRow.BaseState.Meta.Purity = 0.35f;
+    CloseRow.BaseState.Meta.Corruption = 0.70f;
+    Table->AddRow(FName(TEXT("Belokrylnik")), CloseRow);
+
+    // Сфагнум: противоположный полюс того же биома (см. таблицу в §15).
+    FIngredientTableRow FarRow;
+    FarRow.AllowedBiomes = { EBiomeType::Bog };
+    FarRow.RarityWeight = 1;
+    FarRow.BaseState.Meta.Purity = 0.80f;
+    FarRow.BaseState.Meta.Corruption = 0.15f;
+    Table->AddRow(FName(TEXT("Sphagnum")), FarRow);
+
+    UIngredientRegistrySubsystem* Registry = MakeRegistry(Table);
+
+    FRealState CellState;
+    CellState.Meta.Purity = 0.35f;
+    CellState.Meta.Corruption = 0.70f;   // совпадает с Белокрыльником, не со Сфагнумом
+
+    FRandomStream Rng(12345);
+    int32 CloseCount = 0, FarCount = 0;
+    const int32 Trials = 2000;
+    for (int32 i = 0; i < Trials; ++i)
+    {
+        FName Picked = Registry->GetRandomResourceForBiome(EBiomeType::Bog, CellState, Rng);
+        if (Picked == FName(TEXT("Belokrylnik"))) ++CloseCount;
+        else if (Picked == FName(TEXT("Sphagnum"))) ++FarCount;
+    }
+
+    TestEqual(TEXT("Every trial picked one of the two candidates"), CloseCount + FarCount, Trials);
+    TestTrue(TEXT("Candidate matching cell state is picked at least twice as often"), CloseCount > FarCount * 2);
+
+    Registry->Reset();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS

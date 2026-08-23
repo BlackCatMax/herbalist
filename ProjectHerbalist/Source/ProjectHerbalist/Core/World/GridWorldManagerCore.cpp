@@ -352,7 +352,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     int32 NumResources = WorldRNG.RandRange(1, 3);
     for (int32 i = 0; i < NumResources; ++i)
     {
-        FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell.Biome, WorldRNG) : NAME_None;
+        FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell.Biome, Cell.State, WorldRNG) : NAME_None;
         if (IngredientID.IsNone()) continue;
 
         FVector Offset = FVector(WorldRNG.FRandRange(-CellSize * 0.3f, CellSize * 0.3f),

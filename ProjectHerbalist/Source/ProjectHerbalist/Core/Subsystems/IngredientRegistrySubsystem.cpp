@@ -1,5 +1,7 @@
 #include "IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
+#include "Core/Types/HerbalistCoreMath.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Engine/DataTable.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -108,24 +110,41 @@ TArray<FName> UIngredientRegistrySubsystem::GetResourcesForBiome(EBiomeType Biom
     return Found ? *Found : TArray<FName>();
 }
 
-FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(EBiomeType Biome, FRandomStream& Rng) const
+FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(EBiomeType Biome, const FRealState& CellState, FRandomStream& Rng) const
 {
     const TArray<FName>* Candidates = CachedResourcesByBiome.Find(Biome);
     if (!Candidates || Candidates->Num() == 0) return NAME_None;
     if (Candidates->Num() == 1) return (*Candidates)[0];
 
-    const TArray<int32>* Weights = CachedWeightsByBiome.Find(Biome);
-    if (!Weights || Weights->Num() != Candidates->Num()) return (*Candidates)[0];
+    const TArray<int32>* BaseWeights = CachedWeightsByBiome.Find(Biome);
+    if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return (*Candidates)[0];
 
-    int32 TotalWeight = 0;
-    for (int32 W : *Weights) TotalWeight += W;
-    if (TotalWeight <= 0) return (*Candidates)[0];
-
-    int32 Roll = Rng.RandRange(1, TotalWeight);
-    int32 Accum = 0;
+    // Пригодность (DESIGN_World_State.md §15): AllowedBiomes уже отфильтровал
+    // "кто может здесь расти" — Candidates. Здесь решается "сколько шансов у
+    // кого": RarityWeight гасится удалённостью Cell.State от Row.BaseState
+    // по гауссиане, не линейно — так середина спада мягкая, а полюса (клетка,
+    // почти точная копия чьего-то эталона / его противоположность) выражены
+    // резко, при этом вес никогда не проваливается ровно в 0.
+    const float Falloff = GetHerbalistSettings()->IngredientSuitabilityFalloff;
+    TArray<float> EffectiveWeights;
+    EffectiveWeights.Reserve(Candidates->Num());
+    float TotalWeight = 0.0f;
     for (int32 i = 0; i < Candidates->Num(); ++i)
     {
-        Accum += (*Weights)[i];
+        const FIngredientTableRow* Row = Rows.Find((*Candidates)[i]);
+        const float Dist = Row ? HerbalistCore::Math::Distance(CellState, Row->BaseState) : 0.0f;
+        const float Suitability = FMath::Exp(-Falloff * Dist * Dist);
+        const float Weight = static_cast<float>((*BaseWeights)[i]) * Suitability;
+        EffectiveWeights.Add(Weight);
+        TotalWeight += Weight;
+    }
+    if (TotalWeight <= KINDA_SMALL_NUMBER) return (*Candidates)[0];
+
+    const float Roll = Rng.FRandRange(0.0f, TotalWeight);
+    float Accum = 0.0f;
+    for (int32 i = 0; i < Candidates->Num(); ++i)
+    {
+        Accum += EffectiveWeights[i];
         if (Roll <= Accum) return (*Candidates)[i];
     }
     return Candidates->Last();
