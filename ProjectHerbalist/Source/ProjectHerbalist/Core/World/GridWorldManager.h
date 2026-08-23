@@ -138,6 +138,9 @@ public:
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowInventory();
 
+    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
+    void ShowJournal();
+
     void SelectCell(int32 X, int32 Y);
     FString GetSelectedCellInfo() const;
 

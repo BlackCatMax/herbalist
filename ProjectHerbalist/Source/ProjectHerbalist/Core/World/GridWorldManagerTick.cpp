@@ -6,10 +6,14 @@
 #include "HerbalistLogChannels.h"
 #include "DrawDebugHelpers.h"
 #include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/SnapshotService.h"
 #include "Core/Simulation/Public/TraceTypes.h"
 #include "Core/Simulation/Private/TraceReplay.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "Core/Journal/HerbalistJournalComponent.h"
+#include "Core/Simulation/Private/PerceptionService.h"
+#include "Player/HerbalistPlayerController.h"
 
 void AGridWorldManager::Tick(float DeltaTime)
 {
@@ -93,6 +97,65 @@ void AGridWorldManager::RunSimulationStep()
             {
                 Graph->RecordFootprint(Footprint.BiomeID, Footprint.MorokImpact, Footprint.ZaryanaImpact,
                     Footprint.AxisDelta, SimulationFixedTimeStep);
+            }
+        }
+    }
+
+    // Травник (07_UX §7.2.4, ROADMAP.md §2.1) — вне детерминированного
+    // пайплайна, как и Footprint выше: презентационная фиксация, не часть
+    // Command/Delta цикла. Сопоставляем команды Harvest/Apply(крафт) из
+    // CommandsCopy с добавленными предметами из Delta.InventoryOps по порядку —
+    // Pipeline формирует их последовательно 1:1 для одиночного сбора/варки,
+    // этого достаточно для v1. Полная привязка результата к исходной команде
+    // потребовала бы прокидывать ID команды через весь Pipeline — излишне
+    // для журнала, который и так презентационный слой.
+    if (Delta.InventoryOps.Num() > 0)
+    {
+        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()))
+        {
+            if (PC->JournalComponent)
+            {
+                int32 OpIndex = 0;
+                for (const FCommandEntry& Cmd : CommandsCopy)
+                {
+                    const bool bIsHarvest = Cmd.Primitive == ECommandPrimitive::Harvest;
+                    const bool bIsCraft = Cmd.Primitive == ECommandPrimitive::Apply && Cmd.Apply.bIsCrafting;
+                    if (!bIsHarvest && !bIsCraft) continue;
+
+                    // Ищем следующий Add-оп в инвентарь игрока (ContainerID 0) —
+                    // Ash/BoiledWater из провальной варки тоже сюда попадают,
+                    // это осознанно: неудача — тоже опыт, который стоит записать.
+                    while (OpIndex < Delta.InventoryOps.Num()
+                        && !(Delta.InventoryOps[OpIndex].OpType == EInventoryOpType::Add
+                            && Delta.InventoryOps[OpIndex].ContainerID == 0))
+                    {
+                        ++OpIndex;
+                    }
+                    if (OpIndex >= Delta.InventoryOps.Num()) break;
+
+                    const FInventoryItem& Produced = Delta.InventoryOps[OpIndex].Ingredient;
+                    ++OpIndex;
+
+                    FJournalEntry Entry;
+                    Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
+                    Entry.IngredientID = Produced.IngredientID;
+                    Entry.Count = Produced.Count;
+                    // Искажённое состояние, замороженное сейчас — см. предупреждение
+                    // в JournalTypes.h. WorldRNG, не FMath:: — тот же класс бага
+                    // с недетерминированным ГПСЧ уже дважды находился и чинился
+                    // в этой сессии (спавн ресурсов, порча инвентаря).
+                    Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, WorldRNG);
+                    const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
+                    Entry.Cell = TargetCell;
+                    if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))
+                    {
+                        Entry.Biome = Cell->Biome;
+                    }
+                    Entry.bWasNight = IsNight();
+                    Entry.GameTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+
+                    PC->JournalComponent->AddEntry(Entry);
+                }
             }
         }
     }

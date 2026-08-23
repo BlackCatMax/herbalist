@@ -6,6 +6,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Types/HerbalistCoreMath.h"
+#include "Core/Journal/HerbalistJournalComponent.h"
 
 
 void AGridWorldManager::SelectCell(int32 X, int32 Y)
@@ -117,5 +118,32 @@ void AGridWorldManager::ShowInventory()
         UE_LOG(LogHerbalistWorld, Log, TEXT("[%d] %s x%d: Mag=%.2f, Dist=%.2f, Pot=%.2f Res=%.2f Cor=%.2f, Dir: (%.2f,%.2f,%.2f,%.2f)"),
             i, *Name, Item.Count, Res.Magnitude, Res.Meta.Distortion, Res.Meta.Potency, Res.Meta.Resonance, Res.Meta.Corruption,
             Res.Direction.Body, Res.Direction.Mind, Res.Direction.Spirit, Res.Direction.Nature);
+    }
+}
+
+void AGridWorldManager::ShowJournal()
+{
+    // Первый живой потребитель Травника (07_UX §7.2.4) — до UI/подсветки
+    // закономерностей проверяем сам факт записи. Печатает PerceivedState —
+    // намеренно: журнал показывает игроку то же, что видел бы он сам,
+    // не S_real (см. предупреждение в JournalTypes.h).
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (!PC || !PC->JournalComponent)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("No player controller or journal component found"));
+        return;
+    }
+
+    const TArray<FJournalEntry>& Entries = PC->JournalComponent->GetEntries();
+    UE_LOG(LogHerbalistWorld, Log, TEXT("=== TRAVNIK JOURNAL (%d entries) ==="), Entries.Num());
+    for (int32 i = 0; i < Entries.Num(); ++i)
+    {
+        const FJournalEntry& E = Entries[i];
+        const FRealState& S = E.PerceivedState;
+        UE_LOG(LogHerbalistWorld, Log,
+            TEXT("[%d] %s %s x%d @ (%d,%d) biome=%d night=%d t=%.1f | Mag=%.2f Dist=%.2f Pur=%.2f Cor=%.2f"),
+            i, E.Type == EJournalEntryType::Harvest ? TEXT("Harvest") : TEXT("Brew"),
+            *E.IngredientID.ToString(), E.Count, E.Cell.X, E.Cell.Y, (int32)E.Biome, E.bWasNight ? 1 : 0,
+            E.GameTimeSeconds, S.Magnitude, S.Meta.Distortion, S.Meta.Purity, S.Meta.Corruption);
     }
 }

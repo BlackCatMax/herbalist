@@ -7,6 +7,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
+#include "Core/Journal/HerbalistJournalComponent.h"
 #include "UI/InventoryWidget.h"
 #include "UI/AlchemyTransferWidget.h"
 #include "HerbalistPlayerController.generated.h"
@@ -30,6 +31,9 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
     UHerbalistInventoryComponent* InventoryComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Journal")
+    UHerbalistJournalComponent* JournalComponent;
 
     UPROPERTY(BlueprintReadOnly, Category = "UI")
     bool bIsAnyWidgetOpen = false;

@@ -24,6 +24,7 @@
 AHerbalistPlayerController::AHerbalistPlayerController()
 {
     InventoryComponent = CreateDefaultSubobject<UHerbalistInventoryComponent>(TEXT("InventoryComponent"));
+    JournalComponent = CreateDefaultSubobject<UHerbalistJournalComponent>(TEXT("JournalComponent"));
 }
 
 void AHerbalistPlayerController::BeginPlay()
