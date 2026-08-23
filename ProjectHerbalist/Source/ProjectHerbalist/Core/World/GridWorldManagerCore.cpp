@@ -648,8 +648,46 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         return true;
     };
 
+    const float DegradeCenter = Settings ? Settings->BiomeDegradeCenterCorruption : 0.75f;
+    const float DegradeMargin = Settings ? Settings->BiomeDegradeMargin : 0.10f;
+
     for (FGridCell& Cell : Cells)
     {
+        // Бистабильная релаксация (обсуждение в сессии 2026-08-24) — общий
+        // случай того, что раньше делали только Гнильники для Болота. Гистерезис
+        // на Corruption клетки решает, куда сама релаксация её тянет: выше порога
+        // входа цель — испорченный полюс (само восстановление невозможно, только
+        // усугубляет), ниже порога выхода — здоровое умолчание биома/воды. Порог
+        // меняется только на переходе (не каждый тик), иначе TargetState дёргался
+        // бы туда-обратно на каждом пересечении границы гистерезиса.
+        const bool bWasDegrading = Cell.Memory.bDegrading;
+        Cell.Memory.bDegrading = HerbalistCore::Math::PassesHysteresisThreshold(
+            bWasDegrading, Cell.State.Meta.Corruption, DegradeCenter, DegradeMargin);
+
+        if (Cell.Memory.bDegrading != bWasDegrading)
+        {
+            if (Cell.Memory.bDegrading)
+            {
+                Cell.TargetState.Meta.Corruption = 1.0f;
+                Cell.TargetState.Meta.Purity     = 0.0f;
+                Cell.TargetState.Meta.Distortion = 1.0f;
+                Cell.TargetState.Meta.Stability  = 0.0f;
+            }
+            else
+            {
+                // Игрок продавил Corruption ниже порога выхода — цель
+                // возвращается к здоровому умолчанию биома (или воды,
+                // у неё отдельная таблица default-состояний).
+                const FRealState Healthy = Cell.bIsWater
+                    ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
+                    : FBiomeDefaults::GetDefaultState(Cell.Biome);
+                Cell.TargetState.Meta.Corruption = Healthy.Meta.Corruption;
+                Cell.TargetState.Meta.Purity     = Healthy.Meta.Purity;
+                Cell.TargetState.Meta.Distortion = Healthy.Meta.Distortion;
+                Cell.TargetState.Meta.Stability  = Healthy.Meta.Stability;
+            }
+        }
+
         FRealState& S = Cell.State;
         const FRealState& T = Cell.TargetState;
 

@@ -128,6 +128,22 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities", meta = (ClampMin = "0.0", ClampMax = "0.3"))
     float EntityManifestationHysteresis = 0.05f;
 
+    // --- Бистабильная релаксация (обсуждение в сессии 2026-08-24, DESIGN_World_State.md) ---
+    // Раньше только Гнильники сдвигали цель релаксации к порче, и только для
+    // Болота. Общий случай: любая клетка, чей Corruption проходит порог входа,
+    // сама начинает целиться в испорченный полюс вместо здорового умолчания
+    // биома — естественное восстановление перестаёт работать, пока игрок не
+    // продавит Corruption ниже порога выхода активным вмешательством (не
+    // пассивным ожиданием — на то и гистерезис). Центр 0.75, запас 0.10 —
+    // вход 0.85 / выход 0.65. У Болота собственный здоровый Corruption уже 0.70
+    // (DT_BiomeDefaults.json) — специально внутри этого промежутка: самый
+    // тёмный из "нормальных" биомов и должен быть ближе всех к точке невозврата.
+    UPROPERTY(config, EditAnywhere, Category = "Biome|Bistability", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BiomeDegradeCenterCorruption = 0.75f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Biome|Bistability", meta = (ClampMin = "0.0", ClampMax = "0.3"))
+    float BiomeDegradeMargin = 0.10f;
+
     // --- Капища (02_GDD/15_Cycles_And_Shrines.md §15.5) ---
     // Вклад в Restoration от одной варки прямо на клетке капища:
     // OfferingGain × (Coherence−0.5) × 2 × (1−Distortion). При Coherence=1 и

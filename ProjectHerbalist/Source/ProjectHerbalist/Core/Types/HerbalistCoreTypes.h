@@ -114,6 +114,13 @@ struct PROJECTHERBALIST_API FMemoryState
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
     float TimeOfLastDistortionChange = 0.0f;
+
+    // Бистабильная релаксация (обсуждение в сессии 2026-08-24) — состояние
+    // гистерезиса "клетка деградирует" (Corruption прошёл порог входа, цель
+    // релаксации сама сдвинута к испорченному полюсу, пассивное восстановление
+    // не работает). См. RegenerateCellParameters (GridWorldManagerCore.cpp).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
+    bool bDegrading = false;
 };
 
 USTRUCT(BlueprintType)

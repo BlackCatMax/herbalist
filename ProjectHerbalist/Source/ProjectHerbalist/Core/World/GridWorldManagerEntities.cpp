@@ -17,8 +17,11 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
+#include "Core/Types/HerbalistCoreMath.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
+
+using HerbalistCore::Math::PassesHysteresisThreshold;
 
 namespace
 {
@@ -48,15 +51,6 @@ namespace
             || GetEntityManifestationPriority(CandidateID) > GetEntityManifestationPriority(Cell.ManifestedEntityID);
     }
 
-    // Триггер Шмитта: порог входа выше порога выхода на 2×Margin, чтобы Value,
-    // колеблющееся у самой границы Threshold, не переключало bCurrentlyActive
-    // каждый тик. bCurrentlyActive — было ли это конкретное условие уже активно
-    // в предыдущем тике (для проявлений сущностей это Cell.ManifestedEntityID ==
-    // <эта сущность>, читается в месте вызова).
-    bool PassesHysteresisThreshold(bool bCurrentlyActive, float Value, float Threshold, float Margin)
-    {
-        return bCurrentlyActive ? (Value > Threshold - Margin) : (Value > Threshold + Margin);
-    }
 }
 
 // ============================================================================

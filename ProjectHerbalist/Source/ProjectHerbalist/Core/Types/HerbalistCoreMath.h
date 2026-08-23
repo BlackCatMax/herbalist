@@ -53,6 +53,16 @@ namespace HerbalistCore::Math
                           + dPur*dPur + dPot*dPot + dRes*dRes + dCor*dCor);
     }
 
+    // Триггер Шмитта: порог входа выше порога выхода на 2×Margin, чтобы Value,
+    // колеблющееся у самой границы Threshold, не переключало bCurrentlyActive
+    // каждый тик. Раньше жил локально в GridWorldManagerEntities.cpp (проявление
+    // сущностей) — вынесено сюда при появлении второго потребителя (бистабильная
+    // релаксация клетки, GridWorldManagerCore.cpp), чтобы не заводить третью копию.
+    inline bool PassesHysteresisThreshold(bool bCurrentlyActive, float Value, float Threshold, float Margin)
+    {
+        return bCurrentlyActive ? (Value > Threshold - Margin) : (Value > Threshold + Margin);
+    }
+
     // Сравнение двух состояний с заданными допусками
     bool AreStatesSimilar(const FRealState& A, const FRealState& B,
         float MagnitudeThreshold = 0.15f,
