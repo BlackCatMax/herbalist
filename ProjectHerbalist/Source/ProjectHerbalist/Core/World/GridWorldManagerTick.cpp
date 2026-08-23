@@ -66,6 +66,11 @@ void AGridWorldManager::Tick(float DeltaTime)
     // ========================================================================
     UpdateShrines(DeltaTime);
 
+    // ========================================================================
+    // ЗАРЯНА: ФРАГМЕНТЫ ПАМЯТИ И БУЯН (обсуждение в сессии 2026-08-24)
+    // ========================================================================
+    UpdateMemoryFragments(DeltaTime);
+
     // Тик всегда активен для вызова нового пайплайна каждый кадр
     SetActorTickEnabled(true);
 
@@ -146,7 +151,18 @@ void AGridWorldManager::RunSimulationStep()
                     if (OpIndex >= Delta.InventoryOps.Num()) break;
 
                     const FInventoryItem& Produced = Delta.InventoryOps[OpIndex].Ingredient;
+                    const float ProducedCoherence = Delta.InventoryOps[OpIndex].Coherence;
                     ++OpIndex;
+
+                    // Заряна, фрагмент CoherentBrew (обсуждение в сессии 2026-08-24) —
+                    // тот же момент, где уже читается результат варки для Травника,
+                    // не отдельный проход по CommandsCopy.
+                    if (bIsCraft && Produced.IngredientID == FName(TEXT("Potion")))
+                    {
+                        const FIntPoint BrewCell = Cmd.Apply.TargetCell;
+                        TryTriggerCoherentBrewFragment(BrewCell, ProducedCoherence,
+                            Produced.State.Meta.Distortion, Produced.State.Meta.Purity);
+                    }
 
                     FJournalEntry Entry;
                     Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
@@ -156,7 +172,7 @@ void AGridWorldManager::RunSimulationStep()
                     // в JournalTypes.h. WorldRNG, не FMath:: — тот же класс бага
                     // с недетерминированным ГПСЧ уже дважды находился и чинился
                     // в этой сессии (спавн ресурсов, порча инвентаря).
-                    Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, WorldRNG);
+                    Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, WorldRNG, GlobalPerceptionClarity);
                     const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
                     Entry.Cell = TargetCell;
                     if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))

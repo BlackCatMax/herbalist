@@ -5,9 +5,9 @@ namespace Simulation
 {
     // При Distortion=0 объект виден почти точно; чем выше Distortion, тем шире
     // диапазон возможного шума. MaxNoise* — амплитуда шума при Distortion=1.
-    FRealState FPerceptionService::PerceiveRealState(const FRealState& Real, FRandomStream& Rng)
+    FRealState FPerceptionService::PerceiveRealState(const FRealState& Real, FRandomStream& Rng, float Clarity)
     {
-        const float NoiseScale = FMath::Clamp(Real.Meta.Distortion, 0.f, 1.f);
+        const float NoiseScale = FMath::Clamp(Real.Meta.Distortion, 0.f, 1.f) * (1.0f - FMath::Clamp(Clarity, 0.f, 1.f));
         const float MaxNoiseMain = 0.15f;   // Magnitude/Distortion/Purity/Stability
         const float MaxNoiseAxis = 0.08f;   // Direction
 
@@ -26,7 +26,7 @@ namespace Simulation
         return Perceived;
     }
 
-    FPerceivedWorld FPerceptionService::ComputePerceivedWorld(const FWorldSnapshot& RealWorld, FRandomStream& Rng)
+    FPerceivedWorld FPerceptionService::ComputePerceivedWorld(const FWorldSnapshot& RealWorld, FRandomStream& Rng, float Clarity)
     {
         FPerceivedWorld Result;
         Result.WorldSeed = RealWorld.WorldSeed;
@@ -35,13 +35,13 @@ namespace Simulation
             FPerceivedCell P;
             P.Coord = Pair.Key;
             P.bIsVisible = true;
-            P.PerceivedState = PerceiveRealState(Pair.Value.State, Rng);
+            P.PerceivedState = PerceiveRealState(Pair.Value.State, Rng, Clarity);
             Result.Cells.Add(Pair.Key, P);
         }
         return Result;
     }
 
-    FPerceivedInventory FPerceptionService::ComputePerceivedInventory(const FInventorySnapshot& RealInventory, FRandomStream& Rng)
+    FPerceivedInventory FPerceptionService::ComputePerceivedInventory(const FInventorySnapshot& RealInventory, FRandomStream& Rng, float Clarity)
     {
         FPerceivedInventory Result;
         for (const auto& Pair : RealInventory.ContainerContents)
@@ -51,7 +51,7 @@ namespace Simulation
             for (const FInventoryItem& Item : Pair.Value)
             {
                 FInventoryItem Perceived = Item;
-                Perceived.State = PerceiveRealState(Item.State, Rng);
+                Perceived.State = PerceiveRealState(Item.State, Rng, Clarity);
                 PerceivedItems.Add(MoveTemp(Perceived));
             }
             Result.ContainerContents.Add(Pair.Key, MoveTemp(PerceivedItems));

@@ -702,6 +702,7 @@ namespace Simulation
             AddOp.Ingredient = PotionItem;
             AddOp.OpType = EInventoryOpType::Add;
             AddOp.Amount = 1;
+            AddOp.Coherence = EffectiveIntent.Coherence;
             OutDelta.InventoryOps.Add(AddOp);
 
             UE_LOG(LogHerbalistSimulation, Log, TEXT("Crafted potion: Outcome=%d M=%.2f, Dist=%.2f, Purity=%.2f"),

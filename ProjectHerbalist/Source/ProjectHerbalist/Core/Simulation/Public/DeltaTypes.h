@@ -18,6 +18,15 @@ struct FInventoryOperation
     FInventoryItem Ingredient;
     EInventoryOpType OpType = EInventoryOpType::Add;
     int32 Amount = 1;
+
+    // Только для крафта (Add): Coherence, который Pipeline уже посчитал
+    // (ComputeIntentCoherence). Снято отсюда 2026-08-24 вместе с переносом
+    // подношения капищу на Apply (варка сама по себе не должна влиять на
+    // клетки) — и заведено заново для другого, законного потребителя:
+    // триггера фрагмента памяти Заряны CoherentBrew (RunSimulationStep),
+    // которому нужен именно момент варки, не применения. Не тот же случай:
+    // фрагмент не трогает Cell.State, только спавнит презентационный актор.
+    float Coherence = 0.0f;
 };
 
 /**

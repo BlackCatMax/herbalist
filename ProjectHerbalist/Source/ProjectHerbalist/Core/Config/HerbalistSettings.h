@@ -128,6 +128,47 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities", meta = (ClampMin = "0.0", ClampMax = "0.3"))
     float EntityManifestationHysteresis = 0.05f;
 
+    // --- Заряна: фрагменты памяти и Буян (обсуждение в сессии 2026-08-24) ---
+    // Числа — первая прикидка, "числа пока забей" (прямая цитата из сессии):
+    // темп ещё не определён, менять свободно, не ломая структуру.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "1.0"))
+    float MemoryFragmentLifetimeSeconds = 120.0f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float MemoryFragmentSpawnCooldownSeconds = 300.0f;
+
+    // Как часто проверяются State-триггеры (LowLocalDistortion/ShrineRestored) —
+    // не каждый кадр, сканирование всей сетки того не стоит.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "1.0"))
+    float MemoryFragmentStateCheckInterval = 5.0f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MemoryFragmentLowDistortionThreshold = 0.15f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MemoryFragmentShrineRestorationThreshold = 0.7f;
+
+    // Порог Coherence/Purity/Distortion для триггера CoherentBrew (варка).
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MemoryFragmentBrewCoherenceThreshold = 0.8f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MemoryFragmentBrewDistortionCeiling = 0.2f;
+
+    // Выше этого глобального (усреднённого по клеткам) Distortion фрагмент,
+    // родившийся из подлинного триггера, всё равно рискует стать ложным —
+    // "при высоком глобальном Morok фрагмент может проявиться как искажённый".
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MemoryFragmentFalseRiskGlobalDistortion = 0.5f;
+
+    // Буян (§15.5): средний Distance(State, S0) по клеткам ниже порога +
+    // все капища мира выше порога Restoration.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "0.0"))
+    float BuyanAverageDistanceThreshold = 0.5f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BuyanShrineRestorationThreshold = 0.7f;
+
     // --- Передозировка зелий (обсуждение в сессии 2026-08-24) ---
     // Компендиум ("сок его — сильное сердечное зелье, но и яд лютый", Ландыш;
     // тот же паттерн у Полярного мака и Чистотела) — сила лекарства и его яд

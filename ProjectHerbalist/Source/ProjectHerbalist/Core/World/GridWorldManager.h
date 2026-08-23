@@ -12,9 +12,12 @@
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Shrine/ShrineTypes.h"
+#include "Core/Zaryana/MemoryFragmentTypes.h"
 #include "GridWorldManager.generated.h"
 
 class AHerbalistResourceActor;
+class AMemoryFragmentActor;
+class AHerbalistPlayerController;
 class ALandscape;
 struct FWorldSnapshot;
 struct FStateDelta;
@@ -217,6 +220,39 @@ public:
     // Tick() каждый кадр, но и напрямую тестируемо без полной PIE-сессии.
     void UpdateShrines(float DeltaTime);
 
+    // ---- Заряна: фрагменты памяти и Буян (обсуждение в сессии 2026-08-24,
+    // 06_Progression.md "Прогрессия через Заряну", 15_Cycles_And_Shrines.md
+    // §15.5 "Буян как глобальное состояние") ----
+    // Тем же принципом, что и остальные внепайплайновые системы —
+    // UpdateEntityManifestations/UpdateShrines: тикается из Tick(), но
+    // напрямую вызываемо для тестов.
+    void UpdateMemoryFragments(float DeltaTime);
+
+    // Событийный триггер (CoherentBrew) — вызывается из RunSimulationStep,
+    // там же, где уже читается Coherence удавшейся варки для капищ/Травника.
+    void TryTriggerCoherentBrewFragment(const FIntPoint& Cell, float Coherence, float Distortion, float Purity);
+
+    // Вызывается из AMemoryFragmentActor::OnInteract.
+    void CollectMemoryFragment(FName DefinitionID, bool bIsFalse, AHerbalistPlayerController* PC);
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Zaryana")
+    float GetGlobalPerceptionClarity() const { return GlobalPerceptionClarity; }
+    void SetGlobalPerceptionClarity(float InClarity) { GlobalPerceptionClarity = InClarity; }
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Zaryana")
+    bool IsBuyanReached() const { return bBuyanReached; }
+    void SetBuyanReached(bool bInReached) { bBuyanReached = bInReached; }
+
+    const TSet<FName>& GetCollectedFragmentIDs() const { return CollectedFragmentIDs; }
+    void SetCollectedFragmentIDs(const TSet<FName>& InIDs) { CollectedFragmentIDs = InIDs; }
+
+    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
+    void ShowZaryanaStatus();
+
+    // public тем же принципом, что UpdateShrines/RegenerateCellParameters —
+    // тикается из UpdateMemoryFragments, но и напрямую тестируемо.
+    void CheckBuyanCondition();
+
     // ---- Сохранения (Core/Save/HerbalistSaveTypes.h) ----
     TArray<FSavedCellState> CaptureSaveCells() const;
     void ApplySaveCells(const TArray<FSavedCellState>& InCells);
@@ -283,6 +319,18 @@ protected:
 
     // ---- Капища ----
     TArray<FShrine> Shrines;
+
+    // ---- Заряна: фрагменты памяти и Буян ----
+    float GlobalPerceptionClarity = 0.0f;
+    bool bBuyanReached = false;
+    TSet<FName> CollectedFragmentIDs;   // подлинно собранные — больше не спавнятся
+
+    TWeakObjectPtr<AMemoryFragmentActor> ActiveFragment;   // v1: не больше одного за раз
+    float FragmentSpawnCooldownRemaining = 0.0f;
+    float FragmentStateCheckAccumulator = 0.0f;
+
+    void TrySpawnStateBasedFragment();
+    void SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoint& Cell, bool bIsFalse);
 
     // ---- Инициализация ----
     UFUNCTION(BlueprintCallable, Category = "World|Init")

@@ -84,6 +84,17 @@ public:
     UPROPERTY()
     TArray<FShrine> Shrines;
 
+    // Заряна (обсуждение в сессии 2026-08-24) — Clarity/Буян/собранные ID
+    // растут медленно и редко, ровно то, что должно переживать сохранение.
+    UPROPERTY()
+    float GlobalPerceptionClarity = 0.0f;
+
+    UPROPERTY()
+    bool bBuyanReached = false;
+
+    UPROPERTY()
+    TArray<FName> CollectedFragmentIDs;
+
     UPROPERTY()
     TArray<FInventoryItem> InventoryItems;
 

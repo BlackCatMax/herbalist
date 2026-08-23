@@ -2,6 +2,7 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Storage/AlchemyTableActor.h"
+#include "Core/Zaryana/MemoryFragmentActor.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Save/HerbalistSaveSubsystem.h"
@@ -363,6 +364,12 @@ void AHerbalistPlayerController::Interact()
     if (AAlchemyTableActor* AlchemyTable = Cast<AAlchemyTableActor>(HitActor))
     {
         AlchemyTable->OnInteract(this);
+        return;
+    }
+
+    if (AMemoryFragmentActor* Fragment = Cast<AMemoryFragmentActor>(HitActor))
+    {
+        Fragment->OnInteract(this);
         return;
     }
 }

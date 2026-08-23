@@ -21,9 +21,18 @@ void UPerceptionComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
     FWorldSnapshot WorldSnap = Simulation::FSnapshotService::CaptureWorld();
     if (WorldSnap.GridState.Num() == 0) return;
 
+    // GlobalPerceptionClarity (обсуждение в сессии 2026-08-24, "Прогрессия
+    // через Заряну") — компонент живёт прямо на AGridWorldManager (см.
+    // AGridWorldManager::PerceptionComponent), не нужен отдельный поиск.
+    float Clarity = 0.0f;
+    if (const AGridWorldManager* Owner = Cast<AGridWorldManager>(GetOwner()))
+    {
+        Clarity = Owner->GetGlobalPerceptionClarity();
+    }
+
     FRandomStream Rng(WorldSnap.WorldSeed);
-    CachedPerceivedWorld = Simulation::FPerceptionService::ComputePerceivedWorld(WorldSnap, Rng);
+    CachedPerceivedWorld = Simulation::FPerceptionService::ComputePerceivedWorld(WorldSnap, Rng, Clarity);
 
     FInventorySnapshot InvSnap = Simulation::FSnapshotService::CaptureInventory();
-    CachedPerceivedInventory = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, Rng);
+    CachedPerceivedInventory = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, Rng, Clarity);
 }

@@ -47,6 +47,9 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->Cells = WorldManager->CaptureSaveCells();
     Save->EntityLandmarks = WorldManager->GetEntityLandmarks();
     Save->Shrines = WorldManager->GetShrines();
+    Save->GlobalPerceptionClarity = WorldManager->GetGlobalPerceptionClarity();
+    Save->bBuyanReached = WorldManager->IsBuyanReached();
+    Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
 
     if (AHerbalistPlayerController* PC = World ? Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()) : nullptr)
     {
@@ -106,6 +109,9 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetGameClockSeconds(Save->GameClockSeconds);
     WorldManager->SetEntityLandmarks(Save->EntityLandmarks);
     WorldManager->SetShrines(Save->Shrines);
+    WorldManager->SetGlobalPerceptionClarity(Save->GlobalPerceptionClarity);
+    WorldManager->SetBuyanReached(Save->bBuyanReached);
+    WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));
     WorldManager->ApplySaveCells(Save->Cells);
 
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()))
