@@ -10,6 +10,7 @@
 #include "Core/Journal/HerbalistJournalComponent.h"
 #include "UI/InventoryWidget.h"
 #include "UI/AlchemyTransferWidget.h"
+#include "UI/JournalWidget.h"
 #include "HerbalistPlayerController.generated.h"
 
 class AStorageContainer;
@@ -92,6 +93,14 @@ public:
     UFUNCTION(Exec)
     void LoadGame();
 
+    // Экран Травника (UI/JournalWidget.h, 07_UX §7.2.4) — открывается тем же
+    // способом, что и инвентарь (Inventory()). Exec-обёртка отдельно от
+    // JournalAction — тестируемо консолью до того, как в редакторе назначены
+    // сам Input Action asset и WBP-блюпринт (оба нужно создать в редакторе,
+    // C++ этого не может — тот же паттерн, что InventoryWidgetClass/InventoryAction).
+    UFUNCTION(Exec)
+    void ToggleJournalUI();
+
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
@@ -111,14 +120,21 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InteractAction;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    UInputAction* JournalAction;
+
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UInventoryWidget> InventoryWidgetClass;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UJournalWidget> JournalWidgetClass;
 
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
     void Harvest();
     void Info();
     void Inventory();
+    void Journal();
     void ApplyAlchemy();
     void Interact();
 
@@ -135,6 +151,9 @@ protected:
 private:
     UPROPERTY()
     UInventoryWidget* InventoryWidgetInstance = nullptr;
+
+    UPROPERTY()
+    UJournalWidget* JournalWidgetInstance = nullptr;
 
     // Кэш для мира
     UPROPERTY()

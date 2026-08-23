@@ -8,10 +8,13 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnJournalEntryAdded);
 
-// Травник (07_UX §7.2.4) — минимальная реализация: автофиксация, без
-// подсветки закономерностей и сравнения (это следующие шаги, см.
-// ROADMAP.md §2.1). Пишется тем же способом, что и HerbalistInventoryComponent
-// рядом — компонент на PlayerController, не подсистема.
+// Травник (07_UX §7.2.4) — автофиксация (v1) + плоский экран сравнения записей
+// (UI/JournalWidget, 2026-08-24: 06_Progression запрещает "числовые улучшения",
+// поэтому прогрессия — это сравнение глазами, не правка формулы шума).
+// Группировка/подсветка закономерностей по конкретному ингредиенту — ещё не
+// подключена к UI, хотя GetEntriesForIngredient ниже для неё уже готова
+// (ROADMAP.md §2.1/Фаза C §8). Пишется тем же способом, что и
+// HerbalistInventoryComponent рядом — компонент на PlayerController, не подсистема.
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTHERBALIST_API UHerbalistJournalComponent : public UActorComponent
 {

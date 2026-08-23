@@ -54,6 +54,14 @@ void AHerbalistPlayerController::SetupInputComponent()
         EnhancedInputComponent->BindAction(HarvestAction,        ETriggerEvent::Started,   this, &AHerbalistPlayerController::Harvest);
         EnhancedInputComponent->BindAction(InfoAction,           ETriggerEvent::Started,   this, &AHerbalistPlayerController::Info);
         EnhancedInputComponent->BindAction(InventoryAction,      ETriggerEvent::Started,   this, &AHerbalistPlayerController::Inventory);
+        // JournalAction — Input Action asset ещё не создан в редакторе (см.
+        // комментарий у JournalWidgetClass), проверка на null нужна, пока
+        // остальные BindAction её не делают, потому что их actions уже
+        // назначены в BP и никогда не бывают nullptr на практике.
+        if (JournalAction)
+        {
+            EnhancedInputComponent->BindAction(JournalAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Journal);
+        }
         EnhancedInputComponent->BindAction(ApplyAlchemyAction,   ETriggerEvent::Started,   this, &AHerbalistPlayerController::ApplyAlchemy);
         EnhancedInputComponent->BindAction(InteractAction,       ETriggerEvent::Started,   this, &AHerbalistPlayerController::Interact);
         EnhancedInputComponent->BindAction(UsePotionAction,      ETriggerEvent::Started,   this, &AHerbalistPlayerController::OnUsePotion);
@@ -371,6 +379,12 @@ void AHerbalistPlayerController::CloseAnyWidget()
         InventoryWidgetInstance = nullptr;
     }
 
+    if (JournalWidgetInstance && JournalWidgetInstance->IsInViewport())
+    {
+        JournalWidgetInstance->RemoveFromParent();
+        JournalWidgetInstance = nullptr;
+    }
+
     if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
     {
         CurrentAlchemyWidget->RemoveFromParent();
@@ -414,6 +428,43 @@ void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
 void AHerbalistPlayerController::ShowInventory()
 {
     Inventory();
+}
+
+void AHerbalistPlayerController::Journal()
+{
+    if (bIsAnyWidgetOpen && JournalWidgetInstance && JournalWidgetInstance->IsInViewport())
+    {
+        CloseAnyWidget();
+        return;
+    }
+
+    if (bIsAnyWidgetOpen) return;
+
+    if (JournalWidgetInstance)
+    {
+        JournalWidgetInstance->RemoveFromParent();
+        JournalWidgetInstance = nullptr;
+    }
+
+    if (!JournalWidgetClass || !JournalComponent) return;
+
+    JournalWidgetInstance = CreateWidget<UJournalWidget>(GetWorld(), JournalWidgetClass);
+    if (!JournalWidgetInstance) return;
+
+    JournalWidgetInstance->BindJournal(JournalComponent);
+    JournalWidgetInstance->AddToViewport();
+
+    bShowMouseCursor = true;
+    FInputModeGameAndUI InputMode;
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+    SetIgnoreLookInput(true);
+    bIsAnyWidgetOpen = true;
+}
+
+void AHerbalistPlayerController::ToggleJournalUI()
+{
+    Journal();
 }
 
 void AHerbalistPlayerController::SaveGame()
