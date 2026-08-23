@@ -10,6 +10,7 @@
 #include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Core/Types/HerbalistNameUtils.h"   // <-- добавлено
 #include "Core/Simulation/Private/PerceptionService.h"
+#include "Core/World/GridWorldManager.h"
 
 void UAlchemySlotWidget::InitializeSlot(EAlchemySlotType InType, int32 InMaxCount)
 {
@@ -53,7 +54,18 @@ bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
         // Считаем один раз, на входе в слот — не при каждом UpdateDisplay,
         // иначе имя зелья/ингредиента мигало бы новым искажением на любой
         // перерисовке (ROADMAP.md §3.1: иллюзия должна быть устойчивой).
-        PerceivedState = Simulation::FPerceptionService::PerceiveRealState(StoredItem.State, PerceptionRng);
+        // GlobalPerceptionClarity (найдено при аудите 2026-08-24: котёл был
+        // единственным местом, читающим восприятие мимо неё) — тот же
+        // AGridWorldManager, откуда уже берётся CurrentAlchemyTable.
+        float Clarity = 0.0f;
+        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
+        {
+            if (AGridWorldManager* WorldManager = PC->FindWorldManager())
+            {
+                Clarity = WorldManager->GetGlobalPerceptionClarity();
+            }
+        }
+        PerceivedState = Simulation::FPerceptionService::PerceiveRealState(StoredItem.State, PerceptionRng, Clarity);
     }
     else
     {

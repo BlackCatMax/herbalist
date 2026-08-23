@@ -64,17 +64,26 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
 
     // LowLocalDistortion — линейный обход клеток; сетка небольшая (сейчас
     // 20x20), раз в MemoryFragmentStateCheckInterval секунд — не проблема.
+    // Собираем ВСЕ подходящие клетки и берём случайную (WorldRNG), не первую
+    // встречную — иначе фрагмент почти всегда рождался бы в одном и том же
+    // "первом по обходу" углу сетки (найдено при аудите 2026-08-24).
     const FMemoryFragmentDefinition* QuietDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("TIKHOE_MESTO")));
     if (QuietDef && !CollectedFragmentIDs.Contains(QuietDef->ID))
     {
+        TArray<FIntPoint> EligibleCells;
         for (const FGridCell& Cell : Cells)
         {
             if (Cell.bIsWater) continue;
             if (Cell.State.Meta.Distortion < DistortionThreshold)
             {
-                SpawnMemoryFragmentAt(QuietDef->ID, FIntPoint(Cell.X, Cell.Y), /*bIsFalse=*/false);
-                return;
+                EligibleCells.Add(FIntPoint(Cell.X, Cell.Y));
             }
+        }
+        if (EligibleCells.Num() > 0)
+        {
+            const FIntPoint Chosen = EligibleCells[WorldRNG.RandRange(0, EligibleCells.Num() - 1)];
+            SpawnMemoryFragmentAt(QuietDef->ID, Chosen, /*bIsFalse=*/false);
+            return;
         }
     }
 }
