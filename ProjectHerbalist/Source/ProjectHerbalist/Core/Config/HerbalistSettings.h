@@ -105,10 +105,29 @@ public:
     float LandmarkStressAngerThreshold = 0.6f;
 
     // Берегиня (Легендарный, Речная пойма) — порог Memory.HistoryPurity водной
-    // клетки для проявления. Упрощённая версия без полноценной системы капищ
-    // (15_Cycles_And_Shrines §15.5) — тот же принцип, одна клетка вместо структуры.
+    // клетки для проявления. Писалось до капищ как "упрощённая версия без
+    // полноценной системы" (15_Cycles_And_Shrines §15.5) — теперь один из
+    // двух независимых путей к триггеру, см. BereginyaShrineRestorationThreshold.
     UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BereginyaHistoryPurityThreshold = 0.75f;
+
+    // Второй путь к тому же триггеру (16_Entity_Manifestation §16.4: "высокая
+    // Restoration капища поблизости — как уже спроектировано для Берегини"),
+    // добавлен 2026-08-24 после того, как капища перестали быть гипотетическими.
+    // Использует тот же радиус, что ShrineInfluenceRadius ниже.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BereginyaShrineRestorationThreshold = 0.7f;
+
+    // §16.5 "Опасная нечисть — сквозная ночная фаза" (Вурдалаки/Навьи/
+    // Оборотни/Лихоманки/Черти — единственная категория бестиария без
+    // привязки к биому). Применяется ко ВСЕЙ сетке разом, пока держится
+    // ночь (AGridWorldManager::IsNight), поэтому заведомо мельче ставок
+    // одиночных Низших (AmbientEntityTypes.h) — иначе затопил бы их сигнал.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float NightHorrorDistortionRate = 0.003f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float NightHorrorCorruptionRate = 0.002f;
 
     // Скорость обновления Memory.HistoryPurity (медленная скользящая средняя от текущей Purity).
     UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))

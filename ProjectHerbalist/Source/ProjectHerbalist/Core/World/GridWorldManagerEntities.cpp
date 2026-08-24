@@ -1,12 +1,14 @@
 // Core/World/GridWorldManagerEntities.cpp
 //
 // Вертикальный срез "Проявление сущностей" (02_GDD/16_Entity_Manifestation.md).
-// По одному представителю на механизм, плюс с 2026-08-24 два дополнительных
-// Низших поверх общей таблицы определений (AmbientEntityTypes.h):
-//   - Гнильники, Моховые духи, Степные огни (Низший) -> амбиентная зона (§16.2)
+//   - Гнильники, Моховые духи, Степные огни (Низший) -> амбиентная зона (§16.2),
+//     таблица определений AmbientEntityTypes.h, не захардкожено по одной штуке
 //   - Полевик     (Основной,   Лесостепь)      -> "хозяин" с Respect (§16.3)
-//   - Берегиня    (Легендарный, Речная пойма)  -> порог мирового состояния (§16.4)
+//   - Берегиня    (Легендарный, Речная пойма)  -> порог мирового состояния (§16.4),
+//     два независимых пути: HistoryPurity клетки ИЛИ Restoration капища рядом
 //   - Морочники   (Опасная нечисть, повсеместно) -> искажение восприятия (§16.5)
+//   - Ночной нудж (Опасная нечисть, §16.5)     -> разлитый по всей сетке
+//     Distortion/Corruption, пока держится ночь; не претендует на клетку
 //
 // Всё, что мутирует State/TargetState, идёт через Delta.TargetStateNudges ->
 // ApplyStateDelta — тот же внепайплайновый, но Single-Writer-совместимый канал,
@@ -153,6 +155,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float GnilnikiNudgeRate   = Settings ? Settings->GnilnikiNudgeRate                : 0.01f;
     const float HistoryPurityRate   = Settings ? Settings->HistoryPurityLerpRate            : 0.02f;
     const float BereginyaThreshold  = Settings ? Settings->BereginyaHistoryPurityThreshold  : 0.75f;
+    const float BereginyaShrineThreshold = Settings ? Settings->BereginyaShrineRestorationThreshold : 0.7f;
+    const int32 ShrineInfluenceRadius = Settings ? Settings->ShrineInfluenceRadius          : 3;
+    const float NightHorrorDistortionRate = Settings ? Settings->NightHorrorDistortionRate  : 0.003f;
+    const float NightHorrorCorruptionRate = Settings ? Settings->NightHorrorCorruptionRate  : 0.002f;
     const float RespectGainRate     = Settings ? Settings->LandmarkRespectGainRate          : 0.01f;
     const float RespectDecayRate    = Settings ? Settings->LandmarkRespectDecayRate         : 0.02f;
     const float StressAngerThreshold= Settings ? Settings->LandmarkStressAngerThreshold     : 0.6f;
@@ -253,7 +259,20 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         if (Cell.Biome == EBiomeType::Floodplain && Cell.bIsWater)
         {
             const bool bWasActive = Cell.ManifestedEntityID == EntityID_Bereginya;
-            const bool bEligible = PassesHysteresisThreshold(bWasActive, Cell.Memory.HistoryPurity, BereginyaThreshold, HysteresisMargin);
+
+            // Два независимых пути к тому же триггеру (16_Entity_Manifestation
+            // §16.4: "устойчиво низкий Distortion... ИЛИ высокая Restoration
+            // капища поблизости — как уже спроектировано для Берегини"). До
+            // аудита 2026-08-24 был только HistoryPurity — "упрощённая версия
+            // без капищ" (см. комментарий у BereginyaHistoryPurityThreshold в
+            // HerbalistSettings.h), написанная ДО того, как капища появились
+            // в проекте. Теперь появились — добавляем второй путь, не убирая
+            // первый: это разные, оба валидные, сигналы ("вода долго была
+            // чистой сама по себе" vs "рядом ухоженное капище"), не дубли.
+            const bool bHistoryEligible = PassesHysteresisThreshold(bWasActive, Cell.Memory.HistoryPurity, BereginyaThreshold, HysteresisMargin);
+            const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineInfluenceRadius);
+            const bool bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, BereginyaShrineThreshold, HysteresisMargin);
+            const bool bEligible = bHistoryEligible || bShrineEligible;
 
             if (bEligible && CanManifest(Cell, EntityID_Bereginya))
             {
@@ -273,6 +292,24 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 Cell.ManifestedEntityID = NAME_None;
             }
+        }
+
+        // --- Опасная нечисть, §16.5: сквозная ночная фаза ---
+        // Вурдалаки/Навьи/Оборотни/Лихоманки/Черти — единственная категория
+        // бестиария без привязки к биому (biome: Повсеместно). Спецификация
+        // прямо говорит: "прямая привязка к уже спроектированной ночной фазе
+        // — даёт ночному окну реальные зубы за пределами атмосферы". Это не
+        // "хозяин" клетки (не претендует на ManifestedEntityID/CanManifest —
+        // Навьи не "владеют" клеткой так, как Гнильники владеют болотом,
+        // они разлиты по всей карте разом, пока держится ночь) — плюс
+        // нудж мельче любого одиночного Низшего: он не выбирает конкретные
+        // клетки, а идёт по всей сетке сразу, и это не должно перекрывать
+        // сигнал от локальных существ.
+        if (IsNight())
+        {
+            NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + NightHorrorDistortionRate * DeltaTime, 0.0f, 1.0f);
+            NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
+            bChanged = true;
         }
 
         if (bChanged)

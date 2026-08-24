@@ -146,4 +146,49 @@ bool FHerbalistAmbientEntity_StepnyeOgniOnlyManifestAtNight::RunTest(const FStri
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell,
+    "Herbalist.AmbientEntity.NightHorrorAffectsEveryBiomeWithoutClaimingTheCell",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell::RunTest(const FString& Parameters)
+{
+    // §16.5: "сквозная ночная фаза" -- Вурдалаки/Навьи/... не привязаны к
+    // биому (biome: Повсеместно) и не "владеют" клеткой как Гнильники
+    // болотом; проверяем на биоме, где сегодня нет ни одного другого
+    // определения (Тундра), чтобы эффект был виден изолированно.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Cell->Biome = EBiomeType::Tundra;
+    Cell->bIsWater = false;
+
+    Manager->SetGameClockSeconds(0.0f);   // день
+    const float DistortionBeforeDay = Cell->TargetState.Meta.Distortion;
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("No change during the day on a biome with no other definition"),
+        Cell->TargetState.Meta.Distortion, DistortionBeforeDay);
+
+    Manager->SetGameClockSeconds(31.0f * 60.0f);   // ночь
+    const float DistortionBeforeNight = Cell->TargetState.Meta.Distortion;
+    const float CorruptionBeforeNight = Cell->TargetState.Meta.Corruption;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestTrue(TEXT("TargetState.Distortion nudged up at night"), Cell->TargetState.Meta.Distortion > DistortionBeforeNight);
+    TestTrue(TEXT("TargetState.Corruption nudged up at night"), Cell->TargetState.Meta.Corruption > CorruptionBeforeNight);
+    TestEqual(TEXT("Night horror does not claim ManifestedEntityID -- it's atmosphere, not a 'owner'"),
+        Cell->ManifestedEntityID, FName(NAME_None));
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
