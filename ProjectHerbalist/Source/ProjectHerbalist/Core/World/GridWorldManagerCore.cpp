@@ -462,6 +462,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.Amount        = 1;
     Cmd.Harvest.BaseState     = Actor->GetBaseState();
     Cmd.Harvest.Resilience    = Actor->GetResilience();
+    Cmd.Harvest.MoonPhase     = GetMoonPhase();
     QueueCommand(Cmd);
 
     if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)

@@ -94,6 +94,29 @@ bool AGridWorldManager::IsNight() const
     return GetTimeOfDay01() >= NightStartFraction;
 }
 
+// ============================================================================
+// ЛУННЫЙ ЦИКЛ (02_GDD/15_Cycles_And_Shrines.md §15.3) — v1: только фаза и
+// эффект на сбор (Растущая/Полнолуние). Эффекты применённого зелья
+// (Новолуние/Убывающая) сознательно не в этом проходе — тот же принцип
+// вертикального среза, что уже был у капищ/бестиария/Заряны.
+// ============================================================================
+
+EMoonPhase AGridWorldManager::GetMoonPhase() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
+    // 7 игровых суток на фазу — тот же StressRecoveryGameDays, что уже
+    // определяет срок зарастания клетки (§15.3: "не новое число"), не
+    // отдельная константа, которая могла бы разъехаться с ней (см.
+    // AUDIT_AND_REFACTORING_PLAN.md "проверка на двух источниках одного понятия").
+    const float PhaseDurationDays = FMath::Max(0.01f, Settings ? Settings->StressRecoveryGameDays : 7.0f);
+    const float MoonCycleSeconds = PhaseDurationDays * 4.0f * DayLengthSeconds;
+
+    const float CycleFraction = FMath::Fmod(GameClockSeconds, MoonCycleSeconds) / MoonCycleSeconds;
+    const int32 PhaseIndex = FMath::Clamp(FMath::FloorToInt(CycleFraction * 4.0f), 0, 3);
+    return static_cast<EMoonPhase>(PhaseIndex);
+}
+
 float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
 {
     const FGridCell* Cell = GetCellConst(X, Y);

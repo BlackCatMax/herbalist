@@ -60,6 +60,12 @@ struct FHarvestCommand
     // IngredientTableRow::Resilience — насколько трава сопротивляется характеру
     // места при сборе (0 = целиком принимает биом, 1 = остаётся собой).
     float Resilience = 0.f;
+
+    // AGridWorldManager::GetMoonPhase(), резолвится вне Pipeline тем же
+    // принципом, что BaseState/Resilience выше (15_Cycles_And_Shrines.md
+    // §15.3: Растущая усиливает Body/Nature/Magnitude, Полнолуние —
+    // Spirit/Potency/Resonance; см. GenerateHarvestResult в PipelineV2.cpp).
+    EMoonPhase MoonPhase = EMoonPhase::NewMoon;
 };
 
 // B – базовое действие / диалог (Talk) – пока заглушка

@@ -6,6 +6,20 @@
 #include "HerbalistCoreTypes.generated.h"
 
 // ========== Enum'ы ==========
+
+// Лунный цикл (02_GDD/15_Cycles_And_Shrines.md §15.3): 4 фазы по 7 игровых
+// суток = 28-суточный месяц, тот же принцип "круг из 4 фаз", что уже есть
+// у суточного цикла (Рассвет/День/Закат/Ночь), но в масштабе месяца, а не
+// дня — см. §15.1 "три круга — одна структура".
+UENUM(BlueprintType)
+enum class EMoonPhase : uint8
+{
+    NewMoon,      // Новолуние
+    WaxingMoon,   // Растущая
+    FullMoon,     // Полнолуние
+    WaningMoon    // Убывающая
+};
+
 UENUM(BlueprintType)
 enum class EBiomeType : uint8
 {

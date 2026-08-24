@@ -50,10 +50,13 @@ namespace Simulation
                                                FName IngredientID,
                                                const FRealState& IngredientBaseState,
                                                float IngredientResilience,
+                                               EMoonPhase MoonPhase,
                                                FRandomStream& Rng)
     {
         const UHerbalistSettings* Settings = GetHerbalistSettings();
         const float BiomeWeight = Settings ? Settings->HarvestBiomeWeight : 0.4f;
+        const float MoonWaxingBoost = Settings ? Settings->MoonWaxingBoostStrength : 0.15f;
+        const float MoonFullBoost   = Settings ? Settings->MoonFullBoostStrength   : 0.15f;
 
         const FRealState& BiomeState = Cell.State;
 
@@ -79,6 +82,28 @@ namespace Simulation
         State.Meta.Potency     = Blend(Base.Meta.Potency,     BiomeState.Meta.Potency);
         State.Meta.Resonance   = Blend(Base.Meta.Resonance,   BiomeState.Meta.Resonance);
         State.Meta.Corruption  = Blend(Base.Meta.Corruption,  BiomeState.Meta.Corruption);
+
+        // Лунный цикл (15_Cycles_And_Shrines.md §15.3), v1 — только сбор:
+        // Растущая усиливает Body/Nature/Magnitude ("на силу и рост"),
+        // Полнолуние — Spirit/Potency/Resonance ("пик, самое сильное окно").
+        // Новолуние/Убывающая усиливают применённое зелье, не сбор — не
+        // трогаются здесь, это отдельный, ещё не сделанный кусок (влияет на
+        // Apply, не Harvest). Direction-компоненты не клампятся тут же —
+        // NormalizeSum() ниже сам разберётся с относительным ростом;
+        // Magnitude/Potency/Resonance клампятся явно, т.к. дальше их уже
+        // никто не трогает (кроме джиттера на Magnitude).
+        if (MoonPhase == EMoonPhase::WaxingMoon)
+        {
+            State.Direction.Body   *= (1.0f + MoonWaxingBoost);
+            State.Direction.Nature *= (1.0f + MoonWaxingBoost);
+            State.Magnitude = FMath::Clamp(State.Magnitude * (1.0f + MoonWaxingBoost), 0.0f, 1.0f);
+        }
+        else if (MoonPhase == EMoonPhase::FullMoon)
+        {
+            State.Direction.Spirit  *= (1.0f + MoonFullBoost);
+            State.Meta.Potency   = FMath::Clamp(State.Meta.Potency   * (1.0f + MoonFullBoost), 0.0f, 1.0f);
+            State.Meta.Resonance = FMath::Clamp(State.Meta.Resonance * (1.0f + MoonFullBoost), 0.0f, 1.0f);
+        }
 
         // Джиттер — условия сбора (FConditionModifier), которые игрок явно не
         // задаёт. Единственное место, где кламп ещё нужен: шум добавляется
@@ -567,7 +592,7 @@ namespace Simulation
         Modified.State.Direction.NormalizeSum();
         Modified.Memory.AccumulatedDistortion = Modified.State.Meta.Distortion;
         
-        FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Cmd.Resilience, Rng);
+        FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Cmd.Resilience, Cmd.MoonPhase, Rng);
         Harvested.CreationTime = WorldSnap.WorldTime;
 
         FInventoryOperation Op;

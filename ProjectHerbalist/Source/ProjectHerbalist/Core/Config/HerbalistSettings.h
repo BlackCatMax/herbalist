@@ -77,6 +77,19 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Time", meta = (ClampMin = "0.01"))
     float StressRecoveryGameDays = 7.0f;
 
+    // Лунный цикл (15_Cycles_And_Shrines.md §15.3), v1 — только сбор.
+    // Растущая: "усиливает Body/Nature и Magnitude собранного".
+    UPROPERTY(config, EditAnywhere, Category = "Time|Moon", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MoonWaxingBoostStrength = 0.15f;
+
+    // Полнолуние: "усиливает Spirit, Potency, Resonance". Спецификация также
+    // говорит, что вместе с силой растёт и Morok ("ставки выше в обе
+    // стороны") — эта часть не реализована в v1 (влияет на Bifurcation/
+    // варку, не на сбор), см. 16_Entity_Manifestation-подобную оговорку
+    // "не всё сразу" в 15_Cycles_And_Shrines.md §15.6.
+    UPROPERTY(config, EditAnywhere, Category = "Time|Moon", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MoonFullBoostStrength = 0.15f;
+
     // --- Inventory Decay ---
     // Скорость порчи: увеличение Distortion в секунду при отсутствии Stability.
     // Умножается на (1 - Stability) предмета, т.е. стабильные предметы портятся медленнее.
