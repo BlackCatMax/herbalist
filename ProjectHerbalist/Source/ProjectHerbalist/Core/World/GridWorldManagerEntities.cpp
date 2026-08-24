@@ -1,8 +1,9 @@
 // Core/World/GridWorldManagerEntities.cpp
 //
 // Вертикальный срез "Проявление сущностей" (02_GDD/16_Entity_Manifestation.md).
-// Реализует ровно 4 карточки бестиария, по одной на механизм:
-//   - Гнильники   (Низший,     Болото)        -> амбиентная зона (§16.2)
+// По одному представителю на механизм, плюс с 2026-08-24 два дополнительных
+// Низших поверх общей таблицы определений (AmbientEntityTypes.h):
+//   - Гнильники, Моховые духи, Степные огни (Низший) -> амбиентная зона (§16.2)
 //   - Полевик     (Основной,   Лесостепь)      -> "хозяин" с Respect (§16.3)
 //   - Берегиня    (Легендарный, Речная пойма)  -> порог мирового состояния (§16.4)
 //   - Морочники   (Опасная нечисть, повсеместно) -> искажение восприятия (§16.5)
@@ -16,6 +17,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "ProjectHerbalist.h"
@@ -38,7 +40,15 @@ namespace
     {
         if (EntityID == EntityID_Bereginya) return 2;  // Легендарный
         if (EntityID == EntityID_Polevik)   return 1;  // Основной
-        if (EntityID == EntityID_Gnilniki)  return 0;  // Низший
+        // Низший ранг — Гнильники и все определения из AmbientEntityTypes.h
+        // (Моховые духи, Степные огни, ...). Сегодня биомы не пересекаются,
+        // так что до сравнения приоритетов дело не доходит, но при добавлении
+        // нового Низшего на биом Полевика/Берегини это должно уже работать
+        // правильно, а не молча вернуть -1 (см. AmbientEntityTypes.h).
+        for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
+        {
+            if (EntityID == Def.EntityID) return 0;
+        }
         return -1;
     }
 
@@ -173,24 +183,61 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         bool bChanged = false;
         FRealState NewTarget = Cell.TargetState;
 
-        // --- Гнильники: Низший, амбиентная зона, Болото ---
-        if (Cell.Biome == EBiomeType::Bog && !Cell.bIsWater)
+        // --- Низший ранг: амбиентные зоны, §16.2, таблица определений в
+        // AmbientEntityTypes.h. Гнильники, Моховые духи, Степные огни — по
+        // построению у каждого свой Biome, так что на одну клетку может
+        // претендовать не больше одного определения зараз (см. комментарий
+        // в самом файле определений); при добавлении нового с уже занятым
+        // Biome эту гарантию придётся пересмотреть явно, не молча.
+        for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
         {
-            const bool bWasActive = Cell.ManifestedEntityID == EntityID_Gnilniki;
-            const bool bEligible = PassesHysteresisThreshold(bWasActive, Cell.State.Meta.Corruption, GnilnikiThreshold, HysteresisMargin);
+            if (Cell.Biome != Def.Biome) continue;
+            if (Def.bLandOnly && Cell.bIsWater) continue;
+            if (Def.bWaterOnly && !Cell.bIsWater) continue;
 
-            if (bEligible && CanManifest(Cell, EntityID_Gnilniki))
+            const bool bWasActive = Cell.ManifestedEntityID == Def.EntityID;
+
+            bool bEligible = true;
+            if (Def.TriggerAxis != EAmbientTriggerAxis::None)
             {
-                Cell.ManifestedEntityID = EntityID_Gnilniki;
-                // Самоусиливающаяся порча места — тянем TargetState дальше, чем
+                // Гнильники читают порог/скорость из UHerbalistSettings (уже
+                // настраивался балансировщиком раньше этой сессии, см. §2.1
+                // AUDIT_AND_REFACTORING_PLAN.md) — остальные пока только из
+                // своего определения; отдельная настройка на каждое существо
+                // в Project Settings — задел на потом, не сегодняшняя задача.
+                const bool bIsGnilniki = Def.EntityID == EntityID_Gnilniki;
+                const float Threshold = bIsGnilniki ? GnilnikiThreshold : Def.TriggerThreshold;
+                const float AxisValue = GetAmbientTriggerAxisValue(Cell.State.Meta, Def.TriggerAxis);
+                const float SignedValue     = Def.bTriggerAbove ?  AxisValue  : -AxisValue;
+                const float SignedThreshold = Def.bTriggerAbove ?  Threshold : -Threshold;
+                bEligible = PassesHysteresisThreshold(bWasActive, SignedValue, SignedThreshold, Def.HysteresisMargin);
+            }
+            if (Def.bRequiresNight)
+            {
+                bEligible = bEligible && IsNight();
+            }
+
+            if (bEligible && CanManifest(Cell, Def.EntityID))
+            {
+                Cell.ManifestedEntityID = Def.EntityID;
+                // Самоусиливающийся эффект — тянем TargetState дальше, чем
                 // клетка уже есть, а не жёстко фиксируем; ApplyStateDelta/
                 // RegenerateCellParameters сами доведут State до цели.
-                // *DeltaTime: настройка задана "в секунду". Без него порча шла
-                // за кадр, то есть на 60 FPS в 60 раз быстрее заявленного и
-                // с прямой зависимостью скорости порчи мира от частоты кадров.
-                const float GnilnikiStep = GnilnikiNudgeRate * DeltaTime;
-                NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + GnilnikiStep, 0.0f, 1.0f);
-                NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity - GnilnikiStep * 0.5f, 0.0f, 1.0f);
+                // Ставки "в секунду" — умножаем на DeltaTime, иначе эффект
+                // зависел бы от FPS (тот же баг, что чинили у Гнильников
+                // раньше этой сессии, §1.1 AUDIT_AND_REFACTORING_PLAN.md).
+                // У Гнильников ставка по-прежнему приходит из
+                // UHerbalistSettings (переопределяет числа определения
+                // целиком, а не умножается на них — иначе получилось бы
+                // rate*rate), у всех прочих — из самого определения.
+                const bool bIsGnilniki = Def.EntityID == EntityID_Gnilniki;
+                const float CorruptionRate = bIsGnilniki ? GnilnikiNudgeRate        : Def.CorruptionRate;
+                const float PurityRate     = bIsGnilniki ? -GnilnikiNudgeRate * 0.5f : Def.PurityRate;
+
+                if (CorruptionRate      != 0.0f) NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + CorruptionRate      * DeltaTime, 0.0f, 1.0f);
+                if (PurityRate          != 0.0f) NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity     + PurityRate          * DeltaTime, 0.0f, 1.0f);
+                if (Def.DistortionRate  != 0.0f) NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + Def.DistortionRate  * DeltaTime, 0.0f, 1.0f);
+                if (Def.StabilityRate   != 0.0f) NewTarget.Meta.Stability  = FMath::Clamp(NewTarget.Meta.Stability  + Def.StabilityRate   * DeltaTime, 0.0f, 1.0f);
                 bChanged = true;
             }
             else if (bWasActive)
@@ -199,6 +246,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // отобрал более приоритетный хозяин — проекция прекращается.
                 Cell.ManifestedEntityID = NAME_None;
             }
+            break; // Biome уникален на определение (см. комментарий выше) — нашли, хватит.
         }
 
         // --- Берегиня: Легендарный, порог мирового состояния, Речная пойма ---
