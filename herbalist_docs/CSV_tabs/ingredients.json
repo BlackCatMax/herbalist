@@ -28,6 +28,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -66,6 +68,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -104,6 +108,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -142,6 +148,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -182,6 +190,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -222,6 +232,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -262,6 +274,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -303,6 +317,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -339,6 +355,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -380,6 +398,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -421,6 +441,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -462,6 +484,8 @@
             "Bog"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "болото",
@@ -500,6 +524,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "лесостепь",
@@ -539,6 +565,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Огонь",
         "Tags": [
             "лесостепь",
@@ -547,6 +575,45 @@
             "стародубка",
             "желтоцвет",
             "черногорка"
+        ]
+    },
+    {
+        "Name": "les_09",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"les_09_DisplayName\", \"Дождевик\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"les_09_Description\", \"# Дождевик  *[Изображение: dozhdevik.jpeg]*  ## Описание  Дождевик — гриб без лица. Круглый, белый, ножки почти нет, шляпки не разберёшь от тулова — не дерево дал ему жизнь и не корень, а сама земля, вздувшаяся шаром после тёплого дождя. У других грибов с\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.2,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.3,
+                "Spirit": 0.2,
+                "Nature": 0.3
+            },
+            "Meta": {
+                "Distortion": 0.3,
+                "Stability": 0.4,
+                "Purity": 0.5,
+                "Potency": 0.2,
+                "Resonance": 0.2,
+                "Corruption": 0.2
+            }
+        },
+        "Class": "Fungus",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "ForestSteppe"
+        ],
+        "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
+        "Element": "Земля",
+        "Tags": [
+            "гриб",
+            "дождевик",
+            "безликий",
+            "земля"
         ]
     },
     {
@@ -578,6 +645,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "лесостепь",
@@ -616,6 +685,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "лесостепь",
@@ -655,6 +726,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "лесостепь",
@@ -692,6 +765,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "лесостепь",
@@ -733,6 +808,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "лесостепь",
@@ -774,6 +851,8 @@
             "ForestSteppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "лесостепь",
@@ -815,6 +894,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "ива",
@@ -855,6 +936,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -896,6 +979,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -935,6 +1020,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -976,6 +1063,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -1016,6 +1105,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -1056,6 +1147,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -1065,6 +1158,45 @@
             "чернотал (не путать)",
             "водяное дерево",
             "береговое дерево"
+        ]
+    },
+    {
+        "Name": "riv_11",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_11_DisplayName\", \"Плакун-трава\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"riv_11_Description\", \"# Плакун-трава  *[Изображение: plakun_trava.jpeg]*  ## Описание  Плакун-трава цветёт об Иванову ночь тем же огненным цветом, что и папоротник, — оттого её путают, ищут в одном и том же месте, у воды, на закате самой короткой ночи года. Стебель прямой, цве\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.6,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.3,
+                "Spirit": 0.9,
+                "Nature": 0.3
+            },
+            "Meta": {
+                "Distortion": 0.05,
+                "Stability": 0.8,
+                "Purity": 0.9,
+                "Potency": 0.7,
+                "Resonance": 0.7,
+                "Corruption": 0.02
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Floodplain"
+        ],
+        "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.6,
+        "Element": "Огонь",
+        "Tags": [
+            "оберег",
+            "плакун",
+            "купала",
+            "апотропей"
         ]
     },
     {
@@ -1096,6 +1228,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -1137,6 +1271,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -1178,6 +1314,8 @@
             "Floodplain"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "речная пойма",
@@ -1218,6 +1356,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "смешанный лес",
@@ -1258,6 +1398,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "смешанный лес",
@@ -1296,6 +1438,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "смешанный лес",
@@ -1337,6 +1481,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Огонь",
         "Tags": [
             "смешанный лес",
@@ -1378,6 +1524,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "смешанный лес",
@@ -1420,6 +1568,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "смешанный лес",
@@ -1462,6 +1612,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "смешанный лес",
@@ -1504,6 +1656,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Огонь",
         "Tags": [
             "смешанный лес",
@@ -1542,6 +1696,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "смешанный лес",
@@ -1583,6 +1739,8 @@
             "MixedForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "смешанный лес",
@@ -1624,6 +1782,8 @@
             "Steppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "степь",
@@ -1634,6 +1794,45 @@
             "живучая трава",
             "перекати-поле (ошибочно)",
             "змеедушник"
+        ]
+    },
+    {
+        "Name": "ste_08",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_08_DisplayName\", \"Белена\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"ste_08_Description\", \"# Белена  *[Изображение: belena.jpeg]*  ## Описание  Белена растёт там, где земля брошена — у дорог, на пустырях, на выпасах степи, где скот её стороной обходит по чутью. Цветок грязно-жёлтый, в лиловых прожилках, будто испорченная кровь, а пахнет так, чт\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.5,
+            "Direction": {
+                "Body": 0.2,
+                "Mind": 0.9,
+                "Spirit": 0.3,
+                "Nature": 0.2
+            },
+            "Meta": {
+                "Distortion": 0.75,
+                "Stability": 0.2,
+                "Purity": 0.15,
+                "Potency": 0.8,
+                "Resonance": 0.4,
+                "Corruption": 0.7
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Steppe"
+        ],
+        "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.3,
+        "Element": "Воздух",
+        "Tags": [
+            "яд",
+            "белена",
+            "безумие",
+            "степь"
         ]
     },
     {
@@ -1665,6 +1864,8 @@
             "Steppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "степь",
@@ -1706,6 +1907,8 @@
             "Steppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "степь",
@@ -1745,6 +1948,8 @@
             "Steppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "степь",
@@ -1788,6 +1993,8 @@
             "Steppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "степь",
@@ -1830,6 +2037,8 @@
             "Steppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "степь",
@@ -1871,6 +2080,8 @@
             "Steppe"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Огонь",
         "Tags": [
             "степь",
@@ -1881,6 +2092,46 @@
             "зорька",
             "степная свеча",
             "майский цвет"
+        ]
+    },
+    {
+        "Name": "tai_10",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_10_DisplayName\", \"Аконит\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"tai_10_Description\", \"# Аконит  *[Изображение: akonit.jpeg]*  ## Описание  Аконит — борец, волкобой, растёт в глухой тайге, где сосны стоят стеной и солнце не всякий день до земли достаёт. Цветы синие, шлемом, как шапка ратника, — оттого и борец. Волком его прозвали не зря: из\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.6,
+            "Direction": {
+                "Body": 0.9,
+                "Mind": 0.2,
+                "Spirit": 0.3,
+                "Nature": 0.3
+            },
+            "Meta": {
+                "Distortion": 0.6,
+                "Stability": 0.15,
+                "Purity": 0.1,
+                "Potency": 0.9,
+                "Resonance": 0.6,
+                "Corruption": 0.65
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.2,
+        "Element": "Земля",
+        "Tags": [
+            "яд",
+            "аконит",
+            "борец",
+            "волкобой",
+            "ночь"
         ]
     },
     {
@@ -1912,6 +2163,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "тайга",
@@ -1953,6 +2206,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "тайга",
@@ -1994,6 +2249,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "тайга",
@@ -2034,6 +2291,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "тайга",
@@ -2075,6 +2334,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Огонь",
         "Tags": [
             "тайга",
@@ -2116,6 +2377,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "тайга",
@@ -2157,6 +2420,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "тайга",
@@ -2195,6 +2460,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "тайга",
@@ -2234,6 +2501,8 @@
             "Taiga"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "тайга",
@@ -2275,6 +2544,8 @@
             "Tundra"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "тундра",
@@ -2316,6 +2587,8 @@
             "Tundra"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "тундра",
@@ -2357,6 +2630,8 @@
             "Tundra"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "тундра",
@@ -2398,6 +2673,8 @@
             "Tundra"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "тундра",
@@ -2439,6 +2716,8 @@
             "Tundra"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "тундра",
@@ -2479,6 +2758,8 @@
             "Tundra"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "тундра",
@@ -2520,6 +2801,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "широколиственный лес",
@@ -2559,6 +2842,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "широколиственный лес",
@@ -2569,6 +2854,46 @@
             "вековечный",
             "желудь",
             "обережное дерево"
+        ]
+    },
+    {
+        "Name": "broad_10",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_10_DisplayName\", \"Дубовая кора\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"broad_10_Description\", \"# Дубовая кора  *[Изображение: dubovaya_kora.jpeg]*  ## Описание  Дуб — Перунов сын среди дерев, тем и славен, что грозы не боится: молния его метит, а он стоит. Кора у старого дуба толстая, в трещинах, тёмная, как земля после пожога. Знахари режут её тол\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.6,
+            "Direction": {
+                "Body": 0.7,
+                "Mind": 0.1,
+                "Spirit": 0.4,
+                "Nature": 0.6
+            },
+            "Meta": {
+                "Distortion": 0.1,
+                "Stability": 0.9,
+                "Purity": 0.8,
+                "Potency": 0.5,
+                "Resonance": 0.5,
+                "Corruption": 0.05
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "BroadleafForest"
+        ],
+        "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 1.0,
+        "Element": "Огонь",
+        "Tags": [
+            "дуб",
+            "кора",
+            "оберег",
+            "перун",
+            "несгибаемость"
         ]
     },
     {
@@ -2600,6 +2925,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Воздух",
         "Tags": [
             "широколиственный лес",
@@ -2641,6 +2968,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "широколиственный лес",
@@ -2683,6 +3012,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Огонь",
         "Tags": [
             "широколиственный лес",
@@ -2724,6 +3055,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "широколиственный лес",
@@ -2766,6 +3099,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Вода",
         "Tags": [
             "широколиственный лес",
@@ -2807,6 +3142,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Земля",
         "Tags": [
             "широколиственный лес",
@@ -2848,6 +3185,8 @@
             "BroadleafForest"
         ],
         "RarityWeight": 1,
+        "DecayRate": 1.0,
+        "Resilience": 0.0,
         "Element": "Огонь",
         "Tags": [
             "широколиственный лес",

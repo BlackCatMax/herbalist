@@ -65,12 +65,16 @@ def element_to_string(element_raw):
     return str(element_raw)
 
 def main():
-    ingredients_dir = Path("K:/herbalist/herbalist_docs/Herbalist_Vault/04_Compendium/Растительность")
+    # Было захардкожено на K:/herbalist — путь с прежней буквы диска, script
+    # молча не находил папку при запуске из репозитория на G:. Найдено при
+    # аудите 2026-08-24 (extract_biomes.py уже брал REPO относительно себя).
+    repo = Path(__file__).resolve().parent
+    ingredients_dir = repo / "herbalist_docs" / "Herbalist_Vault" / "04_Compendium" / "Растительность"
     if not ingredients_dir.exists():
         print(f"Папка не найдена: {ingredients_dir}")
         return
 
-    output_json = Path("K:/herbalist/herbalist_docs/CSV_tabs/ingredients.json")
+    output_json = repo / "herbalist_docs" / "CSV_tabs" / "ingredients.json"
     output_json.parent.mkdir(parents=True, exist_ok=True)
 
     all_md = list(ingredients_dir.rglob("*.md"))
@@ -122,6 +126,11 @@ def main():
         resonance = front.get('resonance', 0.5)
         corruption = front.get('corruption', 0.2)
         distortion = front.get('distortion', 0.3)
+        # Отсутствовали в схеме до аудита 2026-08-24: без ключа в frontmatter
+        # дефолт совпадает с FIngredientTableRow (Resilience=0.0, DecayRate=1.0),
+        # так что старые карточки без этих полей не меняют поведения.
+        resilience = front.get('resilience', 0.0)
+        decay_rate = front.get('decay_rate', 1.0)
 
         row = {
             "Name": ingredient_id,
@@ -150,6 +159,8 @@ def main():
             "bIsWater": b_is_water,
             "AllowedBiomes": allowed_biomes,
             "RarityWeight": 1,
+            "DecayRate": float(decay_rate),
+            "Resilience": float(resilience),
             "Element": element,
             "Tags": tags
         }
@@ -162,7 +173,7 @@ def main():
         print("\nИмпорт в Unreal Engine:\n"
               "1. Откройте Content Browser\n"
               "2. Нажмите правой кнопкой мыши на папке /Game/Herbalist/Data/\n"
-              "3. Выберите Import → ingredients.json\n"
+              "3. Выберите Import -> ingredients.json\n"
               "4. В диалоге укажите Row Structure = IngredientTableRow\n"
               "5. Нажмите Import")
     else:

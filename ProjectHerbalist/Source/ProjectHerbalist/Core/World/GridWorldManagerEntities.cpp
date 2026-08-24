@@ -252,7 +252,14 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             Landmark.Respect = FMath::Clamp(Landmark.Respect + RespectGainRate * DeltaTime, -1.0f, 1.0f);
         }
 
-        FRealState NewTarget = Cell->TargetState;
+        // Если Гнильники/Берегиня (первый цикл выше) уже поставили нудж на
+        // эту же клетку — берём его как отправную точку, а не сырой
+        // Cell->TargetState. Иначе второй TMap::Add молча перезаписал бы
+        // первый нудж целиком (AUDIT_AND_REFACTORING_PLAN §3.6): сегодня
+        // Полевик и Гнильники живут на непересекающихся биомах и коллизии
+        // не бывает, но это заложенная мина на будущих "хозяев" §16.3
+        // (Кикимора болотная — прямой кандидат делить клетку с Гнильниками).
+        FRealState NewTarget = Delta.TargetStateNudges.FindRef(Landmark.Cell, Cell->TargetState);
         bool bChanged = false;
 
         // Respect отходит от нуля медленно (Gain/DecayRate * DeltaTime) и должен
