@@ -117,6 +117,34 @@ EMoonPhase AGridWorldManager::GetMoonPhase() const
     return static_cast<EMoonPhase>(PhaseIndex);
 }
 
+// ============================================================================
+// ГОДОВОЙ КРУГ (02_GDD/15_Cycles_And_Shrines.md §15.4) — v1: сезон +
+// эффект на скорость зарастания клеток (Весна/Зима) + разлитая по сетке
+// прибавка Purity зимой ("снег как чистота", в один ряд с ночным нуджем
+// §16.5 из UpdateEntityManifestations). "Резкое падение Fertility" зимой из
+// спецификации НЕ реализовано: FEnvironment::Fertility нигде не читается
+// нигде в коде (проверено grep по Source/) — заводить сезонный эффект на
+// мёртвое поле значило бы разыграть эффект, которого никто не увидит,
+// тот самый паттерн "объявлено и не используется" из META_AUDIT.md, только
+// в новую сторону. Лето — намеренно нейтральный/базовый сезон: спецификация
+// не даёт для него числовой формулы (только настроение — "максимум
+// предсказуемости... нарастающая грань к концу"), в отличие от Весны/Зимы.
+// ============================================================================
+
+ESeason AGridWorldManager::GetSeason() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
+    // §15.4: "самое условное число во всём разделе" — в отличие от 7-суточной
+    // фазы луны, тут не на что переиспользоваться, честная новая настройка.
+    const float SeasonDurationDays = FMath::Max(0.01f, Settings ? Settings->SeasonDurationDays : 117.0f);
+    const float YearDurationSeconds = SeasonDurationDays * 3.0f * DayLengthSeconds;
+
+    const float CycleFraction = FMath::Fmod(GameClockSeconds, YearDurationSeconds) / YearDurationSeconds;
+    const int32 SeasonIndex = FMath::Clamp(FMath::FloorToInt(CycleFraction * 3.0f), 0, 2);
+    return static_cast<ESeason>(SeasonIndex);
+}
+
 float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
 {
     const FGridCell* Cell = GetCellConst(X, Y);
@@ -182,6 +210,8 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const int32 ShrineInfluenceRadius = Settings ? Settings->ShrineInfluenceRadius          : 3;
     const float NightHorrorDistortionRate = Settings ? Settings->NightHorrorDistortionRate  : 0.003f;
     const float NightHorrorCorruptionRate = Settings ? Settings->NightHorrorCorruptionRate  : 0.002f;
+    const float WinterPurityRate = Settings ? Settings->WinterPurityRate                    : 0.002f;
+    const bool bIsWinter = GetSeason() == ESeason::Winter;   // одинаково для всей сетки за этот тик
     const float RespectGainRate     = Settings ? Settings->LandmarkRespectGainRate          : 0.01f;
     const float RespectDecayRate    = Settings ? Settings->LandmarkRespectDecayRate         : 0.02f;
     const float StressAngerThreshold= Settings ? Settings->LandmarkStressAngerThreshold     : 0.6f;
@@ -332,6 +362,19 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         {
             NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + NightHorrorDistortionRate * DeltaTime, 0.0f, 1.0f);
             NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
+            bChanged = true;
+        }
+
+        // --- Зима, §15.4: "снег как чистота" ---
+        // "Purity растёт, хотя мир опаснее всего... не баг баланса, а прямое
+        // использование того, что Purity и Corruption — независимые оси:
+        // зима честно самая чистая и самая опасная одновременно". Тот же
+        // разлитый-по-сетке паттерн, что ночной нудж выше — независимо от
+        // ManifestedEntityID, коэффициенты складываются (зимняя ночь получает
+        // оба одновременно, и это осознанно, не коллизия).
+        if (bIsWinter)
+        {
+            NewTarget.Meta.Purity = FMath::Clamp(NewTarget.Meta.Purity + WinterPurityRate * DeltaTime, 0.0f, 1.0f);
             bChanged = true;
         }
 

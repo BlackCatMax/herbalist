@@ -612,8 +612,26 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
     const float RecoveryDays = Settings ? Settings->StressRecoveryGameDays : 7.0f;
     const float DaySeconds = (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f;
 
-    // Множитель зависит только от типа биома, а не от клетки — тянем строку
-    // DataTable один раз на биом, а не 400 раз за кадр.
+    // Сезонный множитель (15_Cycles_And_Shrines.md §15.4): Весна — "временный
+    // бонус к скорости зарастания клеток во всех биомах", Зима — "клетки
+    // заживают медленнее" — отсюда умножение на биомный множитель ниже, а не
+    // замена его. Лето — намеренно 1.0 (см. комментарий у GetSeason() в
+    // GridWorldManagerEntities.cpp). Множитель здесь — время полного
+    // восстановления (RecoveryDays × DaySeconds × Multiplier ниже), не
+    // скорость: Весна < 1.0 (короче срок = быстрее), Зима > 1.0 (длиннее
+    // срок = медленнее) — см. оговорку у HerbalistSettings.h.
+    float SeasonMultiplier = 1.0f;
+    switch (GetSeason())
+    {
+    case ESeason::Spring: SeasonMultiplier = Settings ? Settings->SpringStressRecoveryMultiplier : 0.7f; break;
+    case ESeason::Winter: SeasonMultiplier = Settings ? Settings->WinterStressRecoveryMultiplier : 1.6f; break;
+    default: break;
+    }
+
+    // Множитель биома зависит только от типа, а не от клетки — тянем строку
+    // DataTable один раз на биом, а не 400 раз за кадр. Сезон одинаков для
+    // всей сетки в рамках одного вызова, поэтому безопасно замкнуть его в
+    // тот же кэш через SeasonMultiplier из внешней области видимости.
     TMap<EBiomeType, float> StressDecayPerSecond;
     auto GetStressDecay = [&](EBiomeType Biome) -> float
     {
@@ -626,6 +644,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         {
             Multiplier = FMath::Max(Row->StressRecoveryMultiplier, 0.05f);
         }
+        Multiplier *= SeasonMultiplier;
         const float Decay = 1.0f / FMath::Max(RecoveryDays * DaySeconds * Multiplier, KINDA_SMALL_NUMBER);
         StressDecayPerSecond.Add(Biome, Decay);
         return Decay;

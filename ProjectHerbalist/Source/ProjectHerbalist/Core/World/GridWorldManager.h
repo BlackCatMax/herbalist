@@ -195,6 +195,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     EMoonPhase GetMoonPhase() const;
 
+    // ---- Годовой круг (02_GDD/15_Cycles_And_Shrines.md §15.4) ----
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    ESeason GetSeason() const;
+
     // Игровые часы, независимые от GetWorld()->GetTimeSeconds() (движковое,
     // level-relative, обнуляется при перезапуске сессии) — нужны, чтобы фаза
     // суток (и будущая погода через UltraDynamicSky, ROADMAP.md Фаза D §12)

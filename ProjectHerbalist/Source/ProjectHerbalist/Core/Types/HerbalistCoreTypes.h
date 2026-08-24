@@ -20,6 +20,18 @@ enum class EMoonPhase : uint8
     WaningMoon    // Убывающая
 };
 
+// Годовой круг (02_GDD/15_Cycles_And_Shrines.md §15.4): три сезона, не
+// четыре — трёхполье (яровое/озимое/пар), а не условное деление года на
+// равные четверти. Тот же принцип "круг из N фаз", что у суток (4) и луны
+// (4), просто N=3 здесь — сознательно, не упрощение.
+UENUM(BlueprintType)
+enum class ESeason : uint8
+{
+    Spring,   // Весна
+    Summer,   // Лето
+    Winter    // Зима
+};
+
 UENUM(BlueprintType)
 enum class EBiomeType : uint8
 {

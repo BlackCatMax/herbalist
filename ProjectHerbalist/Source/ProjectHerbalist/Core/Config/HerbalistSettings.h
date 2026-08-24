@@ -142,6 +142,38 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float NightHorrorCorruptionRate = 0.002f;
 
+    // Годовой круг (15_Cycles_And_Shrines.md §15.4). Длина сезона в игровых
+    // сутках — "самое условное число во всём разделе", менять свободно.
+    // 117 = 13 недель × 9 суток/неделя (компендиум), три сезона = 351/год.
+    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "1.0"))
+    float SeasonDurationDays = 117.0f;
+
+    // Весна: "временный бонус к скорости зарастания клеток во всех биомах".
+    // Множится на биомный StressRecoveryMultiplier, не заменяет его. ВАЖНО:
+    // StressRecoveryMultiplier — множитель ВРЕМЕНИ полного восстановления
+    // (см. GetStressDecay в GridWorldManagerCore.cpp: полное время =
+    // RecoveryDays × DaySeconds × Multiplier), не скорости — поэтому "бонус
+    // к скорости" здесь означает число МЕНЬШЕ единицы (короче срок), не
+    // больше. Перепутано было при первой реализации 2026-08-24, поймано
+    // тестом Herbalist.Season.SpringSpeedsUpStressRecoveryWinterSlowsIt
+    // (диагностика показала Весну медленнее Лета, Зиму быстрее — ровно
+    // наоборот тому, что требует спецификация).
+    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.1", ClampMax = "5.0"))
+    float SpringStressRecoveryMultiplier = 0.7f;
+
+    // Зима: "клетки заживают медленнее (сезонное ухудшение
+    // StressRecoveryMultiplier поверх уже посчитанного биомного)" — здесь
+    // "ухудшение" срока = число БОЛЬШЕ единицы (дольше срок), см. оговорку у
+    // SpringStressRecoveryMultiplier выше.
+    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "1.0", ClampMax = "5.0"))
+    float WinterStressRecoveryMultiplier = 1.6f;
+
+    // Зима: "снег как чистота" — Purity растёт по всей сетке, пока держится
+    // зима, независимо от локальных сущностей. Тот же порядок величины, что
+    // NightHorror*Rate выше (разлито по всей сетке, не точечный эффект).
+    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float WinterPurityRate = 0.002f;
+
     // Скорость обновления Memory.HistoryPurity (медленная скользящая средняя от текущей Purity).
     UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HistoryPurityLerpRate = 0.02f;
