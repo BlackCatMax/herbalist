@@ -17,6 +17,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
+#include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -129,6 +130,48 @@ bool FHerbalistSave_ApplyRestoresEarlierSnapshot::RunTest(const FString& Paramet
     {
         TestEqual(TEXT("LoadGame restores the state at save time, not post-save play"), Restored->State.Meta.Corruption, 0.4f);
     }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_BiomeInfluencesWithZeroFieldsStaySparse,
+    "Herbalist.Save.BiomeInfluencesWithZeroFieldsStaySparse",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_BiomeInfluencesWithZeroFieldsStaySparse::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-08-24 (AUDIT_AND_REFACTORING_PLAN.md §7.1): ApplyBiomeInfluences
+    // проверял "есть ли запись в MorokFields/ZaryanaFields", а не "ненулевое ли
+    // значение" -- а UBiomeGraphSubsystem::ApplyFieldsToGrid всегда строит запись
+    // для КАЖДОГО узла графа, независимо от величины поля. Значит в реальной игре
+    // (Tick -> StepSimulation -> ApplyFieldsToGrid, не редкое событие) каждая
+    // клетка сетки помечалась грязной с первого шага, даже когда Морок/Заряна
+    // ещё не успели ничего сдвинуть -- обесценивая липкий DirtyCellIndices,
+    // вокруг которого построена вся система сохранений.
+    //
+    // Этот тест воспроизводит ровно то, что строит ApplyFieldsToGrid, когда поля
+    // ещё на нулевой отметке (типичное начало сессии): запись для каждого биома,
+    // значение 0.0.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    TestEqual(TEXT("Untouched world has zero dirty cells"), Manager->CaptureSaveCells().Num(), 0);
+
+    TMap<FName, float> MorokFields, ZaryanaFields;
+    for (EBiomeType Biome : FBiomeDefaults::GetAllBiomeTypes())
+    {
+        const FName BiomeID = FBiomeDefaults::BiomeTypeToName(Biome);
+        MorokFields.Add(BiomeID, 0.0f);
+        ZaryanaFields.Add(BiomeID, 0.0f);
+    }
+    Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f);
+
+    TestEqual(TEXT("Zero-valued fields for every biome must not dirty the whole grid"),
+        Manager->CaptureSaveCells().Num(), 0);
 
     Manager->Destroy();
     return true;

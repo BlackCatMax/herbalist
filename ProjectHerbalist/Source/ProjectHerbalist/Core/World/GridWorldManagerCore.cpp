@@ -180,23 +180,43 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         FRealState NewTarget = Cell.TargetState;
         bool bChanged = false;
 
-        // 1. Влияние Морока (увеличивает Distortion)
+        // 1. Влияние Морока (увеличивает Distortion). ApplyFieldsToGrid
+        // (BiomeGraphSubsystem.cpp) всегда кладёт запись в MorokFields для
+        // КАЖДОГО узла графа, включая нулевые поля — значит "if (MorokField)"
+        // (есть ли запись) было равносильно "всегда", а не "поле реально
+        // что-то сдвигает". На каждом шаге симуляции (StepSimulation тикается
+        // из Tick(), не редкое событие) это метило ВСЮ сетку грязной с первых
+        // секунд сессии — обесценивая липкий DirtyCellIndices, вокруг
+        // которого построена вся система сохранений (AUDIT_AND_REFACTORING_PLAN.md
+        // §7.1, подтверждено автотестом Herbalist.Save.BiomeInfluencesWithZeroFieldsStaySparse).
+        // Правка: сравниваем итог с уже стоящим TargetState, метим грязной
+        // только при реальном изменении.
         const float* MorokField = MorokFields.Find(BiomeID);
         if (MorokField)
         {
-            float MorokInfluence = *MorokField * 0.1f * GlobalScale;
-            NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + MorokInfluence, 0.f, 1.f);
-            bChanged = true;
+            const float MorokInfluence = *MorokField * 0.1f * GlobalScale;
+            const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + MorokInfluence, 0.f, 1.f);
+            if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Meta.Distortion = NewDistortion;
+                bChanged = true;
+            }
         }
 
-        // 2. Влияние Заряны (повышает Stability и Purity)
+        // 2. Влияние Заряны (повышает Stability и Purity) — та же поправка.
         const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
         if (ZaryanaField)
         {
-            float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
-            NewTarget.Meta.Stability = FMath::Clamp(NewTarget.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
-            NewTarget.Meta.Purity    = FMath::Clamp(NewTarget.Meta.Purity    + ZaryanaInfluence * 0.5f, 0.f, 1.f);
-            bChanged = true;
+            const float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
+            const float NewStability = FMath::Clamp(NewTarget.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
+            const float NewPurity    = FMath::Clamp(NewTarget.Meta.Purity    + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+            if (!FMath::IsNearlyEqual(NewStability, NewTarget.Meta.Stability, KINDA_SMALL_NUMBER) ||
+                !FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Meta.Stability = NewStability;
+                NewTarget.Meta.Purity = NewPurity;
+                bChanged = true;
+            }
         }
 
         if (bChanged)
