@@ -80,6 +80,14 @@ struct FAmbientEntityDefinition
     UPROPERTY() bool bRequiresSeason = false;
     UPROPERTY() ESeason RequiredSeason = ESeason::Spring;
 
+    // Четвёртый гейт — не время, а форма клетки в сетке: граничит ли она с
+    // клеткой ДРУГОГО биома (Chebyshev-соседи, 4 напрямую). Добавлено
+    // 2026-08-29 для Межевых ("клетка на границе биомов графа") — реальная,
+    // не приближённая проверка: тот же самый приём соседей уже применён к
+    // Пограничному капищу (BiomeGraphSubsystem.cpp,
+    // CollectBorderShrineDamping), здесь просто второй потребитель.
+    UPROPERTY() bool bRequiresBiomeBorder = false;
+
     // Нудж TargetState, "в секунду" (как GnilnikiNudgeRate раньше) —
     // умножается на DeltaTime в UpdateEntityManifestations. Ноль = не трогать ось.
     UPROPERTY() float CorruptionRate = 0.0f;
@@ -95,6 +103,11 @@ struct FAmbientEntityDefinition
     // Magnitude — не под Meta (FRealState::Magnitude, отдельное поле),
     // применяется отдельной строкой в UpdateEntityManifestations.
     UPROPERTY() float MagnitudeRate = 0.0f;
+    // Direction (не Meta) — добавлено 2026-08-29 для Межевых ("клетка на
+    // границе биомов графа -> Nature↑"), первый Низший, чей ЭФФЕКТ (не
+    // только триггер выше) бьёт по Direction. Только Nature заведена — не
+    // нужны Body/Mind/Spirit, пока ни одно существо не просит их как эффект.
+    UPROPERTY() float NatureRate = 0.0f;
 };
 
 inline float GetAmbientTriggerAxisValue(const FGridCell& Cell, EAmbientTriggerAxis Axis)
@@ -413,9 +426,93 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
+        // Шептуны (Тундра, земля, §16.2): "открытое пространство, искажает
+        // тултип (кандидат на PerceiveValue, §16.5)". Тот же класс, что
+        // Морочники -- не TargetState-эффект, а искажение восприятия,
+        // ещё не подключенное к бестиарию (§16.6). "Открытое пространство"
+        // не моделируется отдельным атрибутом -- тот же честный тонкий
+        // гейт, что уже у Плескунов (Stability >= 0, практически всегда).
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Шептуны"));
+            D.Biome = EBiomeType::Tundra;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Stability;
+            D.TriggerThreshold = 0.0f;
+            D.bTriggerAbove = true;
+            Defs.Add(D);
+        }
+
+        // Подпольники (Широколиств. лес, земля, §16.2): "подпол/старый дом,
+        // предупреждающий сигнал (UI-хук, не дебафф)". Тот же HarvestStress-
+        // прокси "заброшенности", что уже применён к Злыдням (§16.2, третья
+        // пачка) -- порог НИЖЕ злыдневского (0.4 против 0.6), читается как
+        // ранняя стадия того же упадка: сперва предупреждающий Подпольник,
+        // затем, если ничего не изменилось, настоящая порча от Злыдней.
+        // UI-хук сам не реализован, только проявление.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Подпольники"));
+            D.Biome = EBiomeType::BroadleafForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::HarvestStress;
+            D.TriggerThreshold = 0.4f;
+            D.bTriggerAbove = true;
+            Defs.Add(D);
+        }
+
+        // Стукачи (Широколиств. лес, земля, §16.2): "перед крупным мировым
+        // событием (Bifurcation), предвестник". Счётчика недавних
+        // Catastrophe по биому нет (та же дыра, что у опасного полюса
+        // Легендарного, §16.4 -- честно упрощено там же) -- Distortion как
+        // прокси "риск срыва", тот же приём, что уже у Болотных огней/
+        // Легендарного malign-полюса.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Стукачи"));
+            D.Biome = EBiomeType::BroadleafForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Distortion;
+            D.TriggerThreshold = 0.6f;
+            D.bTriggerAbove = true;
+            Defs.Add(D);
+        }
+
+        // Пеньковые (Тайга, земля, §16.2): "старый нетронутый участок ->
+        // маскировка ресурса в S_Perceived". "Нетронутый" читается как
+        // обратное Злыдням -- НИЗКИЙ HarvestStress (никогда не собирали),
+        // не новое поле "возраст". Маскировка (Perception-эффект) не
+        // подключена, только проявление.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Пеньковые"));
+            D.Biome = EBiomeType::Taiga;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::HarvestStress;
+            D.TriggerThreshold = 0.1f;
+            D.bTriggerAbove = false;
+            Defs.Add(D);
+        }
+
+        // Межевые (Лесостепь, земля, §16.2): "клетка на границе биомов
+        // графа -> Nature↑". Единственный реально проверенный (не
+        // приближённый) гейт этой пачки -- bRequiresBiomeBorder читает
+        // настоящих соседей клетки в сетке (тот же приём, что уже применён
+        // к Пограничному капищу, BiomeGraphSubsystem.cpp), не прокси.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Межевые"));
+            D.Biome = EBiomeType::ForestSteppe;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresBiomeBorder = true;
+            D.NatureRate = 0.01f;
+            Defs.Add(D);
+        }
+
         for (const FAmbientEntityDefinition& D : Defs)
         {
-            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason || D.bRequiresDusk);
+            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason || D.bRequiresDusk || D.bRequiresBiomeBorder);
         }
         return Defs;
     }();

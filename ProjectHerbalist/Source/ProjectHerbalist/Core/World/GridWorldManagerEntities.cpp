@@ -431,6 +431,26 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 bEligible = bEligible && IsDusk();
             }
+            if (Def.bRequiresBiomeBorder)
+            {
+                // Реальная проверка соседей, не прокси -- тот же приём, что
+                // уже применён к Пограничному капищу (BiomeGraphSubsystem.cpp,
+                // CollectBorderShrineDamping). Только 4 ортогональных соседа
+                // (Chebyshev через угол не считается "границей биома" здесь,
+                // тот же выбор, что у капища).
+                bool bOnBorder = false;
+                static const FIntPoint Offsets[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+                for (const FIntPoint& Offset : Offsets)
+                {
+                    const FGridCell* Neighbor = GetCellConst(Cell.X + Offset.X, Cell.Y + Offset.Y);
+                    if (Neighbor && Neighbor->Biome != Cell.Biome)
+                    {
+                        bOnBorder = true;
+                        break;
+                    }
+                }
+                bEligible = bEligible && bOnBorder;
+            }
 
             if (bEligible && CanManifest(Cell, Def.EntityID))
             {
@@ -467,6 +487,12 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 if (Def.PotencyRate     != 0.0f) { NewTarget.Meta.Potency    = FMath::Clamp(NewTarget.Meta.Potency    + Def.PotencyRate     * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
                 if (Def.ResonanceRate   != 0.0f) { NewTarget.Meta.Resonance  = FMath::Clamp(NewTarget.Meta.Resonance  + Def.ResonanceRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
                 if (Def.MagnitudeRate   != 0.0f) { NewTarget.Magnitude       = FMath::Clamp(NewTarget.Magnitude       + Def.MagnitudeRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                // Direction, не Meta -- Max(0, ...), не Clamp(0,1): тот же
+                // принцип, что уже применяет ApplyLandmarkAxisNudge
+                // (LandmarkTypes.h) к Direction-осям, не клампится в 1.0
+                // сверху (NormalizeSum пересчитывает сумму отдельно при
+                // релаксации, не здесь).
+                if (Def.NatureRate      != 0.0f) { NewTarget.Direction.Nature = FMath::Max(0.0f, NewTarget.Direction.Nature + Def.NatureRate * DeltaTime); bAnyRateFired = true; }
                 bChanged = bChanged || bAnyRateFired;
             }
             else if (bWasActive)

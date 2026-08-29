@@ -164,10 +164,11 @@ bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell:
 {
     // §16.5: "сквозная ночная фаза" -- Вурдалаки/Навьи/... не привязаны к
     // биому (biome: Повсеместно) и не "владеют" клеткой как Гнильники
-    // болотом; проверяем на биоме, где сегодня нет ни одного другого
-    // определения (Лесостепь -- Тундра перестала быть пустой 2026-08-29,
-    // получила Снежные огни, тоже ночной триггер), чтобы эффект был виден
-    // изолированно.
+    // болотом; проверяем на биоме, где условие Низшего не завязано на само
+    // состояние клетки (Лесостепь -- только Межевые, 2026-08-29, триггер по
+    // соседям в сетке, не по Meta/HarvestStress), чтобы эффект был виден
+    // изолированно. Соседей (0,0) явно ставим тем же биомом -- иначе
+    // Межевые срабатывают на границе с чем угодно другим на процедурной сетке.
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
@@ -182,6 +183,8 @@ bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell:
     }
     Cell->Biome = EBiomeType::ForestSteppe;
     Cell->bIsWater = false;
+    if (FGridCell* Right = Manager->GetCell(1, 0)) { Right->Biome = EBiomeType::ForestSteppe; }
+    if (FGridCell* Down  = Manager->GetCell(0, 1)) { Down->Biome  = EBiomeType::ForestSteppe; }
 
     Manager->SetGameClockSeconds(0.0f);   // день
     const float DistortionBeforeDay = Cell->TargetState.Meta.Distortion;
@@ -409,14 +412,30 @@ bool FHerbalistAmbientEntity_ItemCorruptingEntitiesManifestWithoutDirtyingTheCel
     NeglectedCell->bIsWater = false;
     NeglectedCell->HarvestStress = 0.9f;
 
+    const FRealState RustTargetBefore = RustCell->TargetState;
+    const FRealState MurkyTargetBefore = MurkyCell->TargetState;
+    const FRealState NeglectedTargetBefore = NeglectedCell->TargetState;
+
     Manager->UpdateEntityManifestations(1.0f);
 
     TestEqual(TEXT("Ржавые духи manifest on low-Stability Bog"), RustCell->ManifestedEntityID, FName(TEXT("Ржавые духи")));
     TestEqual(TEXT("Водяные бесы manifest on high-Distortion water"), MurkyCell->ManifestedEntityID, FName(TEXT("Водяные бесы")));
     TestEqual(TEXT("Злыдни manifest on high-HarvestStress cell"), NeglectedCell->ManifestedEntityID, FName(TEXT("Злыдни")));
 
-    TestEqual(TEXT("Manifesting doesn't dirty the Ржавые духи cell (no TargetState.Meta change)"),
-        Manager->CaptureSaveCells().Num(), 0);
+    // Раньше проверялось глобально (CaptureSaveCells().Num()==0) -- перестало
+    // быть верно 2026-08-29 с добавлением Межевых (Лесостепь, реальный
+    // Nature-эффект на границах биомов): на процедурно сгенерированной сетке
+    // 20x20 почти наверняка есть граничные клетки Лесостепи где-то ещё в тех
+    // же 400 -- и это ожидаемо, не баг. Проверяем прицельно: у ЭТИХ ТРЁХ
+    // клеток (Ржавые духи/Водяные бесы/Злыдни, все без реального эффекта)
+    // TargetState не изменился вовсе -- то самое §7.1, просто не глобальным
+    // счётчиком, а точечно.
+    TestEqual(TEXT("Ржавые духи cell TargetState unchanged (no real effect)"),
+        RustCell->TargetState.Meta.Stability, RustTargetBefore.Meta.Stability);
+    TestEqual(TEXT("Водяные бесы cell TargetState unchanged (no real effect)"),
+        MurkyCell->TargetState.Meta.Distortion, MurkyTargetBefore.Meta.Distortion);
+    TestEqual(TEXT("Злыдни cell TargetState unchanged (no real effect)"),
+        NeglectedCell->TargetState.Meta.Corruption, NeglectedTargetBefore.Meta.Corruption);
 
     Manager->Destroy();
     return true;
