@@ -375,6 +375,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 bEligible = bEligible && (GetSeason() == Def.RequiredSeason);
             }
+            if (Def.bRequiresDusk)
+            {
+                bEligible = bEligible && IsDusk();
+            }
 
             if (bEligible && CanManifest(Cell, Def.EntityID))
             {

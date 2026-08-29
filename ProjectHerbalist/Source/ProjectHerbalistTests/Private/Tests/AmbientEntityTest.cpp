@@ -165,7 +165,9 @@ bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell:
     // §16.5: "сквозная ночная фаза" -- Вурдалаки/Навьи/... не привязаны к
     // биому (biome: Повсеместно) и не "владеют" клеткой как Гнильники
     // болотом; проверяем на биоме, где сегодня нет ни одного другого
-    // определения (Тундра), чтобы эффект был виден изолированно.
+    // определения (Лесостепь -- Тундра перестала быть пустой 2026-08-29,
+    // получила Снежные огни, тоже ночной триггер), чтобы эффект был виден
+    // изолированно.
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
@@ -178,7 +180,7 @@ bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell:
         Manager->Destroy();
         return false;
     }
-    Cell->Biome = EBiomeType::Tundra;
+    Cell->Biome = EBiomeType::ForestSteppe;
     Cell->bIsWater = false;
 
     Manager->SetGameClockSeconds(0.0f);   // день

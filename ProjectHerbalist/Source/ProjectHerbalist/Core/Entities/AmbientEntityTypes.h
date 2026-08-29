@@ -12,9 +12,9 @@
 // которую обходит один универсальный цикл (UpdateEntityManifestations).
 //
 // Сознательно НЕ вынесено в UDataTable/DA_*.uasset (в отличие от биомов и
-// ингредиентов): определений пока десять, они меняются вместе с кодом
-// (новый EAmbientTriggerAxis требует правки C++ всё равно), и это тот же
-// принцип, что уже применён к MemoryFragmentDefinitions.h — простой
+// ингредиентов): определений уже 17 (2026-08-29), они меняются вместе с
+// кодом (новый EAmbientTriggerAxis требует правки C++ всё равно), и это тот
+// же принцип, что уже применён к MemoryFragmentDefinitions.h — простой
 // статический реестр, а не полноценный ассет-пайплайн, пока карточек мало.
 #pragma once
 
@@ -33,7 +33,15 @@ enum class EAmbientTriggerAxis : uint8
     // Не Meta вовсе (FGridCell::HarvestStress) — добавлено 2026-08-29 для
     // Злыдни ("заброшенное жильё, накопленный HarvestStress", §16.2).
     // GetAmbientTriggerAxisValue поэтому принимает Cell целиком, не Meta.
-    HarvestStress
+    HarvestStress,
+    // Direction-оси, не Meta — добавлены 2026-08-29 для закрытия бестиария
+    // (Трясинные духи: "Nature-ось доминирует"; Чащобные духи: "Nature
+    // экстремум"). Тот же принцип, что уже применён к ELandmarkAxis
+    // (LandmarkTypes.h) — Direction читается тем же аппаратом, что Meta.
+    Body,
+    Mind,
+    Spirit,
+    Nature
 };
 
 USTRUCT()
@@ -57,6 +65,13 @@ struct FAmbientEntityDefinition
     UPROPERTY() bool bTriggerAbove = true;   // true: ось > порога; false: ось < порога
     UPROPERTY() bool bRequiresNight = false;
     UPROPERTY() float HysteresisMargin = 0.05f;
+
+    // Третий временной гейт, независимый от Ночи/Сезона — добавлен
+    // 2026-08-29 для существ §16.2, чей триггер буквально "сумерки", не
+    // "ночь" (Шишиги: "овраг/куст, сумерки"). IsDusk() уже существует и
+    // используется §16.5 ("Морок просыпается раньше, чем стемнеет") —
+    // здесь просто второй потребитель того же читателя фазы суток.
+    UPROPERTY() bool bRequiresDusk = false;
 
     // Второй, независимый от ночи временной гейт — добавлен 2026-08-29 для
     // существ §16.2, чей триггер завязан на сезон (Ледяные духи: "низкая
@@ -91,6 +106,10 @@ inline float GetAmbientTriggerAxisValue(const FGridCell& Cell, EAmbientTriggerAx
     case EAmbientTriggerAxis::Distortion:    return Cell.State.Meta.Distortion;
     case EAmbientTriggerAxis::Stability:     return Cell.State.Meta.Stability;
     case EAmbientTriggerAxis::HarvestStress: return Cell.HarvestStress;
+    case EAmbientTriggerAxis::Body:          return Cell.State.Direction.Body;
+    case EAmbientTriggerAxis::Mind:          return Cell.State.Direction.Mind;
+    case EAmbientTriggerAxis::Spirit:        return Cell.State.Direction.Spirit;
+    case EAmbientTriggerAxis::Nature:        return Cell.State.Direction.Nature;
     default:                                 return 0.0f;
     }
 }
@@ -281,9 +300,122 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
+        // Трясинные духи (Болото, земля, §16.2): "Nature-ось доминирует ->
+        // замедление сбора". "Замедление скорости сбора" — отдельный
+        // модификатор темпа действия игрока, которого сейчас нет в модели
+        // (Rate-поля ниже — все TargetState-нуджи, не темп сбора) — эффект
+        // намеренно не реализован, только проявление, тот же принцип
+        // заглушки, что уже применён к Ржавым духам/Водяным бесам/Злыдням.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Трясинные духи"));
+            D.Biome = EBiomeType::Bog;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Nature;
+            D.TriggerThreshold = 0.4f;   // Direction нормализован по сумме (NormalizeSum) -- 0.4 из 1.0 на 4 оси уже заметно доминирует
+            D.bTriggerAbove = true;
+            Defs.Add(D);
+        }
+
+        // Болотные огни (Болото, земля, §16.2): "Morok-поле высокое, ночь ->
+        // Resonance++, Distortion++". MorokField не читается напрямую в этом
+        // реестре (он на уровне BiomeGraphSubsystem, не клетки) — Distortion
+        // клетки уже служит проверенным прокси Морока (тот же принцип, что
+        // ApplyBiomeInfluences использует Distortion как канал Морока).
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Болотные огни"));
+            D.Biome = EBiomeType::Bog;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Distortion;
+            D.TriggerThreshold = 0.5f;
+            D.bTriggerAbove = true;
+            D.bRequiresNight = true;
+            D.ResonanceRate = 0.01f;
+            D.DistortionRate = 0.006f;
+            Defs.Add(D);
+        }
+
+        // Шишиги (Смешанный лес, земля, §16.2): "овраг/куст, сумерки ->
+        // испуг, визуальный дебафф восприятия, без мех. вреда". Чисто
+        // Perception-эффект (как Морочники/Шептуны), не TargetState-нудж —
+        // только проявление, сам испуг ещё не подключен к слою восприятия.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Шишиги"));
+            D.Biome = EBiomeType::MixedForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresDusk = true;
+            Defs.Add(D);
+        }
+
+        // Древесные огни (Смешанный лес, земля, §16.2): "старое дерево, ночь
+        // -> декоративный". §16.2 сам называет тип "декоративный" — тест на
+        // существо без мех. эффекта вовсе, как Снежные огни ниже.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Древесные огни"));
+            D.Biome = EBiomeType::MixedForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresNight = true;
+            Defs.Add(D);
+        }
+
+        // Чащобные духи (Тайга, земля, §16.2): "Nature экстремум -> защитный
+        // дебафф при вторжении в нетронутую клетку". "Вторжение в нетронутую
+        // клетку" как событие (не просто порог) не моделируется — только
+        // проявление по тому же Nature-экстремуму, что Трясинные духи выше,
+        // без эффекта (заглушка, тот же принцип).
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Чащобные духи"));
+            D.Biome = EBiomeType::Taiga;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Nature;
+            D.TriggerThreshold = 0.45f;
+            D.bTriggerAbove = true;
+            Defs.Add(D);
+        }
+
+        // Снежные огни (Тундра, земля, §16.2): "ясная ночь -> декоративный".
+        // "Ясная" (безоблачная) — сигнал погоды, которой в проекте ещё нет
+        // (§15.7) — упрощено до простого ночного триггера, тот же принцип,
+        // что уже применён к Ледяным духам до появления сезонов. §16.2 сам
+        // называет тип "тест на декоративный" — существо без эффекта, только
+        // проявление.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Снежные огни"));
+            D.Biome = EBiomeType::Tundra;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresNight = true;
+            Defs.Add(D);
+        }
+
+        // Плескуны (Речная пойма, ВОДА, §16.2): "мелководье -> декоративный,
+        // Purity нейтрален". "Мелководье" (глубина) не моделируется как
+        // атрибут клетки -- нет условия по времени/сезону в самой карточке,
+        // а check() ниже требует хоть какой-то гейт. Purity >= 0.0 --
+        // тривиально истинно почти всегда (Meta.Purity клампится в [0,1]),
+        // честный тонкий гейт вместо выдумывания несуществующего условия:
+        // Плескуны почти всегда на месте, что и требует "декоративный".
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Плескуны"));
+            D.Biome = EBiomeType::Floodplain;
+            D.bWaterOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Purity;
+            D.TriggerThreshold = 0.0f;
+            D.bTriggerAbove = true;
+            Defs.Add(D);
+        }
+
         for (const FAmbientEntityDefinition& D : Defs)
         {
-            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason);
+            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason || D.bRequiresDusk);
         }
         return Defs;
     }();
