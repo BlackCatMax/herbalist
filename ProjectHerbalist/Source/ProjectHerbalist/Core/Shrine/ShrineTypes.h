@@ -49,25 +49,32 @@ namespace HerbalistCore
 {
     namespace Shrine
     {
-        // Влияние капищ на клетку — общий кусок для эффекта 1 (модуляция
-        // релаксации, RegenerateCellParameters) и эффекта 2 (надбавка к
-        // Coherence, ProcessApplyCommand): при перекрытии радиусов берём
-        // максимум по |Restoration| с сохранением знака, а не сумму — иначе
-        // два капища рядом давали бы вчетверо эффект без всякого обоснования
+        // Капище с наибольшим |Restoration| в радиусе — общий выбор для
+        // эффектов 1/2 (см. GetInfluenceAt ниже) и эффекта 3 (типоспецифичные
+        // бонусы, §15.5 "Типы капищ"), которому вдобавок к Restoration нужен
+        // ещё и Type самого победившего капища, не только число. При
+        // перекрытии радиусов берём максимум по |Restoration|, а не сумму —
+        // два капища рядом не должны давать вчетверо эффект без обоснования
         // в дизайн-документе (§15.5 говорит про одно капище, не про сложение).
-        inline float GetInfluenceAt(const FIntPoint& CellCoord, const TArray<FShrine>& Shrines, int32 InfluenceRadius)
+        inline const FShrine* FindDominantShrine(const FIntPoint& CellCoord, const TArray<FShrine>& Shrines, int32 InfluenceRadius)
         {
-            float Best = 0.0f;
+            const FShrine* Best = nullptr;
             for (const FShrine& S : Shrines)
             {
                 const int32 Dist = FMath::Max(FMath::Abs(CellCoord.X - S.Cell.X), FMath::Abs(CellCoord.Y - S.Cell.Y));
                 if (Dist > InfluenceRadius) continue;
-                if (FMath::Abs(S.Restoration) > FMath::Abs(Best))
+                if (!Best || FMath::Abs(S.Restoration) > FMath::Abs(Best->Restoration))
                 {
-                    Best = S.Restoration;
+                    Best = &S;
                 }
             }
             return Best;
+        }
+
+        inline float GetInfluenceAt(const FIntPoint& CellCoord, const TArray<FShrine>& Shrines, int32 InfluenceRadius)
+        {
+            const FShrine* Dominant = FindDominantShrine(CellCoord, Shrines, InfluenceRadius);
+            return Dominant ? Dominant->Restoration : 0.0f;
         }
     }
 }

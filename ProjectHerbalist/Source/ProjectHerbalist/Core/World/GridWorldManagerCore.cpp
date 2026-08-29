@@ -194,7 +194,21 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         const float* MorokField = MorokFields.Find(BiomeID);
         if (MorokField)
         {
-            const float MorokInfluence = *MorokField * 0.1f * GlobalScale;
+            float MorokInfluence = *MorokField * 0.1f * GlobalScale;
+
+            // Эффект 3, Каменное (Стрибог, §15.5): "не пускает Морок" — глушит
+            // вклад MorokField в локальный Distortion на (1 − 0.4×Restoration),
+            // только в радиусе капища.
+            const UHerbalistSettings* ShrineSettings = GetHerbalistSettings();
+            const FShrine* DominantShrine = Shrines.Num() > 0
+                ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineSettings ? ShrineSettings->ShrineInfluenceRadius : 3)
+                : nullptr;
+            if (DominantShrine && DominantShrine->Type == EShrineType::Stone && DominantShrine->Restoration > 0.0f)
+            {
+                const float Dampening = ShrineSettings ? ShrineSettings->ShrineStoneMorokDampening : 0.4f;
+                MorokInfluence *= (1.0f - FMath::Clamp(Dampening * DominantShrine->Restoration, 0.0f, 1.0f));
+            }
+
             const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + MorokInfluence, 0.f, 1.f);
             if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
             {
@@ -738,18 +752,45 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         // на -0.95 — Influence может быть отрицательным (осквернённое капище,
         // Restoration < 0), (1+Influence) не должен доходить до нуля в знаменателе.
         float CellDeltaRegen = DeltaRegen;
+        float StabilityDeltaRegen = DeltaRegen;   // эффект 3, Родовое — см. ниже
         float DirectionRateMultiplier = 1.0f;
-        if (Shrines.Num() > 0)
+        const FShrine* DominantShrine = Shrines.Num() > 0
+            ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3)
+            : nullptr;
+        if (DominantShrine && DominantShrine->Restoration != 0.0f)
         {
-            const float Influence = HerbalistCore::Shrine::GetInfluenceAt(
-                FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3);
-            if (Influence != 0.0f)
+            const float SafeInfluence = FMath::Clamp(DominantShrine->Restoration, -0.95f, 1.0f);
+            const bool bApproachingS0 = HerbalistCore::Math::Distance(T, FAlatyr::S0) < HerbalistCore::Math::Distance(S, FAlatyr::S0);
+            const float Modulation = bApproachingS0 ? (1.0f + SafeInfluence) : (1.0f / (1.0f + SafeInfluence));
+            CellDeltaRegen *= Modulation;
+            DirectionRateMultiplier = Modulation;
+
+            // Эффект 3, Родовое (Дажьбог, §15.5): "усиливает пуллинг
+            // Stability" — только Stability-ось релаксации, поверх уже
+            // посчитанной Modulation, не вместо неё.
+            StabilityDeltaRegen = CellDeltaRegen;
+            if (DominantShrine->Type == EShrineType::Ancestral)
             {
-                const float SafeInfluence = FMath::Clamp(Influence, -0.95f, 1.0f);
-                const bool bApproachingS0 = HerbalistCore::Math::Distance(T, FAlatyr::S0) < HerbalistCore::Math::Distance(S, FAlatyr::S0);
-                const float Modulation = bApproachingS0 ? (1.0f + SafeInfluence) : (1.0f / (1.0f + SafeInfluence));
-                CellDeltaRegen *= Modulation;
-                DirectionRateMultiplier = Modulation;
+                StabilityDeltaRegen *= Settings ? Settings->ShrineAncestralStabilityMultiplier : 1.5f;
+            }
+        }
+
+        // Эффект 3, Водное (Мокошь, §15.5): "подтягивает Purity воды к 1.0
+        // пропорционально Restoration" — локальный непрерывный нудж
+        // TargetState в радиусе капища (не мутация общего DefaultWaterState
+        // биома — эффект капища всегда локален, тот же принцип, что и у
+        // остальных четырёх типов). Сравнение перед записью — тот же §7.1
+        // паттерн, что у ночного/зимнего нуджа: без него клетка с уже
+        // насыщенной Purity=1.0 грязнилась бы каждый кадр без изменения.
+        if (Cell.bIsWater && DominantShrine && DominantShrine->Type == EShrineType::Water && DominantShrine->Restoration > 0.0f)
+        {
+            const float PullRate = Settings ? Settings->ShrineWaterPurityPullRate : 0.02f;
+            const float NewTargetPurity = FMath::Clamp(
+                Cell.TargetState.Meta.Purity + PullRate * DominantShrine->Restoration * DeltaTime, 0.0f, 1.0f);
+            if (!FMath::IsNearlyEqual(NewTargetPurity, Cell.TargetState.Meta.Purity, KINDA_SMALL_NUMBER))
+            {
+                Cell.TargetState.Meta.Purity = NewTargetPurity;
+                MarkCellDirty(Cell.X, Cell.Y);
             }
         }
 
@@ -759,15 +800,27 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         bool bChanged = false;
         bChanged |= MoveToward(S.Meta.Distortion, T.Meta.Distortion, CellDeltaRegen);
         bChanged |= MoveToward(S.Meta.Purity,     T.Meta.Purity,     CellDeltaRegen);
-        bChanged |= MoveToward(S.Meta.Stability,  T.Meta.Stability,  CellDeltaRegen);
+        bChanged |= MoveToward(S.Meta.Stability,  T.Meta.Stability,  StabilityDeltaRegen);
         bChanged |= MoveToward(S.Meta.Potency,    T.Meta.Potency,    CellDeltaRegen);
         bChanged |= MoveToward(S.Meta.Resonance,  T.Meta.Resonance,  CellDeltaRegen);
         bChanged |= MoveToward(S.Meta.Corruption, T.Meta.Corruption, CellDeltaRegen);
         bChanged |= MoveToward(S.Magnitude,       T.Magnitude,       CellDeltaRegen);
 
-        // 2. Спад HarvestStress — медленный, зависит от биома (см. выше)
+        // 2. Спад HarvestStress — медленный, зависит от биома (см. выше).
+        // Эффект 3, Лесное (Велес, §15.5): "ускоряет заживление клеток" —
+        // StressRecoveryMultiplier биома делится на (1+0.5×Restoration),
+        // что для decay-в-секунду (обратно пропорционален Multiplier)
+        // эквивалентно умножению на тот же коэффициент. Локально — только
+        // в радиусе капища, GetStressDecay(Biome) сам по себе биомный, не
+        // клеточный кэш, эффект капища накладывается поверх здесь.
         const bool bStressDecaying = Cell.HarvestStress > 0.0f;
-        Cell.HarvestStress = FMath::Max(Cell.HarvestStress - GetStressDecay(Cell.Biome) * DeltaTime, 0.0f);
+        float StressDecayRate = GetStressDecay(Cell.Biome);
+        if (DominantShrine && DominantShrine->Type == EShrineType::Forest && DominantShrine->Restoration > 0.0f)
+        {
+            const float HealBonus = Settings ? Settings->ShrineForestHealBonus : 0.5f;
+            StressDecayRate *= (1.0f + HealBonus * DominantShrine->Restoration);
+        }
+        Cell.HarvestStress = FMath::Max(Cell.HarvestStress - StressDecayRate * DeltaTime, 0.0f);
 
         // 3. Направление — та же идея (движение к отклонению-нулю), но
         // Direction нормализуется отдельно (NormalizeSum), поэтому не

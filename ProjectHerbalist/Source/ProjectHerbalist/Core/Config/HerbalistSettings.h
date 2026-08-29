@@ -328,6 +328,43 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ShrineCoherenceBonus = 0.15f;
 
+    // --- Типоспецифичные бонусы капищ (эффект 3, §15.5 "Типы капищ",
+    // реализовано 2026-08-29 вместе с лорной привязкой к богам, см.
+    // 15_Cycles_And_Shrines.md) — числа взяты дословно из таблицы шести
+    // типов, RegenerateCellParameters/ApplyBiomeInfluences/PropagateWaves. ---
+
+    // Родовое (Дажьбог): множитель к шагу релаксации ТОЛЬКО Stability-оси
+    // (не всех осей разом, см. §15.5 "усиливает пуллинг Stability").
+    UPROPERTY(config, EditAnywhere, Category = "Shrines|Types", meta = (ClampMin = "1.0"))
+    float ShrineAncestralStabilityMultiplier = 1.5f;
+
+    // Лесное (Велес): множитель к скорости спада HarvestStress в радиусе —
+    // "StressRecoveryMultiplier биома делится на (1+0.5×Restoration)"
+    // эквивалентно "decay-в-секунду умножается на (1+0.5×Restoration)"
+    // (decay обратно пропорционален Multiplier), поэтому здесь хранится
+    // сразу коэффициент 0.5, не сам делитель.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines|Types", meta = (ClampMin = "0.0"))
+    float ShrineForestHealBonus = 0.5f;
+
+    // Водное (Мокошь): "подтягивает Purity воды к 1.0 пропорционально
+    // Restoration" — реализовано как локальный (в радиусе капища, не
+    // глобальный DefaultWaterState биома целиком — эффект капища всегда
+    // локален, тот же принцип, что у остальных четырёх типов) непрерывный
+    // нудж TargetState.Meta.Purity воды, "в секунду" при полном Restoration.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines|Types", meta = (ClampMin = "0.0"))
+    float ShrineWaterPurityPullRate = 0.02f;
+
+    // Каменное (Стрибог): "глушит вклад MorokField в локальный Distortion на
+    // (1 − 0.4×Restoration)".
+    UPROPERTY(config, EditAnywhere, Category = "Shrines|Types", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ShrineStoneMorokDampening = 0.4f;
+
+    // Пограничное (Перун): "MorokLeak через рёбра графа умножается на
+    // (1 − 0.5×Restoration)" — только для рёбер между биомами, физически
+    // граничащими с клеткой самого капища в сетке (не любые два узла графа).
+    UPROPERTY(config, EditAnywhere, Category = "Shrines|Types", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ShrineBorderLeakDampening = 0.5f;
+
     // ShrineInventoryProtection удалена 2026-08-29 вместе с "эффектом 4"
     // капищ (§15.5) целиком — прямая правка пользователя: порча трав не
     // зависит от места в мире вообще, только от контейнера хранения (см.

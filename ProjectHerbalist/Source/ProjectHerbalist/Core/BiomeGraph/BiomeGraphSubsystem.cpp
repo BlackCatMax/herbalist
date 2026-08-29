@@ -8,6 +8,7 @@
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
@@ -125,7 +126,7 @@ void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
     }
 
     RecalculateFieldsFromGrid(Grid);
-    PropagateWaves();
+    PropagateWaves(Grid);
     ApplyFieldsToGrid(Grid);
     UpdateMemories(StepDeltaTime);
 
@@ -185,7 +186,47 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
     UE_LOG(LogHerbalistBiome, VeryVerbose, TEXT("RecalculateFieldsFromGrid completed"));
 }
 
-void UBiomeGraphSubsystem::PropagateWaves()
+// Эффект 3, Пограничное (Перун, 15_Cycles_And_Shrines.md §15.5 "Типы
+// капищ"): "не даёт искажению течь между биомами" -- MorokLeak по ребру
+// графа умножается на (1 − 0.5×Restoration), но только для рёбер между
+// биомами, которые капище физически граничит в сетке (проверяем соседние
+// клетки капища, не любые два узла графа -- капище должно реально стоять
+// на стыке). Собирается один раз за шаг, до основного цикла по рёбрам ниже.
+static void CollectBorderShrineDamping(AGridWorldManager* Grid, float DampeningFactor,
+    TMap<FName, TMap<FName, float>>& OutDamping)
+{
+    if (!Grid) return;
+
+    static const FIntPoint Offsets[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+
+    for (const FShrine& S : Grid->GetShrines())
+    {
+        if (S.Type != EShrineType::Border || S.Restoration <= 0.0f) continue;
+
+        const FGridCell* Center = Grid->GetCellConst(S.Cell.X, S.Cell.Y);
+        if (!Center) continue;
+
+        for (const FIntPoint& Offset : Offsets)
+        {
+            const FGridCell* Neighbor = Grid->GetCellConst(S.Cell.X + Offset.X, S.Cell.Y + Offset.Y);
+            if (!Neighbor || Neighbor->Biome == Center->Biome) continue;
+
+            const FName A = FBiomeDefaults::BiomeTypeToName(Center->Biome);
+            const FName B = FBiomeDefaults::BiomeTypeToName(Neighbor->Biome);
+            const float Factor = 1.0f - FMath::Clamp(DampeningFactor * S.Restoration, 0.0f, 1.0f);
+
+            // Рёбра графа заведены в обе стороны (см. ROADMAP.md, импорт
+            // DA_BiomeGraph) -- дампим обе, min с уже записанным на случай
+            // нескольких капищ на один и тот же стык.
+            float& SlotAB = OutDamping.FindOrAdd(A).FindOrAdd(B, 1.0f);
+            SlotAB = FMath::Min(SlotAB, Factor);
+            float& SlotBA = OutDamping.FindOrAdd(B).FindOrAdd(A, 1.0f);
+            SlotBA = FMath::Min(SlotBA, Factor);
+        }
+    }
+}
+
+void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
 {
     TMap<FName, float> PrevMorok, PrevZaryana;
     for (const auto& Pair : Nodes)
@@ -201,12 +242,25 @@ void UBiomeGraphSubsystem::PropagateWaves()
         DeltaZaryana.Add(Pair.Key, 0.f);
     }
 
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+    TMap<FName, TMap<FName, float>> BorderDamping;
+    CollectBorderShrineDamping(Grid, Settings ? Settings->ShrineBorderLeakDampening : 0.5f, BorderDamping);
+
     for (const FBiomeGraphEdge& Edge : Edges)
     {
         float SourceMorok = PrevMorok[Edge.FromBiome];
         float SourceZaryana = PrevZaryana[Edge.FromBiome];
 
-        DeltaMorok[Edge.ToBiome] += SourceMorok * Edge.MorokLeak * GlobalInfluenceScale;
+        float EffectiveMorokLeak = Edge.MorokLeak;
+        if (const TMap<FName, float>* FromDamping = BorderDamping.Find(Edge.FromBiome))
+        {
+            if (const float* Factor = FromDamping->Find(Edge.ToBiome))
+            {
+                EffectiveMorokLeak *= *Factor;
+            }
+        }
+
+        DeltaMorok[Edge.ToBiome] += SourceMorok * EffectiveMorokLeak * GlobalInfluenceScale;
         DeltaZaryana[Edge.ToBiome] += SourceZaryana * Edge.ZaryanaFlow * GlobalInfluenceScale;
     }
 
