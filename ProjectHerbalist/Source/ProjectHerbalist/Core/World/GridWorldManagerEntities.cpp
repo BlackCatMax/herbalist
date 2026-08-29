@@ -94,6 +94,69 @@ bool AGridWorldManager::IsNight() const
     return GetTimeOfDay01() >= NightStartFraction;
 }
 
+bool AGridWorldManager::IsDawn() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DayMinutes = FMath::Max(1.0f, Settings ? Settings->GameDayMinutes : 32.0f);
+    // Рассвет — первые 6 игровых минут суток, тот же расклад §15.2, что и у
+    // IsNight() (абсолютные минуты, не пропорциональная доля — если
+    // GameDayMinutes поменять, Рассвет/Закат/Ночь останутся теми же 6
+    // минутами, просто станут другой долей суток).
+    const float DawnDurationMinutes = 6.0f;
+    const float DawnEndFraction = FMath::Clamp(DawnDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    return GetTimeOfDay01() < DawnEndFraction;
+}
+
+bool AGridWorldManager::IsDusk() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DayMinutes = FMath::Max(1.0f, Settings ? Settings->GameDayMinutes : 32.0f);
+    const float NightDurationMinutes = 6.0f;
+    const float DuskDurationMinutes = 6.0f;
+    const float NightStartFraction = 1.0f - FMath::Clamp(NightDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    const float DuskStartFraction = NightStartFraction - FMath::Clamp(DuskDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    const float T = GetTimeOfDay01();
+    return T >= DuskStartFraction && T < NightStartFraction;
+}
+
+float AGridWorldManager::GetDuskProgress01() const
+{
+    // 0 на входе в Закат, 1 у порога Ночи — "+Distortion (нарастающее)"
+    // §15.2: Морок просыпается раньше, чем стемнеет, но не сразу в полную силу.
+    if (!IsDusk()) return 0.0f;
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DayMinutes = FMath::Max(1.0f, Settings ? Settings->GameDayMinutes : 32.0f);
+    const float NightDurationMinutes = 6.0f;
+    const float DuskDurationMinutes = 6.0f;
+    const float NightStartFraction = 1.0f - FMath::Clamp(NightDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    const float DuskStartFraction = NightStartFraction - FMath::Clamp(DuskDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    const float DuskSpan = FMath::Max(NightStartFraction - DuskStartFraction, KINDA_SMALL_NUMBER);
+    return FMath::Clamp((GetTimeOfDay01() - DuskStartFraction) / DuskSpan, 0.0f, 1.0f);
+}
+
+bool AGridWorldManager::IsPoludnitsaWindow() const
+{
+    // Полудница (§15.2 "Полдень как отдельная опасность"): короткий (~2 мин)
+    // всплеск Distortion в середине Дня, только в открытых биомах — не
+    // отдельная сущность в UpdateEntityManifestations (не привязана к
+    // конкретной клетке-хозяйке, как Полевик), а временное окно, тем же
+    // паттерном, что ночной нудж §16.5 в самом UpdateEntityManifestations.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DayMinutes = FMath::Max(1.0f, Settings ? Settings->GameDayMinutes : 32.0f);
+    const float DawnDurationMinutes = 6.0f;
+    const float DuskDurationMinutes = 6.0f;
+    const float NightDurationMinutes = 6.0f;
+    const float PoludnitsaWindowMinutes = 2.0f;
+
+    const float DawnEndFraction = FMath::Clamp(DawnDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    const float NightStartFraction = 1.0f - FMath::Clamp(NightDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    const float DuskStartFraction = NightStartFraction - FMath::Clamp(DuskDurationMinutes / DayMinutes, 0.0f, 1.0f);
+    const float DayMidpoint = (DawnEndFraction + DuskStartFraction) * 0.5f;
+    const float HalfWindow = FMath::Clamp(PoludnitsaWindowMinutes / DayMinutes, 0.0f, 1.0f) * 0.5f;
+
+    return FMath::Abs(GetTimeOfDay01() - DayMidpoint) < HalfWindow;
+}
+
 // ============================================================================
 // ЛУННЫЙ ЦИКЛ (02_GDD/15_Cycles_And_Shrines.md §15.3) — v1: только фаза и
 // эффект на сбор (Растущая/Полнолуние). Эффекты применённого зелья
@@ -212,6 +275,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float NightHorrorCorruptionRate = Settings ? Settings->NightHorrorCorruptionRate  : 0.002f;
     const float WinterPurityRate = Settings ? Settings->WinterPurityRate                    : 0.002f;
     const bool bIsWinter = GetSeason() == ESeason::Winter;   // одинаково для всей сетки за этот тик
+    const float DawnPurityRate      = Settings ? Settings->DawnPurityRate      : 0.004f;
+    const float DawnStabilityRate   = Settings ? Settings->DawnStabilityRate   : 0.004f;
+    const float DuskDistortionRate  = Settings ? Settings->DuskDistortionRate  : 0.005f;
+    const float PoludnitsaDistortionRate = Settings ? Settings->PoludnitsaDistortionRate : 0.02f;
     const float RespectGainRate     = Settings ? Settings->LandmarkRespectGainRate          : 0.01f;
     const float RespectDecayRate    = Settings ? Settings->LandmarkRespectDecayRate         : 0.02f;
     const float StressAngerThreshold= Settings ? Settings->LandmarkStressAngerThreshold     : 0.6f;
@@ -374,6 +441,53 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 NewTarget.Meta.Distortion = NewDistortion;
                 NewTarget.Meta.Corruption = NewCorruption;
+                bChanged = true;
+            }
+        }
+
+        // --- Рассвет, §15.2: "мир на короткое время выдыхает" ---
+        // Единственная "улучшающая" фаза суток — лучшее окно для сбора
+        // чистых ингредиентов. Тот же разлитый-по-сетке паттерн и та же
+        // проверка перед записью, что у ночного/зимнего нуджа.
+        if (IsDawn())
+        {
+            const float NewPurity    = FMath::Clamp(NewTarget.Meta.Purity    + DawnPurityRate    * DeltaTime, 0.0f, 1.0f);
+            const float NewStability = FMath::Clamp(NewTarget.Meta.Stability + DawnStabilityRate * DeltaTime, 0.0f, 1.0f);
+            if (!FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER) ||
+                !FMath::IsNearlyEqual(NewStability, NewTarget.Meta.Stability, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Meta.Purity    = NewPurity;
+                NewTarget.Meta.Stability = NewStability;
+                bChanged = true;
+            }
+        }
+
+        // --- Закат, §15.2: "ни день, ни ночь" ---
+        // "+Distortion (нарастающее)" — ставка растёт линейно от 0 на входе
+        // в Закат до полной силы у порога Ночи (GetDuskProgress01) вместо
+        // мгновенного включения, как у Ночи/Рассвета: Морок начинает
+        // просыпаться раньше, чем стемнеет, но не сразу в полную силу.
+        if (IsDusk())
+        {
+            const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + DuskDistortionRate * GetDuskProgress01() * DeltaTime, 0.0f, 1.0f);
+            if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Meta.Distortion = NewDistortion;
+                bChanged = true;
+            }
+        }
+
+        // --- Полудница, §15.2 "Полдень как отдельная опасность" ---
+        // Буквальная реализация уже существующей в бестиарии карточки
+        // (демон полудня, наказывающий работающих в жаре), декоративной до
+        // сих пор — здесь получает игровые зубы. Только открытые биомы
+        // (Степь, Лесостепь), короткое (~2 мин) окно в середине Дня.
+        if ((Cell.Biome == EBiomeType::Steppe || Cell.Biome == EBiomeType::ForestSteppe) && IsPoludnitsaWindow())
+        {
+            const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + PoludnitsaDistortionRate * DeltaTime, 0.0f, 1.0f);
+            if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Meta.Distortion = NewDistortion;
                 bChanged = true;
             }
         }

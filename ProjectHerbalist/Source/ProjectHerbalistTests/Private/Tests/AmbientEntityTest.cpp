@@ -58,6 +58,11 @@ bool FHerbalistAmbientEntity_GnilnikiStillManifestsAfterRefactor::RunTest(const 
     // нудж вниз от 0.0 не отличим от "не сработало" (кламп к 0.0), поэтому
     // задаём правдоподобное ненулевое начальное значение явно.
     Cell->TargetState.Meta.Purity = 0.5f;
+    // GameClockSeconds по умолчанию 0.0 -- с 2026-08-29 это ещё и Рассвет
+    // (§15.2, DayCycleTest.cpp), который сам поднимает Purity и почти
+    // отменял бы нудж Гнильников вниз чистым совпадением чисел. Явно ставим
+    // середину Дня, чтобы тест проверял ровно Гнильников, не их гонку с Рассветом.
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
     const float PurityBefore = Cell->TargetState.Meta.Purity;
     const float CorruptionBefore = Cell->TargetState.Meta.Corruption;
 

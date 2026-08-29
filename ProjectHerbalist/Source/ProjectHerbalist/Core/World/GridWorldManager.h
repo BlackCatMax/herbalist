@@ -191,6 +191,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     bool IsNight() const;
 
+    // Рассвет/Закат/Полдень (§15.2, 2026-08-29: раньше эффект был только у
+    // Ночи, таблица суток была закрыта на четверть — AUDIT_AND_REFACTORING_PLAN.md §7.2).
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    bool IsDawn() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    bool IsDusk() const;
+
+    // 0 на входе в Закат, 1 у порога Ночи — "+Distortion (нарастающее)" §15.2.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetDuskProgress01() const;
+
+    // Полудница: короткое окно в середине Дня, только открытые биомы.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    bool IsPoludnitsaWindow() const;
+
     // ---- Лунный цикл (02_GDD/15_Cycles_And_Shrines.md §15.3) ----
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     EMoonPhase GetMoonPhase() const;

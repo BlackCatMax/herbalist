@@ -120,13 +120,20 @@ bool FHerbalistSeason_WinterRaisesPurityAcrossTheGrid::RunTest(const FString& Pa
     const float DayLengthSeconds = 32.0f * 60.0f;
     const float SeasonDurationSeconds = 117.0f * DayLengthSeconds;
 
-    Manager->SetGameClockSeconds(0.0f);   // Весна
+    // +10 минут игровых суток на оба замера -- твёрдо внутри фазы "День"
+    // (6-20 минут при дефолтных 32 мин/сутки), не Рассвет/Закат: с
+    // 2026-08-29 у них тоже есть эффект на Purity (§15.2, DayCycleTest.cpp),
+    // и t=0/t=SeasonDuration*2+1 совпадали с Рассветом чисто случайно, что
+    // и сломало "нет изменения в Весну" ниже, когда Рассвет получил эффект.
+    const float MidDaySeconds = 10.0f * 60.0f;
+
+    Manager->SetGameClockSeconds(MidDaySeconds);   // Весна, середина Дня
     const float PurityBeforeSpring = Cell->TargetState.Meta.Purity;
     Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("No Purity change in Spring on a biome with no other definition"),
         Cell->TargetState.Meta.Purity, PurityBeforeSpring);
 
-    Manager->SetGameClockSeconds(SeasonDurationSeconds * 2.0f + 1.0f);   // Зима
+    Manager->SetGameClockSeconds(SeasonDurationSeconds * 2.0f + MidDaySeconds);   // Зима, середина Дня
     const float PurityBeforeWinter = Cell->TargetState.Meta.Purity;
     Manager->UpdateEntityManifestations(1.0f);
     TestTrue(TEXT("Purity rises in Winter ('снег как чистота')"), Cell->TargetState.Meta.Purity > PurityBeforeWinter);

@@ -142,6 +142,27 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float NightHorrorCorruptionRate = 0.002f;
 
+    // Рассвет/Закат/Полудница (§15.2, 2026-08-29) — таблица суток раньше
+    // была закрыта только на Ночь (AUDIT_AND_REFACTORING_PLAN.md §7.2).
+    // Рассвет: "мир на короткое время выдыхает" — единственная улучшающая
+    // фаза суток, зеркало ночного нуджа.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|DayCycle", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float DawnPurityRate = 0.004f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Entities|DayCycle", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float DawnStabilityRate = 0.004f;
+
+    // Закат: "+Distortion (нарастающее)" — умножается на AGridWorldManager::
+    // GetDuskProgress01() (0 на входе, 1 у порога Ночи), не применяется как есть.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|DayCycle", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float DuskDistortionRate = 0.005f;
+
+    // Полудница: "Полдень как отдельная опасность", §15.2 — короткое (~2 мин)
+    // окно, только Степь/Лесостепь, поэтому ставка заметно выше разлитых по
+    // всей сетке (у неё меньше суммарного времени действия, чем у Ночи/Заката).
+    UPROPERTY(config, EditAnywhere, Category = "Entities|DayCycle", meta = (ClampMin = "0.0", ClampMax = "0.2"))
+    float PoludnitsaDistortionRate = 0.02f;
+
     // Годовой круг (15_Cycles_And_Shrines.md §15.4). Длина сезона в игровых
     // сутках — "самое условное число во всём разделе", менять свободно.
     // 117 = 13 недель × 9 суток/неделя (компендиум), три сезона = 351/год.
