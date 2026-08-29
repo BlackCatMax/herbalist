@@ -258,6 +258,15 @@ void AGridWorldManager::SeedTestLandmarks()
     }
 }
 
+FEntityLandmark* AGridWorldManager::FindLandmarkAt(const FIntPoint& Cell)
+{
+    for (FEntityLandmark& L : EntityLandmarks)
+    {
+        if (L.Cell == Cell) return &L;
+    }
+    return nullptr;
+}
+
 // ============================================================================
 // ГЛАВНЫЙ ТИК ПРОЯВЛЕНИЙ
 // ============================================================================
@@ -281,7 +290,6 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float PoludnitsaDistortionRate = Settings ? Settings->PoludnitsaDistortionRate : 0.02f;
     const float RespectGainRate     = Settings ? Settings->LandmarkRespectGainRate          : 0.01f;
     const float RespectDecayRate    = Settings ? Settings->LandmarkRespectDecayRate         : 0.02f;
-    const float StressAngerThreshold= Settings ? Settings->LandmarkStressAngerThreshold     : 0.6f;
     const float HysteresisMargin    = Settings ? Settings->EntityManifestationHysteresis    : 0.05f;
 
     FStateDelta Delta;
@@ -532,24 +540,20 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         }
     }
 
-    // ---- Основной (Полевик) — проход по клеткам-обиталищам ----
+    // ---- Основной (Полевик и далее §16.3) — проход по клеткам-обиталищам ----
+    // Respect больше НЕ растёт/падает пассивно от состояния клетки — тот
+    // подход был упрощением конкретно Полевика, разошедшимся со спецификацией
+    // §16.3 ("подношение/уважение", не амбиентное условие). 2026-08-29,
+    // по прямому решению пользователя: Respect меняется только через
+    // подношение — Apply-на-клетку-обиталище, тот же канал и тот же принцип
+    // знака (Purity−Corruption), что уже есть у капищ (см. RunSimulationStep,
+    // GridWorldManagerTick.cpp), но БЕЗ капищного спада при небрежении —
+    // капище "забывается" как структура, хозяин места — нет, у подношения
+    // ему нет срока годности.
     for (FEntityLandmark& Landmark : EntityLandmarks)
     {
         FGridCell* Cell = GetCell(Landmark.Cell.X, Landmark.Cell.Y);
         if (!Cell) continue;
-
-        // Бережное обращение (низкий стресс, высокая чистота места) поднимает
-        // Respect; истощение клетки — опускает. Та же формула-дух, что и у
-        // Restoration капищ (15_Cycles_And_Shrines §15.5), но без завязки на
-        // конкретную варку — Полевик реагирует на состояние поля в целом.
-        if (Cell->HarvestStress > StressAngerThreshold)
-        {
-            Landmark.Respect = FMath::Clamp(Landmark.Respect - RespectDecayRate * DeltaTime, -1.0f, 1.0f);
-        }
-        else if (Cell->State.Meta.Purity > 0.6f)
-        {
-            Landmark.Respect = FMath::Clamp(Landmark.Respect + RespectGainRate * DeltaTime, -1.0f, 1.0f);
-        }
 
         // Если Гнильники/Берегиня (первый цикл выше) уже поставили нудж на
         // эту же клетку — берём его как отправную точку, а не сырой

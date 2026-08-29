@@ -113,9 +113,9 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float LandmarkRespectDecayRate = 0.02f;
 
-    // Граница HarvestStress клетки-обиталища, выше которой Respect только падает.
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float LandmarkStressAngerThreshold = 0.6f;
+    // LandmarkStressAngerThreshold удалена 2026-08-29: Respect "хозяев"
+    // §16.3 больше не реагирует на HarvestStress клетки пассивно — только на
+    // подношение (Apply-to-cell), см. LandmarkOfferingGain ниже.
 
     // Берегиня (Легендарный, Речная пойма) — порог Memory.HistoryPurity водной
     // клетки для проявления. Писалось до капищ как "упрощённая версия без
@@ -283,11 +283,23 @@ public:
     float BiomeDegradeMargin = 0.10f;
 
     // --- Капища (02_GDD/15_Cycles_And_Shrines.md §15.5) ---
-    // Вклад в Restoration от одной варки прямо на клетке капища:
-    // OfferingGain × (Coherence−0.5) × 2 × (1−Distortion). При Coherence=1 и
-    // чистом результате — максимум; ниже 0.5 — вклад отрицательный.
+    // Вклад в Restoration от применения зелья прямо на клетку капища:
+    // OfferingGain × (Purity − Corruption) результата. Комментарий поправлен
+    // 2026-08-29 — был не обновлён при самой правке формулы (варка сама по
+    // себе больше не подношение, только Apply-на-клетку, см.
+    // RunSimulationStep/GridWorldManagerTick.cpp): раньше здесь стояла
+    // формула через Coherence варки, отброшенная той же правкой.
     UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ShrineOfferingGain = 0.05f;
+
+    // --- "Хозяева" места, §16.3 (Полевик и далее) ---
+    // Тот же принцип, что ShrineOfferingGain выше (Apply-на-клетку-
+    // обиталище, вклад = Gain × (Purity − Corruption) результата), но БЕЗ
+    // капищного спада при небрежении — отдельная настройка, не переиспользует
+    // ShrineOfferingGain, т.к. это философски разные системы (см.
+    // GridWorldManagerEntities.cpp/GridWorldManagerTick.cpp, 2026-08-29).
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float LandmarkOfferingGain = 0.05f;
 
     // Горизонт полного угасания заброшенного капища — то же число, что уже
     // задаёт лунный цикл (§15.3), не новая величина.

@@ -284,6 +284,9 @@ public:
     const TArray<FEntityLandmark>& GetEntityLandmarks() const { return EntityLandmarks; }
     void SetEntityLandmarks(const TArray<FEntityLandmark>& InLandmarks) { EntityLandmarks = InLandmarks; }
 
+    // Подношение "хозяину" (§16.3), тот же принцип, что FindShrineAt.
+    FEntityLandmark* FindLandmarkAt(const FIntPoint& Cell);
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 

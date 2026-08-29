@@ -220,6 +220,37 @@ void AGridWorldManager::RunSimulationStep()
         }
     }
 
+    // Подношение "хозяину" места (16_Entity_Manifestation.md §16.3) —
+    // 2026-08-29, по прямому запросу пользователя ("давай поработаем над
+    // формулой"): тот же канал и тот же знаковый принцип, что подношение
+    // капищу выше (Apply-на-клетку-обиталище, не крафт), сознательно БЕЗ
+    // капищного спада при небрежении — обсуждалось явно: капище "забывается"
+    // как структура со сроком годности, хозяин места — нет, у Respect нет
+    // течения времени, только рост/порча от того, что туда принесли.
+    // Раньше здесь у Полевика стояла пассивная проверка HarvestStress/Purity
+    // клетки без единого явного жеста подношения — расходилась со
+    // спецификацией §16.3 ("подношение/уважение"), мигрирована на этот
+    // канал тем же решением, не оставлена особым случаем.
+    if (Delta.WorldChanges.Num() > 0 && EntityLandmarks.Num() > 0)
+    {
+        for (const FCommandEntry& Cmd : CommandsCopy)
+        {
+            const bool bIsApplyToCell = Cmd.Primitive == ECommandPrimitive::Apply && !Cmd.Apply.bIsCrafting;
+            if (!bIsApplyToCell) continue;
+
+            FEntityLandmark* Landmark = FindLandmarkAt(Cmd.Apply.TargetCell);
+            if (!Landmark) continue;
+
+            const FGridCell* Modified = Delta.WorldChanges.Find(Cmd.Apply.TargetCell);
+            if (!Modified) continue;
+
+            const UHerbalistSettings* Settings = GetHerbalistSettings();
+            const float OfferingGain = Settings ? Settings->LandmarkOfferingGain : 0.05f;
+            const float DeltaRespect = OfferingGain * (Modified->State.Meta.Purity - Modified->State.Meta.Corruption);
+            Landmark->Respect = FMath::Clamp(Landmark->Respect + DeltaRespect, -1.0f, 1.0f);
+        }
+    }
+
     // Запись кадра трассировки
     if (bEnableTrace)
     {
