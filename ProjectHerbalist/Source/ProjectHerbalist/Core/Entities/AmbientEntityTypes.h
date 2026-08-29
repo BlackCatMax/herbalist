@@ -12,7 +12,7 @@
 // которую обходит один универсальный цикл (UpdateEntityManifestations).
 //
 // Сознательно НЕ вынесено в UDataTable/DA_*.uasset (в отличие от биомов и
-// ингредиентов): определений пока семь, они меняются вместе с кодом
+// ингредиентов): определений пока десять, они меняются вместе с кодом
 // (новый EAmbientTriggerAxis требует правки C++ всё равно), и это тот же
 // принцип, что уже применён к MemoryFragmentDefinitions.h — простой
 // статический реестр, а не полноценный ассет-пайплайн, пока карточек мало.
@@ -29,7 +29,11 @@ enum class EAmbientTriggerAxis : uint8
     Corruption,
     Purity,
     Distortion,
-    Stability
+    Stability,
+    // Не Meta вовсе (FGridCell::HarvestStress) — добавлено 2026-08-29 для
+    // Злыдни ("заброшенное жильё, накопленный HarvestStress", §16.2).
+    // GetAmbientTriggerAxisValue поэтому принимает Cell целиком, не Meta.
+    HarvestStress
 };
 
 USTRUCT()
@@ -76,17 +80,29 @@ struct FAmbientEntityDefinition
     // Magnitude — не под Meta (FRealState::Magnitude, отдельное поле),
     // применяется отдельной строкой в UpdateEntityManifestations.
     UPROPERTY() float MagnitudeRate = 0.0f;
+
+    // Порча инвентаря игрока, пока он физически стоит на клетке с активным
+    // существом — не TargetState-нудж вовсе, читается отдельно в
+    // HerbalistInventoryComponent::TickComponent (Ржавые духи, Водяные
+    // бесы, §16.2: "порча инструмента"/"мелкая порча снаряжения" — вне
+    // пайплайна по своей природе, тот же принцип, что уже применён к
+    // защите инвентаря капищами, эффект 4, только с обратным знаком).
+    // Существо с ТОЛЬКО этим полем ненулевым (все Meta/Direction/Magnitude
+    // ставки — 0) намеренно не помечает клетку грязной само по себе — эта
+    // порча не персистентное состояние мира, только временная близость игрока.
+    UPROPERTY() float ItemCorruptionRate = 0.0f;
 };
 
-inline float GetAmbientTriggerAxisValue(const FMeta& Meta, EAmbientTriggerAxis Axis)
+inline float GetAmbientTriggerAxisValue(const FGridCell& Cell, EAmbientTriggerAxis Axis)
 {
     switch (Axis)
     {
-    case EAmbientTriggerAxis::Corruption: return Meta.Corruption;
-    case EAmbientTriggerAxis::Purity:     return Meta.Purity;
-    case EAmbientTriggerAxis::Distortion: return Meta.Distortion;
-    case EAmbientTriggerAxis::Stability:  return Meta.Stability;
-    default:                              return 0.0f;
+    case EAmbientTriggerAxis::Corruption:    return Cell.State.Meta.Corruption;
+    case EAmbientTriggerAxis::Purity:        return Cell.State.Meta.Purity;
+    case EAmbientTriggerAxis::Distortion:    return Cell.State.Meta.Distortion;
+    case EAmbientTriggerAxis::Stability:     return Cell.State.Meta.Stability;
+    case EAmbientTriggerAxis::HarvestStress: return Cell.HarvestStress;
+    default:                                 return 0.0f;
     }
 }
 
@@ -223,6 +239,58 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
+        // Ржавые духи (Болото, земля, §16.2): "Stability клетки низкая ->
+        // порча инструмента, вне пайплайна, флаг на предмете". Единственный
+        // ненулевой эффект — ItemCorruptionRate, читаемый напрямую
+        // HerbalistInventoryComponent, а не TargetState-нудж (все Meta/
+        // Direction/Magnitude ставки нулевые — намеренно, см. комментарий у
+        // ItemCorruptionRate выше).
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Ржавые духи"));
+            D.Biome = EBiomeType::Bog;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Stability;
+            D.TriggerThreshold = 0.3f;
+            D.bTriggerAbove = false;   // низкая Stability, не высокая
+            D.ItemCorruptionRate = 0.015f;
+            Defs.Add(D);
+        }
+
+        // Водяные бесы (Речная пойма, ВОДА, §16.2): "мутная вода -> мелкая
+        // порча снаряжения". Мутная вода = высокий Distortion воды, тот же
+        // язык, что уже применён везде в проекте ("грязный" эквивалентен
+        // высокому Distortion, не новая ось "мутности").
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Водяные бесы"));
+            D.Biome = EBiomeType::Floodplain;
+            D.bWaterOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Distortion;
+            D.TriggerThreshold = 0.5f;
+            D.bTriggerAbove = true;
+            D.ItemCorruptionRate = 0.01f;
+            Defs.Add(D);
+        }
+
+        // Злыдни (Широколиств. лес, земля, §16.2): "заброшенное жильё,
+        // накопленный HarvestStress -> порча инвентаря". "Заброшенное
+        // жильё" как отдельная сущность (конкретный дом-landmark) в модели
+        // данных не существует — упрощено до истощённого участка леса
+        // (HarvestStress клетки), той же оси, что уже называет карточка,
+        // без выдуманной привязки к несуществующему типу landmark.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Злыдни"));
+            D.Biome = EBiomeType::BroadleafForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::HarvestStress;
+            D.TriggerThreshold = 0.6f;
+            D.bTriggerAbove = true;
+            D.ItemCorruptionRate = 0.02f;
+            Defs.Add(D);
+        }
+
         for (const FAmbientEntityDefinition& D : Defs)
         {
             check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason);
@@ -230,4 +298,13 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
         return Defs;
     }();
     return Definitions;
+}
+
+inline const FAmbientEntityDefinition* FindAmbientEntityDefinition(FName EntityID)
+{
+    for (const FAmbientEntityDefinition& D : GetAmbientEntityDefinitions())
+    {
+        if (D.EntityID == EntityID) return &D;
+    }
+    return nullptr;
 }

@@ -362,7 +362,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // в Project Settings — задел на потом, не сегодняшняя задача.
                 const bool bIsGnilniki = Def.EntityID == EntityID_Gnilniki;
                 const float Threshold = bIsGnilniki ? GnilnikiThreshold : Def.TriggerThreshold;
-                const float AxisValue = GetAmbientTriggerAxisValue(Cell.State.Meta, Def.TriggerAxis);
+                const float AxisValue = GetAmbientTriggerAxisValue(Cell, Def.TriggerAxis);
                 const float SignedValue     = Def.bTriggerAbove ?  AxisValue  : -AxisValue;
                 const float SignedThreshold = Def.bTriggerAbove ?  Threshold : -Threshold;
                 bEligible = PassesHysteresisThreshold(bWasActive, SignedValue, SignedThreshold, Def.HysteresisMargin);
@@ -393,14 +393,22 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 const float CorruptionRate = bIsGnilniki ? GnilnikiNudgeRate        : Def.CorruptionRate;
                 const float PurityRate     = bIsGnilniki ? -GnilnikiNudgeRate * 0.5f : Def.PurityRate;
 
-                if (CorruptionRate      != 0.0f) NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + CorruptionRate      * DeltaTime, 0.0f, 1.0f);
-                if (PurityRate          != 0.0f) NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity     + PurityRate          * DeltaTime, 0.0f, 1.0f);
-                if (Def.DistortionRate  != 0.0f) NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + Def.DistortionRate  * DeltaTime, 0.0f, 1.0f);
-                if (Def.StabilityRate   != 0.0f) NewTarget.Meta.Stability  = FMath::Clamp(NewTarget.Meta.Stability  + Def.StabilityRate   * DeltaTime, 0.0f, 1.0f);
-                if (Def.PotencyRate     != 0.0f) NewTarget.Meta.Potency    = FMath::Clamp(NewTarget.Meta.Potency    + Def.PotencyRate     * DeltaTime, 0.0f, 1.0f);
-                if (Def.ResonanceRate   != 0.0f) NewTarget.Meta.Resonance  = FMath::Clamp(NewTarget.Meta.Resonance  + Def.ResonanceRate   * DeltaTime, 0.0f, 1.0f);
-                if (Def.MagnitudeRate   != 0.0f) NewTarget.Magnitude       = FMath::Clamp(NewTarget.Magnitude       + Def.MagnitudeRate   * DeltaTime, 0.0f, 1.0f);
-                bChanged = true;
+                // Метим клетку грязной только если хоть одна ставка реально
+                // ненулевая — иначе существо без Meta/Direction-эффекта
+                // (только ItemCorruptionRate, читаемый в другом месте, см.
+                // Ржавые духи/Водяные бесы ниже) безусловно попадало бы в
+                // Delta.TargetStateNudges каждый tick без единого реального
+                // изменения — тот же класс бага, что уже чинили в
+                // ApplyBiomeInfluences/ночном нудже (AUDIT_AND_REFACTORING_PLAN.md §7.1).
+                bool bAnyRateFired = false;
+                if (CorruptionRate      != 0.0f) { NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + CorruptionRate      * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                if (PurityRate          != 0.0f) { NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity     + PurityRate          * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                if (Def.DistortionRate  != 0.0f) { NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + Def.DistortionRate  * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                if (Def.StabilityRate   != 0.0f) { NewTarget.Meta.Stability  = FMath::Clamp(NewTarget.Meta.Stability  + Def.StabilityRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                if (Def.PotencyRate     != 0.0f) { NewTarget.Meta.Potency    = FMath::Clamp(NewTarget.Meta.Potency    + Def.PotencyRate     * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                if (Def.ResonanceRate   != 0.0f) { NewTarget.Meta.Resonance  = FMath::Clamp(NewTarget.Meta.Resonance  + Def.ResonanceRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                if (Def.MagnitudeRate   != 0.0f) { NewTarget.Magnitude       = FMath::Clamp(NewTarget.Magnitude       + Def.MagnitudeRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
+                bChanged = bChanged || bAnyRateFired;
             }
             else if (bWasActive)
             {

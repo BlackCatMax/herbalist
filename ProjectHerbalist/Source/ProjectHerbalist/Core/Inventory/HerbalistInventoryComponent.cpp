@@ -4,6 +4,7 @@
 #include "HerbalistLogChannels.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
@@ -57,7 +58,43 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
             }
         }
     }
-    const float EffectiveGlobalDecayRate = GlobalDecayRate * (1.0f - ShrineProtection * (Settings ? Settings->ShrineInventoryProtection : 0.5f));
+
+    // §16.2 "порча инструмента"/"мелкая порча снаряжения" (Ржавые духи,
+    // Водяные бесы, Злыдни, 2026-08-29) — тот же принцип, что защита капищ
+    // выше, только обратный знак и другой источник: не Restoration капища,
+    // а ManifestedEntityID клетки, на которой физически стоит игрок прямо
+    // сейчас (уже посчитан каждый кадр в UpdateEntityManifestations — не
+    // пересчитываем условие проявления здесь второй раз, только читаем
+    // готовый результат). Не капищная защита в минус — независимая
+    // добавка: если игрок стоит на клетке с активным Ржавыми духами вне
+    // всякой защиты капища, инвентарь портится быстрее номинала, а не
+    // просто "меньше защищён".
+    float ItemCorruptionPressure = 0.0f;
+    if (APlayerController* OwnerPC = Cast<APlayerController>(GetOwner()))
+    {
+        if (APawn* Pawn = OwnerPC->GetPawn())
+        {
+            for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
+            {
+                AGridWorldManager* WorldManager = *It;
+                int32 CellX, CellY;
+                if (WorldManager->WorldPositionToCell(Pawn->GetActorLocation(), CellX, CellY))
+                {
+                    if (const FGridCell* Cell = WorldManager->GetCellConst(CellX, CellY))
+                    {
+                        if (const FAmbientEntityDefinition* Def = FindAmbientEntityDefinition(Cell->ManifestedEntityID))
+                        {
+                            ItemCorruptionPressure = Def->ItemCorruptionRate;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    const float EffectiveGlobalDecayRate = GlobalDecayRate * (1.0f - ShrineProtection * (Settings ? Settings->ShrineInventoryProtection : 0.5f))
+        + ItemCorruptionPressure;
 
     UIngredientRegistrySubsystem* IngredientReg = nullptr;
     UWaterTypeRegistrySubsystem* WaterReg = nullptr;

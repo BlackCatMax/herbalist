@@ -14,6 +14,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Entities/AmbientEntityTypes.h"
+#include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
@@ -352,6 +353,64 @@ bool FHerbalistAmbientEntity_RusalkiOnlyHauntWaterAtNightNotLand::RunTest(const 
     TestTrue(TEXT("TargetState.Distortion nudged up in water"), WaterCell->TargetState.Meta.Distortion > DistortionBefore);
     TestNotEqual(TEXT("Русалки don't manifest on the land edge -- that's Кувшинкины духи's cell"),
         LandCell->ManifestedEntityID, FName(TEXT("Русалки")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_ItemCorruptingEntitiesManifestWithoutDirtyingTheCell,
+    "Herbalist.AmbientEntity.ItemCorruptingEntitiesManifestWithoutDirtyingTheCell",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_ItemCorruptingEntitiesManifestWithoutDirtyingTheCell::RunTest(const FString& Parameters)
+{
+    // Ржавые духи/Водяные бесы/Злыдни (2026-08-29, §16.2 "порча
+    // инструмента"/"мелкая порча снаряжения") -- единственный эффект у всех
+    // троих это ItemCorruptionRate, читаемый напрямую HerbalistInventoryComponent,
+    // а не TargetState-нудж. Проверяем и что они манифестируют по своим
+    // условиям, и что при этом НЕ попадают в Delta.TargetStateNudges --
+    // это ровно тот класс бага (bChanged безусловно true даже без реального
+    // изменения), который уже чинили для ApplyBiomeInfluences/ночного нуджа
+    // (AUDIT_AND_REFACTORING_PLAN.md §7.1) и который здесь можно было бы
+    // повторить по новой, добавляя существ без Meta/Direction-эффекта.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // GameClockSeconds по умолчанию 0.0 -- фаза Рассвет (§15.2), которая
+    // сама разливает Purity/Stability-нудж по ВСЕЙ сетке и грязнила бы все
+    // 400 клеток независимо от трёх тестовых -- та же ловушка, что уже
+    // чинилась для GnilnikiStillManifestsAfterRefactor. Явно ставим середину Дня.
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+    // Ржавые духи: Болото, земля, Stability < 0.3.
+    FGridCell* RustCell = Manager->GetCell(0, 0);
+    RustCell->Biome = EBiomeType::Bog;
+    RustCell->bIsWater = false;
+    RustCell->State.Meta.Stability = 0.1f;
+
+    // Водяные бесы: Речная пойма, вода, Distortion > 0.5.
+    FGridCell* MurkyCell = Manager->GetCell(1, 0);
+    MurkyCell->Biome = EBiomeType::Floodplain;
+    MurkyCell->bIsWater = true;
+    MurkyCell->State.Meta.Distortion = 0.7f;
+
+    // Злыдни: Широколиств. лес, земля, HarvestStress > 0.6.
+    FGridCell* NeglectedCell = Manager->GetCell(2, 0);
+    NeglectedCell->Biome = EBiomeType::BroadleafForest;
+    NeglectedCell->bIsWater = false;
+    NeglectedCell->HarvestStress = 0.9f;
+
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestEqual(TEXT("Ржавые духи manifest on low-Stability Bog"), RustCell->ManifestedEntityID, FName(TEXT("Ржавые духи")));
+    TestEqual(TEXT("Водяные бесы manifest on high-Distortion water"), MurkyCell->ManifestedEntityID, FName(TEXT("Водяные бесы")));
+    TestEqual(TEXT("Злыдни manifest on high-HarvestStress cell"), NeglectedCell->ManifestedEntityID, FName(TEXT("Злыдни")));
+
+    TestEqual(TEXT("Manifesting doesn't dirty the Ржавые духи cell (no TargetState.Meta change)"),
+        Manager->CaptureSaveCells().Num(), 0);
 
     Manager->Destroy();
     return true;
