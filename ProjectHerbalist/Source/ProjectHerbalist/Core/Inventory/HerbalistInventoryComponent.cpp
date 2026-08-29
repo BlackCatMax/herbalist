@@ -36,8 +36,11 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     float ContainerDecayMultiplier = 1.0f;
     switch (ContainerType)
     {
-    case EStorageContainerType::Basket: ContainerDecayMultiplier = Settings ? Settings->BasketDecayMultiplier : 1.3f; break;
-    case EStorageContainerType::Cellar: ContainerDecayMultiplier = Settings ? Settings->CellarDecayMultiplier : 0.4f; break;
+    case EStorageContainerType::Basket:  ContainerDecayMultiplier = Settings ? Settings->BasketDecayMultiplier  : 1.3f;  break;
+    case EStorageContainerType::Sack:    ContainerDecayMultiplier = Settings ? Settings->SackDecayMultiplier    : 1.4f;  break;
+    case EStorageContainerType::Cabinet: ContainerDecayMultiplier = Settings ? Settings->CabinetDecayMultiplier : 0.7f;  break;
+    case EStorageContainerType::Cellar:  ContainerDecayMultiplier = Settings ? Settings->CellarDecayMultiplier  : 0.4f;  break;
+    case EStorageContainerType::Jar:     ContainerDecayMultiplier = Settings ? Settings->JarDecayMultiplier     : 0.25f; break;
     default: break;   // None — на себе, базовая линия без модификации
     }
     const float EffectiveGlobalDecayRate = GlobalDecayRate * ContainerDecayMultiplier;

@@ -101,13 +101,31 @@ public:
     // портятся сами по себе, естественный процесс... на сохранность влияют
     // сами контейнеры хранения" (прямая правка пользователя, отменяет
     // прежнюю location-based защиту капищ и порчу от Ржавых духов/Водяных
-    // бесов/Злыдней). Только два полюса заведены сейчас — Мешок/Шкаф/Банка
-    // того же типа, ещё не заведены как отдельные записи.
+    // бесов/Злыдней). Изначально заведены только два полюса (Basket/Cellar,
+    // "инфраструктура + 2-3 примера"), три остальных (Sack/Cabinet/Jar)
+    // добавлены тем же днём отдельным заходом ("проработка инвентаря и
+    // систем хранения") — спектр от худшего к лучшему:
+    // Sack(1.4) > Basket(1.3) > None(1.0) > Cabinet(0.7) > Cellar(0.4) > Jar(0.25).
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.1", ClampMax = "5.0"))
     float BasketDecayMultiplier = 1.3f;
 
+    // Мешок — хуже корзины: дерюга/рогожа держит влагу вместо проветривания,
+    // и куда уязвимее для моли/вредителей, чем плетёная корзина.
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.1", ClampMax = "5.0"))
+    float SackDecayMultiplier = 1.4f;
+
+    // Шкаф — лучше базовой линии (закрыт от пыли/вредителей), но не так
+    // хорош, как погреб: комнатная температура и влажность, не стабильные.
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+    float CabinetDecayMultiplier = 0.7f;
+
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.05", ClampMax = "1.0"))
     float CellarDecayMultiplier = 0.4f;
+
+    // Банка (герметичная) — лучшее хранение из всех: почти нет доступа
+    // воздуха/влаги, лучше даже погреба (тот всё равно дышит).
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+    float JarDecayMultiplier = 0.25f;
 
     // --- Entity Manifestation (02_GDD/16_Entity_Manifestation.md) — вертикальный срез ---
     // Гнильники (Низший, Болото): порог Corruption клетки для проявления зоны.
