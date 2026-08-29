@@ -93,11 +93,14 @@ public:
     UFUNCTION(Exec)
     void LoadGame();
 
-    // Экран Травника (UI/JournalWidget.h, 07_UX §7.2.4) — открывается тем же
-    // способом, что и инвентарь (Inventory()). Exec-обёртка отдельно от
-    // JournalAction — тестируемо консолью до того, как в редакторе назначены
-    // сам Input Action asset и WBP-блюпринт (оба нужно создать в редакторе,
-    // C++ этого не может — тот же паттерн, что InventoryWidgetClass/InventoryAction).
+    // Экран Травника (UI/JournalLogWidget.h, 07_UX §7.2.4) — открывается тем
+    // же способом, что и инвентарь (Inventory()). Exec-обёртка отдельно от
+    // JournalAction — тестируемо консолью и до того, как в редакторе назначен
+    // Input Action asset (тот же паттерн, что InventoryAction). Сам виджет
+    // (2026-08-29, "лог, чтобы можно было открыть и почитать") больше не
+    // ждёт WBP — JournalLogWidget строит дерево в C++, готов без единого
+    // .uasset; JournalWidgetClass/UJournalWidget ниже остаются на будущее,
+    // если понадобится более богатый экран через редактор.
     UFUNCTION(Exec)
     void ToggleJournalUI();
 
@@ -138,7 +141,7 @@ protected:
     void ApplyAlchemy();
     void Interact();
 
-    bool GetHitResultFromCamera(FHitResult& OutHit);
+    bool GetHitResultFromCamera(FHitResult& OutHit, ECollisionChannel Channel = ECC_Visibility);
     void OnLeftClick();
     void OnRightClick();
     void OnApplyAlchemyKey();
@@ -152,8 +155,12 @@ private:
     UPROPERTY()
     UInventoryWidget* InventoryWidgetInstance = nullptr;
 
+    // UUserWidget, не UJournalWidget -- Journal() сейчас строит UJournalLogWidget
+    // (см. комментарий у ToggleJournalUI ниже), JournalWidgetInstance хранит
+    // и то, и другое одинаково: обе точки использования (IsInViewport/
+    // RemoveFromParent) базовые, конкретный подкласс не нужен.
     UPROPERTY()
-    UJournalWidget* JournalWidgetInstance = nullptr;
+    UUserWidget* JournalWidgetInstance = nullptr;
 
     // Кэш для мира
     UPROPERTY()

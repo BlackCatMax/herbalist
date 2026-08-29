@@ -525,8 +525,61 @@ Harvest/Apply(крафт)-командам, `ShowJournal()` как первый 
   метрика. Регрессия: `Herbalist.Storage.ContainerTypesOrderDecayCorrectly`
   (весь порядок разом). 76/76 всего зелёные. Подробности —
   `16_Entity_Manifestation.md`.
-- Свой персонаж вместо шаблона, HUD, звук.
-- Чистка `Content/` от шутерного шаблона.
+- ✅ **Чистка `Content/` от шутерного шаблона ВЫПОЛНЕНА 2026-08-29** (по
+  прямому запросу "мусор необходимо вычистить"). 192 файла удалено, каждый
+  проверен на внешние ссылки (по бинарникам .uasset + `Source/` + `Config/`)
+  до удаления: демо-уровень `Lvl_FirstPerson` целиком (GameDefaultMap —
+  `L_TestDev`, не он) + его `BP_FirstPersonGameMode/PlayerController/
+  CameraManager` (реальные — свои, `ProjectHerbalistGameModeBase`/
+  `BP_HerbalistPlayerController`), весь `Weapons/` (Pistol/Rifle/
+  GrenadeLauncher), анимации Pistol/Rifle/Death целиком + Unarmed/Attack +
+  MM_Dash/MM_WallJump (ни одна не входит в цепочку `BP_FirstPersonCharacter`
+  → `ABP_FP_Copy`/`ABP_Unarmed` → `BS_Idle_Walk_Run`, единственную реально
+  используемую), `NewBlueprint`/`NewMaterial`, `LevelPrototyping/
+  Interactable/{JumpPad,Target,Door}`. `LevelPrototyping/Meshes`+`Materials`
+  (кубы/цилиндры/grid-материалы) НЕ тронуты — 64 из 141 внешних акторов
+  `L_TestDev` реально используют их для греибоксинга, это не шаблонный
+  мусор, а рабочая геометрия уровня.
+
+- ✅ **Аудит игровых C++-компонентов ВЫПОЛНЕН 2026-08-29** (по запросу
+  "игрок будет от первого лица, нужно написать или проверить уже написанные
+  компоненты"). Персонаж как таковой остаётся Blueprint (`BP_FirstPersonCharacter`,
+  движение уже работает через `AddMovementInput`/`AddYawInput` — контроллер
+  не завязан на конкретный С++ Pawn) — вся игровая логика (инвентарь,
+  сбор, алхимия, взаимодействие, Травник) и так уже была на
+  `AHerbalistPlayerController`, не на персонаже. Найден и починен реальный
+  баг: `Harvest()` (главный игровой глагол) использовал
+  `GetHitResultUnderCursor` — раскаст от позиции МЫШИ, бессмысленный от
+  первого лица (`bShowMouseCursor=false`), пока `Info`/`Interact`/
+  `ApplyAlchemy`/`UsePotion` уже используют `GetHitResultFromCamera`
+  (raycast от центра камеры). `GetHitResultFromCamera` получил параметр
+  `Channel`, `Harvest()` переведён на тот же вызов с сохранением
+  двухканального фоллбека (`ECC_Visibility` → `ECC_GameTraceChannel1`).
+  `HerbalistInventoryComponent`/`HerbalistJournalComponent`/
+  `UPerceptionComponent` — архитектурно в порядке, без правок.
+
+  **Травник — читаемый лог, 2026-08-29, тем же днём** (по прямому решению
+  пользователя: "предлагаю писать пока в виде лога отдельного, чтобы можно
+  было его открыть и почитать"). Новый `UI/JournalLogWidget.h/.cpp` строит
+  весь UMG-виджет в C++ (`WidgetTree->ConstructWidget`, ни одного
+  `BindWidget`) — не нуждается вообще ни в каком `.uasset`, работает "из
+  коробки" через голый `StaticClass()`. `JournalWidget`/
+  `JournalEntryRowWidget` (богатая раскладка с полями на каждую ось) не
+  тронуты — ждут WBP в редакторе на будущее, C++ не может создать сам
+  ассет. `AHerbalistPlayerController::Journal()` теперь строит
+  `JournalLogWidget` напрямую (`JournalWidgetClass` больше не проверяется,
+  раньше был всегда пуст — экран Травника молча ничего не делал). Формат
+  строки — тот же язык/подписи (Сила/Искажение/Чистота/Порча), что уже
+  устоялся в `JournalEntryRowWidget::InitializeRow`, просто один читаемый
+  абзац на запись вместо шести отдельных полей. `ToggleJournalUI` (Exec)
+  открывает экран уже сейчас без единого шага в редакторе; сама клавиша
+  (`JournalAction`) по-прежнему не назначена — это отдельный, чисто
+  редакторский шаг.
+
+  Не проверено интерактивно (PIE) — тот же компромисс, что и у прежних
+  правок UI в этой сессии, headless UI-тестирование виджетов не настроено.
+- Свой персонаж вместо шаблона (анимации/темп ходьбы/приседание — контентная
+  задача в редакторе на `BP_FirstPersonCharacter`, не C++), HUD, звук.
 - ~~Перенос стресс-скриптов (`stress_ingredients.py`) в `ProjectHerbalistTests`~~ —
   сами скрипты не сохранились (упомянуты в `AUDIT_AND_REFACTORING_PLAN.md §6`
   как «скрипты сохранены», но `find` по репозиторию 2026-08-24 их не нашёл).

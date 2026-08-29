@@ -17,6 +17,7 @@
 #include "UI/AlchemyTransferWidget.h"
 #include "UI/InventoryTransferWidget.h"
 #include "UI/InventoryWidget.h"
+#include "UI/JournalLogWidget.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 
 // ============================================================================
@@ -132,7 +133,7 @@ void AHerbalistPlayerController::UpdateDistortionFromCell(int32 X, int32 Y)
     }
 }
 
-bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
+bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit, ECollisionChannel Channel)
 {
     FVector CameraLocation;
     FRotator CameraRotation;
@@ -142,7 +143,7 @@ bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit)
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(GetPawn());
 
-    const bool bHit = GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, ECC_Visibility, QueryParams);
+    const bool bHit = GetWorld()->LineTraceSingleByChannel(OutHit, CameraLocation, End, Channel, QueryParams);
 
     DrawDebugLine(GetWorld(), CameraLocation, End, bHit ? FColor::Green : FColor::Red, false, 1.0f, 0, 2.0f);
     if (bHit)
@@ -165,10 +166,18 @@ bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
 
 void AHerbalistPlayerController::Harvest()
 {
+    // GetHitResultUnderCursor читает позицию МЫШИ -- бессмысленно от первого
+    // лица (bShowMouseCursor=false в BeginPlay, курсор не двигается вместе с
+    // камерой). Каждый другой интерактивный обработчик в этом файле (Info/
+    // Interact/ApplyAlchemy/UsePotion) уже использует GetHitResultFromCamera
+    // -- сбор урожая, главный игровой глагол, был единственным исключением.
+    // Второй канал (ECC_GameTraceChannel1) сохранён как и был -- отдельный
+    // trace channel специально для собираемых ресурсов, не блокирующих
+    // обычную видимость.
     FHitResult Hit;
-    if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+    if (!GetHitResultFromCamera(Hit, ECC_Visibility))
     {
-        if (!GetHitResultUnderCursor(ECC_GameTraceChannel1, false, Hit))
+        if (!GetHitResultFromCamera(Hit, ECC_GameTraceChannel1))
         {
             return;
         }
@@ -453,13 +462,17 @@ void AHerbalistPlayerController::Journal()
         JournalWidgetInstance = nullptr;
     }
 
-    if (!JournalWidgetClass || !JournalComponent) return;
+    if (!JournalComponent) return;
 
-    JournalWidgetInstance = CreateWidget<UJournalWidget>(GetWorld(), JournalWidgetClass);
-    if (!JournalWidgetInstance) return;
+    // JournalLogWidget не требует JournalWidgetClass/WBP вовсе — строит своё
+    // дерево в C++ (см. UI/JournalLogWidget.h). Голый StaticClass() уже
+    // достаточно, работает без единого шага в редакторе.
+    UJournalLogWidget* LogWidget = CreateWidget<UJournalLogWidget>(GetWorld(), UJournalLogWidget::StaticClass());
+    if (!LogWidget) return;
 
-    JournalWidgetInstance->BindJournal(JournalComponent);
-    JournalWidgetInstance->AddToViewport();
+    LogWidget->BindJournal(JournalComponent);
+    LogWidget->AddToViewport();
+    JournalWidgetInstance = LogWidget;
 
     bShowMouseCursor = true;
     FInputModeGameAndUI InputMode;
