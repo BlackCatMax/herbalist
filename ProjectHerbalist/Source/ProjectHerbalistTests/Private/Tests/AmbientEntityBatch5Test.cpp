@@ -140,4 +140,72 @@ bool FHerbalistAmbientEntity_ProxyStubEntitiesManifestOnTheirConditions::RunTest
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_OmutnyeOgniOnlyOnMoonlessNightsNotEveryNight,
+    "Herbalist.AmbientEntity.OmutnyeOgniOnlyOnMoonlessNightsNotEveryNight",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_OmutnyeOgniOnlyOnMoonlessNightsNotEveryNight::RunTest(const FString& Parameters)
+{
+    // Омутные огни -- первый потребитель bRequiresMoonPhase (шестой из
+    // изначально заблокированных карточек, разблокирован 2026-08-29: и Ночь,
+    // и Новолуние уже существующие сигналы, "глубина" омута -- единственное
+    // упрощённое, тем же принципом, что у остальных водных существ поймы).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    // Две отдельные клетки, не одна: если бы Русалки уже заняли клетку на
+    // предыдущем вызове, Омутные огни (тот же ранг 0) не смогли бы её
+    // отбить в СВОЙ черёд позже -- Русалки переподтвердили бы владение в
+    // СВОЙ черёд тем же тиком (тот же принцип "первый claim держит клетку,
+    // пока сам не станет неподходящим", что уже задокументирован для
+    // Легендарного ранга). Разные клетки убирают этот эффект хэндовера
+    // из теста -- каждая пробуется с чистого листа.
+    FGridCell* WaxingCell = Manager->GetCell(0, 0);
+    WaxingCell->Biome = EBiomeType::Floodplain;
+    WaxingCell->bIsWater = true;
+
+    // NewMoonCell намеренно НЕ становится Floodplain-водой до второго
+    // вызова ниже -- UpdateEntityManifestations проходит ВСЕ клетки сетки
+    // за раз, не только WaxingCell, так что если бы обе клетки были водой
+    // Поймы уже к первому вызову, Русалки заняли бы и её тоже (тот же
+    // хэндовер-эффект, что описан выше, просто по всей сетке сразу, не
+    // только на одной клетке).
+    FGridCell* NewMoonCell = Manager->GetCell(1, 0);
+
+    // Ночь, но Растущая (17060с, см. комментарий у RusalkiOnlyHaunt... --
+    // тот же расчёт) -- Русалки в этом окне, не Омутные огни.
+    Manager->SetGameClockSeconds(17060.0f);
+    Manager->UpdateEntityManifestations(1.0f);
+    TestNotEqual(TEXT("Waxing moon: Омутные огни do not manifest"),
+        WaxingCell->ManifestedEntityID, FName(TEXT("Омутные огни")));
+    TestEqual(TEXT("Waxing moon night: Русалки manifest instead"),
+        WaxingCell->ManifestedEntityID, FName(TEXT("Русалки")));
+
+    // Теперь превращаем вторую клетку в воду Поймы и сразу проверяем на
+    // Новолунии (1700с -- первый день цикла, внутри [0,13440)). Явно
+    // сбрасываем ManifestedEntityID -- дефолтный биом клетки ДО этой
+    // строки был не задан нами (что бы ни досталось от процедурной
+    // генерации сетки), и первый вызов выше уже мог что-то на неё
+    // проявить (нашлось так: клетка досталась Тундрой, Снежные огни успели
+    // занять её первым тиком) -- та же природа хэндовера, что и с
+    // WaxingCell/Русалками выше, просто через другого случайного соседа
+    // рангом 0, не через Омутные огни/Русалок напрямую.
+    NewMoonCell->Biome = EBiomeType::Floodplain;
+    NewMoonCell->bIsWater = true;
+    NewMoonCell->ManifestedEntityID = NAME_None;
+    const float DistortionBefore = NewMoonCell->TargetState.Meta.Distortion;
+    Manager->SetGameClockSeconds(1700.0f);
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("New moon night: Омутные огни manifest"),
+        NewMoonCell->ManifestedEntityID, FName(TEXT("Омутные огни")));
+    TestTrue(TEXT("Омутные огни nudge Distortion up strongly"),
+        NewMoonCell->TargetState.Meta.Distortion > DistortionBefore);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

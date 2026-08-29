@@ -431,6 +431,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 bEligible = bEligible && IsDusk();
             }
+            if (Def.bRequiresMoonPhase)
+            {
+                bEligible = bEligible && (GetMoonPhase() == Def.RequiredMoonPhase);
+            }
             if (Def.bRequiresBiomeBorder)
             {
                 // Реальная проверка соседей, не прокси -- тот же приём, что

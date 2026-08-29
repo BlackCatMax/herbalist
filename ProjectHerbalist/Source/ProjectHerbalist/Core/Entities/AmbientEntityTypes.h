@@ -88,6 +88,15 @@ struct FAmbientEntityDefinition
     // CollectBorderShrineDamping), здесь просто второй потребитель.
     UPROPERTY() bool bRequiresBiomeBorder = false;
 
+    // Пятый гейт — фаза луны, читает уже существующий GetMoonPhase() (§15.3).
+    // Добавлено 2026-08-29 для Омутных огней ("глубокий омут, БЕЗЛУННАЯ
+    // ночь" -> Новолуние + Ночь одновременно). "Глубокий омут" как атрибут
+    // клетки не моделируется — тот же принцип, что уже применён ко всем
+    // остальным водным существам поймы (Русалки/Кувшинкины/Водяные бесы/
+    // Плескуны тоже не различают глубину, просто bWaterOnly).
+    UPROPERTY() bool bRequiresMoonPhase = false;
+    UPROPERTY() EMoonPhase RequiredMoonPhase = EMoonPhase::NewMoon;
+
     // Нудж TargetState, "в секунду" (как GnilnikiNudgeRate раньше) —
     // умножается на DeltaTime в UpdateEntityManifestations. Ноль = не трогать ось.
     UPROPERTY() float CorruptionRate = 0.0f;
@@ -230,6 +239,29 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             D.bRequiresSeason = true;
             D.RequiredSeason = ESeason::Summer;
             D.MagnitudeRate = -0.008f;
+            Defs.Add(D);
+        }
+
+        // Омутные огни (Речная пойма, ВОДА, §16.2): "глубокий омут,
+        // безлунная ночь -> Distortion↑ сильно, ловушка восприятия".
+        // Глубина не моделируется (см. комментарий у bRequiresMoonPhase
+        // выше) — Новолуние+Ночь читаются буквально, оба уже существующие
+        // сигналы (GetMoonPhase/IsNight), не прокси. Зарегистрировано ДО
+        // Русалок ниже (тот же биом+вода+ночь) намеренно — Русалки условие
+        // строго слабее (просто ночь, без фазы луны), при первом заявленном
+        // ранге 0 выигрывает первый по порядку в реестре: без этого порядка
+        // Омутные огни никогда не получили бы свою редкую, более узкую
+        // новолунную ночь, Русалки забирали бы клетку каждую ночь раньше них.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Омутные огни"));
+            D.Biome = EBiomeType::Floodplain;
+            D.bWaterOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresNight = true;
+            D.bRequiresMoonPhase = true;
+            D.RequiredMoonPhase = EMoonPhase::NewMoon;
+            D.DistortionRate = 0.02f;   // "сильно", выше остальных Distortion-нуджей поймы
             Defs.Add(D);
         }
 

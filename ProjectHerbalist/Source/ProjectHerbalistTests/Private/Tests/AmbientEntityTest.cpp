@@ -350,7 +350,11 @@ bool FHerbalistAmbientEntity_RusalkiOnlyHauntWaterAtNightNotLand::RunTest(const 
     Manager->UpdateEntityManifestations(1.0f);
     TestNotEqual(TEXT("No Русалки in water by day"), WaterCell->ManifestedEntityID, FName(TEXT("Русалки")));
 
-    Manager->SetGameClockSeconds(31.0f * 60.0f);   // Ночь
+    // Ночь, но НЕ Новолуние (17060с -- Ночь того же дня, но день 8 цикла,
+    // внутри Растущей [13440,26880) -- иначе коллизия с Омутными огнями,
+    // 2026-08-29: тот же биом+вода+ночь, но ещё и Новолуние, зарегистрированы
+    // раньше специально ради этого более узкого условия, см. AmbientEntityTypes.h).
+    Manager->SetGameClockSeconds(17060.0f);
     const float DistortionBefore = WaterCell->TargetState.Meta.Distortion;
     Manager->UpdateEntityManifestations(1.0f);
 
