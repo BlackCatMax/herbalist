@@ -310,11 +310,21 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         FRealState NewTarget = Cell.TargetState;
 
         // --- Низший ранг: амбиентные зоны, §16.2, таблица определений в
-        // AmbientEntityTypes.h. Гнильники, Моховые духи, Степные огни — по
-        // построению у каждого свой Biome, так что на одну клетку может
-        // претендовать не больше одного определения зараз (см. комментарий
-        // в самом файле определений); при добавлении нового с уже занятым
-        // Biome эту гарантию придётся пересмотреть явно, не молча.
+        // AmbientEntityTypes.h. До 2026-08-29 биом был уникален на
+        // определение (один Низший на биом), и цикл останавливался на первом
+        // совпадении по Biome. С добавлением Ледяные духи/Суховейки/
+        // Кувшинкины духи это перестало быть так — Степные огни (ночь) и
+        // Суховейки (сезон) теперь оба претендуют на Степь и МОГУТ быть
+        // оба формально "eligible" одновременно (летняя ночь). Больше НЕ
+        // прерываем цикл на первом совпадении биома — проверяем все. Кто
+        // первый в порядке объявления в реестре реально заявит
+        // ManifestedEntityID, тот и "победил" на этот тик (CanManifest
+        // отклонит второго claim той же клетки тем же рангом 0 — не
+        // "больше приоритет", а "не выше") — эффект второго тихо не
+        // применяется в этот тик, не складывается с первым. Осознанное
+        // упрощение для v1: полноценное сложение эффектов нескольких
+        // одноранговых Низших на одной клетке — отдельная задача, если
+        // когда-нибудь понадобится.
         for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
         {
             if (Cell.Biome != Def.Biome) continue;
@@ -342,6 +352,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 bEligible = bEligible && IsNight();
             }
+            if (Def.bRequiresSeason)
+            {
+                bEligible = bEligible && (GetSeason() == Def.RequiredSeason);
+            }
 
             if (bEligible && CanManifest(Cell, Def.EntityID))
             {
@@ -364,6 +378,9 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 if (PurityRate          != 0.0f) NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity     + PurityRate          * DeltaTime, 0.0f, 1.0f);
                 if (Def.DistortionRate  != 0.0f) NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + Def.DistortionRate  * DeltaTime, 0.0f, 1.0f);
                 if (Def.StabilityRate   != 0.0f) NewTarget.Meta.Stability  = FMath::Clamp(NewTarget.Meta.Stability  + Def.StabilityRate   * DeltaTime, 0.0f, 1.0f);
+                if (Def.PotencyRate     != 0.0f) NewTarget.Meta.Potency    = FMath::Clamp(NewTarget.Meta.Potency    + Def.PotencyRate     * DeltaTime, 0.0f, 1.0f);
+                if (Def.ResonanceRate   != 0.0f) NewTarget.Meta.Resonance  = FMath::Clamp(NewTarget.Meta.Resonance  + Def.ResonanceRate   * DeltaTime, 0.0f, 1.0f);
+                if (Def.MagnitudeRate   != 0.0f) NewTarget.Magnitude       = FMath::Clamp(NewTarget.Magnitude       + Def.MagnitudeRate   * DeltaTime, 0.0f, 1.0f);
                 bChanged = true;
             }
             else if (bWasActive)
@@ -372,7 +389,6 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // отобрал более приоритетный хозяин — проекция прекращается.
                 Cell.ManifestedEntityID = NAME_None;
             }
-            break; // Biome уникален на определение (см. комментарий выше) — нашли, хватит.
         }
 
         // --- Берегиня: Легендарный, порог мирового состояния, Речная пойма ---

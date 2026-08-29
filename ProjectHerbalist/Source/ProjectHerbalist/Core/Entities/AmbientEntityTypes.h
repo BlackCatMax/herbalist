@@ -12,7 +12,7 @@
 // которую обходит один универсальный цикл (UpdateEntityManifestations).
 //
 // Сознательно НЕ вынесено в UDataTable/DA_*.uasset (в отличие от биомов и
-// ингредиентов): определений пока пять, они меняются вместе с кодом
+// ингредиентов): определений пока шесть, они меняются вместе с кодом
 // (новый EAmbientTriggerAxis требует правки C++ всё равно), и это тот же
 // принцип, что уже применён к MemoryFragmentDefinitions.h — простой
 // статический реестр, а не полноценный ассет-пайплайн, пока карточек мало.
@@ -44,14 +44,22 @@ struct FAmbientEntityDefinition
     UPROPERTY() bool bLandOnly = false;
     UPROPERTY() bool bWaterOnly = false;
 
-    // Условие проявления. TriggerAxis == None означает "только по ночи" —
-    // тогда bRequiresNight обязан быть true, иначе определение никогда не
-    // сработает (проверяется в GetAmbientEntityDefinitions() через check).
+    // Условие проявления. TriggerAxis == None означает "нет условия по оси" —
+    // тогда обязан быть хотя бы один из bRequiresNight/bRequiresSeason,
+    // иначе определение сработает всегда (проверяется в
+    // GetAmbientEntityDefinitions() через check).
     UPROPERTY() EAmbientTriggerAxis TriggerAxis = EAmbientTriggerAxis::None;
     UPROPERTY() float TriggerThreshold = 0.0f;
     UPROPERTY() bool bTriggerAbove = true;   // true: ось > порога; false: ось < порога
     UPROPERTY() bool bRequiresNight = false;
     UPROPERTY() float HysteresisMargin = 0.05f;
+
+    // Второй, независимый от ночи временной гейт — добавлен 2026-08-29 для
+    // существ §16.2, чей триггер завязан на сезон (Ледяные духи: "низкая
+    // температура" -> Зима; Суховейки: "засушливый сезон" -> Лето), а не на
+    // время суток. Оба гейта (ночь + сезон) можно сочетать одновременно.
+    UPROPERTY() bool bRequiresSeason = false;
+    UPROPERTY() ESeason RequiredSeason = ESeason::Spring;
 
     // Нудж TargetState, "в секунду" (как GnilnikiNudgeRate раньше) —
     // умножается на DeltaTime в UpdateEntityManifestations. Ноль = не трогать ось.
@@ -59,6 +67,15 @@ struct FAmbientEntityDefinition
     UPROPERTY() float PurityRate = 0.0f;
     UPROPERTY() float DistortionRate = 0.0f;
     UPROPERTY() float StabilityRate = 0.0f;
+    // Добавлены 2026-08-29 вместе с Potency/Resonance-осями и Magnitude —
+    // первые три существа (Гнильники/Моховые/Степные огни) не тронули
+    // остальные три возможных цели нуджа, но §16.2 их называет
+    // (Кувшинкины духи: Resonance; Ледяные духи/Суховейки: Magnitude).
+    UPROPERTY() float PotencyRate = 0.0f;
+    UPROPERTY() float ResonanceRate = 0.0f;
+    // Magnitude — не под Meta (FRealState::Magnitude, отдельное поле),
+    // применяется отдельной строкой в UpdateEntityManifestations.
+    UPROPERTY() float MagnitudeRate = 0.0f;
 };
 
 inline float GetAmbientTriggerAxisValue(const FMeta& Meta, EAmbientTriggerAxis Axis)
@@ -129,9 +146,59 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
+        // Кувшинкины духи (Речная пойма, земля, §16.2): "заросли, ночь ->
+        // Resonance++, сонливость" — заросли/берег читаем как земляную
+        // кромку поймы, не саму воду (вода поймы — территория Берегини,
+        // §16.4; bLandOnly исключает коллизию биома без явного порядка
+        // приоритетов). Чисто ночной триггер, как у Степных огней.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Кувшинкины духи"));
+            D.Biome = EBiomeType::Floodplain;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresNight = true;
+            D.ResonanceRate = 0.01f;
+            Defs.Add(D);
+        }
+
+        // Ледяные духи (Тундра, земля, §16.2): "низкая температура (сезон,
+        // §15.4 Зима) -> заморозка, временное снижение Magnitude". Первое
+        // существо, завязанное на сезон, а не на время суток — разблокировано
+        // после того, как сезоны получили v1-реализацию 2026-08-24.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Ледяные духи"));
+            D.Biome = EBiomeType::Tundra;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresSeason = true;
+            D.RequiredSeason = ESeason::Winter;
+            D.MagnitudeRate = -0.01f;
+            Defs.Add(D);
+        }
+
+        // Суховейки (Степь, земля, §16.2): "засушливый сезон (§15.4 Лето) ->
+        // иссушение, Magnitude--". Лето в GetSeason() нейтрально для
+        // StressRecoveryMultiplier (у него нет числа в спецификации для ЭТОГО
+        // эффекта), но это не мешает Лету быть триггером для ДРУГОГО,
+        // независимого потребителя того же GetSeason() — не одно и то же
+        // решение, не противоречие.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Суховейки"));
+            D.Biome = EBiomeType::Steppe;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresSeason = true;
+            D.RequiredSeason = ESeason::Summer;
+            D.MagnitudeRate = -0.008f;
+            Defs.Add(D);
+        }
+
         for (const FAmbientEntityDefinition& D : Defs)
         {
-            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight);
+            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason);
         }
         return Defs;
     }();

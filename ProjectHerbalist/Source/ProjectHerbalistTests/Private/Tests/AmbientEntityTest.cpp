@@ -6,6 +6,10 @@
 // добавлены Моховые духи (Тайга) и Степные огни (Степь) — этот файл
 // проверяет, что (а) старое поведение Гнильников не изменилось и (б) новые
 // определения действительно применяются через тот же обобщённый цикл.
+// 2026-08-29: добавлены Кувшинкины духи/Ледяные духи/Суховейки (сезонный
+// гейт, Potency/Resonance/Magnitude-нудж) — и тест на смежную регрессию:
+// с появлением второго определения на одном биоме (Степные огни + Суховейки,
+// оба Степь) цикл больше не может прерываться на первом совпадении Biome.
 // DispatchBeginPlay-паттерн — тот же, что BistabilityTest.cpp/ShrineTest.cpp.
 
 #include "Core/World/GridWorldManager.h"
@@ -191,6 +195,115 @@ bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell:
     TestTrue(TEXT("TargetState.Corruption nudged up at night"), Cell->TargetState.Meta.Corruption > CorruptionBeforeNight);
     TestEqual(TEXT("Night horror does not claim ManifestedEntityID -- it's atmosphere, not a 'owner'"),
         Cell->ManifestedEntityID, FName(NAME_None));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_KuvshinkinyDukhiRaiseResonanceAtNight,
+    "Herbalist.AmbientEntity.KuvshinkinyDukhiRaiseResonanceAtNight",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_KuvshinkinyDukhiRaiseResonanceAtNight::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Floodplain;
+    Cell->bIsWater = false;   // заросли/берег -- земля, не вода Берегини
+
+    Manager->SetGameClockSeconds(31.0f * 60.0f);   // ночь
+    const float ResonanceBefore = Cell->TargetState.Meta.Resonance;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestEqual(TEXT("Кувшинкины духи manifest on the land edge of Floodplain at night"),
+        Cell->ManifestedEntityID, FName(TEXT("Кувшинкины духи")));
+    TestTrue(TEXT("TargetState.Resonance nudged up"), Cell->TargetState.Meta.Resonance > ResonanceBefore);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_LedyanyeDukhiLowerMagnitudeInWinterOnly,
+    "Herbalist.AmbientEntity.LedyanyeDukhiLowerMagnitudeInWinterOnly",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_LedyanyeDukhiLowerMagnitudeInWinterOnly::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Tundra;
+    Cell->bIsWater = false;
+    Cell->TargetState.Magnitude = 0.5f;   // ненулевая точка отсчёта -- нудж вниз от 0.0 не отличим от клампа
+
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    const float SeasonDurationSeconds = 117.0f * DayLengthSeconds;
+    const float MidDaySeconds = 10.0f * 60.0f;   // фаза "День", не Рассвет/Закат/Полудница
+
+    Manager->SetGameClockSeconds(MidDaySeconds);   // Весна
+    const float MagnitudeInSpring = Cell->TargetState.Magnitude;
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("No manifestation in Spring"), Cell->ManifestedEntityID, FName(NAME_None));
+    TestEqual(TEXT("Magnitude untouched in Spring"), Cell->TargetState.Magnitude, MagnitudeInSpring);
+
+    Manager->SetGameClockSeconds(SeasonDurationSeconds * 2.0f + MidDaySeconds);   // Зима
+    const float MagnitudeBeforeWinter = Cell->TargetState.Magnitude;
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Ледяные духи manifest on Tundra in Winter"), Cell->ManifestedEntityID, FName(TEXT("Ледяные духи")));
+    TestTrue(TEXT("TargetState.Magnitude nudged down (freeze) in Winter"), Cell->TargetState.Magnitude < MagnitudeBeforeWinter);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_SukhoveykiAndStepnyeOgniShareSteppeCorrectly,
+    "Herbalist.AmbientEntity.SukhoveykiAndStepnyeOgniShareSteppeCorrectly",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_SukhoveykiAndStepnyeOgniShareSteppeCorrectly::RunTest(const FString& Parameters)
+{
+    // Регрессия на рефакторинг 2026-08-29: до него цикл прерывался на первом
+    // совпадении Biome (Степные огни для Степи всегда шли первыми в реестре),
+    // поэтому Суховейки -- второе определение на том же биоме -- никогда бы
+    // не проверялись вовсе. Тест бьёт именно по дневному (не ночному) летнему
+    // окну, где Степные огни заведомо не активны (нужна ночь), а Суховейки
+    // должны сработать сами по себе.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Steppe;
+    Cell->bIsWater = false;
+    Cell->TargetState.Magnitude = 0.5f;
+
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    const float SeasonDurationSeconds = 117.0f * DayLengthSeconds;
+    const float MidDaySeconds = 10.0f * 60.0f;   // День, не ночь -- Степные огни не должны быть eligible
+
+    Manager->SetGameClockSeconds(SeasonDurationSeconds * 1.0f + MidDaySeconds);   // Лето, День
+    TestFalse(TEXT("Sanity: it's day, not night"), Manager->IsNight());
+
+    const float MagnitudeBefore = Cell->TargetState.Magnitude;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestEqual(TEXT("Суховейки manifest on Steppe in Summer daylight (Степные огни needs night, not eligible)"),
+        Cell->ManifestedEntityID, FName(TEXT("Суховейки")));
+    TestTrue(TEXT("TargetState.Magnitude nudged down (иссушение) by Суховейки"), Cell->TargetState.Magnitude < MagnitudeBefore);
 
     Manager->Destroy();
     return true;
