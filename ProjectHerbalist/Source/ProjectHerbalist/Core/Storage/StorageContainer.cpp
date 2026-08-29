@@ -9,6 +9,10 @@ AStorageContainer::AStorageContainer()
 {
     PrimaryActorTick.bCanEverTick = false;
     InventoryComponent = CreateDefaultSubobject<UHerbalistInventoryComponent>(TEXT("InventoryComponent"));
+    // Разумный дефолт для найденного в мире контейнера (см. комментарий у
+    // EStorageContainerType, HerbalistInventoryComponent.h) — редактируемо
+    // per-instance, если конкретный контейнер в уровне должен быть Cellar.
+    InventoryComponent->ContainerType = EStorageContainerType::Basket;
 }
 
 void AStorageContainer::BeginPlay()

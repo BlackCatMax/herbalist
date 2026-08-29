@@ -12,6 +12,25 @@ struct FStateDelta;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
 
+// Порча трав (2026-08-29, прямая правка пользователя): "не зависит от
+// клеток биомов и чего бы то ни было. Травы портятся сами по себе, это
+// естественный процесс. На сохранность влияют сами контейнеры хранения" —
+// отменяет и капищную защиту инвентаря (эффект 4, §15.5), и location-based
+// порчу от Ржавых духов/Водяных бесов/Злыдней (§16.2, тот же день, раньше
+// в этой же сессии). None — то, что игрок физически несёт на себе, без
+// структуры хранения вовсе (не "контейнер получше корзины", а отсутствие
+// контейнера, отсюда и множитель 1.0, старый глобальный дефолт без
+// модификации). Только два полюса заведены сейчас (по прямому решению
+// пользователя, "инфраструктура + 2-3 примера") — Мешок/Шкаф/Банка того же
+// типа, что Корзина/Погреб, просто ещё не заведены как записи.
+UENUM(BlueprintType)
+enum class EStorageContainerType : uint8
+{
+    None,     // на себе, без контейнера
+    Basket,   // корзина — хуже базовой линии, открытая, дышащая
+    Cellar    // погреб — лучше базовой линии, тёмный, прохладный
+};
+
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTHERBALIST_API UHerbalistInventoryComponent : public UActorComponent
 {
@@ -25,6 +44,13 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
     int32 MaxSlots = 20;
+
+    // Тип контейнера этого конкретного инвентаря — определяет множитель
+    // порчи (см. комментарий у EStorageContainerType выше). Игрок сам несёт
+    // None по умолчанию; AStorageContainer в конструкторе ставит Basket как
+    // разумный дефолт для найденного в мире контейнера, редактируемо per-instance.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+    EStorageContainerType ContainerType = EStorageContainerType::None;
 
     static constexpr int32 MAX_STACK_SIZE = 9;
 

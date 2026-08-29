@@ -96,6 +96,19 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float InventoryDecayRate = 0.02f;
 
+    // Множители InventoryDecayRate по типу контейнера (EStorageContainerType,
+    // 2026-08-29) — единственное, что теперь модулирует порчу: "травы
+    // портятся сами по себе, естественный процесс... на сохранность влияют
+    // сами контейнеры хранения" (прямая правка пользователя, отменяет
+    // прежнюю location-based защиту капищ и порчу от Ржавых духов/Водяных
+    // бесов/Злыдней). Только два полюса заведены сейчас — Мешок/Шкаф/Банка
+    // того же типа, ещё не заведены как отдельные записи.
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.1", ClampMax = "5.0"))
+    float BasketDecayMultiplier = 1.3f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+    float CellarDecayMultiplier = 0.4f;
+
     // --- Entity Manifestation (02_GDD/16_Entity_Manifestation.md) — вертикальный срез ---
     // Гнильники (Низший, Болото): порог Corruption клетки для проявления зоны.
     UPROPERTY(config, EditAnywhere, Category = "Entities|Gnilniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -315,10 +328,10 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ShrineCoherenceBonus = 0.15f;
 
-    // Насколько сильно полностью восстановленное капище снижает эффективный
-    // InventoryDecayRate в своём радиусе (эффект 4): до вдвое при Restoration=1.
-    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float ShrineInventoryProtection = 0.5f;
+    // ShrineInventoryProtection удалена 2026-08-29 вместе с "эффектом 4"
+    // капищ (§15.5) целиком — прямая правка пользователя: порча трав не
+    // зависит от места в мире вообще, только от контейнера хранения (см.
+    // EStorageContainerType, HerbalistInventoryComponent.h).
 
     // --- Spawning (DESIGN_World_State.md §15, звено 3) ---
     // Резкость спада пригодности ингредиента в GetRandomResourceForBiome:

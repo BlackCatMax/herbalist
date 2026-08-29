@@ -80,17 +80,6 @@ struct FAmbientEntityDefinition
     // Magnitude — не под Meta (FRealState::Magnitude, отдельное поле),
     // применяется отдельной строкой в UpdateEntityManifestations.
     UPROPERTY() float MagnitudeRate = 0.0f;
-
-    // Порча инвентаря игрока, пока он физически стоит на клетке с активным
-    // существом — не TargetState-нудж вовсе, читается отдельно в
-    // HerbalistInventoryComponent::TickComponent (Ржавые духи, Водяные
-    // бесы, §16.2: "порча инструмента"/"мелкая порча снаряжения" — вне
-    // пайплайна по своей природе, тот же принцип, что уже применён к
-    // защите инвентаря капищами, эффект 4, только с обратным знаком).
-    // Существо с ТОЛЬКО этим полем ненулевым (все Meta/Direction/Magnitude
-    // ставки — 0) намеренно не помечает клетку грязной само по себе — эта
-    // порча не персистентное состояние мира, только временная близость игрока.
-    UPROPERTY() float ItemCorruptionRate = 0.0f;
 };
 
 inline float GetAmbientTriggerAxisValue(const FGridCell& Cell, EAmbientTriggerAxis Axis)
@@ -239,12 +228,14 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
-        // Ржавые духи (Болото, земля, §16.2): "Stability клетки низкая ->
-        // порча инструмента, вне пайплайна, флаг на предмете". Единственный
-        // ненулевой эффект — ItemCorruptionRate, читаемый напрямую
-        // HerbalistInventoryComponent, а не TargetState-нудж (все Meta/
-        // Direction/Magnitude ставки нулевые — намеренно, см. комментарий у
-        // ItemCorruptionRate выше).
+        // Ржавые духи (Болото, земля, §16.2): карточка описывает "Stability
+        // клетки низкая -> порча инструмента". Задумывался как location-based
+        // порча предметов, читаемая напрямую HerbalistInventoryComponent —
+        // отменено правкой пользователя 2026-08-29 ("травы портятся сами по
+        // себе... на сохранность влияют сами контейнеры хранения", см.
+        // EStorageContainerType в HerbalistInventoryComponent.h). Порог
+        // проявления и биом оставлены (существо манифестируется по §16.2),
+        // сам эффект — заглушка на будущий редизайн, не TargetState-нудж.
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Ржавые духи"));
@@ -253,14 +244,14 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             D.TriggerAxis = EAmbientTriggerAxis::Stability;
             D.TriggerThreshold = 0.3f;
             D.bTriggerAbove = false;   // низкая Stability, не высокая
-            D.ItemCorruptionRate = 0.015f;
             Defs.Add(D);
         }
 
-        // Водяные бесы (Речная пойма, ВОДА, §16.2): "мутная вода -> мелкая
-        // порча снаряжения". Мутная вода = высокий Distortion воды, тот же
-        // язык, что уже применён везде в проекте ("грязный" эквивалентен
-        // высокому Distortion, не новая ось "мутности").
+        // Водяные бесы (Речная пойма, ВОДА, §16.2): карточка описывает
+        // "мутная вода -> мелкая порча снаряжения" (мутная вода = высокий
+        // Distortion воды). Эффект порчи предметов отменён вместе с Ржавыми
+        // духами (см. комментарий выше) — существо манифестируется, эффекта
+        // пока нет.
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Водяные бесы"));
@@ -269,16 +260,16 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             D.TriggerAxis = EAmbientTriggerAxis::Distortion;
             D.TriggerThreshold = 0.5f;
             D.bTriggerAbove = true;
-            D.ItemCorruptionRate = 0.01f;
             Defs.Add(D);
         }
 
-        // Злыдни (Широколиств. лес, земля, §16.2): "заброшенное жильё,
-        // накопленный HarvestStress -> порча инвентаря". "Заброшенное
-        // жильё" как отдельная сущность (конкретный дом-landmark) в модели
-        // данных не существует — упрощено до истощённого участка леса
-        // (HarvestStress клетки), той же оси, что уже называет карточка,
-        // без выдуманной привязки к несуществующему типу landmark.
+        // Злыдни (Широколиств. лес, земля, §16.2): карточка описывает
+        // "заброшенное жильё, накопленный HarvestStress -> порча инвентаря".
+        // "Заброшенное жильё" как отдельная сущность (конкретный дом-
+        // landmark) в модели данных не существует — упрощено до истощённого
+        // участка леса (HarvestStress клетки), той же оси, что уже называет
+        // карточка. Эффект порчи предметов отменён вместе с двумя существами
+        // выше (см. комментарий у Ржавых духов).
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Злыдни"));
@@ -287,7 +278,6 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             D.TriggerAxis = EAmbientTriggerAxis::HarvestStress;
             D.TriggerThreshold = 0.6f;
             D.bTriggerAbove = true;
-            D.ItemCorruptionRate = 0.02f;
             Defs.Add(D);
         }
 
@@ -298,13 +288,4 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
         return Defs;
     }();
     return Definitions;
-}
-
-inline const FAmbientEntityDefinition* FindAmbientEntityDefinition(FName EntityID)
-{
-    for (const FAmbientEntityDefinition& D : GetAmbientEntityDefinitions())
-    {
-        if (D.EntityID == EntityID) return &D;
-    }
-    return nullptr;
 }

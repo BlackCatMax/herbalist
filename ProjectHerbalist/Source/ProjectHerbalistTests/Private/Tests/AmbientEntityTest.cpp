@@ -364,10 +364,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_ItemCorruptingEntitiesM
 
 bool FHerbalistAmbientEntity_ItemCorruptingEntitiesManifestWithoutDirtyingTheCell::RunTest(const FString& Parameters)
 {
-    // Ржавые духи/Водяные бесы/Злыдни (2026-08-29, §16.2 "порча
-    // инструмента"/"мелкая порча снаряжения") -- единственный эффект у всех
-    // троих это ItemCorruptionRate, читаемый напрямую HerbalistInventoryComponent,
-    // а не TargetState-нудж. Проверяем и что они манифестируют по своим
+    // Ржавые духи/Водяные бесы/Злыдни (§16.2 "порча инструмента"/"мелкая
+    // порча снаряжения") -- изначально задумывались с единственным эффектом
+    // ItemCorruptionRate, читаемым напрямую HerbalistInventoryComponent, но
+    // это отменено правкой пользователя 2026-08-29 ("травы портятся сами по
+    // себе... на сохранность влияют сами контейнеры хранения" --
+    // EStorageContainerType в HerbalistInventoryComponent.h). Сейчас у всех
+    // троих вообще нет Meta/Direction-эффекта -- они просто манифестируются.
+    // Тест по-прежнему ценен: проверяем и что они манифестируют по своим
     // условиям, и что при этом НЕ попадают в Delta.TargetStateNudges --
     // это ровно тот класс бага (bChanged безусловно true даже без реального
     // изменения), который уже чинили для ApplyBiomeInfluences/ночного нуджа

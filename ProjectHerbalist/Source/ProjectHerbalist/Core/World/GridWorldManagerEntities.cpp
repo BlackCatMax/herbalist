@@ -395,11 +395,14 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
 
                 // Метим клетку грязной только если хоть одна ставка реально
                 // ненулевая — иначе существо без Meta/Direction-эффекта
-                // (только ItemCorruptionRate, читаемый в другом месте, см.
-                // Ржавые духи/Водяные бесы ниже) безусловно попадало бы в
-                // Delta.TargetStateNudges каждый tick без единого реального
-                // изменения — тот же класс бага, что уже чинили в
-                // ApplyBiomeInfluences/ночном нудже (AUDIT_AND_REFACTORING_PLAN.md §7.1).
+                // вовсе (Ржавые духи/Водяные бесы/Злыдни — их location-based
+                // эффект порчи предметов отменён правкой пользователя
+                // 2026-08-29, см. AmbientEntityTypes.h; сейчас манифестируются
+                // без эффекта, заглушка на будущий редизайн) безусловно
+                // попадало бы в Delta.TargetStateNudges каждый tick без
+                // единого реального изменения — тот же класс бага, что уже
+                // чинили в ApplyBiomeInfluences/ночном нудже
+                // (AUDIT_AND_REFACTORING_PLAN.md §7.1).
                 bool bAnyRateFired = false;
                 if (CorruptionRate      != 0.0f) { NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + CorruptionRate      * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
                 if (PurityRate          != 0.0f) { NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity     + PurityRate          * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }

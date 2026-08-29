@@ -4,13 +4,10 @@
 #include "HerbalistLogChannels.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "Core/Config/HerbalistSettings.h"
-#include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
-#include "Core/World/GridWorldManager.h"
-#include "EngineUtils.h"
 
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 {
@@ -31,70 +28,19 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
     const float GlobalDecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
 
-    // Капище, эффект 4 (15_Cycles_And_Shrines §15.5, компендиум Болота: "Длительное
-    // пребывание без защиты капищ быстро накапливает порчу в инвентаре") — в
-    // радиусе влияния действующего (Restoration > 0) капища эффективный
-    // InventoryDecayRate снижается пропорционально его Restoration.
-    float ShrineProtection = 0.0f;
-    if (APlayerController* OwnerPC = Cast<APlayerController>(GetOwner()))
+    // Порча — естественный процесс, не зависящий от места в мире (прямая
+    // правка пользователя 2026-08-29, отменяет и капищную защиту §15.5
+    // эффект 4, и location-based порчу от Ржавых духов/Водяных бесов/
+    // Злыдней §16.2, обе были здесь раньше в этой же сессии). Единственный
+    // модификатор — тип контейнера, в котором предмет физически хранится.
+    float ContainerDecayMultiplier = 1.0f;
+    switch (ContainerType)
     {
-        if (APawn* Pawn = OwnerPC->GetPawn())
-        {
-            for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-            {
-                AGridWorldManager* WorldManager = *It;
-                const int32 RadiusCells = Settings ? Settings->ShrineInfluenceRadius : 3;
-                const float RadiusWorld = RadiusCells * WorldManager->CellSize;
-                for (const FShrine& S : WorldManager->GetShrines())
-                {
-                    if (S.Restoration <= 0.0f) continue;   // защита, не осквернение
-                    const float Dist = FVector::Dist(Pawn->GetActorLocation(), WorldManager->GetCellWorldPositionFlat(S.Cell.X, S.Cell.Y));
-                    if (Dist <= RadiusWorld)
-                    {
-                        ShrineProtection = FMath::Max(ShrineProtection, S.Restoration);
-                    }
-                }
-                break;
-            }
-        }
+    case EStorageContainerType::Basket: ContainerDecayMultiplier = Settings ? Settings->BasketDecayMultiplier : 1.3f; break;
+    case EStorageContainerType::Cellar: ContainerDecayMultiplier = Settings ? Settings->CellarDecayMultiplier : 0.4f; break;
+    default: break;   // None — на себе, базовая линия без модификации
     }
-
-    // §16.2 "порча инструмента"/"мелкая порча снаряжения" (Ржавые духи,
-    // Водяные бесы, Злыдни, 2026-08-29) — тот же принцип, что защита капищ
-    // выше, только обратный знак и другой источник: не Restoration капища,
-    // а ManifestedEntityID клетки, на которой физически стоит игрок прямо
-    // сейчас (уже посчитан каждый кадр в UpdateEntityManifestations — не
-    // пересчитываем условие проявления здесь второй раз, только читаем
-    // готовый результат). Не капищная защита в минус — независимая
-    // добавка: если игрок стоит на клетке с активным Ржавыми духами вне
-    // всякой защиты капища, инвентарь портится быстрее номинала, а не
-    // просто "меньше защищён".
-    float ItemCorruptionPressure = 0.0f;
-    if (APlayerController* OwnerPC = Cast<APlayerController>(GetOwner()))
-    {
-        if (APawn* Pawn = OwnerPC->GetPawn())
-        {
-            for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
-            {
-                AGridWorldManager* WorldManager = *It;
-                int32 CellX, CellY;
-                if (WorldManager->WorldPositionToCell(Pawn->GetActorLocation(), CellX, CellY))
-                {
-                    if (const FGridCell* Cell = WorldManager->GetCellConst(CellX, CellY))
-                    {
-                        if (const FAmbientEntityDefinition* Def = FindAmbientEntityDefinition(Cell->ManifestedEntityID))
-                        {
-                            ItemCorruptionPressure = Def->ItemCorruptionRate;
-                        }
-                    }
-                }
-                break;
-            }
-        }
-    }
-
-    const float EffectiveGlobalDecayRate = GlobalDecayRate * (1.0f - ShrineProtection * (Settings ? Settings->ShrineInventoryProtection : 0.5f))
-        + ItemCorruptionPressure;
+    const float EffectiveGlobalDecayRate = GlobalDecayRate * ContainerDecayMultiplier;
 
     UIngredientRegistrySubsystem* IngredientReg = nullptr;
     UWaterTypeRegistrySubsystem* WaterReg = nullptr;
