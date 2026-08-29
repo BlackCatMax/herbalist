@@ -82,6 +82,33 @@ namespace
             || GetEntityManifestationPriority(CandidateID) > GetEntityManifestationPriority(Cell.ManifestedEntityID);
     }
 
+    // Собственный C++-сигнал погоды (§15.7), 2026-08-29 — детерминированная
+    // value-noise: хэш (сид, индекс фронта) даёт число в [0,1), интерполяция
+    // между соседними фронтами по времени сглаживает переход. Без сохраняемого
+    // состояния вовсе (чистая функция GameClockSeconds+RngBaseSeed) — тот же
+    // принцип, что уже даёт детерминизм пайплайну через HashCombine(сид, номер
+    // тика) в ExecuteTick, просто на другой временной шкале.
+    float DeterministicNoise01(int32 BaseSeed, int32 Index)
+    {
+        const uint32 Hash = HashCombine(static_cast<uint32>(BaseSeed), static_cast<uint32>(Index));
+        return FRandomStream(static_cast<int32>(Hash)).FRand();
+    }
+
+    float SampleWeatherNoise(float GameClockSeconds, int32 RngBaseSeed, float FrontDurationSeconds, int32 Channel)
+    {
+        const float SafeDuration = FMath::Max(1.0f, FrontDurationSeconds);
+        const float Position = GameClockSeconds / SafeDuration;
+        const int32 FrontA = FMath::FloorToInt(Position);
+        const int32 FrontB = FrontA + 1;
+        // *2+Channel разводит каналы (ветер/снег) по разным хэш-потокам —
+        // иначе они были бы идеально скоррелированы (одна и та же метель
+        // всегда точь-в-точь совпадала бы с тем же ветром).
+        const float NoiseA = DeterministicNoise01(RngBaseSeed, FrontA * 2 + Channel);
+        const float NoiseB = DeterministicNoise01(RngBaseSeed, FrontB * 2 + Channel);
+        const float Alpha = FMath::SmoothStep(0.0f, 1.0f, Position - static_cast<float>(FrontA));
+        return FMath::Lerp(NoiseA, NoiseB, Alpha);
+    }
+
 }
 
 // ============================================================================
@@ -225,6 +252,63 @@ ESeason AGridWorldManager::GetSeason() const
     const float CycleFraction = FMath::Fmod(GameClockSeconds, YearDurationSeconds) / YearDurationSeconds;
     const int32 SeasonIndex = FMath::Clamp(FMath::FloorToInt(CycleFraction * 3.0f), 0, 2);
     return static_cast<ESeason>(SeasonIndex);
+}
+
+float AGridWorldManager::GetSeasonProgress01() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
+    const float SeasonDurationDays = FMath::Max(0.01f, Settings ? Settings->SeasonDurationDays : 117.0f);
+    const float YearDurationSeconds = SeasonDurationDays * 3.0f * DayLengthSeconds;
+
+    const float CycleFraction = FMath::Fmod(GameClockSeconds, YearDurationSeconds) / YearDurationSeconds;
+    return FMath::Frac(CycleFraction * 3.0f);
+}
+
+bool AGridWorldManager::IsLateSummer() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Threshold = Settings ? Settings->LateSummerProgressThreshold : 0.8f;
+    return GetSeason() == ESeason::Summer && GetSeasonProgress01() >= Threshold;
+}
+
+bool AGridWorldManager::IsKupalaNight() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float WindowStart = Settings ? Settings->KupalaWindowStart : 0.15f;
+    const float WindowEnd   = Settings ? Settings->KupalaWindowEnd   : 0.18f;
+    if (GetSeason() != ESeason::Summer) return false;
+    const float Progress = GetSeasonProgress01();
+    return Progress >= WindowStart && Progress < WindowEnd && IsNight();
+}
+
+float AGridWorldManager::GetWindIntensity() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float FrontDuration = Settings ? Settings->WeatherFrontDurationSeconds : 480.0f;
+    return SampleWeatherNoise(GameClockSeconds, RngBaseSeed, FrontDuration, /*Channel=*/0);
+}
+
+float AGridWorldManager::GetSnowIntensity() const
+{
+    if (GetSeason() != ESeason::Winter) return 0.0f;   // снегу неоткуда взяться вне Зимы
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float FrontDuration = Settings ? Settings->WeatherFrontDurationSeconds : 480.0f;
+    return SampleWeatherNoise(GameClockSeconds, RngBaseSeed, FrontDuration, /*Channel=*/1);
+}
+
+bool AGridWorldManager::IsWindy() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    return GetWindIntensity() >= (Settings ? Settings->WindyThreshold : 0.6f);
+}
+
+bool AGridWorldManager::IsBlizzard() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float WindThreshold = Settings ? Settings->BlizzardWindThreshold : 0.55f;
+    const float SnowThreshold = Settings ? Settings->BlizzardSnowThreshold : 0.55f;
+    return GetWindIntensity() >= WindThreshold && GetSnowIntensity() >= SnowThreshold;
 }
 
 float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
@@ -454,6 +538,18 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                     }
                 }
                 bEligible = bEligible && bOnBorder;
+            }
+            if (Def.bRequiresWeather)
+            {
+                bEligible = bEligible && (Def.RequiredWeather == EWeatherCondition::Blizzard ? IsBlizzard() : IsWindy());
+            }
+            if (Def.bRequiresLateSummer)
+            {
+                bEligible = bEligible && IsLateSummer();
+            }
+            if (Def.bRequiresKupalaNight)
+            {
+                bEligible = bEligible && IsKupalaNight();
             }
 
             if (bEligible && CanManifest(Cell, Def.EntityID))

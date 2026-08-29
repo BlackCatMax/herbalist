@@ -12,7 +12,7 @@
 // которую обходит один универсальный цикл (UpdateEntityManifestations).
 //
 // Сознательно НЕ вынесено в UDataTable/DA_*.uasset (в отличие от биомов и
-// ингредиентов): определений уже 17 (2026-08-29), они меняются вместе с
+// ингредиентов): определений уже 28 (2026-08-29), они меняются вместе с
 // кодом (новый EAmbientTriggerAxis требует правки C++ всё равно), и это тот
 // же принцип, что уже применён к MemoryFragmentDefinitions.h — простой
 // статический реестр, а не полноценный ассет-пайплайн, пока карточек мало.
@@ -42,6 +42,17 @@ enum class EAmbientTriggerAxis : uint8
     Mind,
     Spirit,
     Nature
+};
+
+// Погода (§15.7) — 2026-08-29, собственный C++-сигнал (GridWorldManager::
+// GetWindIntensity/GetSnowIntensity/IsWindy/IsBlizzard), не Ultra Dynamic
+// Weather (плагин пока не установлен в проект). Только два условия — ровно
+// то, что нужно трём картам (Ветряные бесы/Вихри: Wind; Метельники: Blizzard).
+UENUM()
+enum class EWeatherCondition : uint8
+{
+    Wind,
+    Blizzard
 };
 
 USTRUCT()
@@ -96,6 +107,22 @@ struct FAmbientEntityDefinition
     // Плескуны тоже не различают глубину, просто bWaterOnly).
     UPROPERTY() bool bRequiresMoonPhase = false;
     UPROPERTY() EMoonPhase RequiredMoonPhase = EMoonPhase::NewMoon;
+
+    // Шестой гейт — погода (собственный C++-сигнал, см. EWeatherCondition
+    // выше). Добавлено 2026-08-29 для Ветряных бесов/Метельников/Вихрей —
+    // изначально заблокированных отсутствием погодной системы, теперь
+    // разблокированных.
+    UPROPERTY() bool bRequiresWeather = false;
+    UPROPERTY() EWeatherCondition RequiredWeather = EWeatherCondition::Wind;
+
+    // Седьмой/восьмой гейты — окна внутри сезона (GridWorldManager::
+    // IsLateSummer/IsKupalaNight, §15.4/HerbalistSettings.h). Добавлены
+    // 2026-08-29 для Листовиков ("осень", проект признаёт только три
+    // сезона) и Купальских (нужен календарь, которого нет как отдельной
+    // системы) — оба прямые решения пользователя: не заводить четвёртый
+    // сезон/полноценный календарь, обойтись узкими окнами внутри Лета.
+    UPROPERTY() bool bRequiresLateSummer = false;
+    UPROPERTY() bool bRequiresKupalaNight = false;
 
     // Нудж TargetState, "в секунду" (как GnilnikiNudgeRate раньше) —
     // умножается на DeltaTime в UpdateEntityManifestations. Ноль = не трогать ось.
@@ -208,6 +235,30 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
+        // Метельники (Тундра, земля, §16.2): "активная метель/буря ->
+        // дезориентация восприятия сильнее обычного". Собственный C++-
+        // сигнал погоды (§15.7, IsBlizzard = сильный ветер + снег
+        // одновременно, снег сам возможен только Зимой) — изначально
+        // заблокировано отсутствием погоды, разблокировано 2026-08-29.
+        // Distortion как язык "дезориентации", тот же приём, что уже у
+        // Степных огней/Омутных огней — здесь ставка выше обоих ("сильнее
+        // обычного" по тексту карточки). Зарегистрировано ДО Ледяных духов
+        // и Шептунов ниже (те же биом+Тундра): и Ледяные духи (весь сезон
+        // Зима целиком), и Шептуны (эффективно "всегда", Stability >= 0)
+        // условие строго ШИРЕ, чем "Зима И метель" -- без этого порядка
+        // Метельники никогда не получили бы свою редкую метель.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Метельники"));
+            D.Biome = EBiomeType::Tundra;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresWeather = true;
+            D.RequiredWeather = EWeatherCondition::Blizzard;
+            D.DistortionRate = 0.015f;
+            Defs.Add(D);
+        }
+
         // Ледяные духи (Тундра, земля, §16.2): "низкая температура (сезон,
         // §15.4 Зима) -> заморозка, временное снижение Magnitude". Первое
         // существо, завязанное на сезон, а не на время суток — разблокировано
@@ -239,6 +290,26 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             D.bRequiresSeason = true;
             D.RequiredSeason = ESeason::Summer;
             D.MagnitudeRate = -0.008f;
+            Defs.Add(D);
+        }
+
+        // Вихри (Степь, земля, §16.2): "открытое пространство, ветер ->
+        // сбивает Direction". Собственный C++-сигнал погоды (§15.7,
+        // GetWindIntensity/IsWindy) — изначально заблокировано отсутствием
+        // погоды, разблокировано 2026-08-29. "Сбивает Direction" — нет
+        // отдельного "рандомизировать/дестабилизировать" механизма
+        // (TargetState-нудж всегда направленный, не шумовой), Distortion
+        // как честный эквивалент "потери ориентации" -- тот же язык, что
+        // уже применён к Степным огням/Метельникам выше.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Вихри"));
+            D.Biome = EBiomeType::Steppe;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresWeather = true;
+            D.RequiredWeather = EWeatherCondition::Wind;
+            D.DistortionRate = 0.01f;
             Defs.Add(D);
         }
 
@@ -381,6 +452,27 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
+        // Купальские (Смешанный лес, земля, §16.2): "ночь на Купалу ->
+        // Resonance++, приворотный ингредиент". Изначально заблокировано
+        // отсутствием календаря — разблокировано 2026-08-29 узким окном
+        // внутри Лета (GridWorldManager::IsKupalaNight, HerbalistSettings.h
+        // KupalaWindowStart/End) — не полноценный календарь с названиями
+        // месяцев, прямое упрощение по решению пользователя. Зарегистрировано
+        // ДО Древесных огней ниже (тот же биом, MixedForest, но Древесные
+        // огни безусловно ночные — Купальская ночь это подмножество ЛЮБОЙ
+        // ночи, без этого порядка Древесные огни забирали бы клетку каждую
+        // ночь раньше редкого купальского окна).
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Купальские"));
+            D.Biome = EBiomeType::MixedForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresKupalaNight = true;
+            D.ResonanceRate = 0.015f;
+            Defs.Add(D);
+        }
+
         // Шишиги (Смешанный лес, земля, §16.2): "овраг/куст, сумерки ->
         // испуг, визуальный дебафф восприятия, без мех. вреда". Чисто
         // Perception-эффект (как Морочники/Шептуны), не TargetState-нудж —
@@ -405,6 +497,29 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             D.bLandOnly = true;
             D.TriggerAxis = EAmbientTriggerAxis::None;
             D.bRequiresNight = true;
+            Defs.Add(D);
+        }
+
+        // Листовики (Смешанный лес, земля, §16.2): "осень -> Nature++,
+        // лёгкость". Изначально заблокировано отсутствием четвёртого
+        // сезона — разблокировано 2026-08-29 узким прокси внутри Лета
+        // (GridWorldManager::IsLateSummer, конец Лета перед Зимой читается
+        // как "осень"), прямое решение пользователя не заводить Autumn как
+        // отдельный ESeason (переоткрывало бы трёхпольное обоснование).
+        // "Лёгкость" без чёткой оси — Nature (Direction) одна и покрывает
+        // карточку. Зарегистрировано ПОСЛЕ Древесных огней/Шишиг выше: в
+        // отличие от них, IsLateSummer() не требует ночи/сумерек вовсе
+        // (действует весь день долю сезона) — если бы стояло раньше, оно
+        // забирало бы клетку даже ночью/в сумерках весь конец Лета,
+        // вытесняя более редкие ночные/сумеречные условия на все эти дни.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Листовики"));
+            D.Biome = EBiomeType::MixedForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresLateSummer = true;
+            D.NatureRate = 0.01f;
             Defs.Add(D);
         }
 
@@ -542,9 +657,27 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
             Defs.Add(D);
         }
 
+        // Ветряные бесы (Лесостепь, земля, §16.2): "открытая клетка, ветер ->
+        // нестабильность Direction". Тот же прокси и та же логика, что уже
+        // у Вихрей выше (Distortion как честный эквивалент "нестабильности",
+        // раз нет отдельного шумового механизма) — собственный C++-сигнал
+        // погоды (§15.7), разблокировано 2026-08-29.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Ветряные бесы"));
+            D.Biome = EBiomeType::ForestSteppe;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::None;
+            D.bRequiresWeather = true;
+            D.RequiredWeather = EWeatherCondition::Wind;
+            D.DistortionRate = 0.01f;
+            Defs.Add(D);
+        }
+
         for (const FAmbientEntityDefinition& D : Defs)
         {
-            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason || D.bRequiresDusk || D.bRequiresBiomeBorder);
+            check(D.TriggerAxis != EAmbientTriggerAxis::None || D.bRequiresNight || D.bRequiresSeason || D.bRequiresDusk
+                || D.bRequiresBiomeBorder || D.bRequiresMoonPhase || D.bRequiresWeather || D.bRequiresLateSummer || D.bRequiresKupalaNight);
         }
         return Defs;
     }();

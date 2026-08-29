@@ -206,6 +206,48 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float WinterPurityRate = 0.002f;
 
+    // --- Окна внутри сезона (2026-08-29) — Листовики/Купальские требуют
+    // "осень"/конкретную ночь в году, которых в трёхсезонной модели нет как
+    // отдельных понятий. Прямое решение пользователя: не заводить четвёртый
+    // сезон/полноценный календарь, найти узкие окна внутри существующих
+    // трёх сезонов через GetSeasonProgress01(). ---
+
+    // Листовики: последняя доля Лета читается как "осень" (увядание перед
+    // Зимой) — тот же смысловой промежуток года, что настоящая осень.
+    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float LateSummerProgressThreshold = 0.8f;
+
+    // Купальская ночь — узкое окно внутри Лета (не привязано к реальной
+    // григорианской дате, у проекта свой календарь). [Start, End) по
+    // GetSeasonProgress01() — интервал уже достаточно узкий (3% сезона —
+    // около 3-4 игровых суток при 117-суточном сезоне), чтобы читаться как
+    // "определённая ночь", не "всё лето".
+    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float KupalaWindowStart = 0.15f;
+    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float KupalaWindowEnd = 0.18f;
+
+    // --- Погода (§15.7) — 2026-08-29, собственный C++-сигнал, по прямому
+    // решению пользователя, пока Ultra Dynamic Weather не установлен в
+    // проект. Значения — детерминированная value-noise (GridWorldManagerEntities.cpp,
+    // SampleWeatherNoise), эти пороги переключают её в "гейт да/нет" для
+    // §16.2 (Ветряные бесы/Метельники/Вихри). ---
+
+    // Как часто меняется "погодный фронт" — единица интерполяции ветра/снега.
+    // 480с = четверть игровых суток по умолчанию (GameDayMinutes×60/4).
+    UPROPERTY(config, EditAnywhere, Category = "Weather", meta = (ClampMin = "10.0"))
+    float WeatherFrontDurationSeconds = 480.0f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Weather", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float WindyThreshold = 0.6f;
+
+    // Ниже обычного WindyThreshold — метель это ветер И снег ОДНОВРЕМЕННО,
+    // так что для неё достаточно чуть более скромного ветра самого по себе.
+    UPROPERTY(config, EditAnywhere, Category = "Weather", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BlizzardWindThreshold = 0.55f;
+    UPROPERTY(config, EditAnywhere, Category = "Weather", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BlizzardSnowThreshold = 0.55f;
+
     // Скорость обновления Memory.HistoryPurity (медленная скользящая средняя от текущей Purity).
     UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HistoryPurityLerpRate = 0.02f;

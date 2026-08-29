@@ -215,6 +215,56 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     ESeason GetSeason() const;
 
+    // Доля пройденного текущего сезона, [0,1) — 0 в момент смены сезона,
+    // ближе к 1 перед следующей сменой. Добавлено 2026-08-29 для карточек
+    // §16.2, которым нужно не "какой сезон", а "какой момент внутри сезона"
+    // (Листовики — поздний конец Лета как прокси "осени", календарь Купалы —
+    // узкое окно внутри Лета). Тот же CycleFraction*3, что уже вычисляет
+    // GetSeason(), просто читается дробная часть, а не индекс.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetSeasonProgress01() const;
+
+    // Купальская ночь (02_GDD/15_Cycles_And_Shrines.md §15.4/16_Entity §16.2,
+    // "ночь на Купалу, нужно завести в календарь") — узкое окно внутри Лета,
+    // не сам факт лета. Лёгкий day-of-year-эквивалент через
+    // GetSeasonProgress01(), не полноценный календарь с названиями месяцев —
+    // осознанный выбор 2026-08-29, тот же масштаб решения, что и трёхполье.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    bool IsKupalaNight() const;
+
+    // Поздний конец Лета — прокси "осени" для Листовиков (§16.2), 2026-08-29
+    // по прямому решению пользователя: не заводить четвёртый сезон
+    // (переоткрывало бы уже принятое трёхпольное решение), а найти узкое
+    // окно внутри существующих трёх. "Осень" читается как последняя,
+    // увядающая часть Лета перед Зимой — то же смысловое место в году, что
+    // и настоящая осень занимает между летом и зимой.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    bool IsLateSummer() const;
+
+    // ---- Погода (02_GDD/15_Cycles_And_Shrines.md §15.7) ----
+    // Собственный C++-сигнал, 2026-08-29, по прямому решению пользователя:
+    // Ultra Dynamic Weather ещё не установлен в проект (см. §15.7), но три
+    // карточки бестиария (Ветряные бесы/Метельники/Вихри) ждать не должны.
+    // Детерминированная, без сохраняемого состояния функция от GameClockSeconds
+    // (интерполяция value-noise между "погодными фронтами", тот же принцип,
+    // что уже даёт CurrentTickID-хэш детерминизм пайплайну) — значения
+    // 0..1, тот же формат, что и задокументированные Cached*Intensity §15.7.
+    // Когда придёт реальный UDW: заменить тела этих функций на чтение
+    // Blueprint-моста, сигнатуры и вызывающий код (bRequiresWeather в
+    // AmbientEntityTypes.h) не меняются — ровно то swap-место, которое и
+    // обещал §15.7.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
+    float GetWindIntensity() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
+    float GetSnowIntensity() const;   // 0 вне Зимы -- снегу неоткуда взяться
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
+    bool IsWindy() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
+    bool IsBlizzard() const;   // Metель = сильный ветер + снег одновременно
+
     // Игровые часы, независимые от GetWorld()->GetTimeSeconds() (движковое,
     // level-relative, обнуляется при перезапуске сессии) — нужны, чтобы фаза
     // суток (и будущая погода через UltraDynamicSky, ROADMAP.md Фаза D §12)
