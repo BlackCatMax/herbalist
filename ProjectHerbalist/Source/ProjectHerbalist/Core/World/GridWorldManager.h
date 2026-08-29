@@ -287,6 +287,17 @@ public:
     // Подношение "хозяину" (§16.3), тот же принцип, что FindShrineAt.
     FEntityLandmark* FindLandmarkAt(const FIntPoint& Cell);
 
+    // Легендарный ранг (§16.4, LegendaryEntityTypes.h, 2026-08-29) — в
+    // отличие от Низшего (амбиентная зона, любая подходящая клетка) и
+    // Основного (тоже привязан к одной клетке, но через Respect), сигнал
+    // триггера здесь на уровне биом-графа (MorokField узла), общий на ВСЕ
+    // клетки биома разом — без якоря "проявляется на 30+ клетках
+    // одновременно" при первом же срабатывании условия, что и многословно,
+    // и грязнит четверть сетки за один тик. Якорь — тот же принцип, что
+    // EntityLandmarks: одна выделенная клетка на существо, назначается
+    // один раз при инициализации (SeedLegendaryAnchors), не пересчитывается.
+    const TMap<FName, FIntPoint>& GetLegendaryAnchors() const { return LegendaryAnchors; }
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -343,6 +354,13 @@ protected:
     TArray<FEntityLandmark> EntityLandmarks;
 
     void SeedTestLandmarks();
+
+    // Одна клетка-якорь на Легендарное существо (см. GetLegendaryAnchors
+    // выше) — не UPROPERTY/EditAnywhere, как EntityLandmarks: это чисто
+    // вычислительный кэш, не авторский контент, TMap ключом FName тоже не
+    // рефлексируется движком без доп. работы, а нужды в этом нет.
+    TMap<FName, FIntPoint> LegendaryAnchors;
+    void SeedLegendaryAnchors();
 
     // ---- Капища ----
     TArray<FShrine> Shrines;

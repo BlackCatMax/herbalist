@@ -21,6 +21,8 @@
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Entities/LandmarkTypes.h"
+#include "Core/Entities/LegendaryEntityTypes.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "ProjectHerbalist.h"
@@ -31,7 +33,6 @@ using HerbalistCore::Math::PassesHysteresisThreshold;
 namespace
 {
     const FName EntityID_Gnilniki(TEXT("Гнильники"));
-    const FName EntityID_Polevik(TEXT("Полевик"));
     const FName EntityID_Bereginya(TEXT("Берегиня"));
 
     // Ранг бестиария (см. заголовок файла: Низший/Основной/Легендарный) решает,
@@ -42,7 +43,24 @@ namespace
     int32 GetEntityManifestationPriority(FName EntityID)
     {
         if (EntityID == EntityID_Bereginya) return 2;  // Легендарный
-        if (EntityID == EntityID_Polevik)   return 1;  // Основной
+        // Легендарный ранг из реестра (LegendaryEntityTypes.h, 2026-08-29) —
+        // та же биома-независимая проверка, что уже есть у Основного/Низшего
+        // ниже. Берегиня выше (жёстко закодирована в этом файле) не тронута.
+        for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
+        {
+            if (EntityID == Def.EntityID) return 2;
+        }
+        // Основной ранг — раньше только Полевик хардкодом, остальные 12
+        // "хозяев" §16.3 молча падали в -1 при столкновении биомов с другим
+        // рангом (не было проблемой, пока биомы landmark/ambient/legendary
+        // не пересекались — Легендарный реестр выше это меняет, Дуб-старец
+        // и Жердяи оба на Широколиственном лесу). Не найдено багом раньше,
+        // почищено попутно, не отдельной задачей. Полевик тоже находится
+        // этим циклом (он есть в реестре) — отдельная проверка не нужна.
+        for (const FLandmarkDefinition& Def : GetLandmarkDefinitions())
+        {
+            if (EntityID == Def.EntityID) return 1;
+        }
         // Низший ранг — Гнильники и все определения из AmbientEntityTypes.h
         // (Моховые духи, Степные огни, ...). Сегодня биомы не пересекаются,
         // так что до сравнения приоритетов дело не доходит, но при добавлении
@@ -280,6 +298,33 @@ FEntityLandmark* AGridWorldManager::FindLandmarkAt(const FIntPoint& Cell)
     return nullptr;
 }
 
+// Якоря Легендарного ранга (§16.4, LegendaryEntityTypes.h) — тот же
+// CellsUsed-приём, что уже применяет SeedTestLandmarks выше, но с учётом
+// bLandOnly/bWaterOnly (у Landmark их нет вовсе, там земля всегда).
+void AGridWorldManager::SeedLegendaryAnchors()
+{
+    LegendaryAnchors.Empty();
+
+    TSet<FIntPoint> CellsUsed;
+    for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
+    {
+        for (const FGridCell& Cell : Cells)
+        {
+            if (Cell.Biome != Def.Biome) continue;
+            if (Def.bLandOnly && Cell.bIsWater) continue;
+            if (Def.bWaterOnly && !Cell.bIsWater) continue;
+            const FIntPoint Coord(Cell.X, Cell.Y);
+            if (CellsUsed.Contains(Coord)) continue;
+
+            LegendaryAnchors.Add(Def.EntityID, Coord);
+            CellsUsed.Add(Coord);
+            UE_LOG(LogHerbalistWorld, Log, TEXT("[Entities] Seeded legendary anchor %s at (%d,%d)"),
+                *Def.EntityID.ToString(), Coord.X, Coord.Y);
+            break;
+        }
+    }
+}
+
 // ============================================================================
 // ГЛАВНЫЙ ТИК ПРОЯВЛЕНИЙ
 // ============================================================================
@@ -302,6 +347,13 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float DuskDistortionRate  = Settings ? Settings->DuskDistortionRate  : 0.005f;
     const float PoludnitsaDistortionRate = Settings ? Settings->PoludnitsaDistortionRate : 0.02f;
     const float HysteresisMargin    = Settings ? Settings->EntityManifestationHysteresis    : 0.05f;
+    // Легендарный ранг (§16.4, LegendaryEntityTypes.h) читает MorokField
+    // узла биом-графа, не Cell.State напрямую — нужна сама подсистема, не
+    // только Settings. Может быть null в тестовом окружении без BeginPlay
+    // геймлейна (см. FindGridWorldManager/InitializeFromAsset) — обрабатывается
+    // как "легендарные молчат", не крашем, тот же принцип терпимости, что у
+    // остальных внепайплайновых систем к отсутствующим данным.
+    UBiomeGraphSubsystem* Graph = GetWorld() ? GetWorld()->GetSubsystem<UBiomeGraphSubsystem>() : nullptr;
 
     FStateDelta Delta;
 
@@ -631,6 +683,74 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         if (bChanged)
         {
             Delta.TargetStateNudges.Add(Landmark.Cell, NewTarget);
+        }
+    }
+
+    // ---- Легендарный (реестр LegendaryEntityTypes.h) — проход по якорным
+    // клеткам, тем же принципом, что Основной выше (одна клетка на
+    // существо, не "весь биом разом"). Сигнал триггера всё равно на уровне
+    // биом-графа (MorokField узла, общий на все клетки биома) — но эффект
+    // применяется только к SeedLegendaryAnchors'ом назначенной клетке,
+    // иначе первое же срабатывание условия нуджило бы TargetState разом на
+    // 30+ клетках одного биома (найдено и починено до коммита: интеграционный
+    // тест на реальный Tick() с BiomeGraphSubsystem — Herbalist.BiomeGraph.
+    // RealTickKeepsDirtyCellsSparse — сразу поймал 243/400 грязных клеток на
+    // первой версии, где Легендарный жил внутри общего цикла по Cells). ----
+    if (Graph)
+    {
+        for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
+        {
+            const FIntPoint* Anchor = LegendaryAnchors.Find(Def.EntityID);
+            if (!Anchor) continue;   // биом без подходящей клетки в этой сетке -- молчаливый no-op
+
+            FGridCell* Cell = GetCell(Anchor->X, Anchor->Y);
+            if (!Cell) continue;
+
+            const FName BiomeID = FBiomeDefaults::BiomeTypeToName(Def.Biome);
+            const FBiomeGraphNode* Node = Graph->GetNode(BiomeID);
+            if (!Node) continue;
+
+            FRealState NewTarget = Delta.TargetStateNudges.FindRef(*Anchor, Cell->TargetState);
+            bool bChanged = false;
+
+            const bool bWasActive = Cell->ManifestedEntityID == Def.EntityID;
+            bool bEligible = false;
+            if (Def.Pole == ELegendaryPole::Malign)
+            {
+                bEligible = PassesHysteresisThreshold(bWasActive, Node->MorokField, Def.MorokThreshold, HysteresisMargin);
+            }
+            else
+            {
+                // "Устойчиво низкий MorokField" -- тот же приём инверсии
+                // знака, что уже применяет §16.2 для bTriggerAbove=false
+                // (AmbientEntityTypes.h): сравниваем отрицания, не пишем
+                // отдельную "ниже порога" версию PassesHysteresisThreshold.
+                const bool bMorokEligible = PassesHysteresisThreshold(bWasActive, -Node->MorokField, -Def.MorokThreshold, HysteresisMargin);
+                bool bShrineEligible = false;
+                if (Def.bHasShrinePath)
+                {
+                    const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(*Anchor, Shrines, ShrineInfluenceRadius);
+                    bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, Def.ShrineThreshold, HysteresisMargin);
+                }
+                bEligible = bMorokEligible || bShrineEligible;
+            }
+
+            if (bEligible && CanManifest(*Cell, Def.EntityID))
+            {
+                ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
+                ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);
+                Cell->ManifestedEntityID = Def.EntityID;
+                bChanged = true;
+            }
+            else if (bWasActive)
+            {
+                Cell->ManifestedEntityID = NAME_None;
+            }
+
+            if (bChanged)
+            {
+                Delta.TargetStateNudges.Add(*Anchor, NewTarget);
+            }
         }
     }
 

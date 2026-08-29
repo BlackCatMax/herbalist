@@ -120,6 +120,18 @@ bool FHerbalistBiomeGraph_RealTickKeepsDirtyCellsSparse::RunTest(const FString& 
     TestTrue(TEXT("Dirty cells did not hit literally every cell (the exact §7.1 symptom)"),
         DirtyCount < GridCellCount);
 
+    // UBiomeGraphSubsystem — WorldSubsystem, переживает этот тест: все
+    // автотесты делят один и тот же GEditor->GetEditorWorldContext().World().
+    // Без явной деинициализации следующий тест в том же прогоне унаследовал
+    // бы уже инициализированный граф с реальными (не нулевыми) MorokField --
+    // нашлось так: Herbalist.Legendary.* и Herbalist.Landmark.* тесты после
+    // этого стали молча проявлять Легендарных существ поверх ожидаемых
+    // Landmark на тех же клетках (общий детерминированный layout сетки).
+    // Deinitialize() возвращает подсистему в то же состояние, что и после
+    // OnWorldBeginPlay (Nodes/Edges пустые, bInitialized=false) -- тот же
+    // сброс, который сделал бы реальный уход с уровня.
+    Graph->Deinitialize();
+
     Manager->Destroy();
     return true;
 }

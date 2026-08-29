@@ -389,6 +389,7 @@ void AGridWorldManager::InitializeCells()
     // Вертикальный срез проявления сущностей (16_Entity_Manifestation) —
     // авто-расстановка тестовых клеток-обиталищ.
     SeedTestLandmarks();
+    SeedLegendaryAnchors();
 
     SetActorTickEnabled(true);
 }
