@@ -309,4 +309,52 @@ bool FHerbalistAmbientEntity_SukhoveykiAndStepnyeOgniShareSteppeCorrectly::RunTe
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_RusalkiOnlyHauntWaterAtNightNotLand,
+    "Herbalist.AmbientEntity.RusalkiOnlyHauntWaterAtNightNotLand",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_RusalkiOnlyHauntWaterAtNightNotLand::RunTest(const FString& Parameters)
+{
+    // Русалки (2026-08-29, решение пользователя): не "хозяин" §16.3 (нет
+    // симметричного благословения за подношение -- враждебная сущность,
+    // избегаемая опасность, не покровитель), а амбиентная зона §16.2,
+    // bWaterOnly. Тест проверяет обе половины фильтра: не проявляются на
+    // земляной кромке той же поймы (там Кувшинкины духи, bLandOnly -- не
+    // должно быть путаницы между двумя bWaterOnly/bLandOnly определениями
+    // на одном биоме) и не проявляются днём даже в воде.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* WaterCell = Manager->GetCell(0, 0);
+    FGridCell* LandCell  = Manager->GetCell(1, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), WaterCell) || !TestNotNull(TEXT("Cell (1,0) exists"), LandCell))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    WaterCell->Biome = EBiomeType::Floodplain;
+    WaterCell->bIsWater = true;
+    LandCell->Biome = EBiomeType::Floodplain;
+    LandCell->bIsWater = false;
+
+    Manager->SetGameClockSeconds(10.0f * 60.0f);   // День
+    Manager->UpdateEntityManifestations(1.0f);
+    TestNotEqual(TEXT("No Русалки in water by day"), WaterCell->ManifestedEntityID, FName(TEXT("Русалки")));
+
+    Manager->SetGameClockSeconds(31.0f * 60.0f);   // Ночь
+    const float DistortionBefore = WaterCell->TargetState.Meta.Distortion;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestEqual(TEXT("Русалки manifest in water at night"), WaterCell->ManifestedEntityID, FName(TEXT("Русалки")));
+    TestTrue(TEXT("TargetState.Distortion nudged up in water"), WaterCell->TargetState.Meta.Distortion > DistortionBefore);
+    TestNotEqual(TEXT("Русалки don't manifest on the land edge -- that's Кувшинкины духи's cell"),
+        LandCell->ManifestedEntityID, FName(TEXT("Русалки")));
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
