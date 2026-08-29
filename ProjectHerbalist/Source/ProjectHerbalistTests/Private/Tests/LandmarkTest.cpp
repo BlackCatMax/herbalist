@@ -20,6 +20,7 @@
 // DispatchBeginPlay-паттерн — тот же, что AmbientEntityTest.cpp/ShrineTest.cpp.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Entities/LandmarkTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
@@ -178,6 +179,93 @@ bool FHerbalistLandmark_RespectDoesNotDecayPassively::RunTest(const FString& Par
     {
         TestEqual(TEXT("Respect untouched by HarvestStress alone"), Landmarks[0].Respect, 0.2f);
     }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLandmark_DukhMedvedyaBlessesBodyNotPotency,
+    "Herbalist.Landmark.DukhMedvedyaBlessesBodyNotPotency",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistLandmark_DukhMedvedyaBlessesBodyNotPotency::RunTest(const FString& Parameters)
+{
+    // Регрессия на обобщение 2026-08-29: проверяет, что реестр
+    // (LandmarkTypes.h) реально управляет тем, какая ось меняется -- не
+    // только то, что Полевик по-прежнему работает (тот тест выше не отличил
+    // бы "реестр читается" от "Potency/Purity остались захардкожены").
+    // Дух Медведя благословляет Body (Direction), не Meta-ось вовсе --
+    // ловит и регрессию на Direction-нудж, которого раньше в системе
+    // "хозяев" не было.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(5, 5);
+    if (!TestNotNull(TEXT("Cell (5,5) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Taiga;
+    Cell->bIsWater = false;
+    Cell->TargetState.Direction.Body = 0.25f;
+    Cell->TargetState.Meta.Potency = 0.3f;
+
+    FEntityLandmark Landmark;
+    Landmark.EntityID = FName(TEXT("Дух Медведя"));
+    Landmark.Cell = FIntPoint(5, 5);
+    Landmark.Respect = 0.8f;
+    Manager->SetEntityLandmarks({ Landmark });
+
+    const float BodyBefore = Cell->TargetState.Direction.Body;
+    const float PotencyBefore = Cell->TargetState.Meta.Potency;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestEqual(TEXT("Дух Медведя manifests as blessed"), Cell->ManifestedEntityID, FName(TEXT("Дух Медведя")));
+    TestTrue(TEXT("TargetState.Direction.Body nudged up"), Cell->TargetState.Direction.Body > BodyBefore);
+    TestEqual(TEXT("TargetState.Potency untouched -- Дух Медведя doesn't bless it, Полевик does"),
+        Cell->TargetState.Meta.Potency, PotencyBefore);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLandmark_SeedTestLandmarksGivesEachDefinitionADistinctCell,
+    "Herbalist.Landmark.SeedTestLandmarksGivesEachDefinitionADistinctCell",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistLandmark_SeedTestLandmarksGivesEachDefinitionADistinctCell::RunTest(const FString& Parameters)
+{
+    // Регрессия: несколько "хозяев" теперь делят один биом (Тайга: Аука +
+    // Дух Медведя; Широколиств. лес: Гуменник + Овинник + Жердяи; и т.д.) --
+    // до правки SeedTestLandmarks второй на том же биоме занял бы ту же
+    // первую попавшуюся клетку, что и первый (или, что честнее для старого
+    // однопроходного кода, вообще не нашёл бы себе клетки, если бы искал
+    // "первую свободную от воды" без учёта уже занятых).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // SeedTestLandmarks() -- protected, вызывается автоматически при
+    // инициализации клеток (GridWorldManagerCore.cpp), уже отработала к
+    // моменту DispatchBeginPlay() выше.
+    const TArray<FEntityLandmark>& Landmarks = Manager->GetEntityLandmarks();
+
+    TSet<FIntPoint> SeenCells;
+    bool bAllDistinct = true;
+    for (const FEntityLandmark& L : Landmarks)
+    {
+        if (SeenCells.Contains(L.Cell))
+        {
+            bAllDistinct = false;
+            AddError(FString::Printf(TEXT("Landmark %s reused cell (%d,%d)"), *L.EntityID.ToString(), L.Cell.X, L.Cell.Y));
+        }
+        SeenCells.Add(L.Cell);
+    }
+    TestTrue(TEXT("Every seeded landmark got its own cell"), bAllDistinct);
+    TestEqual(TEXT("Every registered definition found a matching-biome cell in the default grid"),
+        Landmarks.Num(), GetLandmarkDefinitions().Num());
 
     Manager->Destroy();
     return true;

@@ -106,12 +106,10 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|Gnilniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float GnilnikiNudgeRate = 0.01f;
 
-    // Полевик (Основной, Лесостепь) — скорость роста/падения Respect в секунду.
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float LandmarkRespectGainRate = 0.01f;
-
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float LandmarkRespectDecayRate = 0.02f;
+    // LandmarkRespectGainRate/LandmarkRespectDecayRate удалены 2026-08-29,
+    // тем же проходом, что и LandmarkStressAngerThreshold ниже: скорость
+    // благословения/порчи теперь у каждого "хозяина" своя (BlessRate/
+    // CurseRate в LandmarkTypes.h), не общая на всех через одну настройку.
 
     // LandmarkStressAngerThreshold удалена 2026-08-29: Respect "хозяев"
     // §16.3 больше не реагирует на HarvestStress клетки пассивно — только на

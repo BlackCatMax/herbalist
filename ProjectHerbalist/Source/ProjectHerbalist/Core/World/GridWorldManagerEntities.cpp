@@ -20,6 +20,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Entities/AmbientEntityTypes.h"
+#include "Core/Entities/LandmarkTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Types/HerbalistCoreMath.h"
 #include "ProjectHerbalist.h"
@@ -241,18 +242,30 @@ void AGridWorldManager::SeedTestLandmarks()
 {
     EntityLandmarks.Empty();
 
-    // Полевик: первая найденная клетка Лесостепи, не водная.
-    for (const FGridCell& Cell : Cells)
+    // Один "хозяин" на биом мог занять первую попавшуюся клетку молча —
+    // с 2026-08-29 несколько определений делят один биом (Тайга: Аука +
+    // Дух Медведя; Широколиств. лес: Гуменник + Овинник + Жердяи; Степь:
+    // Переплут + Курганные огни; Смеш. лес: Боровик + Луговой; Лесостепь:
+    // Полевик + Курганники; Речная пойма: Бродницы) — CellsUsed следит,
+    // чтобы каждый получил СВОЮ клетку, а не потерялся, заняв уже занятую
+    // (первый в реестре выигрывал бы её снова и снова).
+    TSet<FIntPoint> CellsUsed;
+    for (const FLandmarkDefinition& Def : GetLandmarkDefinitions())
     {
-        if (Cell.Biome == EBiomeType::ForestSteppe && !Cell.bIsWater)
+        for (const FGridCell& Cell : Cells)
         {
+            if (Cell.Biome != Def.Biome || Cell.bIsWater) continue;
+            const FIntPoint Coord(Cell.X, Cell.Y);
+            if (CellsUsed.Contains(Coord)) continue;
+
             FEntityLandmark Landmark;
-            Landmark.EntityID = EntityID_Polevik;
-            Landmark.Cell = FIntPoint(Cell.X, Cell.Y);
+            Landmark.EntityID = Def.EntityID;
+            Landmark.Cell = Coord;
             Landmark.Respect = 0.0f;
             EntityLandmarks.Add(Landmark);
+            CellsUsed.Add(Coord);
             UE_LOG(LogHerbalistWorld, Log, TEXT("[Entities] Seeded landmark %s at (%d,%d)"),
-                *EntityID_Polevik.ToString(), Cell.X, Cell.Y);
+                *Def.EntityID.ToString(), Coord.X, Coord.Y);
             break;
         }
     }
@@ -288,8 +301,6 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float DawnStabilityRate   = Settings ? Settings->DawnStabilityRate   : 0.004f;
     const float DuskDistortionRate  = Settings ? Settings->DuskDistortionRate  : 0.005f;
     const float PoludnitsaDistortionRate = Settings ? Settings->PoludnitsaDistortionRate : 0.02f;
-    const float RespectGainRate     = Settings ? Settings->LandmarkRespectGainRate          : 0.01f;
-    const float RespectDecayRate    = Settings ? Settings->LandmarkRespectDecayRate         : 0.02f;
     const float HysteresisMargin    = Settings ? Settings->EntityManifestationHysteresis    : 0.05f;
 
     FStateDelta Delta;
@@ -575,19 +586,23 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         const bool bBlessEligible = PassesHysteresisThreshold(bWasBlessed, Landmark.Respect, 0.5f, HysteresisMargin);
         const bool bCurseEligible = PassesHysteresisThreshold(bWasCursed, -Landmark.Respect, 0.3f, HysteresisMargin);
 
-        if (bBlessEligible && CanManifest(*Cell, Landmark.EntityID))
+        // Какую ось благословлять/проклинать и с какой скоростью — из
+        // реестра §16.3 (LandmarkTypes.h), не захардкожено на Полевика.
+        // Отсутствие определения (ещё не заведённый "хозяин") — молчаливый
+        // no-op, не крах: та же терпимость, что у AmbientEntityDefinition
+        // к неизвестным EntityID.
+        const FLandmarkDefinition* Def = FindLandmarkDefinition(Landmark.EntityID);
+
+        if (bBlessEligible && Def && CanManifest(*Cell, Landmark.EntityID))
         {
-            // Благословлённое зерно (08_Content/бестиарий: "повышенная Potency и Purity").
-            NewTarget.Meta.Potency = FMath::Clamp(NewTarget.Meta.Potency + RespectGainRate * DeltaTime, 0.0f, 1.0f);
-            NewTarget.Meta.Purity  = FMath::Clamp(NewTarget.Meta.Purity + RespectGainRate * DeltaTime * 0.5f, 0.0f, 1.0f);
+            ApplyLandmarkAxisNudge(NewTarget, Def->BlessAxis,  Def->BlessRate  * DeltaTime);
+            ApplyLandmarkAxisNudge(NewTarget, Def->BlessAxis2, Def->BlessRate2 * DeltaTime);
             Cell->ManifestedEntityID = Landmark.EntityID;
             bChanged = true;
         }
-        else if (bCurseEligible && CanManifest(*Cell, Landmark.EntityID))
+        else if (bCurseEligible && Def && CanManifest(*Cell, Landmark.EntityID))
         {
-            // "Порча посевов, наведение усталости" — переведено в Stability, а не
-            // в новую придуманную ось "усталости".
-            NewTarget.Meta.Stability = FMath::Clamp(NewTarget.Meta.Stability - RespectDecayRate * DeltaTime, 0.0f, 1.0f);
+            ApplyLandmarkAxisNudge(NewTarget, Def->CurseAxis, Def->CurseRate * DeltaTime);
             Cell->ManifestedEntityID = Landmark.EntityID;
             bChanged = true;
         }
