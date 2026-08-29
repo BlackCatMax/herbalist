@@ -403,10 +403,22 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 
+    // Одно и то же окно условий для всех 1-3 ресурсов этого вызова (та же
+    // клетка, тот же момент) — читается один раз, не на каждой итерации.
+    FHarvestContext Context;
+    Context.Season = GetSeason();
+    Context.bLateSummer = IsLateSummer();
+    Context.TimeOfDay = IsDawn() ? EHarvestTimeWindow::Dawn
+        : IsDusk() ? EHarvestTimeWindow::Dusk
+        : IsNight() ? EHarvestTimeWindow::Night
+        : EHarvestTimeWindow::Day;
+    Context.MoonPhase = GetMoonPhase();
+    Context.bDryWeather = !IsRainy() && !IsBlizzard();
+
     int32 NumResources = WorldRNG.RandRange(1, 3);
     for (int32 i = 0; i < NumResources; ++i)
     {
-        FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell.Biome, Cell.State, WorldRNG) : NAME_None;
+        FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, WorldRNG) : NAME_None;
         if (IngredientID.IsNone()) continue;
 
         FVector Offset = FVector(WorldRNG.FRandRange(-CellSize * 0.3f, CellSize * 0.3f),

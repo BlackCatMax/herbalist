@@ -27,10 +27,14 @@ public:
 
     TArray<FName> GetResourcesForBiome(EBiomeType Biome) const;
 
-    // Пригодность (DESIGN_World_State.md §15, звено 3): AllowedBiomes уже решил,
-    // КТО может расти здесь (кэш CachedResourcesByBiome) — CellState решает,
-    // СКОЛЬКО шансов у каждого кандидата, через близость к его BaseState.
-    FName GetRandomResourceForBiome(EBiomeType Biome, const FRealState& CellState, FRandomStream& Rng) const;
+    // Пригодность (DESIGN_World_State.md §15/§16, звенья 3 и 8): AllowedBiomes
+    // уже решил, КТО может расти здесь (кэш CachedResourcesByBiome) — Cell и
+    // HarvestContext решают, СКОЛЬКО шансов у каждого кандидата: близость к
+    // BaseState (звено 3) умножается на (1 − Cell.HarvestStress) и на
+    // СезонноеОкно×ВременноеОкно×ЛунноеОкно×ПогодноеОкно (звено 8), каждое —
+    // мягкий гейт (IngredientWindowMismatchMultiplier), не hard-фильтр. Cell
+    // целиком, не Biome+State по отдельности — ради HarvestStress.
+    FName GetRandomResourceForBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
 
     void Reset();
 

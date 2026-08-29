@@ -17,19 +17,10 @@
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
+#include "TestWorldHelpers.h"
+
 namespace
 {
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World)
-    {
-        if (!World) return nullptr;
-        AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
-        if (Manager)
-        {
-            Manager->DispatchBeginPlay();
-        }
-        return Manager;
-    }
-
     // Дефолт: GameDayMinutes=32мин -> 1920 секунд игровых часов на сутки.
     constexpr float DaySeconds = 32.0f * 60.0f;
 }

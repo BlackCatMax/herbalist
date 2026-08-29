@@ -512,6 +512,59 @@ Harvest/Apply(крафт)-командам, `ShowJournal()` как первый 
     вызывающий код не трогать). Поле `HarvestWeather` у ингредиентов
     по-прежнему не заведено — этот заход закрыл только §16.2 (бестиарий),
     не §16 `DESIGN_World_State.md` целиком.
+
+    **✅ Звено 8 (§16 `DESIGN_World_State.md`, "Сезон/погода → ингредиенты")
+    ЗАКРЫТО 2026-08-29**, по прямому запросу пользователя ("прорабатываем
+    сбор, связку ингредиентов с сезонами, погодой и прочими факторами").
+    `FIngredientTableRow` получил `AllowedSeasons`/`bAutumnOnly`/
+    `HarvestTimeWindow`/`bRequiresMoonPhase`+`RequiredMoonPhase`/
+    `bRequiresDryWeather` — мягкие гейты (`IngredientWindowMismatchMultiplier`,
+    никогда 0), умножаются в `GetRandomResourceForBiome` поверх уже
+    существующей гауссианы по `Distance(Cell.State, Row.BaseState)`, вместе с
+    `(1 − Cell.HarvestStress)` (закрывает заодно звено 4, "Разрастание →
+    среда" — предсказано самим §15 текстом design-документа заранее).
+    Погода расширена третьим независимым каналом шума — `GetRainIntensity`/
+    `IsRainy()` (`RainyThreshold`, `HerbalistSettings.h`) — ни Ветер, ни
+    сезонная Метель не покрывали "сухой день", самое частое погодное условие
+    в компендиуме (Метель вдобавок в принципе невозможна вне Зимы, а
+    большинство трав собирают Весной/Летом).
+
+    Фоновый агент прочитал все 76 карточек `04_Compendium/Растительность/` и
+    извлёк условия сбора; реальные значения проставлены на 70 из них через
+    новый `IngredientHarvestWindowPatchCommandlet` (`-run=
+    IngredientHarvestWindowPatch`, тот же JSON round-trip через
+    `GetTableAsJSON`/`CreateTableFromJSONString`, что `IngredientAppendCommandlet`,
+    но точечно мержит 5 новых ключей поверх живых рядов, не добавляет/не
+    удаляет) — источник данных: `herbalist_docs/CSV_tabs/
+    ingredient_harvest_windows.json`. 6 карточек оставлены без окна вовсе
+    (`bol_03`, `les_09`, `mix_01`, `ste_08`, `tai_09`, `broad_10` — либо
+    "не найдено", либо растянуты на весь год без выраженного окна).
+
+    **"Хозяин" (Леший/Водяной/Русалки...) СОЗНАТЕЛЬНО НЕ реализован** —
+    почти в каждой карточке назван, но пользователь явно выбрал "не сейчас"
+    (`AskUserQuestion`, вариант "Хранителя+ритуал — отдельная, самостоятельная
+    задача"): данных много (конкретные сущности, конкретные последствия, не
+    всегда согласующиеся между карточками — например, Ольха речной поймы
+    прямо противоречит правилу "сухое/живое дерево" у остальных деревьев),
+    и это разошлось бы с уже принятым 2026-08-29 решением, что Respect
+    хозяина места меняется только через явное подношение (Apply), не
+    автоматически от сбора. Естественная форма без нового канала записи,
+    если возьмёмся: читать уже существующий `Landmark.Respect` как ещё один
+    множитель `Suitability`, не писать в него при сборе.
+
+    Регрессия: `Herbalist.Registry.{SeasonWindowBiasesTowardMatchingSeason,
+    AutumnOnlyDoesNotBlockItsOtherAllowedSeason,
+    HarvestTimeWindowGatesDawnOnlyIngredient, MoonPhaseGatesRequiredPhase,
+    DryWeatherGatesRequiredIngredient, ExhaustedCellStillYieldsSomethingNotNothing}`
+    (6 новых тестов). Заодно найден и починен реальный, не связанный с этой
+    задачей баг: 15 файлов `Tests/*.cpp` дублировали идентичный хелпер
+    `SpawnAndBeginPlay` каждый в своём anonymous namespace — было безобидно,
+    пока `ProjectHerbalistTests` собирался файл-за-файлом, но добавление
+    новых файлов в этой сессии сдвинуло UBT на unity-сборку модуля (все .cpp
+    через `#include` в один `Module.ProjectHerbalistTests.cpp`), и
+    одинаковые тела внутри одной единицы трансляции стали настоящим ODR-
+    нарушением (MSVC C2084). Вынесено в общий `Tests/TestWorldHelpers.h`.
+    82/82 всего зелёные.
 13. PCG/материалы — продолжить с `MPC_WorldStateFields`.
 
 ### Вне фаз, в любой момент

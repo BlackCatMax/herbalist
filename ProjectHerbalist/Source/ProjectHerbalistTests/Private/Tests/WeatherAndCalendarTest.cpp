@@ -17,19 +17,10 @@
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
+#include "TestWorldHelpers.h"
+
 namespace
 {
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World)
-    {
-        if (!World) return nullptr;
-        AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
-        if (Manager)
-        {
-            Manager->DispatchBeginPlay();
-        }
-        return Manager;
-    }
-
     // Возвращает первый GameClockSeconds из [Start, End) с шагом Step, где
     // Predicate(Manager) истинен, либо -1 если не нашлось.
     template<typename TPredicate>

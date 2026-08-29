@@ -198,11 +198,11 @@ graph LR
 | 1 | Среда → свойства собранного | ✅ `GenerateHarvestResult`, Lerp с `Resilience`. Работает и проверено численно. |
 | 2 | Сбор → истощение среды | ✅ `HarvestStress` + деградация. Починено в этой сессии (frame-rate). |
 | 3 | **Среда → что вырастает** | ✅ ВЫПОЛНЕНО 2026-08-23 — `GetRandomResourceForBiome` теперь берёт `Cell.State` третьим параметром и гасит `RarityWeight` гауссианой по `Distance(CellState, Row.BaseState)` (§15). Регрессия: `Herbalist.Registry.SuitabilityBiasesTowardCloserBaseState`. |
-| 4 | Разрастание → среда | 🟡 Косвенно закрыто через звено 3: состав выросшего теперь зависит от `Cell.State`, значит следующий сбор (звено 1) уже видит след предыдущего состояния. Прямой обратной связи (само разрастание меняет `Cell.State`) всё ещё нет — решено, что это не нужно отдельно, эффект уже есть через выбор ресурса. |
+| 4 | Разрастание → среда | 🟡→✅ Косвенно закрыто через звено 3: состав выросшего теперь зависит от `Cell.State`, значит следующий сбор (звено 1) уже видит след предыдущего состояния. 2026-08-29: `GetRandomResourceForBiome` теперь читает `Cell.HarvestStress` тем же множителем (`1 − HarvestStress`) — истощённая сборами клетка родит меньше и хуже, обратная связь появилась без отдельной механики, как и предполагал §15 ниже. Прямой обратной связи (само разрастание меняет `Cell.State`) всё ещё нет — решено, что это не нужно отдельно. |
 | 5 | Среда → проявление сущностей | ✅ Гнильники по порогу Corruption, Берегиня по HistoryPurity. |
 | 6 | Сущности → среда | ✅ через `TargetStateNudges`. |
 | 7 | Миграция существ | ❌ Сущности проявляются на месте по порогу и гаснут. Не перемещаются. |
-| 8 | Сезон/погода → ингредиенты | ❌ Сезонов нет. `TimeOfDayMask` есть у `UHerbalistIngredient`, но **не у `FIngredientTableRow`**, а игра читает именно таблицу. Плюс сам enum нигде не определён. |
+| 8 | Сезон/погода → ингредиенты | ✅ ВЫПОЛНЕНО 2026-08-29 — `FIngredientTableRow` получил `AllowedSeasons`/`bAutumnOnly`/`HarvestTimeWindow`/`bRequiresMoonPhase`+`RequiredMoonPhase`/`bRequiresDryWeather` (`IngredientTableRow.h`); `GetRandomResourceForBiome` умножает `Suitability` на все четыре мягких гейта (`IngredientWindowMismatchMultiplier`, никогда 0) плюс `(1 − Cell.HarvestStress)` — звено 4 закрыто той же правкой, не отдельно. Реальные значения на 70 из 76 карточек компендиума проставлены через `IngredientHarvestWindowPatchCommandlet` по отчёту агента, прочитавшего весь `04_Compendium/Растительность/`. Погода расширена третьим независимым каналом шума (`GetRainIntensity`/`IsRainy`, §15.7) — ни Ветер, ни сезонная Метель не покрывали "сухой день", самое частое условие в карточках. Регрессия: `Herbalist.Registry.{SeasonWindowBiasesTowardMatchingSeason, AutumnOnlyDoesNotBlockItsOtherAllowedSeason, HarvestTimeWindowGatesDawnOnlyIngredient, MoonPhaseGatesRequiredPhase, DryWeatherGatesRequiredIngredient, ExhaustedCellStillYieldsSomethingNotNothing}`. "Хозяин" (Леший/Водяной/...), тоже почти повсеместный в карточках, сознательно НЕ реализован в этом проходе — расходится с решением 2026-08-29, что Respect хозяина места меняется только через подношение (Apply), не автоматически от сбора; см. `GridWorldManagerTick.cpp` "Подношение хозяину места" и `ROADMAP.md`. |
 | 9 | Время суток → сущности | 🟡 Только `IsNight()` для Морочников, и та не видна игроку. |
 | 10 | Прогресс игрока → Заряна | ❌ Ничего. |
 
@@ -424,7 +424,21 @@ Entity = Projection(BiomeState)».
 `GuardianEntity` (кто хозяин), `HarvestTimeWindow`, `HarvestWeather`,
 `DisrespectPenalty`, `SeasonWindow`.
 
-### 17. Замкнутая схема
+**Статус (2026-08-29).** `HarvestTimeWindow`/`SeasonWindow`(→`AllowedSeasons`+
+`bAutumnOnly`)/`HarvestWeather`(→`bRequiresDryWeather`) реализованы, плюс
+незапланированная здесь `bRequiresMoonPhase`+`RequiredMoonPhase` — фоновый
+агент, читавший все 76 карточек для этой задачи, обнаружил, что фаза луны
+названа как самостоятельное условие примерно в половине из них, независимо от
+времени суток. `GuardianEntity`/`DisrespectPenalty` — сознательно НЕ
+реализованы: пока писался этот раздел, автоматической связи "сбор не по
+правилам → штраф хозяину" ещё не существовало, но в текущем коде она уже
+закрыта иначе — Respect хозяина места меняется только через явное подношение
+(Apply-на-клетку-обиталище, `GridWorldManagerTick.cpp`), НЕ пассивно и НЕ от
+самого факта сбора. Ввести `DisrespectPenalty` значило бы завести второй,
+противоречащий этому решению канал изменения Respect. Отложено осознанно, не
+забыто — если понадобится, естественная форма без нового канала: читать уже
+существующий `Landmark.Respect` как ещё один множитель `Suitability` (хозяин
+в загоне → его подопечные травы реже всходят), не писать в него при сборе.
 
 ```mermaid
 graph TD

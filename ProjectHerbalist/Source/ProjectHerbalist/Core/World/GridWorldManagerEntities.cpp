@@ -311,6 +311,19 @@ bool AGridWorldManager::IsBlizzard() const
     return GetWindIntensity() >= WindThreshold && GetSnowIntensity() >= SnowThreshold;
 }
 
+float AGridWorldManager::GetRainIntensity() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float FrontDuration = Settings ? Settings->WeatherFrontDurationSeconds : 480.0f;
+    return SampleWeatherNoise(GameClockSeconds, RngBaseSeed, FrontDuration, /*Channel=*/2);
+}
+
+bool AGridWorldManager::IsRainy() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    return GetRainIntensity() >= (Settings ? Settings->RainyThreshold : 0.6f);
+}
+
 float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
 {
     const FGridCell* Cell = GetCellConst(X, Y);

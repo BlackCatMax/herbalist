@@ -265,6 +265,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
     bool IsBlizzard() const;   // Metель = сильный ветер + снег одновременно
 
+    // Третий, независимый канал того же шума (Channel=2) — добавлено 2026-08-29
+    // для сбора трав (FIngredientTableRow::bRequiresDryWeather, §15.7): в
+    // отличие от снега, дождь возможен в любой сезон, не только Зимой.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
+    float GetRainIntensity() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
+    bool IsRainy() const;
+
     // Игровые часы, независимые от GetWorld()->GetTimeSeconds() (движковое,
     // level-relative, обнуляется при перезапуске сессии) — нужны, чтобы фаза
     // суток (и будущая погода через UltraDynamicSky, ROADMAP.md Фаза D §12)

@@ -110,31 +110,76 @@ TArray<FName> UIngredientRegistrySubsystem::GetResourcesForBiome(EBiomeType Biom
     return Found ? *Found : TArray<FName>();
 }
 
-FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(EBiomeType Biome, const FRealState& CellState, FRandomStream& Rng) const
+namespace
 {
-    const TArray<FName>* Candidates = CachedResourcesByBiome.Find(Biome);
+    // Мягкий гейт "окна" (сезон/время суток/луна/погода) — DESIGN_World_State.md
+    // §15/§16, звено 8. bRequires == false значит "условия нет" -> множитель 1
+    // всегда, вне зависимости от bMatchesNow (та же семантика, что у пустого
+    // AllowedSeasons). Иначе — 1, если текущее условие совпало с требуемым,
+    // иначе IngredientWindowMismatchMultiplier (никогда ровно 0, тот же принцип,
+    // что уже применён к гауссиане по State ниже).
+    float WindowMultiplier(bool bRequires, bool bMatchesNow, float MismatchMultiplier)
+    {
+        if (!bRequires) return 1.0f;
+        return bMatchesNow ? 1.0f : MismatchMultiplier;
+    }
+}
+
+FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
+{
+    const TArray<FName>* Candidates = CachedResourcesByBiome.Find(Cell.Biome);
     if (!Candidates || Candidates->Num() == 0) return NAME_None;
     if (Candidates->Num() == 1) return (*Candidates)[0];
 
-    const TArray<int32>* BaseWeights = CachedWeightsByBiome.Find(Biome);
+    const TArray<int32>* BaseWeights = CachedWeightsByBiome.Find(Cell.Biome);
     if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return (*Candidates)[0];
 
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
     // Пригодность (DESIGN_World_State.md §15): AllowedBiomes уже отфильтровал
     // "кто может здесь расти" — Candidates. Здесь решается "сколько шансов у
     // кого": RarityWeight гасится удалённостью Cell.State от Row.BaseState
     // по гауссиане, не линейно — так середина спада мягкая, а полюса (клетка,
     // почти точная копия чьего-то эталона / его противоположность) выражены
     // резко, при этом вес никогда не проваливается ровно в 0.
-    const float Falloff = GetHerbalistSettings()->IngredientSuitabilityFalloff;
+    const float Falloff = Settings ? Settings->IngredientSuitabilityFalloff : 2.0f;
+    // (1 − HarvestStress), §15 звено 4: истощённая сборами клетка родит меньше
+    // — тот же HarvestStress, что уже двигает Гнильников/Злыдней/Подпольников
+    // (AmbientEntityTypes.h), здесь читается напрямую, не через сущность.
+    const float StressFactor = FMath::Clamp(1.0f - Cell.HarvestStress, 0.0f, 1.0f);
+    const float WindowMismatch = Settings ? Settings->IngredientWindowMismatchMultiplier : 0.15f;
+
     TArray<float> EffectiveWeights;
     EffectiveWeights.Reserve(Candidates->Num());
     float TotalWeight = 0.0f;
     for (int32 i = 0; i < Candidates->Num(); ++i)
     {
         const FIngredientTableRow* Row = Rows.Find((*Candidates)[i]);
-        const float Dist = Row ? HerbalistCore::Math::Distance(CellState, Row->BaseState) : 0.0f;
+        if (!Row)
+        {
+            EffectiveWeights.Add(static_cast<float>((*BaseWeights)[i]));
+            TotalWeight += EffectiveWeights.Last();
+            continue;
+        }
+
+        const float Dist = HerbalistCore::Math::Distance(Cell.State, Row->BaseState);
         const float Suitability = FMath::Exp(-Falloff * Dist * Dist);
-        const float Weight = static_cast<float>((*BaseWeights)[i]) * Suitability;
+
+        // Пусто = любой сезон (см. комментарий у AllowedSeasons в IngredientTableRow.h).
+        // bAutumnOnly — второй, более узкий гейт ВНУТРИ Лета (см. комментарий там же):
+        // применяется только когда СЕЙЧАС Лето, весенние/зимние окна не трогает.
+        const bool bSeasonOK = Row->AllowedSeasons.Num() == 0 || Row->AllowedSeasons.Contains(Context.Season);
+        const bool bAutumnOK = !Row->bAutumnOnly || Context.Season != ESeason::Summer || Context.bLateSummer;
+        const float SeasonWindow = (bSeasonOK && bAutumnOK) ? 1.0f : WindowMismatch;
+
+        const float TimeWindow = WindowMultiplier(Row->HarvestTimeWindow != EHarvestTimeWindow::Any,
+            Row->HarvestTimeWindow == Context.TimeOfDay, WindowMismatch);
+        const float MoonWindow = WindowMultiplier(Row->bRequiresMoonPhase,
+            Row->RequiredMoonPhase == Context.MoonPhase, WindowMismatch);
+        const float WeatherWindow = WindowMultiplier(Row->bRequiresDryWeather,
+            Context.bDryWeather, WindowMismatch);
+
+        const float Weight = static_cast<float>((*BaseWeights)[i]) * Suitability * StressFactor
+            * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow;
         EffectiveWeights.Add(Weight);
         TotalWeight += Weight;
     }

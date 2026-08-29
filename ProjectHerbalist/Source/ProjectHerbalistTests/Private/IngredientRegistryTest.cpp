@@ -171,16 +171,22 @@ bool FHerbalistRegistry_SuitabilityBiasesTowardCloserBaseState::RunTest(const FS
 
     UIngredientRegistrySubsystem* Registry = MakeRegistry(Table);
 
-    FRealState CellState;
-    CellState.Meta.Purity = 0.35f;
-    CellState.Meta.Corruption = 0.70f;   // совпадает с Белокрыльником, не со Сфагнумом
+    FGridCell Cell;
+    Cell.Biome = EBiomeType::Bog;
+    Cell.State.Meta.Purity = 0.35f;
+    Cell.State.Meta.Corruption = 0.70f;   // совпадает с Белокрыльником, не со Сфагнумом
+
+    // Оба ряда без AllowedSeasons/HarvestTimeWindow/луны/погоды (по умолчанию
+    // "без ограничения") — окна из этого теста не участвуют, проверяем только
+    // смещение по дистанции State, как и раньше.
+    FHarvestContext Context;
 
     FRandomStream Rng(12345);
     int32 CloseCount = 0, FarCount = 0;
     const int32 Trials = 2000;
     for (int32 i = 0; i < Trials; ++i)
     {
-        FName Picked = Registry->GetRandomResourceForBiome(EBiomeType::Bog, CellState, Rng);
+        FName Picked = Registry->GetRandomResourceForBiome(Cell, Context, Rng);
         if (Picked == FName(TEXT("Belokrylnik"))) ++CloseCount;
         else if (Picked == FName(TEXT("Sphagnum"))) ++FarCount;
     }

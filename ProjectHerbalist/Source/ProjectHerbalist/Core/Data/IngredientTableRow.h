@@ -18,6 +18,21 @@ enum class EIngredientClass : uint8
     Unknown     UMETA(DisplayName = "Unknown")
 };
 
+// Окно времени суток для сбора (DESIGN_World_State.md §15/§16, "ПогодноеОкно"
+// сестра — "ВременноеОкно"), 2026-08-29. День = Рассвет/Закат/Ночь оба false
+// (GridWorldManager::IsDawn/IsDusk/IsNight уже взаимоисключающие и покрывают
+// сутки целиком, см. 15_Cycles_And_Shrines §15.2) — не нужен отдельный
+// IsDay(), просто отсутствие остальных трёх.
+UENUM(BlueprintType)
+enum class EHarvestTimeWindow : uint8
+{
+    Any     UMETA(DisplayName = "Любое время"),
+    Dawn    UMETA(DisplayName = "Рассвет"),
+    Day     UMETA(DisplayName = "День"),
+    Dusk    UMETA(DisplayName = "Закат"),
+    Night   UMETA(DisplayName = "Ночь")
+};
+
 USTRUCT(BlueprintType)
 struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
 {
@@ -66,4 +81,63 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
     TArray<FName> Tags;
+
+    // ---- Окна сбора (DESIGN_World_State.md §15/§16, звено 8: "Сезон/погода
+    // → ингредиенты"), 2026-08-29. Тот же язык гейтов, что уже устоялся в
+    // AmbientEntityTypes.h (bRequiresX/RequiredX, пусто = без ограничения) —
+    // не hard-фильтр (в отличие от AllowedBiomes, где пустой список значит
+    // "нигде не растёт"), а мягкий множитель в GetRandomResourceForBiome
+    // (IngredientWindowMismatchMultiplier, HerbalistSettings.h): вне окна
+    // шанс резко падает, но не запирается в 0.
+
+    // Пусто = любой сезон. Небольшая проверенная свобода (не строгий гейт по
+    // месяцу) — в компендиуме сроки цветения/сбора почти всегда указаны
+    // диапазоном ("май-июнь"), а проект осознанно держит только 3 сезона
+    // (см. bAutumnOnly ниже и комментарий у GridWorldManager::IsLateSummer).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    TArray<ESeason> AllowedSeasons;
+
+    // Второй, более узкий гейт ВНУТРИ Лета — прокси "осени" (см. bRequiresLateSummer
+    // в AmbientEntityTypes.h, тот же принцип, тот же IsLateSummer()). Применяется
+    // ТОЛЬКО когда текущий сезон Лето: если AllowedSeasons также включает Весну,
+    // весенний сбор им не затрагивается — типичный случай компендиума "корень
+    // копают ранней весной ИЛИ поздней осенью" (два отдельных окна, не одно).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    bool bAutumnOnly = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    EHarvestTimeWindow HarvestTimeWindow = EHarvestTimeWindow::Any;
+
+    // Фаза луны (GridWorldManager::GetMoonPhase, §15.3) — компендиум называет
+    // её примерно в половине карточек как самостоятельное, не завязанное на
+    // время суток условие ("собирать на убывающую луну").
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    bool bRequiresMoonPhase = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    EMoonPhase RequiredMoonPhase = EMoonPhase::NewMoon;
+
+    // "Сухая погода" — самое частое погодное условие компендиума ("собирать в
+    // сухой день", грозы явно запрещены). GridWorldManager::IsRainy()/IsBlizzard()
+    // читаются как "не сухо" — оба означают осадки, а не только дождь.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    bool bRequiresDryWeather = false;
+};
+
+// Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются
+// один раз в AGridWorldManager::SpawnResourcesInCell (та же клетка для всех
+// 1-3 ресурсов, спавнящихся в неё) и сравниваются с окнами выше построчно.
+// Отдельная структура, а не россыпь bool/enum параметров — те же 5 сигналов
+// (сезон/окно суток/луна/погода) уже читает GetEntityManifestationPriority
+// окольным путём через сам AGridWorldManager, здесь просто собраны в одно
+// значение для передачи через границу GameInstanceSubsystem.
+USTRUCT()
+struct FHarvestContext
+{
+    GENERATED_BODY()
+
+    ESeason Season = ESeason::Spring;
+    bool bLateSummer = false;
+    EHarvestTimeWindow TimeOfDay = EHarvestTimeWindow::Day;
+    EMoonPhase MoonPhase = EMoonPhase::NewMoon;
+    bool bDryWeather = true;
 };

@@ -20,18 +20,10 @@
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
+#include "TestWorldHelpers.h"
+
 namespace
 {
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World)
-    {
-        if (!World) return nullptr;
-        AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
-        if (Manager)
-        {
-            Manager->DispatchBeginPlay();
-        }
-        return Manager;
-    }
 
     UBiomeGraphSubsystem* InitGraph(UWorld* World)
     {

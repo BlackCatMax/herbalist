@@ -50,19 +50,7 @@ bool FHerbalistShrine_OverlapTakesStrongestNotSum::RunTest(const FString& Parame
     return true;
 }
 
-namespace
-{
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World)
-    {
-        if (!World) return nullptr;
-        AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
-        if (Manager)
-        {
-            Manager->DispatchBeginPlay();
-        }
-        return Manager;
-    }
-}
+#include "TestWorldHelpers.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistShrine_RegisterIsIdempotent,
     "Herbalist.Shrine.RegisterIsIdempotent",

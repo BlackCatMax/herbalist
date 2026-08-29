@@ -266,6 +266,16 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Weather", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BlizzardSnowThreshold = 0.55f;
 
+    // Третий канал того же шума (Channel=2, SampleWeatherNoise), 2026-08-29 —
+    // добавлено для сбора трав (FIngredientTableRow::bRequiresDryWeather):
+    // компендиум почти повсеместно требует "сухой день" и явно запрещает сбор
+    // в грозу, а ни Ветер, ни Метель (которая вдобавок возможна только Зимой,
+    // GetSnowIntensity) этого не покрывают — большинство трав собирают
+    // Весной/Летом. Независимый канал, не производный от Wind/Snow — иначе
+    // дождь был бы идеально скоррелирован с ветром, а не отдельным фронтом.
+    UPROPERTY(config, EditAnywhere, Category = "Weather", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float RainyThreshold = 0.6f;
+
     // Скорость обновления Memory.HistoryPurity (медленная скользящая средняя от текущей Purity).
     UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float HistoryPurityLerpRate = 0.02f;
@@ -439,6 +449,17 @@ public:
     // всходит, просто редко.
     UPROPERTY(config, EditAnywhere, Category = "Spawning", meta = (ClampMin = "0.0"))
     float IngredientSuitabilityFalloff = 2.0f;
+
+    // Множитель пригодности вне окна сезона/времени суток/фазы луны/погоды
+    // (DESIGN_World_State.md §15/§16: "СезонноеОкно × ПогодноеОкно"), 2026-08-29.
+    // Не 0 — тот же принцип, что уже применён к дистанции по State выше
+    // (комментарий над IngredientSuitabilityFalloff): окно резко гасит шанс,
+    // но не запирает его наглухо (редкая трава вне срока — не невозможная
+    // трава). Один общий множитель на все четыре гейта, не четыре отдельных
+    // настройки — они однородны по роли (мягкий отсекающий гейт), лишняя
+    // раздельная настройка не отражала бы никакой реальной разницы между ними.
+    UPROPERTY(config, EditAnywhere, Category = "Spawning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float IngredientWindowMismatchMultiplier = 0.15f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

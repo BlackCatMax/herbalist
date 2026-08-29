@@ -24,24 +24,7 @@
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
-namespace
-{
-    // Прямой вызов виртуального BeginPlay() пропускает состояние-машину движка
-    // (AActor::ActorHasBegunPlay выставляется в DispatchBeginPlay ДО вызова
-    // BeginPlay) и валит ensure "ActorHasBegunPlay == BeginningPlay". Правильный
-    // публичный API именно для этого случая — динамически заспавненный актор вне
-    // обычного старта уровня/PIE — DispatchBeginPlay(), не голый BeginPlay().
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World)
-    {
-        if (!World) return nullptr;
-        AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
-        if (Manager)
-        {
-            Manager->DispatchBeginPlay();
-        }
-        return Manager;
-    }
-}
+#include "TestWorldHelpers.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_CaptureIsSparse,
     "Herbalist.Save.CaptureIsSparse",
