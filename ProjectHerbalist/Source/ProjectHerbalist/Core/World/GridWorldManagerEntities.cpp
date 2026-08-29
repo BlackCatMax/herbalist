@@ -358,11 +358,24 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // нудж мельче любого одиночного Низшего: он не выбирает конкретные
         // клетки, а идёт по всей сетке сразу, и это не должно перекрывать
         // сигнал от локальных существ.
+        //
+        // Сравниваем с уже стоящим значением перед записью (не просто "ночь
+        // идёт, значит меняем") — тот же принцип, что уже применён в
+        // ApplyBiomeInfluences после аудита 2026-08-24 (§7.1
+        // AUDIT_AND_REFACTORING_PLAN.md): без этого клетка у потолка/пола
+        // (Distortion/Corruption уже 1.0) всё равно помечалась бы грязной
+        // каждый тик безусловно, хотя реального сдвига нет.
         if (IsNight())
         {
-            NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + NightHorrorDistortionRate * DeltaTime, 0.0f, 1.0f);
-            NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
-            bChanged = true;
+            const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + NightHorrorDistortionRate * DeltaTime, 0.0f, 1.0f);
+            const float NewCorruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
+            if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER) ||
+                !FMath::IsNearlyEqual(NewCorruption, NewTarget.Meta.Corruption, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Meta.Distortion = NewDistortion;
+                NewTarget.Meta.Corruption = NewCorruption;
+                bChanged = true;
+            }
         }
 
         // --- Зима, §15.4: "снег как чистота" ---
@@ -371,11 +384,16 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // зима честно самая чистая и самая опасная одновременно". Тот же
         // разлитый-по-сетке паттерн, что ночной нудж выше — независимо от
         // ManifestedEntityID, коэффициенты складываются (зимняя ночь получает
-        // оба одновременно, и это осознанно, не коллизия).
+        // оба одновременно, и это осознанно, не коллизия). Та же проверка
+        // перед записью, что и у ночного нуджа — не метить клетку у потолка.
         if (bIsWinter)
         {
-            NewTarget.Meta.Purity = FMath::Clamp(NewTarget.Meta.Purity + WinterPurityRate * DeltaTime, 0.0f, 1.0f);
-            bChanged = true;
+            const float NewPurity = FMath::Clamp(NewTarget.Meta.Purity + WinterPurityRate * DeltaTime, 0.0f, 1.0f);
+            if (!FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Meta.Purity = NewPurity;
+                bChanged = true;
+            }
         }
 
         if (bChanged)
