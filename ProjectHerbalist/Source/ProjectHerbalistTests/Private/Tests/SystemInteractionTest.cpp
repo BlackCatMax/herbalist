@@ -145,6 +145,14 @@ bool FHerbalistSystemInteraction_StackedWritersConvergeWithoutChaos::RunTest(con
     TestTrue(TEXT("Cell ends up locked onto the corrupt pole (contagion + self bistability both push that way)"),
         Target->Memory.bDegrading);
 
+    // Фикс 2026-08-30 (по итогам обхода всего бестиария, см. AmbientSweep/
+    // LandmarkSweep/LegendarySweep ниже): Моховые духи (TriggerAxis=Purity,
+    // ортогонален Corruption) больше не должны манифестировать на клетке,
+    // которую бистабильность зафиксировала испорченной -- раньше именно это
+    // и происходило (см. CHANGELOG.md, находка сессии).
+    TestTrue(TEXT("Benign ambient entity does not remain manifested on a bDegrading cell"),
+        Target->ManifestedEntityID.IsNone() || Target->ManifestedEntityID != FName(TEXT("Моховые духи")));
+
     AddInfo(FString::Printf(TEXT("Final state: ManifestedEntityID=%s bDegrading=%d State.Purity=%.3f State.Corruption=%.3f TargetState.Purity=%.3f TargetState.Corruption=%.3f"),
         *Target->ManifestedEntityID.ToString(), Target->Memory.bDegrading,
         Target->State.Meta.Purity, Target->State.Meta.Corruption,
@@ -231,6 +239,11 @@ bool FHerbalistSystemInteraction_LegendaryBenignVsBistability::RunTest(const FSt
     TestFalse(TEXT("State/TargetState never leaves [0,1] or produces NaN"), bSawNaNOrOutOfRange);
     TestTrue(FString::Printf(TEXT("ManifestedEntityID does not flicker uncontrollably (%d flips over 200 ticks)"), ManifestFlips),
         ManifestFlips <= 2);
+
+    // Фикс 2026-08-30: Благой полюс (MorokField графа, ортогонален Corruption
+    // клетки) больше не манифестирует на bDegrading-клетке.
+    TestTrue(TEXT("Benign Legendary does not remain manifested on a bDegrading cell"),
+        Anchored->ManifestedEntityID.IsNone() || Anchored->ManifestedEntityID != FName(TEXT("Индрик-зверь")));
 
     AddInfo(FString::Printf(TEXT("Final state: ManifestedEntityID=%s bDegrading=%d State.Corruption=%.3f State.Potency=%.3f TargetState.Corruption=%.3f TargetState.Potency=%.3f"),
         *Anchored->ManifestedEntityID.ToString(), Anchored->Memory.bDegrading,
@@ -418,6 +431,12 @@ bool FHerbalistSystemInteraction_MaximumStackDoesNotBreak::RunTest(const FString
     TestTrue(FString::Printf(TEXT("ManifestedEntityID does not flicker uncontrollably (%d flips over 300 ticks)"), ManifestFlips),
         ManifestFlips <= 4);
 
+    // Фикс 2026-08-30, тот же гейт, что и в StackedWritersConvergeWithoutChaos
+    // -- под максимальной нагрузкой (зима + диффузия биом-графа сверху)
+    // держится так же, не только в изолированном случае.
+    TestTrue(TEXT("Benign ambient entity does not remain manifested on a bDegrading cell under max stacking"),
+        Target->ManifestedEntityID.IsNone() || Target->ManifestedEntityID != FName(TEXT("Моховые духи")));
+
     AddInfo(FString::Printf(TEXT("Final state: ManifestedEntityID=%s bDegrading=%d State=(Corruption=%.3f Purity=%.3f Distortion=%.3f Stability=%.3f) Target=(Corruption=%.3f Purity=%.3f Distortion=%.3f Stability=%.3f)"),
         *Target->ManifestedEntityID.ToString(), Target->Memory.bDegrading,
         Target->State.Meta.Corruption, Target->State.Meta.Purity, Target->State.Meta.Distortion, Target->State.Meta.Stability,
@@ -483,11 +502,15 @@ bool FHerbalistSystemInteraction_LandmarkBlessVsSelfBistability::RunTest(const F
 
         TestFalse(FString::Printf(TEXT("[%s] State/TargetState stays in range"), *C.EntityID.ToString()), bSawNaNOrOutOfRange);
 
+        // Фикс 2026-08-30: благословенный Хозяин (Respect, ортогонален
+        // Corruption клетки) больше не остаётся манифестирован на клетке,
+        // которую бистабильность зафиксировала испорченной.
         const bool bIncoherent = Cell->Memory.bDegrading && Cell->ManifestedEntityID == C.EntityID;
-        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d%s"),
+        TestFalse(FString::Printf(TEXT("[%s/%s] blessed host does not remain manifested on a bDegrading cell"),
+            *C.EntityID.ToString(), *UEnum::GetValueAsString(C.Biome)), bIncoherent);
+        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d"),
             *C.EntityID.ToString(), *UEnum::GetValueAsString(C.Biome),
-            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading,
-            bIncoherent ? TEXT("  <-- INCOHERENT: blessed host manifests on a doomed cell") : TEXT("")));
+            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading));
 
         Manager->Destroy();
     }
@@ -558,12 +581,17 @@ bool FHerbalistSystemInteraction_AmbientSweepAcrossAllBiomes::RunTest(const FStr
         TestFalse(FString::Printf(TEXT("[%s] State/TargetState stays in range"), *Def.EntityID.ToString()), bSawNaNOrOutOfRange);
         ++Tested;
 
+        // Фикс 2026-08-30: любое существо с триггер-осью, ортогональной
+        // Corruption, больше не остаётся манифестировано на bDegrading-клетке
+        // (Гнильники исключены из этого правила самим гейтом -- их ось и есть
+        // Corruption -- поэтому им сюда попасть и не полагалось).
         const bool bIncoherent = Cell->Memory.bDegrading && Cell->ManifestedEntityID == Def.EntityID;
         if (bIncoherent) ++Incoherent;
-        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d%s"),
+        TestFalse(FString::Printf(TEXT("[%s/%s] does not remain manifested on a bDegrading cell"),
+            *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome)), bIncoherent);
+        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d"),
             *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome),
-            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading,
-            bIncoherent ? TEXT("  <-- INCOHERENT: manifests on a doomed cell") : TEXT("")));
+            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading));
 
         Manager->Destroy();
     }
@@ -641,13 +669,19 @@ bool FHerbalistSystemInteraction_LegendarySweepAcrossAllBiomes::RunTest(const FS
         TestFalse(FString::Printf(TEXT("[%s] State/TargetState stays in range"), *Def.EntityID.ToString()), bSawNaNOrOutOfRange);
         ++Tested;
 
+        // Фикс 2026-08-30: Благой полюс больше не остаётся манифестирован на
+        // bDegrading-клетке; Злой исключён из правила намеренно (высокий
+        // MorokField уже согласован с испорченным полюсом тематически).
         const bool bIncoherent = Anchored->Memory.bDegrading && Anchored->ManifestedEntityID == Def.EntityID;
         if (bIncoherent) ++Incoherent;
-        AddInfo(FString::Printf(TEXT("[%s/%s/%s] ManifestedEntityID=%s bDegrading=%d%s"),
+        if (Def.Pole == ELegendaryPole::Benign)
+        {
+            TestFalse(FString::Printf(TEXT("[%s/Benign] does not remain manifested on a bDegrading cell"), *Def.EntityID.ToString()), bIncoherent);
+        }
+        AddInfo(FString::Printf(TEXT("[%s/%s/%s] ManifestedEntityID=%s bDegrading=%d"),
             *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome),
             Def.Pole == ELegendaryPole::Malign ? TEXT("Malign") : TEXT("Benign"),
-            *Anchored->ManifestedEntityID.ToString(), Anchored->Memory.bDegrading,
-            bIncoherent ? TEXT("  <-- INCOHERENT: manifests on a doomed cell") : TEXT("")));
+            *Anchored->ManifestedEntityID.ToString(), Anchored->Memory.bDegrading));
 
         Graph->Deinitialize();
         Manager->Destroy();

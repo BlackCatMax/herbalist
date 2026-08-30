@@ -606,6 +606,18 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 bEligible = bEligible && IsKupalaNight();
             }
 
+            // Находка сессии 2026-08-30 (SystemInteractionTest — обход всего
+            // бестиария): 9 из 11 проверенных Низших существ манифестируют
+            // на клетке, которую бистабильность независимо зафиксировала на
+            // испорченном полюсе (bDegrading), потому что их триггер-ось
+            // (Purity/Stability/...) ортогональна Corruption по дизайну и не
+            // спадает вместе с ней. Гнильники (TriggerAxis=Corruption)
+            // согласованы с bDegrading по построению — не гейтим их.
+            if (Def.TriggerAxis != EAmbientTriggerAxis::Corruption)
+            {
+                bEligible = bEligible && !Cell.Memory.bDegrading;
+            }
+
             if (bEligible && CanManifest(Cell, Def.EntityID))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
@@ -676,7 +688,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             const bool bHistoryEligible = PassesHysteresisThreshold(bWasActive, Cell.Memory.HistoryPurity, BereginyaThreshold, HysteresisMargin);
             const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineInfluenceRadius);
             const bool bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, BereginyaShrineThreshold, HysteresisMargin);
-            const bool bEligible = bHistoryEligible || bShrineEligible;
+            // Тот же гейт, что у Низшего ранга выше — Берегиня целиком
+            // "чистая" по конструкции (порог по HistoryPurity/Restoration),
+            // без злого аналога, поэтому исключений внутри неё нет.
+            const bool bEligible = (bHistoryEligible || bShrineEligible) && !Cell.Memory.bDegrading;
 
             if (bEligible && CanManifest(Cell, EntityID_Bereginya))
             {
@@ -837,7 +852,12 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         const bool bWasActive = Cell->ManifestedEntityID == Landmark.EntityID;
         const bool bWasBlessed = bWasActive && Landmark.Respect >= 0.0f;
         const bool bWasCursed  = bWasActive && Landmark.Respect < 0.0f;
-        const bool bBlessEligible = PassesHysteresisThreshold(bWasBlessed, Landmark.Respect, 0.5f, HysteresisMargin);
+        // Тот же гейт, что у Низшего/Берегини — благословенный Хозяин
+        // ортогонален Corruption (Respect меняется только подношением) и
+        // застревал бы на клетке, которую бистабильность уже зафиксировала
+        // испорченной. Проклятие не гейтим — оно тематически согласовано с
+        // испорченным полюсом, тот же принцип, что у Гнильников/Злого полюса.
+        const bool bBlessEligible = PassesHysteresisThreshold(bWasBlessed, Landmark.Respect, 0.5f, HysteresisMargin) && !Cell->Memory.bDegrading;
         const bool bCurseEligible = PassesHysteresisThreshold(bWasCursed, -Landmark.Respect, 0.3f, HysteresisMargin);
 
         // Какую ось благословлять/проклинать и с какой скоростью — из
@@ -920,7 +940,11 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                     const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(*Anchor, Shrines, ShrineInfluenceRadius);
                     bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, Def.ShrineThreshold, HysteresisMargin);
                 }
-                bEligible = bMorokEligible || bShrineEligible;
+                // Тот же гейт, что у остальных рангов — Благой полюс
+                // ортогонален Corruption клетки (читает MorokField графа, не
+                // Cell.State), Злой полюс не гейтим (высокий MorokField уже
+                // тематически согласован с испорченным полюсом).
+                bEligible = (bMorokEligible || bShrineEligible) && !Cell->Memory.bDegrading;
             }
 
             if (bEligible && CanManifest(*Cell, Def.EntityID))
