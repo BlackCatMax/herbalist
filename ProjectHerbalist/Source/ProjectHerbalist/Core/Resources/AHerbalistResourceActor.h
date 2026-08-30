@@ -22,12 +22,14 @@ public:
 	
 	FRealState GetBaseState() const { return BaseState; }
 	float GetResilience() const { return Resilience; }
+	bool GetIsIronAverse() const { return bIronAverse; }
+	bool GetIsDelicate() const { return bDelicate; }
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Init(FName InIngredientID, const FText& InDisplayName, UStaticMesh* Mesh,
     const FRealState& InBaseState, const FVector& Location,
     AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY,
-    float InResilience = 0.0f);
+    float InResilience = 0.0f, bool InIronAverse = false, bool InDelicate = false);
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Harvest();
@@ -99,6 +101,14 @@ protected:
     // Копия IngredientTableRow::Resilience — чтобы на момент сбора не лезть в реестр
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float Resilience = 0.0f;
+
+    // Копии IngredientTableRow::bIronAverse/bDelicate — тот же принцип, что
+    // Resilience выше, не лезть в реестр на момент сбора (DESIGN_Community_
+    // And_Homestead.md §2.3, 2026-08-31).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
+    bool bIronAverse = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
+    bool bDelicate = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Effects")
     UParticleSystem* HarvestParticleSystem;

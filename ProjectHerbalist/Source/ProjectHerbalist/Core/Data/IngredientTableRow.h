@@ -121,6 +121,23 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     // читаются как "не сухо" — оба означают осадки, а не только дождь.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
     bool bRequiresDryWeather = false;
+
+    // ---- Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3, флаги
+    // найдены проходом по компендиуму 2026-08-31 — bIronAverse подтверждён
+    // текстом карточек Плакун-травы/Чистотела, bDelicate — Медуницы; для
+    // остальных 73 карточек оба флага пока false, не проверено построчно
+    // "нет мотива" не то же самое, что "проверено и мотива нет").
+
+    // Трава чует железо — собранная железным инструментом теряет силу
+    // (см. ToolQualityMultiplier в PipelineV2.cpp). Голые руки/медь/кость
+    // одинаково безопасны.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    bool bIronAverse = false;
+
+    // Тонкая трава — костяной нож при срезе сохраняет её силу лучше любого
+    // другого инструмента (бонус, не отдельный гейт).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    bool bDelicate = false;
 };
 
 // Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются

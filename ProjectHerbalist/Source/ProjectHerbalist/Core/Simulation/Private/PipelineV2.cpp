@@ -46,11 +46,55 @@ namespace Simulation
     // координат (лежит вне диапазона реальных биомов по всем шести мета-осям),
     // и теперь свободен для своей настоящей роли — недостижимого ориентира, до
     // которого меряют расстояние в прогрессии.
+    // Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3, 2026-08-31) —
+    // множитель качества, не шанса спавна: неверный инструмент портит уже
+    // найденную траву при сборе, не мешает ей существовать в мире (тот вопрос
+    // уже решён IngredientSuitabilityFalloff в IngredientRegistrySubsystem).
+    // Реальный фольклор, найденный проходом по компендиуму и дописанный в
+    // карточки тем же числом: Плакун-трава/Чистотел (bIronAverse — железо
+    // отпугивает силу) и Медуница (bDelicate — костяной нож сохраняет её).
+    static float ToolQualityMultiplier(EGatheringTool Tool, bool bIronAverse, bool bDelicate, const UHerbalistSettings* Settings)
+    {
+        const float BareHands  = Settings ? Settings->GatheringToolBareHandsMultiplier   : 0.7f;
+        const float NonIron    = Settings ? Settings->GatheringToolNonIronMultiplier     : 0.9f;
+        const float IronAverse = Settings ? Settings->GatheringToolIronAverseMultiplier  : 0.3f;
+        const float DelicateBone = Settings ? Settings->GatheringToolDelicateBoneBonus   : 1.15f;
+
+        float Mult;
+        switch (Tool)
+        {
+            case EGatheringTool::CopperBlade: Mult = NonIron; break;
+            case EGatheringTool::BoneKnife:   Mult = NonIron; break;
+            case EGatheringTool::IronBlade:   Mult = 1.0f; break;
+            case EGatheringTool::BareHands:
+            default:                          Mult = BareHands; break;
+        }
+
+        if (bIronAverse)
+        {
+            // Уважительный сбор (не железо) на такой траве не наказывается
+            // вовсе — полный множитель, не обычный базовый инструмента.
+            Mult = (Tool == EGatheringTool::IronBlade) ? IronAverse : 1.0f;
+        }
+
+        if (bDelicate && Tool == EGatheringTool::BoneKnife)
+        {
+            // Перекрывает даже ветку bIronAverse выше — кость и так не
+            // железо, получает бонус поверх снятого табу.
+            Mult = DelicateBone;
+        }
+
+        return Mult;
+    }
+
     static FInventoryItem GenerateHarvestResult(const FGridCell& Cell,
                                                FName IngredientID,
                                                const FRealState& IngredientBaseState,
                                                float IngredientResilience,
                                                EMoonPhase MoonPhase,
+                                               EGatheringTool Tool,
+                                               bool bIronAverse,
+                                               bool bDelicate,
                                                FRandomStream& Rng)
     {
         const UHerbalistSettings* Settings = GetHerbalistSettings();
@@ -104,6 +148,15 @@ namespace Simulation
             State.Meta.Potency   = FMath::Clamp(State.Meta.Potency   * (1.0f + MoonFullBoost), 0.0f, 1.0f);
             State.Meta.Resonance = FMath::Clamp(State.Meta.Resonance * (1.0f + MoonFullBoost), 0.0f, 1.0f);
         }
+
+        // Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3) — тот же
+        // приём, что лунный цикл выше, второй потребитель тех же трёх осей.
+        // После луны, до джиттера: неверный инструмент портит уже усиленную
+        // луной траву, не спорит с ней за первенство.
+        const float ToolMult = ToolQualityMultiplier(Tool, bIronAverse, bDelicate, Settings);
+        State.Meta.Potency   = FMath::Clamp(State.Meta.Potency   * ToolMult, 0.0f, 1.0f);
+        State.Meta.Resonance = FMath::Clamp(State.Meta.Resonance * ToolMult, 0.0f, 1.0f);
+        State.Magnitude      = FMath::Clamp(State.Magnitude      * ToolMult, 0.0f, 1.0f);
 
         // Джиттер — условия сбора (FConditionModifier), которые игрок явно не
         // задаёт. Единственное место, где кламп ещё нужен: шум добавляется
@@ -797,7 +850,7 @@ namespace Simulation
         Modified.State.Direction.NormalizeSum();
         Modified.Memory.AccumulatedDistortion = Modified.State.Meta.Distortion;
         
-        FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Cmd.Resilience, Cmd.MoonPhase, Rng);
+        FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Cmd.Resilience, Cmd.MoonPhase, Cmd.Tool, Cmd.bIronAverse, Cmd.bDelicate, Rng);
         Harvested.CreationTime = WorldSnap.WorldTime;
 
         FInventoryOperation Op;

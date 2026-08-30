@@ -72,6 +72,16 @@ struct FHarvestCommand
     // §15.3: Растущая усиливает Body/Nature/Magnitude, Полнолуние —
     // Spirit/Potency/Resonance; см. GenerateHarvestResult в PipelineV2.cpp).
     EMoonPhase MoonPhase = EMoonPhase::NewMoon;
+
+    // Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3, 2026-08-31)
+    // и копии IngredientTableRow::bIronAverse/bDelicate — тот же принцип,
+    // что BaseState/Resilience выше: резолвятся вне Pipeline
+    // (AGridWorldManager::OnResourceCollected из AHerbalistResourceActor и
+    // AHerbalistPlayerController::CurrentGatheringTool), не лезут в реестр
+    // изнутри симуляции. См. ToolQualityMultiplier в PipelineV2.cpp.
+    EGatheringTool Tool = EGatheringTool::BareHands;
+    bool bIronAverse = false;
+    bool bDelicate = false;
 };
 
 // Контейнер команды (одна запись в пакете команд). B/Talk убран 2026-08-30

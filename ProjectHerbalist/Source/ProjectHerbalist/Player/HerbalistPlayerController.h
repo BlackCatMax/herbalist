@@ -54,6 +54,15 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Herbalist|Harvesting")
     float MaxHarvestDistance = 200.0f;
 
+    // Текущий инструмент сбора (DESIGN_Community_And_Homestead.md §2.3,
+    // 2026-08-31) — читается AGridWorldManager::OnResourceCollected в
+    // Cmd.Harvest.Tool. v1: переключается Exec-командой (SetGatheringTool),
+    // не физическим предметом в инвентаре — экономика источников
+    // инструментов (курганы/дары хозяев/торговля) отдельный, ещё не
+    // реализованный проход; сам множитель качества работает уже сейчас.
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Harvesting")
+    EGatheringTool CurrentGatheringTool = EGatheringTool::BareHands;
+
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
 
@@ -103,6 +112,13 @@ public:
     // если понадобится более богатый экран через редактор.
     UFUNCTION(Exec)
     void ToggleJournalUI();
+
+    // Переключить текущий инструмент сбора (§ комментарий у CurrentGatheringTool
+    // выше). ToolName: "hands"/"iron"/"copper"/"bone" — строка, не enum,
+    // тем же паттерном, что SetGatheringTool видится проще с консоли, чем
+    // числовой индекс EGatheringTool.
+    UFUNCTION(Exec)
+    void SetGatheringTool(FString ToolName);
 
     // Экранный попап текста воспоминания Заряны/объявления Буяна
     // (UI/MemoryRevealWidget.h, "Прогрессия/Заряна" 2026-08-29) — вызывается

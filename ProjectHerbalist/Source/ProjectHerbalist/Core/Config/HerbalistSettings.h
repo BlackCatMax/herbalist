@@ -531,6 +531,37 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Spawning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float IngredientWindowMismatchMultiplier = 0.15f;
 
+    // ---- Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3), 2026-08-31.
+    // Применяются к Magnitude/Potency/Resonance собранного предмета в
+    // GenerateHarvestResult (PipelineV2.cpp) — ГДЕ множитель <1 гасит их,
+    // а не к шансу спавна ресурса в мире (тот уже решён IngredientSuitability*
+    // выше): неверный инструмент портит УЖЕ найденную траву при сборе, не
+    // мешает ей существовать в мире.
+
+    // Базовый множитель качества голыми руками — безопасно везде, но
+    // медленнее любого инструмента.
+    UPROPERTY(config, EditAnywhere, Category = "Gathering Tools", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+    float GatheringToolBareHandsMultiplier = 0.7f;
+
+    // Медь/кость на обычной (не помеченной) траве — чуть хуже железа,
+    // цена универсальности неметаллического инструмента.
+    UPROPERTY(config, EditAnywhere, Category = "Gathering Tools", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+    float GatheringToolNonIronMultiplier = 0.9f;
+
+    // Железо на траве с bIronAverse — трава «чует железо» и прячет силу
+    // (карточки Плакун-травы/Чистотела). Голые руки/медь/кость на такой
+    // траве вместо этого получают полный множитель 1.0 (не их обычный
+    // базовый) — уважительный сбор не наказывается вовсе.
+    UPROPERTY(config, EditAnywhere, Category = "Gathering Tools", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+    float GatheringToolIronAverseMultiplier = 0.3f;
+
+    // Костяной нож на траве с bDelicate — сохраняет мощь при срезе лучше
+    // любого другого инструмента (карточка Медуницы). Перекрывает
+    // GatheringToolIronAverseMultiplier, если трава несёт оба флага сразу
+    // (кость и так не железо — снимает табу и даёт бонус одновременно).
+    UPROPERTY(config, EditAnywhere, Category = "Gathering Tools", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+    float GatheringToolDelicateBoneBonus = 1.15f;
+
     // Сколько секунд держится на экране попап с текстом воспоминания Заряны/
     // объявлением Буяна (UI/MemoryRevealWidget.h), 2026-08-29. Достаточно на
     // 1-2 предложения текущей длины (см. MemoryFragmentDefinitions.h) при

@@ -45,6 +45,23 @@ enum class EBiomeType : uint8
     Bog
 };
 
+// Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3, реализация
+// 2026-08-31) — резак-ось таблицы множителей: голые руки безопасны для
+// всего, но медленны; железо быстро, но вредит травам с флагом
+// bIronAverse (карточки Плакун-травы/Чистотела); медь/кость — не-железные
+// альтернативы, кость дополнительно бережёт травы с флагом bDelicate
+// (карточка Медуницы). Оберег-ось (серебро, "скрытие" при сборе) —
+// сознательно НЕ в этом enum, отдельная механика следующего прохода, не
+// резак вообще.
+UENUM(BlueprintType)
+enum class EGatheringTool : uint8
+{
+    BareHands,
+    IronBlade,
+    CopperBlade,
+    BoneKnife
+};
+
 UENUM(BlueprintType)
 enum class EAlchemyOutcome : uint8
 {

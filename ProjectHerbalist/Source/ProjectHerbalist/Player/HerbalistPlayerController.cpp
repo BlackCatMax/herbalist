@@ -440,6 +440,21 @@ void AHerbalistPlayerController::ShowInventory()
     Inventory();
 }
 
+void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
+{
+    ToolName.ToLowerInline();
+    if (ToolName == TEXT("iron"))         CurrentGatheringTool = EGatheringTool::IronBlade;
+    else if (ToolName == TEXT("copper"))  CurrentGatheringTool = EGatheringTool::CopperBlade;
+    else if (ToolName == TEXT("bone"))    CurrentGatheringTool = EGatheringTool::BoneKnife;
+    else if (ToolName == TEXT("hands"))   CurrentGatheringTool = EGatheringTool::BareHands;
+    else
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGatheringTool: unknown tool '%s' (ожидались hands/iron/copper/bone)"), *ToolName);
+        return;
+    }
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("SetGatheringTool: %s"), *ToolName);
+}
+
 void AHerbalistPlayerController::Journal()
 {
     if (bIsAnyWidgetOpen && JournalWidgetInstance && JournalWidgetInstance->IsInViewport())
