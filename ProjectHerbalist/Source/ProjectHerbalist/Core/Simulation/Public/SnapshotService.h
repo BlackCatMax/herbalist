@@ -17,8 +17,7 @@ namespace Simulation
         static void ApplyDeltaToInventory(const FStateDelta& Delta);
         static void ApplyDeltaToBiomes(const FStateDelta& Delta);
 
-        // Новый метод для PR-4 (заглушка)
-        static FCommandGraph BuildCommandGraph(const TArray<FCommandEntry>& RawCommands);
-		static FStateDelta ExecuteTick(const FCommandGraph& Commands);
+        static FCommandBatch BuildCommandBatch(const TArray<FCommandEntry>& RawCommands);
+		static FStateDelta ExecuteTick(const FCommandBatch& Commands);
     };
 }

@@ -35,21 +35,21 @@ bool FPipelineV2HarvestTest::RunTest(const FString& Parameters)
     FInventorySnapshot InvSnap;
     FBiomeSnapshot BiomeSnap;
 
-    // 2. Строим граф команд
-    FCommandGraph CmdGraph;
+    // 2. Строим пакет команд
+    FCommandBatch CmdBatch;
     FCommandEntry CmdEntry;
     CmdEntry.Primitive = ECommandPrimitive::Harvest;
     CmdEntry.Harvest.TargetCell = FIntPoint(5, 7);
     CmdEntry.Harvest.IngredientID = TEXT("TestHerb");
     CmdEntry.Harvest.Amount = 1;
-    CmdGraph.AddCommand(CmdEntry);
+    CmdBatch.AddCommand(CmdEntry);
 
     // 3. Детерминированный ГПСЧ
     FRandomStream Rng(Cell.X * 123 + Cell.Y * 456);
     int32 SeedBefore = Rng.GetCurrentSeed();
 
     // 4. Запуск пайплайна
-    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdGraph, Rng);
+    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
 
     // 5. Проверки
     const FGridCell* Modified = Delta.WorldChanges.Find(FIntPoint(5, 7));
@@ -92,16 +92,16 @@ bool FPipelineV2HarvestWaterTest::RunTest(const FString& Parameters)
 
     FInventorySnapshot InvSnap;
     FBiomeSnapshot BiomeSnap;
-    FCommandGraph CmdGraph;
+    FCommandBatch CmdBatch;
     FCommandEntry CmdEntry;
     CmdEntry.Primitive = ECommandPrimitive::Harvest;
     CmdEntry.Harvest.TargetCell = FIntPoint(3,3);
     CmdEntry.Harvest.IngredientID = TEXT("WaterHerb");
     CmdEntry.Harvest.Amount = 1;
-    CmdGraph.AddCommand(CmdEntry);
+    CmdBatch.AddCommand(CmdEntry);
 
     FRandomStream Rng(42);
-    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdGraph, Rng);
+    FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
 
     // Вода не деградирует (клетка не меняется), но предмет в инвентарь добавляется —
     // см. ProcessHarvestCommand: ветка bIsWater кладёт один InventoryOp и выходит

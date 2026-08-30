@@ -128,18 +128,18 @@ namespace Simulation
         }
     }
 
-    // ----- Сборка графа команд (заглушка) -----
-    FCommandGraph FSnapshotService::BuildCommandGraph(const TArray<FCommandEntry>& RawCommands)
+    // ----- Сборка пакета команд -----
+    FCommandBatch FSnapshotService::BuildCommandBatch(const TArray<FCommandEntry>& RawCommands)
     {
-        FCommandGraph Graph;
-        Graph.Commands = RawCommands;
-        return Graph;
+        FCommandBatch Batch;
+        Batch.Commands = RawCommands;
+        return Batch;
     }
 
     // ----- Выполнение одного тика симуляции -----
-    FStateDelta FSnapshotService::ExecuteTick(const FCommandGraph& Commands)
+    FStateDelta FSnapshotService::ExecuteTick(const FCommandBatch& Commands)
     {
-        // Пустой граф команд гарантированно даёт пустую Delta (ExecutePipeline
+        // Пустой пакет команд гарантированно даёт пустую Delta (ExecutePipeline
         // просто не итерирует ничего) — не тратим снапшот всего мира/инвентаря/
         // биомов и применение пустой дельты на тик, где игрок ничего не делал.
         // Это большинство тиков при 20Гц фиксированном шаге.

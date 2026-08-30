@@ -12,7 +12,6 @@ enum class ECommandPrimitive : uint8
     Transfer,
     Apply,
     Harvest,
-    Talk,
     Wait
 };
 
@@ -68,14 +67,12 @@ struct FHarvestCommand
     EMoonPhase MoonPhase = EMoonPhase::NewMoon;
 };
 
-// B – базовое действие / диалог (Talk) – пока заглушка
-struct FTalkCommand
-{
-    ECommandPrimitive Type = ECommandPrimitive::Talk;
-    FName DialogueID;
-};
-
-// Контейнер команды (одна запись в графе команд)
+// Контейнер команды (одна запись в пакете команд). B/Talk убран 2026-08-30
+// ("закрываем архитектурный долг") — не заглушка на будущее, а мёртвый код:
+// ни один игровой путь никогда не создавал FTalkCommand, а сам ГДД
+// (17_Hero_And_Community.md, "Никто не говорит ему «спасибо»") прямо
+// отвергает диалог как механику в пользу тихой материальной платы. Тот же
+// повод, что и у ExecutionOrder ниже — объявлено, не используется.
 struct FCommandEntry
 {
     ECommandPrimitive Primitive = ECommandPrimitive::None;
@@ -84,15 +81,23 @@ struct FCommandEntry
     FTransferCommand    Transfer;
     FApplyCommand       Apply;
     FHarvestCommand     Harvest;
-    FTalkCommand        Talk;
 
     uint32 CommandID = 0;
-    float ExecutionOrder = 0.0f;
     bool bCancelled = false;
 };
 
-// Граф команд (контейнер на один тик)
-struct FCommandGraph
+// Пакет команд одного тика — переименован из FCommandGraph 2026-08-30
+// ("закрываем архитектурный долг", DESIGN_World_State.md §23): имя обещало
+// граф зависимостей между командами, а внутри всегда был плоский
+// TArray<FCommandEntry>, исполняемый по порядку добавления
+// (PipelineV2.cpp::ExecutePipeline, обычный range-for по Commands). Заодно
+// убран мёртвый ExecutionOrder (объявлен, нигде не читался и не
+// сортировался по нему — реальный порядок исполнения всегда был порядком
+// добавления, не этим полем). Честное имя вместо попытки построить
+// настоящий граф зависимостей, которого никакая текущая команда не просит:
+// все шесть примитивов (Query/Transfer/Apply/Harvest/Wait) независимы друг
+// от друга внутри одного тика.
+struct FCommandBatch
 {
     TArray<FCommandEntry> Commands;
 

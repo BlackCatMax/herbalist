@@ -764,7 +764,7 @@ namespace Simulation
     FStateDelta ExecutePipeline(const FWorldSnapshot& WorldSnapshot,
                                 const FInventorySnapshot& InventorySnapshot,
                                 const FBiomeSnapshot& BiomeSnapshot,
-                                const FCommandGraph& Commands,
+                                const FCommandBatch& Commands,
                                 FRandomStream& Rng)
     {
         FStateDelta Delta;

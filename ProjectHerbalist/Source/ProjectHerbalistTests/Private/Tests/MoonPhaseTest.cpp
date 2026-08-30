@@ -52,7 +52,7 @@ namespace
         FInventorySnapshot InvSnap;
         FBiomeSnapshot BiomeSnap;
 
-        FCommandGraph CmdGraph;
+        FCommandBatch CmdBatch;
         FCommandEntry CmdEntry;
         CmdEntry.Primitive = ECommandPrimitive::Harvest;
         CmdEntry.Harvest.TargetCell = FIntPoint(Cell.X, Cell.Y);
@@ -61,10 +61,10 @@ namespace
         CmdEntry.Harvest.BaseState = Cell.State;   // Base == Cell -> Resilience/биом не вносят разброса
         CmdEntry.Harvest.Resilience = 1.0f;
         CmdEntry.Harvest.MoonPhase = MoonPhase;
-        CmdGraph.AddCommand(CmdEntry);
+        CmdBatch.AddCommand(CmdEntry);
 
         FRandomStream Rng(Seed);
-        FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdGraph, Rng);
+        FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
         check(Delta.InventoryOps.Num() == 1);
         return Delta.InventoryOps[0].Ingredient.State;
     }

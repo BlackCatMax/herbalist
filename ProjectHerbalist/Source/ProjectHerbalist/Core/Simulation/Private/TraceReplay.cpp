@@ -10,10 +10,10 @@ namespace Simulation
     {
         FInventorySnapshot InvSnap;   // инвентарь не трассируем, используем пустой
 
-        FCommandGraph Graph;
-        Graph.Commands = Frame.Commands;
+        FCommandBatch Batch;
+        Batch.Commands = Frame.Commands;
 
-        FStateDelta ReplayedDelta = ExecutePipeline(Frame.WorldSnapshot, InvSnap, Frame.BiomeSnapshot, Graph, Rng);
+        FStateDelta ReplayedDelta = ExecutePipeline(Frame.WorldSnapshot, InvSnap, Frame.BiomeSnapshot, Batch, Rng);
 
         // Сравниваем изменения мира
         if (ReplayedDelta.WorldChanges.Num() != Frame.GeneratedDelta.WorldChanges.Num())

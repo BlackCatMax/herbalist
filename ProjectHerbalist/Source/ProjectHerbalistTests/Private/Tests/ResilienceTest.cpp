@@ -14,7 +14,7 @@
 // этот файл превращает две из них (эталоны 1.0 и 0.0) в автотест, а не
 // только в лорный текст.
 //
-// Тестируем через полный FCommandGraph -> ExecutePipeline, а не напрямую
+// Тестируем через полный FCommandBatch -> ExecutePipeline, а не напрямую
 // статическую GenerateHarvestResult() — она не экспортирована из PipelineV2.cpp
 // (тот же паттерн, что PipelineV2Test.cpp).
 #include "Core/Simulation/Public/SnapshotTypes.h"
@@ -89,7 +89,7 @@ namespace
         FInventorySnapshot InvSnap;
         FBiomeSnapshot BiomeSnap;
 
-        FCommandGraph CmdGraph;
+        FCommandBatch CmdBatch;
         FCommandEntry CmdEntry;
         CmdEntry.Primitive = ECommandPrimitive::Harvest;
         CmdEntry.Harvest.TargetCell = FIntPoint(Cell.X, Cell.Y);
@@ -97,10 +97,10 @@ namespace
         CmdEntry.Harvest.Amount = 1;
         CmdEntry.Harvest.BaseState = BaseState;
         CmdEntry.Harvest.Resilience = Resilience;
-        CmdGraph.AddCommand(CmdEntry);
+        CmdBatch.AddCommand(CmdEntry);
 
         FRandomStream Rng(Seed);
-        FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdGraph, Rng);
+        FStateDelta Delta = Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
 
         // Урожай появляется как InventoryOp, не WorldChanges — сама клетка
         // после Harvest тоже меняется (HarvestStress), но нас интересует

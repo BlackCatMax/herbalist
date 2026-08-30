@@ -544,3 +544,41 @@ ActorClass` — пусто = базовый класс ранга, конкре�
 LandmarkManifestationSpawnsActor, LegendaryManifestationSpawnsActor,
 ExistingInteractablesImplementTheSharedInterface}` (4 новых теста). 86/86
 всего зелёные.
+
+### Архитектурный долг: `FCommandGraph`/`Talk`
+
+По прямому запросу ("закрываем архитектурный долг"). Три пункта из
+`DESIGN_World_State.md §23`/`ROADMAP.md`, все проверены заново перед
+правкой, не взяты на веру из старой формулировки:
+
+1. **Резолв имени/perceived-состояния по виджетам** — при повторной
+   проверке оказался уже закрытым: `JournalLogWidget`/`JournalEntryRowWidget`/
+   `AlchemySlotWidget`/`InventorySlotWidget`/`ItemTooltipWidget` — все читают
+   общий `GetItemDisplayName` (`HerbalistNameUtils.h`), не разрешают имя
+   каждый сам по себе. Просто не перепроверялось раньше — закрыто в
+   документации, без правок кода.
+2. **`FCommandGraph` — не граф.** Переименован в `FCommandBatch`
+   (`Core/Simulation/Public/CommandTypes.h`, 10 файлов, включая тесты) —
+   честное имя вместо попытки построить настоящий граф зависимостей: все
+   шесть команд (Query/Transfer/Apply/Harvest/Wait) независимы друг от
+   друга внутри тика, `PipelineV2.cpp::ExecutePipeline` всегда просто
+   `for`-ил `Commands` по порядку добавления. Заодно удалён мёртвый
+   `ExecutionOrder` (объявлен, нигде не читался и не сортировался).
+3. **`Talk` (B) — заглушка.** Удалена целиком, не доведена до реализации:
+   `grep` по всему `Source/` подтвердил, что ни один игровой путь никогда
+   не создавал `FTalkCommand` (не "недописанная фича", а мёртвый код с
+   самого начала), а `17_Hero_And_Community.md` прямо отвергает диалог как
+   механику ("вместо диалоговой благодарности... тихая ответная плата:
+   хлеб-соль, монета, моток пряжи").
+
+**Не тронуто осознанно:** полный переход Morok/Zaryana на read-time
+оверлей — единственный из трёх исходных пунктов долга, отложенный ещё
+раньше (`AUDIT_AND_REFACTORING_PLAN.md §7.1/§7.3`) по названным там
+причинам (требует сперва сохранения `BiomeGraphSubsystem::Nodes`,
+непропорциональный blast radius относительно уже закрытой измеренной
+проблемы) — решение не пересматривалось, не входило в этот заход.
+
+Регрессия не добавлялась отдельно — переименование чисто механическое,
+существующие `Herbalist.PipelineV2.*`/`Herbalist.MoonPhase.*`/
+`Herbalist.Resilience.*` уже гоняют `FCommandBatch`/`ExecutePipeline` и
+подтвердили, что ничего не сломалось. 86/86 всего зелёные.

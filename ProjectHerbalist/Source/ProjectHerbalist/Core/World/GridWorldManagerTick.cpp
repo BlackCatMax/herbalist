@@ -97,11 +97,11 @@ void AGridWorldManager::RunSimulationStep()
         }
     }
 
-    // Построение и выполнение графа команд нового пайплайна
-    const FCommandGraph CmdGraph = Simulation::FSnapshotService::BuildCommandGraph(PendingCommands);
+    // Построение и выполнение пакета команд нового пайплайна
+    const FCommandBatch CmdBatch = Simulation::FSnapshotService::BuildCommandBatch(PendingCommands);
     TArray<FCommandEntry> CommandsCopy = PendingCommands;   // копируем для трейса
     PendingCommands.Empty();
-    FStateDelta Delta = Simulation::FSnapshotService::ExecuteTick(CmdGraph);
+    FStateDelta Delta = Simulation::FSnapshotService::ExecuteTick(CmdBatch);
 
     // Footprint (14_Biome_Graph.md): Pipeline — чистая функция, сам в
     // UBiomeGraphSubsystem не пишет, только формирует Delta.Footprints.

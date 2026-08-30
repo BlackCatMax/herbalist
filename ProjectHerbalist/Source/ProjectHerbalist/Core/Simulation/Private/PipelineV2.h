@@ -13,6 +13,6 @@ namespace Simulation
         const FWorldSnapshot& WorldSnapshot,
         const FInventorySnapshot& InventorySnapshot,
         const FBiomeSnapshot& BiomeSnapshot,
-        const FCommandGraph& Commands,
+        const FCommandBatch& Commands,
         FRandomStream& Rng);
 }
