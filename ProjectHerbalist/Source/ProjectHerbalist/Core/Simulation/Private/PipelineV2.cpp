@@ -743,6 +743,11 @@ namespace Simulation
             PotionItem.Count = 1;
             PotionItem.CreationTime = WorldSnap.WorldTime;
             PotionItem.bSubjectToDecay = false;
+            // Честный факт исхода варки на самом предмете (см. FInventoryItem::
+            // BrewOutcome) -- нужен фольклорной системе имён (HerbalistNameUtils.cpp),
+            // чтобы Purified/Catastrophe получали своё собственное имя, а не
+            // угадывались задним числом по осям.
+            PotionItem.BrewOutcome = Outcome;
 
             FInventoryOperation AddOp;
             AddOp.ContainerID = 0;

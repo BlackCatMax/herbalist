@@ -173,6 +173,7 @@ void AGridWorldManager::RunSimulationStep()
                     // с недетерминированным ГПСЧ уже дважды находился и чинился
                     // в этой сессии (спавн ресурсов, порча инвентаря).
                     Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, WorldRNG, GlobalPerceptionClarity);
+                    Entry.BrewOutcome = Produced.BrewOutcome;
                     const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
                     Entry.Cell = TargetCell;
                     if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))

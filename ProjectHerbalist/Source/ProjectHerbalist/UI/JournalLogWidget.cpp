@@ -293,6 +293,7 @@ FText UJournalLogWidget::FormatEntry(const FJournalEntry& Entry, UIngredientRegi
     FInventoryItem NameLookup;
     NameLookup.IngredientID = Entry.IngredientID;
     NameLookup.State = Entry.PerceivedState;
+    NameLookup.BrewOutcome = Entry.BrewOutcome;
     const FString DisplayName = GetItemDisplayName(NameLookup, IngredientRegistry);
     const FString TypeLabel = Entry.Type == EJournalEntryType::Harvest ? TEXT("Собрано") : TEXT("Сварено");
     const FString BiomeLabel = FBiomeDefaults::BiomeTypeToName(Entry.Biome).ToString();

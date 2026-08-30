@@ -191,7 +191,10 @@ void UAlchemySlotWidget::UpdateDisplay()
     FString DisplayName;
     if (StoredItem.IngredientID == FName(TEXT("Potion")))
     {
-        DisplayName = GeneratePotionName(PerceivedState).ToString();
+        // BrewOutcome — честный факт события (не искажается восприятием, см.
+        // FInventoryItem::BrewOutcome), берём с реального предмета; State —
+        // искажённое, как и раньше.
+        DisplayName = GeneratePotionName(StoredItem.BrewOutcome, PerceivedState).ToString();
     }
     else
     {

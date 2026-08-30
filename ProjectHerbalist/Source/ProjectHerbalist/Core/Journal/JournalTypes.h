@@ -82,4 +82,11 @@ struct PROJECTHERBALIST_API FJournalEntry
     // прогрессия как сжатие ошибки через сравнение).
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
     bool bFragmentWasTrue = true;
+
+    // Только для Type == Brew — исход варки (FInventoryItem::BrewOutcome).
+    // Тот же принцип, что у IngredientID/Count выше: честный факт события,
+    // не искажается восприятием (в отличие от PerceivedState) — игрок
+    // физически видел у котла, взорвалось зелье или очистилось само.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
+    EAlchemyOutcome BrewOutcome = EAlchemyOutcome::Valid;
 };

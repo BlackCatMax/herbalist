@@ -13,6 +13,7 @@ void UJournalEntryRowWidget::InitializeRow(const FJournalEntry& InEntry, UIngred
     FInventoryItem NameLookup;
     NameLookup.IngredientID = InEntry.IngredientID;
     NameLookup.State = InEntry.PerceivedState;
+    NameLookup.BrewOutcome = InEntry.BrewOutcome;
     const FString TypeLabel = InEntry.Type == EJournalEntryType::Harvest ? TEXT("собрано") : TEXT("сварено");
     const FString DisplayName = GetItemDisplayName(NameLookup, IngredientRegistry);
 

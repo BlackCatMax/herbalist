@@ -82,7 +82,9 @@ void UInventorySlotWidget::UpdateDisplay()
         // должно строиться по искажённому восприятию, а не по реальному составу.
         FInventoryItem Perceived;
         const FRealState& StateForName = TryGetPerceivedItem(Perceived) ? Perceived.State : CachedItem.State;
-        DisplayName = GeneratePotionName(StateForName).ToString();
+        // BrewOutcome — честный факт события, не искажается восприятием,
+        // берём с реального CachedItem, не с искажённой копии.
+        DisplayName = GeneratePotionName(CachedItem.BrewOutcome, StateForName).ToString();
     }
     else
     {

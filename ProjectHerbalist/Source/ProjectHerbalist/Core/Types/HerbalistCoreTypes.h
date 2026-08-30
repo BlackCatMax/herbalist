@@ -289,6 +289,20 @@ struct PROJECTHERBALIST_API FInventoryItem
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     bool bIsWater = false;
 
+    // Исход варки (ComputeApplyResult, PipelineV2.cpp) — раньше терялся сразу
+    // после крафта: Valid/Purified/Catastrophe все сливались в один и тот же
+    // IngredientID="Potion", различить их постфактум можно было только гадая
+    // по числам State. Добавлено 2026-08-30 для фольклорной системы имён
+    // (HerbalistNameUtils.cpp) — имя зелья должно честно отражать, ЧТО
+    // случилось при варке (редкая удачная чистка, катастрофа), не только
+    // пересчитанные задним числом оси. Не искажается восприятием намеренно,
+    // в отличие от State/PerceivedState (JournalTypes.h): это категориальный
+    // факт события, которое игрок только что физически наблюдал у котла
+    // (сварилось — либо взорвалось), не скрытая числовая истина S_real,
+    // добывать которую как раз и не должен Травник.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    EAlchemyOutcome BrewOutcome = EAlchemyOutcome::Valid;
+
     bool IsEmpty() const { return IngredientID.IsNone() || Count <= 0; }
     void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; CreationTime = 0.0f; bSubjectToDecay = true; }
     bool IsValid() const { return !IngredientID.IsNone() && Count > 0; }
