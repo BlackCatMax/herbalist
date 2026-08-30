@@ -328,6 +328,12 @@ public:
     // Повторная регистрация на уже занятой клетке не создаёт дубликат.
     void RegisterShrine(const FIntPoint& Cell, EShrineType Type);
 
+    // Домовой (DESIGN_Community_And_Homestead.md §2.1, 2026-08-31) — тот
+    // же принцип, что RegisterShrine: не сеется по биому
+    // (bManualRegistrationOnly в LandmarkTypes.h), регистрируется напрямую
+    // AAlchemyTableActor::BeginPlay на клетке жилища, идемпотентно.
+    void RegisterDomovoi(const FIntPoint& Cell);
+
     // Тип капища по месту, не жёстко Ancestral (находка финального аудита
     // 2026-08-30: единственная точка регистрации, AlchemyTableActor::BeginPlay,
     // передавала EShrineType::Ancestral безусловно — формулы остальных 4 типов

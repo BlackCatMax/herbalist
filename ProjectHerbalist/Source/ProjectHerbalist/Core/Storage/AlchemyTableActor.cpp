@@ -38,6 +38,11 @@ void AAlchemyTableActor::BeginPlay()
         {
             GridCoords = FIntPoint(X, Y);
             WorldManager->RegisterShrine(GridCoords, WorldManager->ResolveShrineTypeForCell(GridCoords));
+
+            // Домовой (DESIGN_Community_And_Homestead.md §2.1, 2026-08-31) —
+            // хозяин очага, не место на карте: там же, где котёл, не через
+            // биом-сопоставление, тот же принцип, что и у капища выше.
+            WorldManager->RegisterDomovoi(GridCoords);
         }
         else
         {

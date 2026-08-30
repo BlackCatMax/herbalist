@@ -393,6 +393,12 @@ void AGridWorldManager::SeedTestLandmarks()
     TSet<FIntPoint> CellsUsed;
     for (const FLandmarkDefinition& Def : GetLandmarkDefinitions())
     {
+        // Домовой и подобные (bManualRegistrationOnly) не сеются по биому —
+        // их регистрирует напрямую тот, кому они принадлежат (AAlchemyTableActor
+        // ::BeginPlay), иначе задвоились бы: один экземпляр здесь на случайной
+        // клетке подходящего биома, второй — на самом деле у жилища.
+        if (Def.bManualRegistrationOnly) continue;
+
         for (const FGridCell& Cell : Cells)
         {
             if (Cell.Biome != Def.Biome || Cell.bIsWater) continue;
@@ -419,6 +425,23 @@ FEntityLandmark* AGridWorldManager::FindLandmarkAt(const FIntPoint& Cell)
         if (L.Cell == Cell) return &L;
     }
     return nullptr;
+}
+
+void AGridWorldManager::RegisterDomovoi(const FIntPoint& Cell)
+{
+    if (FindLandmarkAt(Cell))
+    {
+        // Уже что-то стоит на этой клетке (включая сам Домовой при повторном
+        // BeginPlay) — тот же принцип идемпотентности, что RegisterShrine.
+        return;
+    }
+
+    FEntityLandmark Landmark;
+    Landmark.EntityID = FName(TEXT("Домовой"));
+    Landmark.Cell = Cell;
+    Landmark.Respect = 0.0f;
+    EntityLandmarks.Add(Landmark);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Domovoi] Registered at (%d,%d)"), Cell.X, Cell.Y);
 }
 
 // Якоря Легендарного ранга (§16.4, LegendaryEntityTypes.h) — тот же
@@ -901,6 +924,16 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         else if (bCurseEligible && Def && CanManifest(*Cell, Landmark.EntityID))
         {
             ApplyLandmarkAxisNudge(NewTarget, Def->CurseAxis, Def->CurseRate * DeltaTime);
+            // Отягощённое проклятие (§ комментарий у AggravatedCurseThreshold
+            // в LandmarkTypes.h) — второй, более резкий удар поверх обычного
+            // curse, когда Respect провалился существенно ниже обычного
+            // порога, не просто пересёк его. Домовой: эскалация в домашнюю
+            // Кикимору тем же приёмом, что уже применяется к Гнильникам/
+            // прочим порогам, не отдельным событийным триггером.
+            if (Landmark.Respect < Def->AggravatedCurseThreshold)
+            {
+                ApplyLandmarkAxisNudge(NewTarget, Def->AggravatedCurseAxis, Def->AggravatedCurseRate * DeltaTime);
+            }
             Cell->ManifestedEntityID = Landmark.EntityID;
             bChanged = true;
         }

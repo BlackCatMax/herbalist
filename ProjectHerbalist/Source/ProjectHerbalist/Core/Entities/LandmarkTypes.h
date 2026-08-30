@@ -62,10 +62,28 @@ struct FLandmarkDefinition
     UPROPERTY() ELandmarkAxis CurseAxis = ELandmarkAxis::None;
     UPROPERTY() float CurseRate = 0.0f;
 
+    // Отягощённое проклятие (DESIGN_Community_And_Homestead.md §2.1,
+    // 2026-08-31) — общий механизм эскалации, не специфичный для одного
+    // хозяина: если AggravatedCurseThreshold > -1 (задан), при Respect НИЖЕ
+    // этого порога curse усиливается вторым, более резким ударом поверх
+    // обычного — не отдельная сущность, второй порог той же проекции (тот
+    // же принцип, что уже даёт домашней Кикиморе появиться как эскалация
+    // плохих отношений с Домовым, не независимый триггер).
+    UPROPERTY() ELandmarkAxis AggravatedCurseAxis = ELandmarkAxis::None;
+    UPROPERTY() float AggravatedCurseRate = 0.0f;
+    UPROPERTY() float AggravatedCurseThreshold = -1.0f;
+
     // Физическое представление (2026-08-30) — пусто = базовый
     // ALandmarkEntityActor. См. комментарий у одноимённого поля в
     // AmbientEntityTypes.h.
     UPROPERTY() TSubclassOf<class AHerbalistEntityActor> ActorClass;
+
+    // Домовой (2026-08-31) — регистрируется напрямую AAlchemyTableActor::
+    // BeginPlay на клетке жилища, не через биом-сопоставление ниже. true
+    // значит "SeedTestLandmarks должен пропустить эту запись целиком" —
+    // иначе она бы ещё и посеялась в случайной клетке подходящего биома,
+    // задвоив хозяина.
+    UPROPERTY() bool bManualRegistrationOnly = false;
 };
 
 // Direction нужен отдельно от Meta, т.к. это разные подобъекты FRealState —
@@ -282,6 +300,27 @@ inline const TArray<FLandmarkDefinition>& GetLandmarkDefinitions()
             D.Biome = EBiomeType::Steppe;
             D.BlessAxis = ELandmarkAxis::Resonance; D.BlessRate = 0.01f;
             D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.02f;
+            Defs.Add(D);
+        }
+
+        // Домовой (жилище игрока, DESIGN_Community_And_Homestead.md §2.1,
+        // 2026-08-31) — не биом, регистрируется напрямую на клетке
+        // AAlchemyTableActor (bManualRegistrationOnly=true, SeedTestLandmarks
+        // пропускает). Хороший Respect защищает дом — Stability, тот же
+        // смысл, что уже даёт капищам устойчивость к порче (§12.10). Плохой
+        // — мелкие пакости, Corruption. При-сильно плохом (ниже -0.6) —
+        // второй, более резкий удар (Stability вниз тоже) — эскалация в
+        // домашнюю Кикимору (собрана этой же сессией,
+        // DESIGN_Brewing_Situations_And_Lore.md), не отдельная сущность.
+        {
+            FLandmarkDefinition D;
+            D.EntityID = FName(TEXT("Домовой"));
+            D.bManualRegistrationOnly = true;
+            D.BlessAxis = ELandmarkAxis::Stability; D.BlessRate = 0.01f;
+            D.CurseAxis = ELandmarkAxis::Corruption; D.CurseRate = 0.015f;
+            D.AggravatedCurseAxis = ELandmarkAxis::Stability;
+            D.AggravatedCurseRate = -0.02f;
+            D.AggravatedCurseThreshold = -0.6f;
             Defs.Add(D);
         }
 

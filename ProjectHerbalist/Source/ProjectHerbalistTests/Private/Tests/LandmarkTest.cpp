@@ -252,8 +252,105 @@ bool FHerbalistLandmark_SeedTestLandmarksGivesEachDefinitionADistinctCell::RunTe
         SeenCells.Add(L.Cell);
     }
     TestTrue(TEXT("Every seeded landmark got its own cell"), bAllDistinct);
-    TestEqual(TEXT("Every registered definition found a matching-biome cell in the default grid"),
-        Landmarks.Num(), GetLandmarkDefinitions().Num());
+
+    // Домовой (2026-08-31, bManualRegistrationOnly) сознательно не сеется по
+    // биому -- регистрируется напрямую AAlchemyTableActor::BeginPlay на
+    // клетке жилища, не найден бы биом-циклом SeedTestLandmarks вообще.
+    // Ожидаем ровно те определения, что реально претендуют на биом.
+    int32 ExpectedSeededCount = 0;
+    for (const FLandmarkDefinition& Def : GetLandmarkDefinitions())
+    {
+        if (!Def.bManualRegistrationOnly) ++ExpectedSeededCount;
+    }
+    TestEqual(TEXT("Every biome-matched definition found a matching-biome cell in the default grid"),
+        Landmarks.Num(), ExpectedSeededCount);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLandmark_DomovoiIsNotSeededByBiome,
+    "Herbalist.Landmark.DomovoiIsNotSeededByBiome",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistLandmark_DomovoiIsNotSeededByBiome::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const TArray<FEntityLandmark>& Landmarks = Manager->GetEntityLandmarks();
+    bool bFoundDomovoi = false;
+    for (const FEntityLandmark& L : Landmarks)
+    {
+        if (L.EntityID == FName(TEXT("Домовой"))) bFoundDomovoi = true;
+    }
+    TestFalse(TEXT("SeedTestLandmarks alone never places Домовой -- only AAlchemyTableActor::BeginPlay does"), bFoundDomovoi);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLandmark_DomovoiAggravatedCurseHitsStabilityBelowThreshold,
+    "Herbalist.Landmark.DomovoiAggravatedCurseHitsStabilityBelowThreshold",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistLandmark_DomovoiAggravatedCurseHitsStabilityBelowThreshold::RunTest(const FString& Parameters)
+{
+    // DESIGN_Community_And_Homestead.md §2.1: плохой Respect -- обычная
+    // порча (Corruption); Respect провалившийся НИЖЕ отдельного, более
+    // глубокого порога (-0.6) -- второй, более резкий удар (Stability тоже
+    // вниз) поверх обычного, эскалация в домашнюю Кикимору.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* MildCell = Manager->GetCell(2, 2);
+    FGridCell* SevereCell = Manager->GetCell(3, 3);
+    if (!TestNotNull(TEXT("Cell (2,2) exists"), MildCell) || !TestNotNull(TEXT("Cell (3,3) exists"), SevereCell))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    for (FGridCell* Cell : { MildCell, SevereCell })
+    {
+        Cell->Biome = EBiomeType::MixedForest;
+        Cell->bIsWater = false;
+        Cell->TargetState.Meta.Stability = 0.5f;
+    }
+
+    FEntityLandmark MildLandmark;
+    MildLandmark.EntityID = FName(TEXT("Домовой"));
+    MildLandmark.Cell = FIntPoint(2, 2);
+    MildLandmark.Respect = -0.4f;   // ниже обычного порога (-0.3), выше отягощённого (-0.6)
+
+    FEntityLandmark SevereLandmark;
+    SevereLandmark.EntityID = FName(TEXT("Домовой"));
+    SevereLandmark.Cell = FIntPoint(3, 3);
+    SevereLandmark.Respect = -0.8f;   // ниже отягощённого порога тоже
+
+    Manager->SetEntityLandmarks({ MildLandmark, SevereLandmark });
+
+    const float MildStabilityBefore = MildCell->TargetState.Meta.Stability;
+    const float SevereStabilityBefore = SevereCell->TargetState.Meta.Stability;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestEqual(TEXT("Both cells manifest Домовой as cursed"), MildCell->ManifestedEntityID, FName(TEXT("Домовой")));
+    TestEqual(TEXT("Both cells manifest Домовой as cursed"), SevereCell->ManifestedEntityID, FName(TEXT("Домовой")));
+
+    // Сравнение, не точное число (тот же довод, что уже применяют другие
+    // тесты этого файла): фоновый дрейф клетки (ночная фаза, релаксация и
+    // т.п.) может слегка тронуть Stability независимо от Домового — важен
+    // именно ДОПОЛНИТЕЛЬНЫЙ удар отягощённого проклятия, не абсолютная
+    // неизменность мягкого случая.
+    const float MildDrop = MildStabilityBefore - MildCell->TargetState.Meta.Stability;
+    const float SevereDrop = SevereStabilityBefore - SevereCell->TargetState.Meta.Stability;
+    TestTrue(TEXT("Severe curse (-0.8, past the aggravated threshold) drops Stability measurably more than mild curse (-0.4) does"),
+        SevereDrop > MildDrop + 0.01f);
 
     Manager->Destroy();
     return true;
