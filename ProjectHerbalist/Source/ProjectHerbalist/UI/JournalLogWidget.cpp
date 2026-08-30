@@ -13,6 +13,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
+#include "Components/ComboBoxString.h"
 #include "Kismet/GameplayStatics.h"
 
 void UJournalLogWidget::BindJournal(UHerbalistJournalComponent* InJournal)
@@ -93,7 +94,18 @@ void UJournalLogWidget::BuildLayout()
     ClarityText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 14));
     ClarityText->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.65f, 0.7f)));
     UVerticalBoxSlot* ClaritySlot = Root->AddChildToVerticalBox(ClarityText);
-    ClaritySlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 12.0f));
+    ClaritySlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+
+    // Подсветка закономерностей (07_UX §7.2.4/Фаза C п.8) -- фильтр по
+    // ингредиенту/"Зелья", единственный способ увидеть несколько записей
+    // одного и того же рядом без прокрутки всего лога вручную. Опции
+    // заполняются в RefreshDisplay (зависят от того, что реально уже
+    // записано), не здесь -- при первом открытии Травника записей ещё нет.
+    IngredientFilterCombo = WidgetTree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), TEXT("JournalFilter"));
+    IngredientFilterCombo->OnSelectionChanged.AddDynamic(this, &UJournalLogWidget::OnFilterSelectionChanged);
+    UVerticalBoxSlot* FilterSlot = Root->AddChildToVerticalBox(IngredientFilterCombo);
+    FilterSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 12.0f));
+    FilterSlot->SetHorizontalAlignment(HAlign_Left);
 
     UScrollBox* Scroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("JournalScroll"));
     UVerticalBoxSlot* ScrollSlot = Root->AddChildToVerticalBox(Scroll);
@@ -114,6 +126,26 @@ void UJournalLogWidget::OnJournalEntryAdded()
     RefreshDisplay();
 }
 
+void UJournalLogWidget::OnFilterSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+    // Direct -- вызвано программным SetSelectedOption изнутри
+    // RefreshFilterOptions (пересинхронизация списка при новой записи), не
+    // самим игроком; SelectedIngredientFilter там уже выставлен напрямую,
+    // повторный RefreshDisplay тут не нужен и рискует повторным входом
+    // (RefreshDisplay -> RefreshFilterOptions -> SetSelectedOption -> ...).
+    if (SelectionType == ESelectInfo::Direct) return;
+
+    if (const FName* Found = FilterLabelToIngredientID.Find(SelectedItem))
+    {
+        SelectedIngredientFilter = *Found;
+    }
+    else
+    {
+        SelectedIngredientFilter = NAME_None;
+    }
+    RefreshDisplay();
+}
+
 void UJournalLogWidget::RefreshDisplay()
 {
     if (!JournalComponent || !EntryList) return;
@@ -127,32 +159,116 @@ void UJournalLogWidget::RefreshDisplay()
             : FText::FromString(FString::Printf(TEXT("Ясность: %.2f"), Clarity)));
     }
 
-    EntryList->ClearChildren();
-
     UIngredientRegistrySubsystem* IngSub = nullptr;
     if (UGameInstance* GI = GetGameInstance())
     {
         IngSub = GI->GetSubsystem<UIngredientRegistrySubsystem>();
     }
 
+    RefreshFilterOptions(IngSub);
+
+    EntryList->ClearChildren();
+
     // Новые сверху -- тот же порядок, что у JournalWidget (RefreshDisplay).
-    const TArray<FJournalEntry>& Entries = JournalComponent->GetEntries();
-    if (Entries.Num() == 0)
+    // Фильтр (SelectedIngredientFilter) отбирает подмножество тех же самых
+    // записей -- ничего не считает и не подсказывает, просто убирает с
+    // глаз то, что сейчас не сравнивается (подсветка закономерностей,
+    // 07_UX §7.2.4).
+    const TArray<FJournalEntry>& AllEntries = JournalComponent->GetEntries();
+    TArray<int32> VisibleIndices;
+    VisibleIndices.Reserve(AllEntries.Num());
+    for (int32 i = 0; i < AllEntries.Num(); ++i)
+    {
+        if (SelectedIngredientFilter != NAME_None
+            && (AllEntries[i].Type == EJournalEntryType::MemoryFragment || AllEntries[i].IngredientID != SelectedIngredientFilter))
+        {
+            continue;
+        }
+        VisibleIndices.Add(i);
+    }
+
+    if (VisibleIndices.Num() == 0)
     {
         UTextBlock* Empty = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-        Empty->SetText(FText::FromString(TEXT("Пока пусто -- собери или свари что-нибудь.")));
+        Empty->SetText(AllEntries.Num() == 0
+            ? FText::FromString(TEXT("Пока пусто -- собери или свари что-нибудь."))
+            : FText::FromString(TEXT("Нет записей с этим отбором.")));
         Empty->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)));
         EntryList->AddChildToVerticalBox(Empty);
         return;
     }
 
-    for (int32 i = Entries.Num() - 1; i >= 0; --i)
+    for (int32 i = VisibleIndices.Num() - 1; i >= 0; --i)
     {
         UTextBlock* Line = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-        Line->SetText(FormatEntry(Entries[i], IngSub));
+        Line->SetText(FormatEntry(AllEntries[VisibleIndices[i]], IngSub));
         Line->SetAutoWrapText(true);
         UVerticalBoxSlot* LineSlot = EntryList->AddChildToVerticalBox(Line);
         LineSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+    }
+}
+
+// Список опций фильтра отражает то, что реально уже записано (порядок
+// появления, не алфавит -- проще увидеть только что собранное). Восстанавливает
+// текущий выбор, если он всё ещё существует, иначе откатывает на "Все" --
+// иначе перерисовка на каждую новую запись (OnJournalEntryAdded) сбрасывала
+// бы фильтр игрока при любом новом событии где угодно в мире.
+void UJournalLogWidget::RefreshFilterOptions(UIngredientRegistrySubsystem* IngredientRegistry)
+{
+    if (!IngredientFilterCombo || !JournalComponent) return;
+
+    const FString PreviousSelection = IngredientFilterCombo->GetSelectedOption();
+
+    IngredientFilterCombo->ClearOptions();
+    FilterLabelToIngredientID.Empty();
+
+    const FString AllLabel = TEXT("Все");
+    IngredientFilterCombo->AddOption(AllLabel);
+    FilterLabelToIngredientID.Add(AllLabel, NAME_None);
+
+    TSet<FName> SeenIDs;
+    for (const FJournalEntry& Entry : JournalComponent->GetEntries())
+    {
+        if (Entry.Type == EJournalEntryType::MemoryFragment) continue;
+        if (SeenIDs.Contains(Entry.IngredientID)) continue;
+        SeenIDs.Add(Entry.IngredientID);
+
+        FString Label;
+        if (Entry.IngredientID == FName(TEXT("Potion")))
+        {
+            // "Potion" -- общий IngredientID у ЛЮБОГО сваренного зелья
+            // (см. GridWorldManagerTick.cpp): имя каждой конкретной варки
+            // генерируется из State (GeneratePotionName) и потому разное у
+            // разных записей -- честная метка фильтра не может быть именем
+            // одного зелья, только общая категория ("сравнение зелий",
+            // Фаза C п.8).
+            Label = TEXT("Зелья");
+        }
+        else
+        {
+            FInventoryItem NameLookup;
+            NameLookup.IngredientID = Entry.IngredientID;
+            Label = GetItemDisplayName(NameLookup, IngredientRegistry);
+        }
+
+        if (FilterLabelToIngredientID.Contains(Label)) continue;   // на случай совпавших меток
+        IngredientFilterCombo->AddOption(Label);
+        FilterLabelToIngredientID.Add(Label, Entry.IngredientID);
+    }
+
+    FString TargetSelection = AllLabel;
+    if (!PreviousSelection.IsEmpty() && FilterLabelToIngredientID.Contains(PreviousSelection))
+    {
+        TargetSelection = PreviousSelection;
+    }
+    else
+    {
+        SelectedIngredientFilter = NAME_None;
+    }
+
+    if (IngredientFilterCombo->GetSelectedOption() != TargetSelection)
+    {
+        IngredientFilterCombo->SetSelectedOption(TargetSelection);
     }
 }
 

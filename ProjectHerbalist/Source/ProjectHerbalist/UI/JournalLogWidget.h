@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Types/SlateEnums.h"
 #include "JournalLogWidget.generated.h"
 
 class UHerbalistJournalComponent;
@@ -10,6 +11,7 @@ class UIngredientRegistrySubsystem;
 class UVerticalBox;
 class UScrollBox;
 class UTextBlock;
+class UComboBoxString;
 class AGridWorldManager;
 struct FJournalEntry;
 
@@ -55,10 +57,30 @@ private:
     UPROPERTY()
     UTextBlock* ClarityText = nullptr;
 
+    // Подсветка закономерностей (07_UX §7.2.4/Фаза C п.8, 2026-08-30) —
+    // "сравнение глазами, не правка формулы шума": фильтр только отбирает
+    // уже показанные записи одного ингредиента рядом друг с другом, не
+    // считает и не показывает никакого среднего/агрегата за игрока — сам
+    // вывод из сопоставления нескольких искажённых чисел делает игрок, не
+    // экран. FName::None = "Все" (фильтр снят).
+    UPROPERTY()
+    UComboBoxString* IngredientFilterCombo = nullptr;
+
+    FName SelectedIngredientFilter = NAME_None;
+
+    // ComboBoxString работает со строками (готовыми отображаемыми именами),
+    // не с FName напрямую — обратная карта нужна, чтобы по выбранной строке
+    // найти, каким IngredientID в реальности фильтровать GetEntries().
+    TMap<FString, FName> FilterLabelToIngredientID;
+
     UFUNCTION()
     void OnJournalEntryAdded();
 
+    UFUNCTION()
+    void OnFilterSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
     void BuildLayout();
     void RefreshDisplay();
+    void RefreshFilterOptions(UIngredientRegistrySubsystem* IngredientRegistry);
     FText FormatEntry(const FJournalEntry& Entry, UIngredientRegistrySubsystem* IngredientRegistry) const;
 };
