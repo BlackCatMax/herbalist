@@ -460,6 +460,13 @@ public:
     // раздельная настройка не отражала бы никакой реальной разницы между ними.
     UPROPERTY(config, EditAnywhere, Category = "Spawning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float IngredientWindowMismatchMultiplier = 0.15f;
+
+    // Сколько секунд держится на экране попап с текстом воспоминания Заряны/
+    // объявлением Буяна (UI/MemoryRevealWidget.h), 2026-08-29. Достаточно на
+    // 1-2 предложения текущей длины (см. MemoryFragmentDefinitions.h) при
+    // спокойном темпе чтения, не хронометрировано точно под каждый текст.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "1.0"))
+    float MemoryRevealDisplaySeconds = 7.0f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

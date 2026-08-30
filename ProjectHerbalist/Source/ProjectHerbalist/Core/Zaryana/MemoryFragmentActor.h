@@ -30,6 +30,7 @@ public:
 
     FName GetDefinitionID() const { return DefinitionID; }
     bool IsFalse() const { return bIsFalse; }
+    FIntPoint GetGridCell() const { return FIntPoint(GridX, GridY); }
 
 protected:
     virtual void Tick(float DeltaTime) override;

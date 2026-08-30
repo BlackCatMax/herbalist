@@ -7,6 +7,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -18,6 +19,7 @@
 #include "UI/InventoryTransferWidget.h"
 #include "UI/InventoryWidget.h"
 #include "UI/JournalLogWidget.h"
+#include "UI/MemoryRevealWidget.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 
 // ============================================================================
@@ -471,6 +473,7 @@ void AHerbalistPlayerController::Journal()
     if (!LogWidget) return;
 
     LogWidget->BindJournal(JournalComponent);
+    LogWidget->BindWorldManager(FindWorldManager());
     LogWidget->AddToViewport();
     JournalWidgetInstance = LogWidget;
 
@@ -480,6 +483,25 @@ void AHerbalistPlayerController::Journal()
     SetInputMode(InputMode);
     SetIgnoreLookInput(true);
     bIsAnyWidgetOpen = true;
+}
+
+// UMemoryRevealWidget.h -- вызывается извне (AGridWorldManager::
+// CollectMemoryFragment/CheckBuyanCondition), не завязан на состояние
+// bIsAnyWidgetOpen/CloseAnyWidget() намеренно: попап всплывает поверх
+// обычной игры сам по себе, не блокирует ввод и не конкурирует с
+// Инвентарём/Травником за тот же канал -- игрок может продолжать двигаться,
+// пока текст на экране.
+void AHerbalistPlayerController::ShowMemoryRevealText(const FText& Text)
+{
+    if (!MemoryRevealWidgetInstance)
+    {
+        MemoryRevealWidgetInstance = CreateWidget<UMemoryRevealWidget>(GetWorld(), UMemoryRevealWidget::StaticClass());
+    }
+    if (!MemoryRevealWidgetInstance) return;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DisplaySeconds = Settings ? Settings->MemoryRevealDisplaySeconds : 7.0f;
+    MemoryRevealWidgetInstance->Show(Text, DisplaySeconds);
 }
 
 void AHerbalistPlayerController::ToggleJournalUI()

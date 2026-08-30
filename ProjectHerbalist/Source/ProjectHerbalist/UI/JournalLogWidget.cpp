@@ -5,6 +5,7 @@
 #include "Core/Types/HerbalistNameUtils.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/World/GridWorldManager.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/SizeBox.h"
@@ -24,6 +25,15 @@ void UJournalLogWidget::BindJournal(UHerbalistJournalComponent* InJournal)
     if (JournalComponent)
     {
         JournalComponent->OnJournalEntryAdded.AddDynamic(this, &UJournalLogWidget::OnJournalEntryAdded);
+        RefreshDisplay();
+    }
+}
+
+void UJournalLogWidget::BindWorldManager(AGridWorldManager* InWorldManager)
+{
+    WorldManagerRef = InWorldManager;
+    if (ClarityText)
+    {
         RefreshDisplay();
     }
 }
@@ -73,7 +83,17 @@ void UJournalLogWidget::BuildLayout()
     Title->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 24));
     Title->SetColorAndOpacity(FSlateColor(FLinearColor(0.92f, 0.85f, 0.6f)));
     UVerticalBoxSlot* TitleSlot = Root->AddChildToVerticalBox(Title);
-    TitleSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 12.0f));
+    TitleSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+
+    // Ясность (AGridWorldManager::GlobalPerceptionClarity, "Прогрессия/Заряна"
+    // 2026-08-29) -- единственное число прогрессии во всей игре (06_Progression.md
+    // прямо запрещает числовые статы/уровни), поэтому стоит рядом с заголовком,
+    // не внутри списка записей: это состояние Травника целиком, не одна запись.
+    ClarityText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("JournalClarity"));
+    ClarityText->SetFont(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 14));
+    ClarityText->SetColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.65f, 0.7f)));
+    UVerticalBoxSlot* ClaritySlot = Root->AddChildToVerticalBox(ClarityText);
+    ClaritySlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 12.0f));
 
     UScrollBox* Scroll = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("JournalScroll"));
     UVerticalBoxSlot* ScrollSlot = Root->AddChildToVerticalBox(Scroll);
@@ -97,6 +117,15 @@ void UJournalLogWidget::OnJournalEntryAdded()
 void UJournalLogWidget::RefreshDisplay()
 {
     if (!JournalComponent || !EntryList) return;
+
+    if (ClarityText)
+    {
+        const bool bBuyan = WorldManagerRef && WorldManagerRef->IsBuyanReached();
+        const float Clarity = WorldManagerRef ? WorldManagerRef->GetGlobalPerceptionClarity() : 0.0f;
+        ClarityText->SetText(bBuyan
+            ? FText::FromString(TEXT("Ясность: 1.00 -- Буян достигнут"))
+            : FText::FromString(FString::Printf(TEXT("Ясность: %.2f"), Clarity)));
+    }
 
     EntryList->ClearChildren();
 
@@ -134,6 +163,17 @@ void UJournalLogWidget::RefreshDisplay()
 // (см. предупреждение в JournalTypes.h), не переcчитывается здесь заново.
 FText UJournalLogWidget::FormatEntry(const FJournalEntry& Entry, UIngredientRegistrySubsystem* IngredientRegistry) const
 {
+    // Фрагмент памяти -- отдельная ветка, не подходит под "ингредиент × N со
+    // стат-блоком": сам текст воспоминания важнее, чем где/когда его нашли.
+    if (Entry.Type == EJournalEntryType::MemoryFragment)
+    {
+        const FString TypeLabel = Entry.bFragmentWasTrue ? TEXT("Воспоминание") : TEXT("Искажённое воспоминание");
+        return FText::FromString(FString::Printf(
+            TEXT("[%s] \"%s\"\n     (%d,%d), %s"),
+            *TypeLabel, *Entry.FragmentText.ToString(), Entry.Cell.X, Entry.Cell.Y,
+            Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
+    }
+
     FInventoryItem NameLookup;
     NameLookup.IngredientID = Entry.IngredientID;
     NameLookup.State = Entry.PerceivedState;

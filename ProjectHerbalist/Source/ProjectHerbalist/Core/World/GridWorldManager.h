@@ -316,7 +316,7 @@ public:
     void TryTriggerCoherentBrewFragment(const FIntPoint& Cell, float Coherence, float Distortion, float Purity);
 
     // Вызывается из AMemoryFragmentActor::OnInteract.
-    void CollectMemoryFragment(FName DefinitionID, bool bIsFalse, AHerbalistPlayerController* PC);
+    void CollectMemoryFragment(FName DefinitionID, bool bIsFalse, AHerbalistPlayerController* PC, const FIntPoint& Cell = FIntPoint(-1, -1));
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Zaryana")
     float GetGlobalPerceptionClarity() const { return GlobalPerceptionClarity; }

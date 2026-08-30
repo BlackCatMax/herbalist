@@ -9,6 +9,8 @@ class UHerbalistJournalComponent;
 class UIngredientRegistrySubsystem;
 class UVerticalBox;
 class UScrollBox;
+class UTextBlock;
+class AGridWorldManager;
 struct FJournalEntry;
 
 // Травник как читаемый лог (2026-08-29, по прямому решению пользователя:
@@ -29,6 +31,14 @@ class PROJECTHERBALIST_API UJournalLogWidget : public UUserWidget
 public:
     void BindJournal(UHerbalistJournalComponent* InJournal);
 
+    // Ясность (AGridWorldManager::GetGlobalPerceptionClarity, "Прогрессия/
+    // Заряна" 2026-08-29) читается отсюда живьём в RefreshDisplay, не
+    // кэшируется отдельным полем на момент открытия — иначе значение
+    // застыло бы, пока экран открыт, а сбор фрагмента как раз может
+    // произойти в любой момент (тут не произойдёт, экран модальный, но
+    // отдельная сущность истины лучше молчаливого допущения).
+    void BindWorldManager(AGridWorldManager* InWorldManager);
+
 protected:
     virtual void NativeConstruct() override;
 
@@ -37,7 +47,13 @@ private:
     UHerbalistJournalComponent* JournalComponent = nullptr;
 
     UPROPERTY()
+    AGridWorldManager* WorldManagerRef = nullptr;
+
+    UPROPERTY()
     UVerticalBox* EntryList = nullptr;
+
+    UPROPERTY()
+    UTextBlock* ClarityText = nullptr;
 
     UFUNCTION()
     void OnJournalEntryAdded();

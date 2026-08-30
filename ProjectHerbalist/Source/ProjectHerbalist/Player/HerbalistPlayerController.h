@@ -104,6 +104,13 @@ public:
     UFUNCTION(Exec)
     void ToggleJournalUI();
 
+    // Экранный попап текста воспоминания Заряны/объявления Буяна
+    // (UI/MemoryRevealWidget.h, "Прогрессия/Заряна" 2026-08-29) — вызывается
+    // из AGridWorldManager (CollectMemoryFragment/CheckBuyanCondition), не
+    // ждёт открытия Травника: фрагмент должен быть прочитан в момент сбора,
+    // Травник ниже — для перечитать позже, не единственный способ увидеть.
+    void ShowMemoryRevealText(const FText& Text);
+
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
@@ -161,6 +168,9 @@ private:
     // RemoveFromParent) базовые, конкретный подкласс не нужен.
     UPROPERTY()
     UUserWidget* JournalWidgetInstance = nullptr;
+
+    UPROPERTY()
+    class UMemoryRevealWidget* MemoryRevealWidgetInstance = nullptr;
 
     // Кэш для мира
     UPROPERTY()

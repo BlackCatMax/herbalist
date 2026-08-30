@@ -14,6 +14,8 @@
 #include "Core/Zaryana/MemoryFragmentDefinitions.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Types/HerbalistCoreMath.h"
+#include "Core/Journal/HerbalistJournalComponent.h"
+#include "Core/Journal/JournalTypes.h"
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -147,12 +149,13 @@ void AGridWorldManager::SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoin
         *DefinitionID.ToString(), bActuallyFalse ? TEXT(" (FALSE)") : TEXT(""), Cell.X, Cell.Y);
 }
 
-void AGridWorldManager::CollectMemoryFragment(FName DefinitionID, bool bIsFalse, AHerbalistPlayerController* PC)
+void AGridWorldManager::CollectMemoryFragment(FName DefinitionID, bool bIsFalse, AHerbalistPlayerController* PC, const FIntPoint& Cell)
 {
     const FMemoryFragmentDefinition* Def = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(DefinitionID);
     if (!Def) return;
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const FText& RevealText = bIsFalse ? Def->FalseText : Def->TrueText;
 
     if (bIsFalse)
     {
@@ -169,6 +172,32 @@ void AGridWorldManager::CollectMemoryFragment(FName DefinitionID, bool bIsFalse,
         GlobalPerceptionClarity = FMath::Clamp(GlobalPerceptionClarity + Def->ClarityGain, 0.0f, 1.0f);
         UE_LOG(LogHerbalistWorld, Log, TEXT("[Zaryana] Подлинное воспоминание (%s): \"%s\" (Clarity=%.2f)"),
             *DefinitionID.ToString(), *Def->TrueText.ToString(), GlobalPerceptionClarity);
+    }
+
+    // Экран + Травник, "Прогрессия/Заряна" 2026-08-29 — раньше сбор был виден
+    // только через UE_LOG, текст воспоминания игрок никогда не читал. PC
+    // может быть nullptr (Herbalist.Zaryana.* тесты вызывают этот метод
+    // напрямую на голом AGridWorldManager, без контроллера) — оба шага
+    // защищены проверкой.
+    if (PC)
+    {
+        PC->ShowMemoryRevealText(RevealText);
+
+        if (PC->JournalComponent)
+        {
+            FJournalEntry Entry;
+            Entry.Type = EJournalEntryType::MemoryFragment;
+            Entry.FragmentText = RevealText;
+            Entry.bFragmentWasTrue = !bIsFalse;
+            Entry.Cell = Cell;
+            if (const FGridCell* FoundCell = GetCellConst(Cell.X, Cell.Y))
+            {
+                Entry.Biome = FoundCell->Biome;
+            }
+            Entry.bWasNight = IsNight();
+            Entry.GameTimeSeconds = GameClockSeconds;
+            PC->JournalComponent->AddEntry(Entry);
+        }
     }
 
     ActiveFragment.Reset();
@@ -207,6 +236,19 @@ void AGridWorldManager::CheckBuyanCondition()
     // Открытие скрытой локации с живой/мёртвой водой — контентная задача
     // (level design), не код: см. DESIGN_World_State.md, раздел про Буян.
     // Здесь — только флаг, который такой контент сможет прочитать.
+
+    // Текстовое объявление на экране, "Прогрессия/Заряна" 2026-08-29 — тот же
+    // разрыв, что у фрагментов: сам факт раньше был виден только через
+    // UE_LOG/ShowZaryanaStatus (Exec-команда, не часть обычной игры). Не через
+    // CollectMemoryFragment (это состояние мира, не действие игрока) — читаем
+    // PC тем же приёмом, что уже применён в GridWorldManagerAlchemy.cpp/
+    // GridWorldManagerDebug.cpp/GridWorldManagerTick.cpp.
+    if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()))
+    {
+        PC->ShowMemoryRevealText(FText::FromString(TEXT(
+            "Морок стих. Впервые за долгий срок мир вокруг ровен, как гладь непотревоженной воды -- "
+            "будто где-то там, за пределами видимого, лежит Буян.")));
+    }
 }
 
 void AGridWorldManager::ShowZaryanaStatus()

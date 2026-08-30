@@ -59,6 +59,6 @@ void AMemoryFragmentActor::OnInteract(AHerbalistPlayerController* PC)
     if (bCollected || !PC || !WorldManager) return;
     bCollected = true;
 
-    WorldManager->CollectMemoryFragment(DefinitionID, bIsFalse, PC);
+    WorldManager->CollectMemoryFragment(DefinitionID, bIsFalse, PC, GetGridCell());
     Destroy();
 }

@@ -10,7 +10,12 @@ UENUM(BlueprintType)
 enum class EJournalEntryType : uint8
 {
     Harvest,
-    Brew
+    Brew,
+    // Фрагмент памяти Заряны (Core/Zaryana/MemoryFragmentTypes.h), 2026-08-29 —
+    // закрывает разрыв "игрок собирает фрагмент, видит только UE_LOG": текст
+    // (FragmentText ниже) теперь читается тем же экраном, что харвест/варка,
+    // не теряется после экранного попапа (UI/MemoryRevealWidget.h).
+    MemoryFragment
 };
 
 // Одна запись Травника — 06_Progression.md: прогрессия как "сжатие ошибки
@@ -62,4 +67,18 @@ struct PROJECTHERBALIST_API FJournalEntry
     // (AUDIT_AND_REFACTORING_PLAN §3.4, устранённое дублирование часов).
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
     float GameTimeSeconds = 0.0f;
+
+    // Только для Type == MemoryFragment — само воспоминание (Def->TrueText/
+    // FalseText, см. GridWorldManagerZaryana.cpp::CollectMemoryFragment).
+    // IngredientID/Count/PerceivedState для этого типа не используются
+    // (остаются на дефолтах), Cell/Biome/bWasNight/GameTimeSeconds — как есть.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
+    FText FragmentText;
+
+    // Подлинное (true) или искажённое Мороком (false) воспоминание. Ложные
+    // тоже записываются — игрок должен иметь возможность потом сравнить и
+    // научиться различать, не только в момент сбора (06_Progression.md:
+    // прогрессия как сжатие ошибки через сравнение).
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
+    bool bFragmentWasTrue = true;
 };
