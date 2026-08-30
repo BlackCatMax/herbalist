@@ -120,6 +120,33 @@ public:
     UFUNCTION(Exec)
     void SetGatheringTool(FString ToolName);
 
+    // Диалоги (DESIGN_Community_And_Homestead.md §1.1, 2026-08-31) — v1
+    // консольный, тем же принципом, что SetGatheringTool/SetGardenPlot:
+    // TalkTo открывает разговор с хозяином места на клетке (X,Y) — печатает
+    // реплику узла и доступные по Respect ветки в лог; ChooseDialogueBranch
+    // выбирает ветку по индексу из ПОСЛЕДНЕГО напечатанного списка. Текущий
+    // узел разговора — состояние контроллера, не мира (см. комментарий у
+    // FTalkCommand, CommandTypes.h): разговор не переживает выход игрока
+    // из зоны взаимодействия, не сохраняется.
+    UFUNCTION(Exec)
+    void TalkTo(int32 X, int32 Y);
+
+    UFUNCTION(Exec)
+    void ChooseDialogueBranch(int32 BranchIndex);
+
+    // Подношение общине (DESIGN_Community_And_Homestead.md §1.3, 2026-08-31)
+    // — тот же приём, что TestNewApply: ингредиенты по именам через запятую,
+    // ищутся в инвентаре, списываются, ΔMolva логируется в
+    // AGridWorldManager::OfferToCommunity.
+    UFUNCTION(Exec)
+    void OfferToCommunity(FString IngredientList);
+
+    // Торговля с общиной (§1.2) — WantedIngredientID должен существовать в
+    // реестре (DT_IngredientClass), полученный предмет добавляется в
+    // инвентарь тем же способом, что и любой другой (AddItem).
+    UFUNCTION(Exec)
+    void TradeWithCommunity(FString OfferedIngredientID, FString WantedIngredientID);
+
     // Зарегистрировать клетку как грядку сада с пристройкой NicheName
     // (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) — "mycelium"/
     // "cellar"/"pond"/"sunny"/"shade", "none" снимает регистрацию. v1:
@@ -202,4 +229,11 @@ private:
     AGridWorldManager* CachedWorldManager = nullptr;
 
     bool TryHarvestResource(AHerbalistResourceActor* Resource);
+
+    // Текущий разговор (TalkTo/ChooseDialogueBranch, § комментарий у их
+    // объявления выше) — состояние UI-сессии, не мира, не UPROPERTY(SaveGame)
+    // намеренно.
+    FName CurrentDialogueID = NAME_None;
+    FName CurrentDialogueNodeID = NAME_None;
+    FIntPoint CurrentDialogueCell = FIntPoint(-1, -1);
 };

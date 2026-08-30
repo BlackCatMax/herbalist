@@ -22,6 +22,7 @@
 #include "UI/JournalLogWidget.h"
 #include "UI/MemoryRevealWidget.h"
 #include "Core/Simulation/Public/CommandTypes.h"
+#include "Core/Dialogue/HerbalistDialogueTypes.h"
 
 // ============================================================================
 // ЖИЗНЕННЫЙ ЦИКЛ
@@ -453,6 +454,188 @@ void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
         return;
     }
     UE_LOG(LogHerbalistPlayer, Log, TEXT("SetGatheringTool: %s"), *ToolName);
+}
+
+namespace
+{
+    void PrintDialogueNode(const FDialogueDefinition& Def, const FDialogueNode& Node, float Respect)
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("[Talk:%s] %s"), *Def.DialogueID.ToString(), *Node.SpeakerLine.ToString());
+        const TArray<const FDialogueBranch*> Available = GetAvailableBranches(Node, Respect);
+        if (Available.Num() == 0)
+        {
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("[Talk] (нечего ответить -- разговор окончен)"));
+            return;
+        }
+        for (int32 i = 0; i < Available.Num(); ++i)
+        {
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("[Talk] %d) %s"), i, *Available[i]->ActionText.ToString());
+        }
+    }
+}
+
+void AHerbalistPlayerController::TalkTo(int32 X, int32 Y)
+{
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("TalkTo: no world manager"));
+        return;
+    }
+
+    const FEntityLandmark* Landmark = Grid->FindLandmarkAt(FIntPoint(X, Y));
+    if (!Landmark)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("TalkTo: no one to talk to at (%d,%d)"), X, Y);
+        return;
+    }
+
+    const FDialogueDefinition* Def = FindDialogueDefinition(Landmark->EntityID);
+    if (!Def)
+    {
+        // Честный пробел, не крах: у большинства хозяев места пока нет
+        // записанного дерева (см. комментарий у GetDialogueDefinitions,
+        // "Домовой -- первый и пока единственный пример").
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("TalkTo: %s has no dialogue tree yet"), *Landmark->EntityID.ToString());
+        return;
+    }
+
+    // Реанимированный примитив (§ комментарий у ECommandPrimitive::Talk,
+    // CommandTypes.h) -- инертен в ExecutePipeline, ставится в очередь ради
+    // архитектурной полноты Q/T/D/S/B, не ради эффекта.
+    FCommandEntry Cmd;
+    Cmd.Primitive = ECommandPrimitive::Talk;
+    Cmd.Talk.DialogueID = Def->DialogueID;
+    Grid->QueueCommand(Cmd);
+
+    CurrentDialogueID = Def->DialogueID;
+    CurrentDialogueNodeID = Def->StartNodeID;
+    CurrentDialogueCell = FIntPoint(X, Y);
+
+    const FDialogueNode* Node = FindDialogueNode(*Def, CurrentDialogueNodeID);
+    if (Node)
+    {
+        PrintDialogueNode(*Def, *Node, Landmark->Respect);
+    }
+}
+
+void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
+{
+    if (CurrentDialogueID.IsNone())
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ChooseDialogueBranch: no active conversation (call TalkTo first)"));
+        return;
+    }
+
+    AGridWorldManager* Grid = FindWorldManager();
+    const FEntityLandmark* Landmark = Grid ? Grid->FindLandmarkAt(CurrentDialogueCell) : nullptr;
+    const FDialogueDefinition* Def = FindDialogueDefinition(CurrentDialogueID);
+    const FDialogueNode* Node = Def ? FindDialogueNode(*Def, CurrentDialogueNodeID) : nullptr;
+    if (!Landmark || !Def || !Node)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ChooseDialogueBranch: conversation partner is gone"));
+        CurrentDialogueID = NAME_None;
+        return;
+    }
+
+    const TArray<const FDialogueBranch*> Available = GetAvailableBranches(*Node, Landmark->Respect);
+    if (!Available.IsValidIndex(BranchIndex))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ChooseDialogueBranch: %d is not a valid branch (0..%d)"), BranchIndex, Available.Num() - 1);
+        return;
+    }
+
+    const FName NextNodeID = Available[BranchIndex]->NextNodeID;
+    if (NextNodeID.IsNone())
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("[Talk:%s] (разговор окончен)"), *CurrentDialogueID.ToString());
+        CurrentDialogueID = NAME_None;
+        CurrentDialogueNodeID = NAME_None;
+        return;
+    }
+
+    CurrentDialogueNodeID = NextNodeID;
+    const FDialogueNode* NextNode = FindDialogueNode(*Def, CurrentDialogueNodeID);
+    if (NextNode)
+    {
+        PrintDialogueNode(*Def, *NextNode, Landmark->Respect);
+    }
+}
+
+void AHerbalistPlayerController::OfferToCommunity(FString IngredientList)
+{
+    if (!InventoryComponent) return;
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+
+    // Тот же приём поиска по имени, что TestNewApply — но по индексу, не по
+    // значению: подношение должно списать ровно то, что нашло, а не
+    // случайную более позднюю копию с тем же IngredientID.
+    TArray<FInventoryItem> Items;
+    TArray<int32> Indices;
+    TArray<FString> Names;
+    IngredientList.ParseIntoArray(Names, TEXT(","), true);
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    for (const FString& Name : Names)
+    {
+        const FName IngID(*Name);
+        for (int32 i = 0; i < CurrentItems.Num(); ++i)
+        {
+            if (Indices.Contains(i)) continue;
+            if (CurrentItems[i].IngredientID == IngID)
+            {
+                Items.Add(CurrentItems[i]);
+                Indices.Add(i);
+                break;
+            }
+        }
+    }
+
+    if (Items.Num() == 0)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferToCommunity: no matching items in inventory"));
+        return;
+    }
+
+    Grid->OfferToCommunity(Items);
+
+    // Индексы по убыванию — RemoveItem(Index) не должен сдвинуть ещё не
+    // обработанные позиции.
+    Indices.Sort([](int32 A, int32 B) { return A > B; });
+    for (int32 Index : Indices)
+    {
+        InventoryComponent->RemoveItem(Index, 1);
+    }
+}
+
+void AHerbalistPlayerController::TradeWithCommunity(FString OfferedIngredientID, FString WantedIngredientID)
+{
+    if (!InventoryComponent) return;
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+
+    const FName OfferedID(*OfferedIngredientID);
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    int32 FoundIndex = INDEX_NONE;
+    for (int32 i = 0; i < CurrentItems.Num(); ++i)
+    {
+        if (CurrentItems[i].IngredientID == OfferedID) { FoundIndex = i; break; }
+    }
+    if (FoundIndex == INDEX_NONE)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("TradeWithCommunity: '%s' not found in inventory"), *OfferedIngredientID);
+        return;
+    }
+
+    FInventoryItem Received;
+    if (!Grid->TryTradeWithCommunity(CurrentItems[FoundIndex], FName(*WantedIngredientID), Received))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("TradeWithCommunity: trade failed ('%s' unknown to the community, or nothing to offer)"), *WantedIngredientID);
+        return;
+    }
+
+    InventoryComponent->RemoveItem(FoundIndex, 1);
+    InventoryComponent->AddItem(Received, Received.Count);
 }
 
 void AHerbalistPlayerController::SetGardenPlot(int32 X, int32 Y, FString NicheName)

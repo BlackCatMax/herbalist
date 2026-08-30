@@ -452,6 +452,41 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|Landmarks", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float LandmarkOfferingGain = 0.05f;
 
+    // --- Молва общины (17_Hero_And_Community.md §17.3, DESIGN_Community_
+    // And_Homestead.md §1, реализация 2026-08-31) ---
+    // Тот же принцип роста, что Shrine/LandmarkOfferingGain выше (Gain ×
+    // (Purity − Corruption) поднесённого), но медленнее — "община доверяет
+    // дольше, чем одно место" (§17.3, прикидка документа — 0.03 против 0.05
+    // у капищ). Не тот же самый параметр, что выше: три философски разных
+    // адресата (место / хозяин места / люди), три отдельные настройки —
+    // тот же довод, что уже развёл ShrineOfferingGain и LandmarkOfferingGain.
+    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MolvaOfferingGain = 0.03f;
+
+    // Пороги веток диалога/торговли по Molva (§17.3, таблица): ниже первого —
+    // только анонимные записки/худший курс, между — нейтрально, выше
+    // второго — именные ветки/лучший курс.
+    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+    float MolvaLowThreshold = -0.3f;
+    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+    float MolvaHighThreshold = 0.5f;
+
+    // --- Торговля с общиной (DESIGN_Community_And_Homestead.md §1.2) ---
+    // Ценность(предмет) = Magnitude × (1 + PurityWeight×Purity) × (1 +
+    // RarityWeight×(1/RarityWeight_ингредиента)) — редкость учитывается как
+    // обратная величина уже существующего IngredientTableRow::RarityWeight
+    // (меньше вес спавна = реже = ценнее), не новое понятие "редкости".
+    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "0.0"))
+    float TradeValuePurityWeight = 0.5f;
+    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "0.0"))
+    float TradeValueRarityWeight = 0.5f;
+
+    // Курс = ЦенностьA/ЦенностьB, домножается на (1 + MolvaRateBonus×Molva) —
+    // выше Molva, выгоднее курс (община доверяет качеству того, что даёт
+    // герой), тот же язык, что уже в §1.2 документа.
+    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float TradeMolvaRateBonus = 0.3f;
+
     // Горизонт полного угасания заброшенного капища — то же число, что уже
     // задаёт лунный цикл (§15.3), не новая величина.
     UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "1.0"))

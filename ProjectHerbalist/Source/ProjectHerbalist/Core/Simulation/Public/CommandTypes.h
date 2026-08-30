@@ -12,7 +12,18 @@ enum class ECommandPrimitive : uint8
     Transfer,
     Apply,
     Harvest,
-    Wait
+    Wait,
+    // Реанимирован 2026-08-31 (DESIGN_Community_And_Homestead.md §1.1) —
+    // удалён 2026-08-30 как мёртвый код (ни один путь не создавал
+    // FTalkCommand), но запрошены настоящие диалоговые деревья тем же днём
+    // позже — сознательный откат, не забытая чистка. Как и Query, не
+    // обрабатывается в ExecutePipeline (см. default-ветку там) — диалог
+    // читает Molva/Respect и статический реестр (Core/Dialogue/
+    // DialogueTypes.h), ничего не меняет в FRealState/инвентаре, поэтому не
+    // производит Delta и не нуждается в детерминированном пайплайне; сама
+    // команда реанимирована ради полноты алгебры Q/T/D/S/B, не как
+    // фактический канал эффекта.
+    Talk
 };
 
 // Q – запрос (какие клетки/предметы затронуты)
@@ -84,12 +95,20 @@ struct FHarvestCommand
     bool bDelicate = false;
 };
 
-// Контейнер команды (одна запись в пакете команд). B/Talk убран 2026-08-30
-// ("закрываем архитектурный долг") — не заглушка на будущее, а мёртвый код:
-// ни один игровой путь никогда не создавал FTalkCommand, а сам ГДД
-// (17_Hero_And_Community.md, "Никто не говорит ему «спасибо»") прямо
-// отвергает диалог как механику в пользу тихой материальной платы. Тот же
-// повод, что и у ExecutionOrder ниже — объявлено, не используется.
+// B – диалог (реанимирован 2026-08-31, см. комментарий у ECommandPrimitive
+// ::Talk выше — был убран 2026-08-30 как мёртвый код, сознательно
+// восстановлен тем же днём позже по прямому запросу настоящих диалоговых
+// деревьев). DialogueID — ключ в Core/Dialogue::GetDialogueDefinitions(),
+// не сама диалоговая структура: тело дерева и текущий узел разговора не
+// часть команды/Delta, живут на стороне PlayerController (см.
+// CurrentDialogueNodeID) — команда лишь фиксирует факт "поговорил",
+// не переносит состояние разговора через границу пайплайна.
+struct FTalkCommand
+{
+    FName DialogueID;
+};
+
+// Контейнер команды (одна запись в пакете команд).
 struct FCommandEntry
 {
     ECommandPrimitive Primitive = ECommandPrimitive::None;
@@ -98,6 +117,7 @@ struct FCommandEntry
     FTransferCommand    Transfer;
     FApplyCommand       Apply;
     FHarvestCommand     Harvest;
+    FTalkCommand        Talk;
 
     uint32 CommandID = 0;
     bool bCancelled = false;

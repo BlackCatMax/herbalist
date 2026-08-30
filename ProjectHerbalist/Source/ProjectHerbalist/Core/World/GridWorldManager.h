@@ -352,6 +352,46 @@ public:
     // Tick() каждый кадр, но и напрямую тестируемо без полной PIE-сессии.
     void UpdateShrines(float DeltaTime);
 
+    // ---- Общинный кластер (DESIGN_Community_And_Homestead.md §1,
+    // 17_Hero_And_Community.md §17.3, реализация 2026-08-31): Молва,
+    // Подношение общине, Торговля с общиной — один накопитель, три
+    // интерфейса поверх него, не три отдельные системы (см. комментарий
+    // у OfferToCommunity ниже). Вне детерминированного пайплайна, тем же
+    // принципом, что UpdateShrines/UpdateMemoryFragments — не место/клетка,
+    // абстрактная община, WorldSnap.GridState её не описывает. ----
+
+    // [-1, 1], растёт/падает только явным подношением (OfferToCommunity),
+    // без пассивного спада — тот же принцип, что уже у Landmark.Respect
+    // (§16.3: "у подношения ему нет срока годности").
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Community")
+    float Molva = 0.0f;
+
+    // Подношение общине (§1.3 "то, что уже есть, назвать общим именем") —
+    // тот же знаковый принцип роста, что уже даёт капищам/хозяевам места
+    // (Gain × (Purity − Corruption)), просто по среднему предложенных
+    // предметов, не по клетке: община — не место. Возвращает применённое
+    // ΔMolva (для лога/обратной связи вызывающей стороне), сам инвентарь
+    // не трогает — списание предметов остаётся на вызывающей стороне
+    // (AHerbalistPlayerController), тем же разделением обязанностей, что
+    // и у остальных Exec-путей этого класса.
+    float OfferToCommunity(const TArray<FInventoryItem>& Items);
+
+    // Ценность предмета для общины (§1.2) — Magnitude, взвешенный Purity и
+    // обратной редкостью (1/IngredientTableRow::RarityWeight — уже
+    // существующее понятие, не новая метрика). Нулевая/неизвестная
+    // Ценность (не найден в реестре) — 0, не крах: тот же принцип
+    // терпимости к отсутствующим данным, что у GetRow/Classify.
+    float ComputeCommunityTradeValue(const FInventoryItem& Item) const;
+
+    // Обмен (§1.2) — курс ЦенностьA/ЦенностьB, домножен на (1 +
+    // TradeMolvaRateBonus×Molva). OutReceived получает WantedIngredientID
+    // с его собственным BaseState (реестр) и посчитанным Count (минимум 1,
+    // если курс вообще положителен — община не выдаёт пустых стопок).
+    // false = ничего не найдено в реестре или Offered.Count<=0 — не значит
+    // "курс невыгодный", тот случай тоже true с Count=1 (§1.2: "не магазин
+    // с ценниками", округление вниз, не отказ).
+    bool TryTradeWithCommunity(const FInventoryItem& Offered, FName WantedIngredientID, FInventoryItem& OutReceived) const;
+
     // ---- Заряна: фрагменты памяти и Буян (обсуждение в сессии 2026-08-24,
     // 06_Progression.md "Прогрессия через Заряну", 15_Cycles_And_Shrines.md
     // §15.5 "Буян как глобальное состояние") ----
