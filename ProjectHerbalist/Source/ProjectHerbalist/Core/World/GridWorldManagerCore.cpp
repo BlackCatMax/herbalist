@@ -755,6 +755,47 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
             }
         }
 
+        // Заражение соседей (2026-08-30, "разрастание поганых мест") — пока
+        // клетка в испорченном полюсе, она непрерывно толкает TargetState
+        // четырёх прямых соседей по сетке в ту же сторону, что и её
+        // собственный полюс. Пересекает границу биома намеренно (прямое
+        // решение пользователя) — заражение не спрашивает биом соседа, тем
+        // же принципом, что уже диффузия Морока по биомному графу, только
+        // на уровне клеток сетки. Сравнение перед записью — тот же §7.1
+        // паттерн, что у ночного/зимнего нуджа выше в этом файле: без него
+        // сосед у уже насыщенного полюса грязнился бы каждый кадр без
+        // реального изменения.
+        if (Cell.Memory.bDegrading)
+        {
+            const float ContagionRate = Settings ? Settings->ContagionSpreadRate : 0.01f;
+            if (ContagionRate > 0.0f)
+            {
+                static const FIntPoint ContagionOffsets[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+                for (const FIntPoint& Offset : ContagionOffsets)
+                {
+                    FGridCell* Neighbor = GetCell(Cell.X + Offset.X, Cell.Y + Offset.Y);
+                    if (!Neighbor) continue;
+
+                    const float NewCorruption = FMath::Clamp(Neighbor->TargetState.Meta.Corruption + ContagionRate * DeltaTime, 0.0f, 1.0f);
+                    const float NewPurity     = FMath::Clamp(Neighbor->TargetState.Meta.Purity     - ContagionRate * DeltaTime, 0.0f, 1.0f);
+                    const float NewDistortion = FMath::Clamp(Neighbor->TargetState.Meta.Distortion + ContagionRate * DeltaTime, 0.0f, 1.0f);
+                    const float NewStability  = FMath::Clamp(Neighbor->TargetState.Meta.Stability  - ContagionRate * DeltaTime, 0.0f, 1.0f);
+
+                    if (!FMath::IsNearlyEqual(NewCorruption, Neighbor->TargetState.Meta.Corruption, KINDA_SMALL_NUMBER) ||
+                        !FMath::IsNearlyEqual(NewPurity,     Neighbor->TargetState.Meta.Purity,     KINDA_SMALL_NUMBER) ||
+                        !FMath::IsNearlyEqual(NewDistortion, Neighbor->TargetState.Meta.Distortion, KINDA_SMALL_NUMBER) ||
+                        !FMath::IsNearlyEqual(NewStability,  Neighbor->TargetState.Meta.Stability,  KINDA_SMALL_NUMBER))
+                    {
+                        Neighbor->TargetState.Meta.Corruption = NewCorruption;
+                        Neighbor->TargetState.Meta.Purity     = NewPurity;
+                        Neighbor->TargetState.Meta.Distortion = NewDistortion;
+                        Neighbor->TargetState.Meta.Stability  = NewStability;
+                        MarkCellDirty(Neighbor->X, Neighbor->Y);
+                    }
+                }
+            }
+        }
+
         FRealState& S = Cell.State;
         const FRealState& T = Cell.TargetState;
 
