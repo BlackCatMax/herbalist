@@ -24,7 +24,7 @@ tags: [technical, current, ui]
 ### `UItemTooltipWidget`
 - Показывает **S_perceived**: искажённые значения параметров + реальные в скобках.
 - Искажение через `Perception::PerceiveValue` (мультипликативное, bounded).
-- Подмена класса через `Perception::PerceiveClass` (вероятностная, при D > 0.5).
+- `PerceiveClass` (подмена самого факта "что это за вещь") в коде не существует — искажаются только числа, не идентичность предмета; см. `ROADMAP.md`, "Механики с открытым дизайном".
 - Глобальный Distortion из `AHerbalistPlayerController::CurrentGlobalDistortion`.
 - Детерминированный seed (нет дрожания).
 ## Управление вводом

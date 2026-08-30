@@ -66,4 +66,4 @@ struct FInventoryItem {
     
 - `UInventorySlotWidget` — отображает иконку, название, количество, обрабатывает drag&drop и тултип.
     
-- `UItemTooltipWidget` — показывает **[[S_perceived]]** (искажённые значения + реальные в скобках). Использует Perception::PerceiveValue` и `Perception::PerceiveClass. Глобальный Distortion из HerbalistPlayerController::CurrentGlobalDistortion.
+- `UItemTooltipWidget` — показывает **[[S_perceived]]** (искажённые значения + реальные в скобках). Использует `Perception::PerceiveValue`. `PerceiveClass` (подмена идентичности предмета) в коде не существует — см. `ROADMAP.md`. Глобальный Distortion из HerbalistPlayerController::CurrentGlobalDistortion.

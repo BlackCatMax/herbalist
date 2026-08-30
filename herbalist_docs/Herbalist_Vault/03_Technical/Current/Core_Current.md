@@ -42,7 +42,11 @@ struct FMemoryState {
 ### `FIntent`
 
 struct FIntent {
-    float Coherence; // всегда 0.5f в текущем коде
+    float Coherence; // устарело: с ComputeIntentCoherence (PipelineV2.cpp)
+        // больше не константа — считается из фактических ингредиентов (вес
+        // по позиции, согласие доминирующих осей, качество, бонус воды);
+        // то, что вызывающий код кладёт в Cmd.Intent.Coherence, Pipeline
+        // перезаписывает своим значением, см. Alchemy_Current.md
 };
 
 ## Нормализация направления
