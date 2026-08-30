@@ -48,6 +48,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->EntityLandmarks = WorldManager->GetEntityLandmarks();
     Save->Shrines = WorldManager->GetShrines();
     Save->Molva = WorldManager->Molva;
+    Save->GardenPlots = WorldManager->GardenPlots;
     Save->GlobalPerceptionClarity = WorldManager->GetGlobalPerceptionClarity();
     Save->bBuyanReached = WorldManager->IsBuyanReached();
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
@@ -111,6 +112,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetEntityLandmarks(Save->EntityLandmarks);
     WorldManager->SetShrines(Save->Shrines);
     WorldManager->Molva = Save->Molva;
+    WorldManager->GardenPlots = Save->GardenPlots;
     WorldManager->SetGlobalPerceptionClarity(Save->GlobalPerceptionClarity);
     WorldManager->SetBuyanReached(Save->bBuyanReached);
     WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));

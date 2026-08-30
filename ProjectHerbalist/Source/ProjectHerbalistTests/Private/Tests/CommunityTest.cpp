@@ -13,6 +13,17 @@
 // окружении — тот же довод, что уже объясняет структуру
 // IngredientRegistryTest.cpp (синтетическая таблица для прямых тестов
 // реестра, не GameInstance).
+//
+// Аудит "на аудит" (2026-08-31): та же зависимость от реестра — причина,
+// по которой найденный в этом же проходе баг количества в
+// AHerbalistPlayerController::TradeWithCommunity (ComputeCommunityTradeValue
+// оценивал ВЕСЬ предложенный стек по Item.Count, а списывался только 1 —
+// бесплатная утечка ценности при стеке > 1, см. правку и комментарий там же)
+// не покрыт отдельным автотестом здесь: числовую проверку курса нельзя
+// собрать без реального реестра, а PlayerController нигде в этом проекте не
+// поднимается в automation-тестах (нет прецедента, заводить его ради одной
+// правки — непропорционально). Реальная сквозная проверка — ручной прогон
+// по PIE_VERIFICATION_PLAN.md, "Приоритет 3".
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Types/BiomeTypes.h"
@@ -215,6 +226,52 @@ bool FHerbalistCommunity_MolvaSurvivesSaveLoad::RunTest(const FString& Parameter
     Manager->Molva = Save->Molva;   // тот же порядок присваивания, что LoadGame()
 
     TestEqual(TEXT("Molva restored to the value at save time, not left at post-save value"), Manager->Molva, 0.42f);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCommunity_GardenPlotsSurviveSaveLoad,
+    "Herbalist.Community.GardenPlotsSurviveSaveLoad",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCommunity_GardenPlotsSurviveSaveLoad::RunTest(const FString& Parameters)
+{
+    // Аудит "на аудит" (2026-08-31, по прямому запросу пользователя после
+    // закрытия всей фазы): тот же класс пробела, что MolvaSurvivesSaveLoad
+    // выше уже проверяет для Molva -- но найденный на проход раньше, у
+    // Сада (b421b8c, 2026-08-31 утро). GardenPlots ни разу не встречался в
+    // Core/Save/ до этой правки: SetGardenPlot -- решение игрока, не
+    // производная от клетки, значит обязана переживать перезагрузку тем же
+    // доводом, что и Molva. Тот же приём обхода UHerbalistSaveSubsystem
+    // (GameInstanceSubsystem недоступен в editor-world автотестах, см.
+    // комментарий у MolvaSurvivesSaveLoad) -- напрямую воспроизводится пара
+    // присваиваний Save/Load.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UHerbalistSaveGame* Save = NewObject<UHerbalistSaveGame>();
+    if (!TestNotNull(TEXT("Save object constructed"), Save)) { Manager->Destroy(); return false; }
+
+    Manager->RegisterGardenPlot(FIntPoint(2, 3), EGardenNiche::Mycelium);
+    Manager->RegisterGardenPlot(FIntPoint(5, 5), EGardenNiche::Pond);
+    Save->GardenPlots = Manager->GardenPlots;   // тот же порядок, что SaveGame()
+
+    // Симулируем дальнейшую игру после сохранения -- новая пристройка и
+    // очистка старой должны откатиться при загрузке, не остаться в силе.
+    Manager->RegisterGardenPlot(FIntPoint(2, 3), EGardenNiche::None);
+    Manager->RegisterGardenPlot(FIntPoint(9, 9), EGardenNiche::ShadeBed);
+    Manager->GardenPlots = Save->GardenPlots;   // тот же порядок, что LoadGame()
+
+    TestEqual(TEXT("Exactly the two saved plots come back, not the post-save edits"), Manager->GardenPlots.Num(), 2);
+    const EGardenNiche* Mycelium = Manager->GardenPlots.Find(FIntPoint(2, 3));
+    const EGardenNiche* Pond = Manager->GardenPlots.Find(FIntPoint(5, 5));
+    TestTrue(TEXT("(2,3) restored to Mycelium"), Mycelium && *Mycelium == EGardenNiche::Mycelium);
+    TestTrue(TEXT("(5,5) restored to Pond"), Pond && *Pond == EGardenNiche::Pond);
+    TestFalse(TEXT("(9,9), assigned only after the save point, is not present"), Manager->GardenPlots.Contains(FIntPoint(9, 9)));
 
     Manager->Destroy();
     return true;

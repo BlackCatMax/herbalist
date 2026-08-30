@@ -634,7 +634,12 @@ void AHerbalistPlayerController::TradeWithCommunity(FString OfferedIngredientID,
         return;
     }
 
-    InventoryComponent->RemoveItem(FoundIndex, 1);
+    // Аудит 2026-08-31: ComputeCommunityTradeValue домножает цену на весь
+    // Item.Count предложенного стека (см. GridWorldManagerCommunity.cpp) --
+    // значит и списать нужно весь стек, а не 1 единицу. Раньше здесь стояла
+    // RemoveItem(FoundIndex, 1): стек из 5 трав оценивался как 5, а терял
+    // игрок только 1 -- бесплатная утечка ценности при любом стеке > 1.
+    InventoryComponent->RemoveItem(FoundIndex, CurrentItems[FoundIndex].Count);
     InventoryComponent->AddItem(Received, Received.Count);
 }
 

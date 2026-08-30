@@ -463,13 +463,17 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MolvaOfferingGain = 0.03f;
 
-    // Пороги веток диалога/торговли по Molva (§17.3, таблица): ниже первого —
-    // только анонимные записки/худший курс, между — нейтрально, выше
-    // второго — именные ветки/лучший курс.
-    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
-    float MolvaLowThreshold = -0.3f;
-    UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
-    float MolvaHighThreshold = 0.5f;
+    // Пороговая (не непрерывная) привязка веток диалога/торговли к Molva —
+    // "ниже порога только анонимные записки/худший курс, выше — именные
+    // ветки/лучший курс" (§17.3, таблица) -- НЕ реализована: единственный
+    // существующий пример дерева (Домовой) гейтится Landmark.Respect, не
+    // Molva вовсе (у него нет "имени" community-собеседника), а Торговля
+    // уже использует Molva непрерывно (TradeMolvaRateBonus ниже), не через
+    // пороги. Аудит "на аудит" (2026-08-31) снял отсюда MolvaLowThreshold/
+    // MolvaHighThreshold -- два поля стояли здесь с комментарием,
+    // утверждавшим поведение, которого нет ни в одной строчке кода (ни разу
+    // не прочитаны нигде в проекте). Остаётся открытым пунктом §17.3, не
+    // заглушкой в настройках.
 
     // --- Торговля с общиной (DESIGN_Community_And_Homestead.md §1.2) ---
     // Ценность(предмет) = Magnitude × (1 + PurityWeight×Purity) × (1 +
