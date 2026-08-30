@@ -152,6 +152,27 @@ struct FAmbientEntityDefinition
     UPROPERTY() TSubclassOf<class AHerbalistEntityActor> ActorClass;
 };
 
+// Обратная операция к GetAmbientTriggerAxisValue ниже -- нужна тестам,
+// которым нужно программно завести клетку в состояние "подходит под этот
+// Axis/Threshold", не только читать уже готовую (SystemInteractionTest.cpp,
+// 2026-08-30, "проверим сочетания всех биомов").
+inline void SetAmbientTriggerAxisValue(FGridCell& Cell, EAmbientTriggerAxis Axis, float Value)
+{
+    switch (Axis)
+    {
+    case EAmbientTriggerAxis::Corruption:    Cell.State.Meta.Corruption = Value; break;
+    case EAmbientTriggerAxis::Purity:        Cell.State.Meta.Purity = Value; break;
+    case EAmbientTriggerAxis::Distortion:    Cell.State.Meta.Distortion = Value; break;
+    case EAmbientTriggerAxis::Stability:     Cell.State.Meta.Stability = Value; break;
+    case EAmbientTriggerAxis::HarvestStress: Cell.HarvestStress = Value; break;
+    case EAmbientTriggerAxis::Body:          Cell.State.Direction.Body = Value; break;
+    case EAmbientTriggerAxis::Mind:          Cell.State.Direction.Mind = Value; break;
+    case EAmbientTriggerAxis::Spirit:        Cell.State.Direction.Spirit = Value; break;
+    case EAmbientTriggerAxis::Nature:        Cell.State.Direction.Nature = Value; break;
+    default: break;
+    }
+}
+
 inline float GetAmbientTriggerAxisValue(const FGridCell& Cell, EAmbientTriggerAxis Axis)
 {
     switch (Axis)

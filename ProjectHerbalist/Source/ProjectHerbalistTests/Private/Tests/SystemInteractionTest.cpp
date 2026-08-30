@@ -428,4 +428,233 @@ bool FHerbalistSystemInteraction_MaximumStackDoesNotBreak::RunTest(const FString
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSystemInteraction_LandmarkBlessVsSelfBistability,
+    "Herbalist.SystemInteraction.LandmarkBlessVsSelfBistability",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSystemInteraction_LandmarkBlessVsSelfBistability::RunTest(const FString& Parameters)
+{
+    // "Хозяева" (Основной ранг), прямой самоконфликт -- не через заражение
+    // соседа (уже проверено, чисто), а через то, что Respect (подношение)
+    // и Corruption (бистабильность клетки) две полностью независимые
+    // величины: ничто не мешает клетке-обиталищу одновременно быть щедро
+    // одаренной И собственной Corruption пересечь порог входа. Три хозяина
+    // на трёх разных биомах -- механизм у всех 14 идентичен (один и тот же
+    // Respect-канал), биом сам по себе логику не меняет, три образца
+    // достаточно, чтобы не гонять оставшиеся 11 ради того же самого вывода.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    struct FCase { FName EntityID; EBiomeType Biome; FIntPoint Cell; };
+    const FCase Cases[] = {
+        { FName(TEXT("Полевик")),          EBiomeType::ForestSteppe, FIntPoint(3, 3) },
+        { FName(TEXT("Кикимора болотная")), EBiomeType::Bog,          FIntPoint(4, 4) },
+        { FName(TEXT("Бродницы")),          EBiomeType::Floodplain,  FIntPoint(5, 5) },
+    };
+
+    for (const FCase& C : Cases)
+    {
+        AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+        if (!TestNotNull(TEXT("Manager spawned"), Manager)) continue;
+        Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+        FGridCell* Cell = Manager->GetCell(C.Cell.X, C.Cell.Y);
+        if (!TestNotNull(TEXT("Landmark cell exists"), Cell)) { Manager->Destroy(); continue; }
+
+        Cell->Biome = C.Biome;
+        Cell->bIsWater = false;
+        Cell->State.Meta.Corruption = 0.95f;   // за порогом входа бистабильности САМОЙ клетки
+        Cell->TargetState = Cell->State;
+        Cell->Memory.bDegrading = false;
+
+        FEntityLandmark Landmark;
+        Landmark.EntityID = C.EntityID;
+        Landmark.Cell = C.Cell;
+        Landmark.Respect = 0.9f;   // щедро одаренный, далеко за порогом благословения (0.5)
+        Manager->SetEntityLandmarks({ Landmark });
+
+        bool bSawNaNOrOutOfRange = false;
+        for (int32 i = 0; i < 100; ++i)
+        {
+            Manager->RegenerateCellParameters(1.0f);
+            Manager->UpdateEntityManifestations(1.0f);
+            if (!CellAxesInRange(*Cell)) bSawNaNOrOutOfRange = true;
+        }
+
+        TestFalse(FString::Printf(TEXT("[%s] State/TargetState stays in range"), *C.EntityID.ToString()), bSawNaNOrOutOfRange);
+
+        const bool bIncoherent = Cell->Memory.bDegrading && Cell->ManifestedEntityID == C.EntityID;
+        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d%s"),
+            *C.EntityID.ToString(), *UEnum::GetValueAsString(C.Biome),
+            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading,
+            bIncoherent ? TEXT("  <-- INCOHERENT: blessed host manifests on a doomed cell") : TEXT("")));
+
+        Manager->Destroy();
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSystemInteraction_AmbientSweepAcrossAllBiomes,
+    "Herbalist.SystemInteraction.AmbientSweepAcrossAllBiomes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSystemInteraction_AmbientSweepAcrossAllBiomes::RunTest(const FString& Parameters)
+{
+    // Программный обход ВСЕГО реестра Низшего ранга (2026-08-30, "проверим
+    // сочетания всех биомов"), не горстка образцов вручную. Каждое
+    // определение с осевым триггером (TriggerAxis != None), кроме самой
+    // Corruption (та согласована с бистабильностью по построению, не
+    // противоречит) и кроме требующих время/сезон/луну/погоду/границу биома
+    // (эти пропускаются с явной пометкой в отчёте, не тихо) -- заводится в
+    // клетку СВОЕГО биома, ОДНОВременно с Corruption за порогом
+    // бистабильности, и проверяется через реальные тики.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    int32 Tested = 0, Skipped = 0, Incoherent = 0;
+    for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
+    {
+        if (Def.TriggerAxis == EAmbientTriggerAxis::None || Def.TriggerAxis == EAmbientTriggerAxis::Corruption)
+        {
+            ++Skipped;
+            continue;
+        }
+        if (Def.bRequiresNight || Def.bRequiresDusk || Def.bRequiresSeason || Def.bRequiresMoonPhase
+            || Def.bRequiresWeather || Def.bRequiresLateSummer || Def.bRequiresKupalaNight || Def.bRequiresBiomeBorder)
+        {
+            AddInfo(FString::Printf(TEXT("[%s] SKIPPED -- needs a time/season/weather/border gate not covered by this sweep"), *Def.EntityID.ToString()));
+            ++Skipped;
+            continue;
+        }
+
+        AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+        if (!TestNotNull(TEXT("Manager spawned"), Manager)) continue;
+        Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+        FGridCell* Cell = Manager->GetCell(6, 6);
+        if (!TestNotNull(TEXT("Sweep cell exists"), Cell)) { Manager->Destroy(); continue; }
+
+        Cell->Biome = Def.Biome;
+        Cell->bIsWater = Def.bWaterOnly;
+        Cell->State.Meta.Corruption = 0.95f;   // бистабильность клетки, независимо от биома/оси
+        Cell->TargetState = Cell->State;
+        Cell->Memory.bDegrading = false;
+
+        // Заводим ось триггера с явным запасом за порог гистерезиса, в
+        // нужную сторону (bTriggerAbove).
+        const float Margin = Def.HysteresisMargin + 0.05f;
+        const float AxisValue = FMath::Clamp(Def.bTriggerAbove ? Def.TriggerThreshold + Margin : Def.TriggerThreshold - Margin, 0.0f, 1.0f);
+        SetAmbientTriggerAxisValue(*Cell, Def.TriggerAxis, AxisValue);
+
+        bool bSawNaNOrOutOfRange = false;
+        for (int32 i = 0; i < 50; ++i)
+        {
+            Manager->RegenerateCellParameters(1.0f);
+            Manager->UpdateEntityManifestations(1.0f);
+            if (!CellAxesInRange(*Cell)) bSawNaNOrOutOfRange = true;
+        }
+
+        TestFalse(FString::Printf(TEXT("[%s] State/TargetState stays in range"), *Def.EntityID.ToString()), bSawNaNOrOutOfRange);
+        ++Tested;
+
+        const bool bIncoherent = Cell->Memory.bDegrading && Cell->ManifestedEntityID == Def.EntityID;
+        if (bIncoherent) ++Incoherent;
+        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d%s"),
+            *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome),
+            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading,
+            bIncoherent ? TEXT("  <-- INCOHERENT: manifests on a doomed cell") : TEXT("")));
+
+        Manager->Destroy();
+    }
+
+    AddInfo(FString::Printf(TEXT("Ambient sweep summary: %d tested, %d skipped (time/season/weather/border gates), %d incoherent"),
+        Tested, Skipped, Incoherent));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSystemInteraction_LegendarySweepAcrossAllBiomes,
+    "Herbalist.SystemInteraction.LegendarySweepAcrossAllBiomes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSystemInteraction_LegendarySweepAcrossAllBiomes::RunTest(const FString& Parameters)
+{
+    // Программный обход ВСЕГО реестра Легендарного ранга, тем же принципом,
+    // что и Ambient-развёртка выше -- каждое существо на своей якорной
+    // клетке, якорь дополнительно продавлен за порог бистабильности,
+    // MorokField узла настроен под полюс существа (низкий для Благого,
+    // высокий для Злого -- bHasShrinePath не мешает: это OR-условие,
+    // одного MorokField достаточно независимо от него).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    int32 Tested = 0, Skipped = 0, Incoherent = 0;
+    for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
+    {
+        AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+        if (!TestNotNull(TEXT("Manager spawned"), Manager)) continue;
+        Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+        UBiomeGraphSubsystem* Graph = InitGraphForInteractionTest(World);
+        if (!TestNotNull(TEXT("Graph initialized"), Graph)) { Manager->Destroy(); continue; }
+
+        const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(Def.EntityID);
+        if (!Anchor)
+        {
+            // Не у каждого биома в тестовой 20x20 сетке найдётся подходящая
+            // клетка для КАЖДОГО существа сразу -- молчаливый no-op в самом
+            // коде (см. SeedLegendaryAnchors), здесь просто помечаем пропуск.
+            AddInfo(FString::Printf(TEXT("[%s] SKIPPED -- no seeded anchor cell in this grid"), *Def.EntityID.ToString()));
+            ++Skipped;
+            Graph->Deinitialize();
+            Manager->Destroy();
+            continue;
+        }
+
+        const FName BiomeID = FBiomeDefaults::BiomeTypeToName(Def.Biome);
+        FBiomeGraphNode* Node = Graph->GetMutableNode(BiomeID);
+        if (!Node)
+        {
+            AddInfo(FString::Printf(TEXT("[%s] SKIPPED -- biome node missing from DA_BiomeGraph"), *Def.EntityID.ToString()));
+            ++Skipped;
+            Graph->Deinitialize();
+            Manager->Destroy();
+            continue;
+        }
+        Node->MorokField = Def.Pole == ELegendaryPole::Malign ? 0.9f : 0.05f;
+
+        FGridCell* Anchored = Manager->GetCell(Anchor->X, Anchor->Y);
+        if (!TestNotNull(TEXT("Anchor cell exists"), Anchored)) { Graph->Deinitialize(); Manager->Destroy(); continue; }
+
+        Anchored->State.Meta.Corruption = 0.95f;
+        Anchored->TargetState = Anchored->State;
+        Anchored->Memory.bDegrading = false;
+
+        bool bSawNaNOrOutOfRange = false;
+        for (int32 i = 0; i < 50; ++i)
+        {
+            Manager->RegenerateCellParameters(1.0f);
+            Manager->UpdateEntityManifestations(1.0f);
+            if (!CellAxesInRange(*Anchored)) bSawNaNOrOutOfRange = true;
+        }
+
+        TestFalse(FString::Printf(TEXT("[%s] State/TargetState stays in range"), *Def.EntityID.ToString()), bSawNaNOrOutOfRange);
+        ++Tested;
+
+        const bool bIncoherent = Anchored->Memory.bDegrading && Anchored->ManifestedEntityID == Def.EntityID;
+        if (bIncoherent) ++Incoherent;
+        AddInfo(FString::Printf(TEXT("[%s/%s/%s] ManifestedEntityID=%s bDegrading=%d%s"),
+            *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome),
+            Def.Pole == ELegendaryPole::Malign ? TEXT("Malign") : TEXT("Benign"),
+            *Anchored->ManifestedEntityID.ToString(), Anchored->Memory.bDegrading,
+            bIncoherent ? TEXT("  <-- INCOHERENT: manifests on a doomed cell") : TEXT("")));
+
+        Graph->Deinitialize();
+        Manager->Destroy();
+    }
+
+    AddInfo(FString::Printf(TEXT("Legendary sweep summary: %d tested, %d skipped, %d incoherent"), Tested, Skipped, Incoherent));
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
