@@ -158,6 +158,116 @@ namespace Simulation
     }
 
     // ---------------------------------------------------------
+    // Согласие/конфликт трав (2026-08-30, "докручиваем варку, учитывая
+    // реальные сильные стороны трав и их сочетаний"). Раньше не-водные
+    // ингредиенты сворачивались одним симметричным взвешенным средним —
+    // сильная ось одной травы всегда гасилась слабой той же осью другой,
+    // независимо от того, реально ли они "спелись". Здесь ингредиенты
+    // обрабатываются последовательно (см. основной цикл ниже, "Сборка
+    // не-водных ингредиентов"): первый — затравка, каждый следующий
+    // РЕАГИРУЕТ на уже накопленный результат.
+    // ---------------------------------------------------------
+
+    enum class EDirectionAxis : uint8 { Body, Mind, Spirit, Nature };
+
+    static EDirectionAxis GetDominantDirectionAxis(const FDirection& Dir)
+    {
+        EDirectionAxis Best = EDirectionAxis::Body;
+        float BestValue = Dir.Body;
+        if (Dir.Mind > BestValue)   { Best = EDirectionAxis::Mind;   BestValue = Dir.Mind; }
+        if (Dir.Spirit > BestValue) { Best = EDirectionAxis::Spirit; BestValue = Dir.Spirit; }
+        if (Dir.Nature > BestValue) { Best = EDirectionAxis::Nature; }
+        return Best;
+    }
+
+    // Голосование по 7 сигналам (6 Meta-осей + совпадение доминанты
+    // Direction) — доля согласных минус доля конфликтующих, в [-1, 1].
+    // "Согласие" по Meta-оси — обе стороны 0.5 (обе выше или обе ниже),
+    // не точное равенство: две разные "порченые" травы всё ещё согласны
+    // в том, что зелье должно быть порченым.
+    static float ComputeHarmony(const FRealState& Current, const FRealState& Incoming)
+    {
+        int32 Agree = 0, Total = 0;
+        auto Check = [&](float A, float B)
+        {
+            ++Total;
+            const bool bBothHigh = A > 0.5f && B > 0.5f;
+            const bool bBothLow  = A < 0.5f && B < 0.5f;
+            if (bBothHigh || bBothLow) ++Agree;
+        };
+        Check(Current.Meta.Distortion, Incoming.Meta.Distortion);
+        Check(Current.Meta.Stability,  Incoming.Meta.Stability);
+        Check(Current.Meta.Purity,     Incoming.Meta.Purity);
+        Check(Current.Meta.Potency,    Incoming.Meta.Potency);
+        Check(Current.Meta.Resonance,  Incoming.Meta.Resonance);
+        Check(Current.Meta.Corruption, Incoming.Meta.Corruption);
+        ++Total;
+        if (GetDominantDirectionAxis(Current.Direction) == GetDominantDirectionAxis(Incoming.Direction)) ++Agree;
+
+        return (2.0f * static_cast<float>(Agree) / static_cast<float>(Total)) - 1.0f;
+    }
+
+    // Одна Meta-ось реагирует на один входящий ингредиент. Согласие (обе
+    // стороны 0.5) — НЕ Lerp к полюсу (тот всегда даёт результат МЕЖДУ
+    // текущим значением и полюсом, то есть не выше самого убедительного
+    // входа — проверено на реальных числах при разработке, это не
+    // "усиление", а просто иначе взвешенное среднее). Вместо этого —
+    // "шумные И/ИЛИ" (стандартная форма для сочетания независимых
+    // убеждений в одну сторону): 1-(1-A)(1-B)^w при обоих высоких
+    // гарантированно даёт результат ВЫШЕ каждого из входов по отдельности
+    // (две уверенно "порченые" травы совместно убедительнее одной),
+    // симметрично A·B^w при обоих низких. Конфликт (разные стороны 0.5) —
+    // тянет к нейтральной середине пропорционально силе расхождения.
+    static void ReactAxis(float& Current, float Incoming, float Weight, float AgreementRate, float ConflictRate)
+    {
+        const bool bBothHigh = Current > 0.5f && Incoming > 0.5f;
+        const bool bBothLow  = Current < 0.5f && Incoming < 0.5f;
+        const float W = FMath::Clamp(Weight * AgreementRate, 0.0f, 1.0f);
+        if (bBothHigh)
+        {
+            Current = 1.0f - (1.0f - Current) * FMath::Pow(1.0f - Incoming, W);
+        }
+        else if (bBothLow)
+        {
+            Current = Current * FMath::Pow(FMath::Max(Incoming, KINDA_SMALL_NUMBER), W);
+        }
+        else
+        {
+            const float Discord = FMath::Abs(Current - Incoming);
+            Current = FMath::Lerp(Current, 0.5f, Weight * Discord * ConflictRate);
+        }
+    }
+
+    // Direction — симплекс (сумма=1), не независимая биполярная ось: здесь
+    // "согласие" значит "та же доминирующая ось у обоих", а не то же число.
+    static void ReactDirection(FDirection& Current, const FDirection& Incoming, float Weight, float AgreementRate, float ConflictRate)
+    {
+        if (GetDominantDirectionAxis(Current) == GetDominantDirectionAxis(Incoming))
+        {
+            // Согласны в характере -- усиливаем уже доминирующую ось.
+            const float Rate = Weight * AgreementRate * 0.5f;
+            switch (GetDominantDirectionAxis(Current))
+            {
+                case EDirectionAxis::Body:   Current.Body   = FMath::Min(1.0f, Current.Body   + Rate); break;
+                case EDirectionAxis::Mind:   Current.Mind   = FMath::Min(1.0f, Current.Mind   + Rate); break;
+                case EDirectionAxis::Spirit: Current.Spirit = FMath::Min(1.0f, Current.Spirit + Rate); break;
+                case EDirectionAxis::Nature: Current.Nature = FMath::Min(1.0f, Current.Nature + Rate); break;
+            }
+        }
+        else
+        {
+            // Разные характеры -- размывает специализацию к равномерной
+            // (0.25 каждой оси), не выраженный характер вместо конфликта осей.
+            const float Rate = Weight * ConflictRate * 0.5f;
+            Current.Body   = FMath::Lerp(Current.Body,   0.25f, Rate);
+            Current.Mind   = FMath::Lerp(Current.Mind,   0.25f, Rate);
+            Current.Spirit = FMath::Lerp(Current.Spirit, 0.25f, Rate);
+            Current.Nature = FMath::Lerp(Current.Nature, 0.25f, Rate);
+        }
+        Current.NormalizeSum();
+    }
+
+    // ---------------------------------------------------------
     // L1 (симплекс, сумма=1) <-> единичный 4D-вектор — нужен для Morok/Zaryana,
     // где по легаси-коду требуется геометрия сферы (вращение/смешивание осей),
     // а не барицентрические координаты. Легаси (Core/Pipeline/PipelineMorok.cpp,
@@ -366,13 +476,16 @@ namespace Simulation
 
         const UHerbalistSettings* Settings = GetHerbalistSettings();
 
-        // --- 1-2. Fold: ингредиенты и вода агрегируются раздельно; у обычных
-        // ингредиентов вес затухает с позицией (первый — максимальный вклад) ---
+        // --- 1-2. Разделяем на воду и не-воду. Вода по-прежнему агрегируется
+        // простым взвешенным средним (не её сегодня докручиваем — только
+        // сочетание трав, см. комментарий у ReactAxis выше) ---
         const float OrderDecay = Settings ? Settings->FoldWeightDecay : 0.8f;
+        const float AgreementRate  = Settings ? Settings->AlchemyAgreementRate  : 0.6f;
+        const float ConflictRate   = Settings ? Settings->AlchemyConflictRate   : 0.5f;
+        const float PowerGrowthRate = Settings ? Settings->AlchemyPowerGrowthRate : 0.5f;
+        const float PowerDecayRate  = Settings ? Settings->AlchemyPowerDecayRate  : 0.6f;
 
-        FRealState NonWaterAgg;
-        float NonWaterWeight = 0.f;
-        int32 NonWaterOrderIndex = 0;
+        TArray<const FInventoryItem*> NonWaterItems;
         int32 NonWaterCount = 0;
 
         FRealState WaterAgg;
@@ -390,16 +503,51 @@ namespace Simulation
             }
             else
             {
-                const float Weight = Item.State.Magnitude * Item.Count * FMath::Pow(OrderDecay, static_cast<float>(NonWaterOrderIndex));
-                AccumulateWeighted(NonWaterAgg, Item.State, Weight);
-                NonWaterWeight += Weight;
+                NonWaterItems.Add(&Item);
                 NonWaterCount += Item.Count;
-                ++NonWaterOrderIndex;
             }
         }
 
-        DivideRealState(NonWaterAgg, NonWaterWeight);
         DivideRealState(WaterAgg, WaterWeightSum);
+
+        // --- Сборка не-водных ингредиентов -- ПОСЛЕДОВАТЕЛЬНО, не одним
+        // симметричным средним (по прямому запросу "докручиваем варку,
+        // учитывая реальные сильные стороны трав и их сочетаний"; находка
+        // сессии — честный набор трав без выраженного согласия давал
+        // "Хилую воду", технически верно, но невыразительно). Первый
+        // ингредиент — затравка (сырой базовый характер), каждый следующий
+        // РЕАГИРУЕТ на уже накопленный результат: согласные оси усиливают
+        // друг друга, конфликтующие гасят к нейтральной середине. Мощь
+        // (Magnitude) — прямое следствие того, насколько ингредиенты
+        // "спелись" (ComputeHarmony), не просто их число: слаженное
+        // сочетание сильнее любого компонента по отдельности, разнородное —
+        // слабее, даже если веществ больше. Порядок теперь и правда важен:
+        // добавление 3-го согласного/конфликтующего ингредиента — не то же
+        // самое, что взять те же три сразу одним средним.
+        FRealState NonWaterAgg;
+        if (NonWaterItems.Num() > 0)
+        {
+            NonWaterAgg = NonWaterItems[0]->State;
+            NonWaterAgg.Direction.NormalizeSum();
+            for (int32 i = 1; i < NonWaterItems.Num(); ++i)
+            {
+                const FRealState& Incoming = NonWaterItems[i]->State;
+                const float Weight = FMath::Pow(OrderDecay, static_cast<float>(i));
+                const float Harmony = ComputeHarmony(NonWaterAgg, Incoming);
+
+                ReactAxis(NonWaterAgg.Meta.Distortion, Incoming.Meta.Distortion, Weight, AgreementRate, ConflictRate);
+                ReactAxis(NonWaterAgg.Meta.Stability,  Incoming.Meta.Stability,  Weight, AgreementRate, ConflictRate);
+                ReactAxis(NonWaterAgg.Meta.Purity,     Incoming.Meta.Purity,     Weight, AgreementRate, ConflictRate);
+                ReactAxis(NonWaterAgg.Meta.Potency,    Incoming.Meta.Potency,    Weight, AgreementRate, ConflictRate);
+                ReactAxis(NonWaterAgg.Meta.Resonance,  Incoming.Meta.Resonance,  Weight, AgreementRate, ConflictRate);
+                ReactAxis(NonWaterAgg.Meta.Corruption, Incoming.Meta.Corruption, Weight, AgreementRate, ConflictRate);
+                ReactDirection(NonWaterAgg.Direction, Incoming.Direction, Weight, AgreementRate, ConflictRate);
+
+                NonWaterAgg.Magnitude = Harmony >= 0.f
+                    ? FMath::Lerp(NonWaterAgg.Magnitude, 1.0f, PowerGrowthRate * Harmony * Weight)
+                    : FMath::Lerp(NonWaterAgg.Magnitude, 0.0f, PowerDecayRate * (-Harmony) * Weight);
+            }
+        }
 
         // --- 4a. Обязательность воды: ингредиенты без единой капли воды дают золу ---
         if (NonWaterCount > 0 && WaterCount == 0)

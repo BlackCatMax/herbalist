@@ -31,6 +31,31 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Fold", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float FoldWeightDecay = 0.8f;
 
+    // --- Согласие/конфликт трав (2026-08-30, "докручиваем варку") ---
+    // Раньше не-водные ингредиенты сворачивались одним симметричным
+    // взвешенным средним (Fold) -- любая сильная ось одной травы гасилась
+    // слабой той же оси у другой, независимо от порядка добавления. Теперь
+    // ингредиенты обрабатываются ПОСЛЕДОВАТЕЛЬНО (первый -- затравка, каждый
+    // следующий РЕАГИРУЕТ на уже накопленный результат, не усредняется с ним
+    // симметрично): согласные оси (обе выше или обе ниже 0.5) усиливают друг
+    // друга, конфликтующие -- гасят к нейтральной середине. См.
+    // ComputeApplyResult (PipelineV2.cpp).
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Harmony", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float AlchemyAgreementRate = 0.6f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Harmony", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float AlchemyConflictRate = 0.5f;
+
+    // Мощь (Magnitude) зелья -- прямое следствие того, насколько ингредиенты
+    // "спелись" (см. ComputeHarmony), не просто их количество: слаженное
+    // сочетание реально сильнее, чем взятое отдельно любое из двух, а
+    // разнородное -- слабее, даже если добавить больше веществ.
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Harmony", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float AlchemyPowerGrowthRate = 0.5f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Harmony", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float AlchemyPowerDecayRate = 0.6f;
+
     // --- Morok ---
     // Давление Морока: во сколько раз сильна его хватка при полном EffectiveMorok
     // и нулевой Stability. Входит показателем степени (PipelineV2::ComputeApplyResult),

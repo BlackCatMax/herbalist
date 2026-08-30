@@ -295,6 +295,170 @@ bool FPipelineV2ApplyWaterDilutionExcessPenaltyTest::RunTest(const FString& Para
 }
 
 // ---------------------------------------------------------------------------
+// Согласие/конфликт трав (2026-08-30, "докручиваем варку, учитывая реальные
+// сильные стороны трав и их сочетаний" -- по прямому запросу). Два и более
+// не-водных ингредиента теперь собираются ПОСЛЕДОВАТЕЛЬНО (первый -- затравка,
+// каждый следующий реагирует на уже накопленный результат), не одним
+// симметричным взвешенным средним -- эта ветка формулы раньше не имела ни
+// одного теста вовсе (все существующие тесты выше используют ровно один
+// не-водный ингредиент, при котором цикл реакции не выполняется ни разу).
+//
+// Magnitude -- единственная ось, которую Zaryana/Morok не трогают вообще
+// (см. заметку в шапке файла), поэтому её можно проверить точным числом
+// через весь пайплайн целиком; остальные Meta-оси проверяются сравнительно.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyMagnitudeExactlyReflectsHarmonyTest,
+    "ProjectHerbalist.PipelineV2.ApplyMagnitudeExactlyReflectsHarmony",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyMagnitudeExactlyReflectsHarmonyTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Два ингредиента с ОДИНАКОВЫМИ Meta-осями (все 0.9, > 0.5) и одной и той
+    // же доминирующей осью Direction -- максимальное согласие по всем 7
+    // сигналам голосования (Harmony=1.0 ровно, не приближённо), плюс 1 вода
+    // (Count=1). Magnitude первого (затравка) = 0.5, второго намеренно другой
+    // (0.7) -- собственная Magnitude второго ингредиента формулу не трогает,
+    // только его Meta/Direction (согласие/конфликт), это тоже часть проверки.
+    FInventoryItem Item1 = MakeIngredient(TEXT("A"), 0.5f, 0.9f, 0.9f, 0.9f, 0.9f, 0.9f, 0.9f, /*Body*/ 1.f);
+    FInventoryItem Item2 = MakeIngredient(TEXT("B"), 0.7f, 0.9f, 0.9f, 0.9f, 0.9f, 0.9f, 0.9f, /*Body*/ 1.f);
+    FInventoryItem Water = MakeWater(0.5f, 0.5f, 1);
+
+    FRandomStream Rng(1);
+    FStateDelta Delta = RunApply({ Item1, Item2, Water }, /*bIsCrafting*/ true, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap);
+
+    const FInventoryOperation* AddOp = nullptr;
+    for (const FInventoryOperation& Op : Delta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) AddOp = &Op;
+    if (!TestNotNull(TEXT("Add op present"), AddOp)) return false;
+
+    // Harmony=1.0 (полное согласие) -> NonWaterAgg.Magnitude = Lerp(0.5, 1.0,
+    // PowerGrowthRate(0.5) * 1.0 * Weight(FoldWeightDecay^1=0.8)) = Lerp(0.5,1.0,0.4) = 0.7.
+    // Разбавление водой: WaterFraction = 1/3 (2 не-водных + 1 вода) -> 0.7*(1-1/3) = 0.46667.
+    TestTrue(TEXT("Magnitude matches the exact harmony+dilution formula for full agreement"),
+        FMath::IsNearlyEqual(AddOp->Ingredient.State.Magnitude, 0.7f * (1.f - 1.f / 3.f), 0.0015f));
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Согласные ингредиенты дают итог УБЕДИТЕЛЬНЕЕ каждого из них по отдельности
+// (шумное "ИЛИ", не среднее и не Lerp-к-полюсу — тот всегда даёт результат
+// МЕЖДУ входом и полюсом, то есть не выше самого сильного входа, что при
+// разработке проверено и отвергнуто как недостаточное "усиление").
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyAgreeingIngredientsOutdoBothInputsTest,
+    "ProjectHerbalist.PipelineV2.ApplyAgreeingIngredientsOutdoBothInputs",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyAgreeingIngredientsOutdoBothInputsTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Два ингредиента, оба с высокой Corruption (0.8 и 0.9), прочие оси
+    // нейтральны, но НЕ ровно 0.5 (0.51/0.49 попеременно скучные -- избегаем
+    // граничного случая "ровно 0.5 не считается ни высоким, ни низким",
+    // который иначе тянул бы общий Harmony вниз без содержательной причины).
+    FInventoryItem Strong1 = MakeIngredient(TEXT("A"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.8f, 1.f);
+    FInventoryItem Strong2 = MakeIngredient(TEXT("B"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.9f, 1.f);
+    FInventoryItem Water = MakeWater(0.5f, 0.5f, 1);
+
+    FRandomStream RngPair(7);
+    FStateDelta PairDelta = RunApply({ Strong1, Strong2, Water }, /*bIsCrafting*/ true, FIntPoint(5, 5), RngPair, WorldSnap, BiomeSnap);
+    FRandomStream RngSolo(7);
+    FStateDelta SoloDelta = RunApply({ Strong2, Water }, /*bIsCrafting*/ true, FIntPoint(5, 5), RngSolo, WorldSnap, BiomeSnap);
+
+    const FInventoryOperation* PairOp = nullptr;
+    for (const FInventoryOperation& Op : PairDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) PairOp = &Op;
+    const FInventoryOperation* SoloOp = nullptr;
+    for (const FInventoryOperation& Op : SoloDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) SoloOp = &Op;
+    if (!TestNotNull(TEXT("Pair op present"), PairOp) || !TestNotNull(TEXT("Solo op present"), SoloOp)) return false;
+
+    TestTrue(TEXT("Two agreeing high-Corruption ingredients outdo the stronger one taken alone"),
+        PairOp->Ingredient.State.Meta.Corruption > SoloOp->Ingredient.State.Meta.Corruption + KINDA_SMALL_NUMBER);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Конфликтующие ингредиенты дают более слабое/мутное зелье (ниже Magnitude),
+// чем те же по силе, но согласные -- при прочих равных.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyConflictIsWeakerThanAgreementTest,
+    "ProjectHerbalist.PipelineV2.ApplyConflictIsWeakerThanAgreement",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyConflictIsWeakerThanAgreementTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    FInventoryItem Seed = MakeIngredient(TEXT("A"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.8f, 1.f);
+    FInventoryItem Agreeing  = MakeIngredient(TEXT("B"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.8f, 1.f);
+    FInventoryItem Conflicting = MakeIngredient(TEXT("C"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.1f, 1.f);
+    FInventoryItem Water = MakeWater(0.5f, 0.5f, 1);
+
+    FRandomStream RngAgree(3);
+    FStateDelta AgreeDelta = RunApply({ Seed, Agreeing, Water }, /*bIsCrafting*/ true, FIntPoint(5, 5), RngAgree, WorldSnap, BiomeSnap);
+    FRandomStream RngConflict(3);
+    FStateDelta ConflictDelta = RunApply({ Seed, Conflicting, Water }, /*bIsCrafting*/ true, FIntPoint(5, 5), RngConflict, WorldSnap, BiomeSnap);
+
+    const FInventoryOperation* AgreeOp = nullptr;
+    for (const FInventoryOperation& Op : AgreeDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) AgreeOp = &Op;
+    const FInventoryOperation* ConflictOp = nullptr;
+    for (const FInventoryOperation& Op : ConflictDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) ConflictOp = &Op;
+    if (!TestNotNull(TEXT("Agree op present"), AgreeOp) || !TestNotNull(TEXT("Conflict op present"), ConflictOp)) return false;
+
+    TestTrue(TEXT("Agreeing pair yields higher Magnitude than a conflicting pair, same seed"),
+        AgreeOp->Ingredient.State.Magnitude > ConflictOp->Ingredient.State.Magnitude + KINDA_SMALL_NUMBER);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Порядок теперь и правда важен: та же тройка ингредиентов в другом порядке
+// добавления даёт другой результат (последовательная реакция, не симметричный
+// пул) -- ровно то отличие, ради которого затевалась вся правка ("добавление
+// 3-го предмета -- не то же самое, что и 3 предмета сразу").
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyIngredientOrderAffectsResultTest,
+    "ProjectHerbalist.PipelineV2.ApplyIngredientOrderAffectsResult",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyIngredientOrderAffectsResultTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    FInventoryItem A = MakeIngredient(TEXT("A"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.8f, 1.f);
+    FInventoryItem B = MakeIngredient(TEXT("B"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.8f, 1.f);
+    FInventoryItem C = MakeIngredient(TEXT("C"), 0.5f, 0.51f, 0.51f, 0.51f, 0.51f, 0.51f, /*Corruption*/ 0.1f, 1.f);
+    FInventoryItem Water = MakeWater(0.5f, 0.5f, 1);
+
+    // A+B согласны (оба Corruption=0.8) и должны успеть усилиться ДО того,
+    // как в реакцию вступит конфликтующий C -- если C идёт первым/вторым,
+    // накопленный результат к моменту его прихода другой, и его конфликт
+    // проявляется иначе.
+    FRandomStream RngABC(11);
+    FStateDelta DeltaABC = RunApply({ A, B, C, Water }, /*bIsCrafting*/ true, FIntPoint(5, 5), RngABC, WorldSnap, BiomeSnap);
+    FRandomStream RngCAB(11);
+    FStateDelta DeltaCAB = RunApply({ C, A, B, Water }, /*bIsCrafting*/ true, FIntPoint(5, 5), RngCAB, WorldSnap, BiomeSnap);
+
+    const FInventoryOperation* OpABC = nullptr;
+    for (const FInventoryOperation& Op : DeltaABC.InventoryOps) if (Op.OpType == EInventoryOpType::Add) OpABC = &Op;
+    const FInventoryOperation* OpCAB = nullptr;
+    for (const FInventoryOperation& Op : DeltaCAB.InventoryOps) if (Op.OpType == EInventoryOpType::Add) OpCAB = &Op;
+    if (!TestNotNull(TEXT("ABC op present"), OpABC) || !TestNotNull(TEXT("CAB op present"), OpCAB)) return false;
+
+    TestFalse(TEXT("Same three ingredients in a different order give a different Magnitude"),
+        FMath::IsNearlyEqual(OpABC->Ingredient.State.Magnitude, OpCAB->Ingredient.State.Magnitude, 0.0005f));
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Bifurcation: Purified -- Stability=1.0 у единственного ингредиента выживает
 // без изменений через Fold/Zaryana (Lerp(1,1,x)=1 при любом x), поэтому
 // `Rng.FRand() < 1.0` истинно ГАРАНТИРОВАННО, независимо от сида (FRand() в
