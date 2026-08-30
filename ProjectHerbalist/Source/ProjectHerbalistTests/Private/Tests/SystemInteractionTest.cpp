@@ -50,6 +50,21 @@ namespace
             && InRange01(T.Meta.Corruption) && InRange01(T.Meta.Purity) && InRange01(T.Meta.Distortion) && InRange01(T.Meta.Stability)
             && InRange01(T.Meta.Potency) && InRange01(T.Meta.Resonance) && InRange01(T.Magnitude);
     }
+
+    // Зеркало GridWorldManagerEntities.cpp::IsAxisConsistentWithCorruptPole
+    // (не экспортируется -- локальна для своей единицы трансляции), нужно
+    // тестам знать, какие существа гейт 2026-08-30 намеренно НЕ блокирует.
+    bool IsAxisConsistentWithCorruptPole(EAmbientTriggerAxis Axis, bool bTriggerAbove)
+    {
+        switch (Axis)
+        {
+            case EAmbientTriggerAxis::Corruption: return bTriggerAbove;
+            case EAmbientTriggerAxis::Purity:     return !bTriggerAbove;
+            case EAmbientTriggerAxis::Distortion: return bTriggerAbove;
+            case EAmbientTriggerAxis::Stability:  return !bTriggerAbove;
+            default:                               return false;
+        }
+    }
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSystemInteraction_StackedWritersConvergeWithoutChaos,
@@ -581,17 +596,38 @@ bool FHerbalistSystemInteraction_AmbientSweepAcrossAllBiomes::RunTest(const FStr
         TestFalse(FString::Printf(TEXT("[%s] State/TargetState stays in range"), *Def.EntityID.ToString()), bSawNaNOrOutOfRange);
         ++Tested;
 
-        // Фикс 2026-08-30: любое существо с триггер-осью, ортогональной
-        // Corruption, больше не остаётся манифестировано на bDegrading-клетке
-        // (Гнильники исключены из этого правила самим гейтом -- их ось и есть
-        // Corruption -- поэтому им сюда попасть и не полагалось).
-        const bool bIncoherent = Cell->Memory.bDegrading && Cell->ManifestedEntityID == Def.EntityID;
-        if (bIncoherent) ++Incoherent;
-        TestFalse(FString::Printf(TEXT("[%s/%s] does not remain manifested on a bDegrading cell"),
-            *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome)), bIncoherent);
-        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d"),
+        // Фикс 2026-08-30, расширен финальным аудитом тем же днём: гейт
+        // освобождает не только буквальную ось Corruption, а любую ось+
+        // направление, согласованные с испорченным полюсом (высокий
+        // Corruption/Distortion, низкая Purity/Stability -- см.
+        // IsAxisConsistentWithCorruptPole). Для согласованных существ
+        // (Водяные бесы/Болотные огни/Стукачи по Distortion, Ржавые духи по
+        // Stability) проверяем ОБРАТНОЕ -- что они, как Гнильники, ОСТАЮТСЯ
+        // манифестированы, не изгнаны по ошибке.
+        const bool bManifestedAsSelf = Cell->Memory.bDegrading && Cell->ManifestedEntityID == Def.EntityID;
+        const bool bExpectedExempt = IsAxisConsistentWithCorruptPole(Def.TriggerAxis, Def.bTriggerAbove);
+        if (bExpectedExempt)
+        {
+            // Гнильники (тоже Corruption-согласованный, тот же приоритет-ранг
+            // 0) могут забрать ту же клетку первыми на общем Bog-биоме -- уже
+            // задокументированный артефакт методики (форсированный
+            // Corruption=0.95 заодно удовлетворяет и их порог), не признак
+            // того, что гейт неправильно изгнал существо под тестом. Считаем
+            // "не несостыковка", если клетку удержало ЛИБО само существо,
+            // ЛИБО Гнильники -- обе исход согласованы с испорченным полюсом.
+            const bool bLostToGnilnikiPriorityArtifact = Cell->Memory.bDegrading && Cell->ManifestedEntityID == FName(TEXT("Гнильники"));
+            TestTrue(FString::Printf(TEXT("[%s/%s] axis-consistent entity is not incoherently evicted from a bDegrading cell"),
+                *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome)), bManifestedAsSelf || bLostToGnilnikiPriorityArtifact);
+        }
+        else
+        {
+            if (bManifestedAsSelf) ++Incoherent;
+            TestFalse(FString::Printf(TEXT("[%s/%s] does not remain manifested on a bDegrading cell"),
+                *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome)), bManifestedAsSelf);
+        }
+        AddInfo(FString::Printf(TEXT("[%s/%s] ManifestedEntityID=%s bDegrading=%d exempt=%d"),
             *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome),
-            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading));
+            *Cell->ManifestedEntityID.ToString(), Cell->Memory.bDegrading, bExpectedExempt));
 
         Manager->Destroy();
     }

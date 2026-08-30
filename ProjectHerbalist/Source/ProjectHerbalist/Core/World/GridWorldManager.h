@@ -296,6 +296,16 @@ public:
     // (AAlchemyTableActor::BeginPlay регистрирует его на своей клетке).
     // Повторная регистрация на уже занятой клетке не создаёт дубликат.
     void RegisterShrine(const FIntPoint& Cell, EShrineType Type);
+
+    // Тип капища по месту, не жёстко Ancestral (находка финального аудита
+    // 2026-08-30: единственная точка регистрации, AlchemyTableActor::BeginPlay,
+    // передавала EShrineType::Ancestral безусловно — формулы остальных 4 типов
+    // §15.5 реализованы и протестированы, но недостижимы игроком). Пограничное —
+    // раньше биомной группы: капище физически на стыке биомов (тот же 4-соседский
+    // критерий, что уже использует CollectBorderShrineDamping/bRequiresBiomeBorder) —
+    // это более редкая и более специфичная позиция, чем просто попадание в биом.
+    EShrineType ResolveShrineTypeForCell(const FIntPoint& Cell) const;
+
     const TArray<FShrine>& GetShrines() const { return Shrines; }
     FShrine* FindShrineAt(const FIntPoint& Cell);
     void SetShrines(const TArray<FShrine>& InShrines) { Shrines = InShrines; }

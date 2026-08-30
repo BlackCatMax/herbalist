@@ -37,7 +37,7 @@ void AAlchemyTableActor::BeginPlay()
         if (WorldManager->WorldPositionToCell(GetActorLocation(), X, Y))
         {
             GridCoords = FIntPoint(X, Y);
-            WorldManager->RegisterShrine(GridCoords, EShrineType::Ancestral);
+            WorldManager->RegisterShrine(GridCoords, WorldManager->ResolveShrineTypeForCell(GridCoords));
         }
         else
         {

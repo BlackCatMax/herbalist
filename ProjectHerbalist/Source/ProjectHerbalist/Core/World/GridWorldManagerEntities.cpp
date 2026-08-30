@@ -86,6 +86,28 @@ namespace
             || GetEntityManifestationPriority(CandidateID) > GetEntityManifestationPriority(Cell.ManifestedEntityID);
     }
 
+    // Согласованность триггер-оси Низшего с испорченным полюсом бистабильности
+    // (находка финального аудита 2026-08-30: гейт `!bDegrading`, добавленный тем
+    // же днём чуть раньше, изначально освобождал от него только буквальную ось
+    // Corruption, хотя переход в bDegrading фиксирует ЧЕТЫРЕ оси разом —
+    // Corruption=1, Purity=0, Distortion=1, Stability=0, см. флип-блок в
+    // GridWorldManagerCore.cpp — не одну). Существо согласовано с полюсом, если
+    // его триггер стреляет в ту же сторону, что и полюс держит эту ось: высокий
+    // Corruption/Distortion или низкий Purity/Stability. Остальные оси
+    // (HarvestStress, Body/Mind/Spirit/Nature) полюс не трогает вовсе — всегда
+    // ортогональны, гейт остаётся для них в силе независимо от направления.
+    bool IsAxisConsistentWithCorruptPole(EAmbientTriggerAxis Axis, bool bTriggerAbove)
+    {
+        switch (Axis)
+        {
+            case EAmbientTriggerAxis::Corruption: return bTriggerAbove;    // полюс: Corruption=1
+            case EAmbientTriggerAxis::Purity:     return !bTriggerAbove;   // полюс: Purity=0
+            case EAmbientTriggerAxis::Distortion: return bTriggerAbove;    // полюс: Distortion=1
+            case EAmbientTriggerAxis::Stability:  return !bTriggerAbove;   // полюс: Stability=0
+            default:                               return false;
+        }
+    }
+
     // Собственный C++-сигнал погоды (§15.7), 2026-08-29 — детерминированная
     // value-noise: хэш (сид, индекс фронта) даёт число в [0,1), интерполяция
     // между соседними фронтами по времени сглаживает переход. Без сохраняемого
@@ -607,13 +629,15 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             }
 
             // Находка сессии 2026-08-30 (SystemInteractionTest — обход всего
-            // бестиария): 9 из 11 проверенных Низших существ манифестируют
+            // бестиария): большинство проверенных Низших существ манифестируют
             // на клетке, которую бистабильность независимо зафиксировала на
             // испорченном полюсе (bDegrading), потому что их триггер-ось
-            // (Purity/Stability/...) ортогональна Corruption по дизайну и не
-            // спадает вместе с ней. Гнильники (TriggerAxis=Corruption)
-            // согласованы с bDegrading по построению — не гейтим их.
-            if (Def.TriggerAxis != EAmbientTriggerAxis::Corruption)
+            // ортогональна полюсу по дизайну и не спадает вместе с ней.
+            // Существа, чья ось И направление согласованы с полюсом (Гнильники
+            // и по итогам финального аудита — Водяные бесы/Болотные огни/
+            // Стукачи по высокому Distortion, Ржавые духи по низкой Stability),
+            // не гейтим — см. IsAxisConsistentWithCorruptPole выше.
+            if (!IsAxisConsistentWithCorruptPole(Def.TriggerAxis, Def.bTriggerAbove))
             {
                 bEligible = bEligible && !Cell.Memory.bDegrading;
             }
