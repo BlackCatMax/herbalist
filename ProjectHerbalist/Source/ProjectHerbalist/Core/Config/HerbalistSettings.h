@@ -56,6 +56,34 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Harmony", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float AlchemyPowerDecayRate = 0.6f;
 
+    // --- Градации сложности/опасности варки (2026-08-30, "у зелий должны
+    // появляться градации сложности варки и опасности" -- 2 просто, 3 риск,
+    // 4 опасно, 5 смертельно, прямой запрос). Опасность = исход варки
+    // (Bifurcation, не новая система вреда игроку -- в проекте нет системы
+    // здоровья вовсе). Считается от числа РАЗНЫХ не-водных ингредиентов
+    // (NonWaterItems.Num(), не суммарного Count) -- см. ComputeApplyResult. ---
+
+    // На каждый ингредиент сверх двух порог Bifurcation (CollapseThreshold)
+    // снижается на эту величину -- зелье срывается уже при более скромном
+    // Distortion, чем при бережливой варке из двух вещей.
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Risk", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+    float AlchemyRiskThresholdStep = 0.15f;
+
+    // На каждый ингредиент сверх двух шанс "повезло" (Purified вместо
+    // Catastrophe при сорвавшемся Bifurcation) домножается на (1 - это
+    // значение) -- крепкая Stability всё ещё может спасти при 3-4
+    // ингредиентах, но с каждым разом всё менее надёжно.
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Risk", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float AlchemyRiskPurifyOddsStep = 0.3f;
+
+    // От этого числа РАЗНЫХ не-водных ингредиентов и выше -- Catastrophe
+    // гарантирована безусловно (не зависит от Distortion/Stability вовсе):
+    // "5 смертельно" буквально, без исключений для удачно подобранных
+    // ингредиентов -- котёл не прощает такую сложность, что бы в него ни
+    // положили.
+    UPROPERTY(config, EditAnywhere, Category = "Pipeline|Alchemy Risk", meta = (ClampMin = "3", ClampMax = "10"))
+    int32 AlchemyGuaranteedCatastropheCount = 5;
+
     // --- Morok ---
     // Давление Морока: во сколько раз сильна его хватка при полном EffectiveMorok
     // и нулевой Stability. Входит показателем степени (PipelineV2::ComputeApplyResult),

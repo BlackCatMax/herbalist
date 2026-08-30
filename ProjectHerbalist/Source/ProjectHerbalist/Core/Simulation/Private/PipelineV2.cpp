@@ -445,7 +445,8 @@ namespace Simulation
                                         float CollapseThreshold,
                                         FRandomStream& Rng,
                                         EAlchemyOutcome& OutOutcome,
-                                        FVector4& OutAxisDeltaForFootprint)
+                                        FVector4& OutAxisDeltaForFootprint,
+                                        bool bIsRitual = false)
     {
         OutOutcome = EAlchemyOutcome::Valid;
         OutAxisDeltaForFootprint = FVector4(0.f, 0.f, 0.f, 0.f);
@@ -673,23 +674,57 @@ namespace Simulation
         Result.Direction = UnitVectorToDirection(UnitDir);
 
         // --- 8. Bifurcation: при критическом Distortion — Collapse или Purification.
-        // Чем выше текущая Stability, тем вероятнее очищение, а не схлопывание. ---
-        if (Result.Meta.Distortion >= CollapseThreshold)
+        // Чем выше текущая Stability, тем вероятнее очищение, а не схлопывание.
+        //
+        // Градации сложности/опасности (2026-08-30, "2 просто, 3 риск, 4
+        // опасно, 5 смертельно" -- прямой запрос): опасность растёт с числом
+        // РАЗНЫХ не-водных ингредиентов, не их суммарным количеством в стопке
+        // -- котёл не прощает сложность рецепта, не объём. На каждый
+        // ингредиент сверх двух порог срыва снижается (AlchemyRiskThresholdStep)
+        // и шанс "повезло" при уже случившемся срыве падает
+        // (AlchemyRiskPurifyOddsStep) -- крепкая Stability всё ещё может
+        // спасти на 3-4, но всё менее надёжно. На AlchemyGuaranteedCatastropheCount
+        // (по умолчанию 5) и выше -- катастрофа безусловна, без исключения
+        // для удачно подобранных ингредиентов: "смертельно" в буквальном
+        // смысле — не "скорее всего", а всегда.
+        //
+        // Правильно исполненный ритуал (bIsRitual, AGridWorldManager::
+        // TryAdvanceRitual) обходит все градации риска целиком -- игрок
+        // сварил по верному месту/времени/порядку, не закинул всё разом.
+        // Котёл наказывает за проигнорированную сложность, не за укрощённую. ---
+        const int32 GuaranteedCatastropheCount = Settings ? Settings->AlchemyGuaranteedCatastropheCount : 5;
+        if (!bIsRitual && NonWaterItems.Num() >= GuaranteedCatastropheCount)
         {
-            const bool bPurify = Rng.FRand() < Result.Meta.Stability;
-            if (bPurify)
+            Result.Meta.Distortion = 0.2f;
+            Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability - 0.3f, 0.f, 1.f);
+            Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption + 0.2f, 0.f, 1.f);
+            OutOutcome = EAlchemyOutcome::Catastrophe;
+        }
+        else
+        {
+            const int32 RiskyCount = bIsRitual ? 0 : FMath::Max(0, NonWaterItems.Num() - 2);
+            const float RiskThresholdStep = Settings ? Settings->AlchemyRiskThresholdStep : 0.15f;
+            const float RiskPurifyOddsStep = Settings ? Settings->AlchemyRiskPurifyOddsStep : 0.3f;
+            const float EffectiveCollapseThreshold = FMath::Max(0.1f, CollapseThreshold - RiskThresholdStep * RiskyCount);
+            const float PurifyOddsMultiplier = FMath::Clamp(1.f - RiskPurifyOddsStep * RiskyCount, 0.f, 1.f);
+
+            if (Result.Meta.Distortion >= EffectiveCollapseThreshold)
             {
-                Result.Meta.Distortion = 0.4f;
-                Result.Meta.Purity = FMath::Clamp(Result.Meta.Purity + 0.2f, 0.f, 1.f);
-                Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability + 0.2f, 0.f, 1.f);
-                OutOutcome = EAlchemyOutcome::Purified;
-            }
-            else
-            {
-                Result.Meta.Distortion = 0.2f;
-                Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability - 0.3f, 0.f, 1.f);
-                Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption + 0.2f, 0.f, 1.f);
-                OutOutcome = EAlchemyOutcome::Catastrophe;
+                const bool bPurify = Rng.FRand() < Result.Meta.Stability * PurifyOddsMultiplier;
+                if (bPurify)
+                {
+                    Result.Meta.Distortion = 0.4f;
+                    Result.Meta.Purity = FMath::Clamp(Result.Meta.Purity + 0.2f, 0.f, 1.f);
+                    Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability + 0.2f, 0.f, 1.f);
+                    OutOutcome = EAlchemyOutcome::Purified;
+                }
+                else
+                {
+                    Result.Meta.Distortion = 0.2f;
+                    Result.Meta.Stability = FMath::Clamp(Result.Meta.Stability - 0.3f, 0.f, 1.f);
+                    Result.Meta.Corruption = FMath::Clamp(Result.Meta.Corruption + 0.2f, 0.f, 1.f);
+                    OutOutcome = EAlchemyOutcome::Catastrophe;
+                }
             }
         }
 
@@ -846,7 +881,7 @@ namespace Simulation
 
         EAlchemyOutcome Outcome = EAlchemyOutcome::Valid;
         FVector4 AxisDeltaForFootprint;
-        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint);
+        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint, Cmd.bIsRitual);
 
         // 2. Удаляем использованные ингредиенты из инвентаря
         for (const FInventoryItem& Ing : Cmd.Ingredients)

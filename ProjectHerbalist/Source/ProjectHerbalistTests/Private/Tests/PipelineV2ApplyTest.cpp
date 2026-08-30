@@ -459,6 +459,123 @@ bool FPipelineV2ApplyIngredientOrderAffectsResultTest::RunTest(const FString& Pa
 }
 
 // ---------------------------------------------------------------------------
+// Градации опасности по числу ингредиентов (2026-08-30, "2 просто, 3 риск,
+// 4 опасно, 5 смертельно" -- прямой запрос). Опасность = исход варки
+// (Bifurcation), считается от числа РАЗНЫХ не-водных ингредиентов, не от
+// суммарного Count в стопке.
+// ---------------------------------------------------------------------------
+
+// "5 смертельно" буквально: даже объективно безопасный набор (низкий
+// Distortion=0.1, максимальная Stability=1.0 -- при 2 ингредиентах это
+// гарантированный Purified, Bifurcation вообще не сработал бы) на пяти
+// РАЗНЫХ ингредиентах обязан дать Catastrophe безусловно.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyFiveIngredientsGuaranteedCatastropheTest,
+    "ProjectHerbalist.PipelineV2.ApplyFiveIngredientsGuaranteedCatastrophe",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyFiveIngredientsGuaranteedCatastropheTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    TArray<FInventoryItem> Ingredients;
+    for (int32 i = 0; i < 5; ++i)
+    {
+        Ingredients.Add(MakeIngredient(*FString::Printf(TEXT("Safe%d"), i), 0.5f,
+            /*Distortion*/ 0.1f, /*Stability*/ 1.0f, /*Purity*/ 0.9f, 0.1f, 0.1f, /*Corruption*/ 0.1f, 1.f));
+    }
+    Ingredients.Add(MakeWater(0.5f, 0.5f));
+
+    // Много разных сидов -- "безусловно" значит "независимо от ГПСЧ".
+    for (int32 Seed : { 1, 2, 3, 42, 999 })
+    {
+        FRandomStream Rng(Seed);
+        FStateDelta Delta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap);
+        const FInventoryOperation* AddOp = nullptr;
+        for (const FInventoryOperation& Op : Delta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) AddOp = &Op;
+        if (!TestNotNull(FString::Printf(TEXT("[seed=%d] Add op present"), Seed), AddOp)) continue;
+
+        TestEqual(FString::Printf(TEXT("[seed=%d] 5 ingredients guarantee Catastrophe even with ideal Distortion/Stability"), Seed),
+            AddOp->Ingredient.State.Meta.Distortion, 0.2f);
+    }
+    return true;
+}
+
+// 4 ингредиента: Stability=1.0 у затравки (раньше -- и на 1, и на 2
+// ингредиентах -- ГАРАНТИРОВАЛА Purified, `Rng.FRand() < 1.0` истинно
+// всегда). На 4 шанс домножается на PurifyOddsMultiplier<1
+// (1-0.3*2=0.4) -- гарантия ломается, при части сидов итог Catastrophe.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyFourIngredientsBreaksStabilityGuaranteeTest,
+    "ProjectHerbalist.PipelineV2.ApplyFourIngredientsBreaksStabilityGuarantee",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyFourIngredientsBreaksStabilityGuaranteeTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    TArray<FInventoryItem> Ingredients;
+    for (int32 i = 0; i < 4; ++i)
+    {
+        // Distortion=0.95 у всех и согласны -- гарантированно за порогом
+        // (даже сниженным на 4 ингредиента: 0.85-0.15*2=0.55), Stability=1.0
+        // у всех -- та самая "раньше гарантированная Purified" ситуация.
+        Ingredients.Add(MakeIngredient(*FString::Printf(TEXT("Volatile%d"), i), 0.5f,
+            /*Distortion*/ 0.95f, /*Stability*/ 1.0f, 0.5f, 0.1f, 0.1f, 0.1f, 1.f));
+    }
+    Ingredients.Add(MakeWater(0.5f, 0.5f));
+
+    // Откалибровано реальным прогоном (диапазон сидов 1-30 -- при
+    // PurifyOddsMultiplier=0.4 примерно 40% сидов всё ещё дают Purified,
+    // seed=3 надёжно в невезучих 60%).
+    FRandomStream Rng(3);
+    FStateDelta Delta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap);
+    const FInventoryOperation* AddOp = nullptr;
+    for (const FInventoryOperation& Op : Delta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) AddOp = &Op;
+    if (!TestNotNull(TEXT("Add op present"), AddOp)) return false;
+
+    TestEqual(TEXT("4 ingredients break the old 'Stability=1.0 always Purifies' guarantee"),
+        AddOp->Ingredient.State.Meta.Distortion, 0.2f);
+    return true;
+}
+
+// 2 ингредиента: "просто" -- поведение НЕ меняется относительно поведения
+// до этой правки. Stability=1.0 по-прежнему гарантирует Purified всегда,
+// на любом сиде (RiskyCount=0 при count<=2, тот же класс, что и 1
+// ингредиент в ApplyBifurcationPurifiedTest выше).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyTwoIngredientsRiskUnchangedTest,
+    "ProjectHerbalist.PipelineV2.ApplyTwoIngredientsRiskUnchanged",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyTwoIngredientsRiskUnchangedTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    TArray<FInventoryItem> Ingredients = {
+        MakeIngredient(TEXT("A"), 0.5f, /*Distortion*/ 0.95f, /*Stability*/ 1.0f, 0.5f, 0.1f, 0.1f, 0.1f, 1.f),
+        MakeIngredient(TEXT("B"), 0.5f, /*Distortion*/ 0.95f, /*Stability*/ 1.0f, 0.5f, 0.1f, 0.1f, 0.1f, 1.f),
+        MakeWater(0.5f, 0.5f)
+    };
+
+    for (int32 Seed : { 1, 2, 3, 42, 999 })
+    {
+        FRandomStream Rng(Seed);
+        FStateDelta Delta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap);
+        const FInventoryOperation* AddOp = nullptr;
+        for (const FInventoryOperation& Op : Delta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) AddOp = &Op;
+        if (!TestNotNull(FString::Printf(TEXT("[seed=%d] Add op present"), Seed), AddOp)) continue;
+
+        TestEqual(FString::Printf(TEXT("[seed=%d] 2 ingredients: Stability=1.0 still guarantees Purified"), Seed),
+            AddOp->Ingredient.State.Meta.Distortion, 0.4f);
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Bifurcation: Purified -- Stability=1.0 у единственного ингредиента выживает
 // без изменений через Fold/Zaryana (Lerp(1,1,x)=1 при любом x), поэтому
 // `Rng.FRand() < 1.0` истинно ГАРАНТИРОВАННО, независимо от сида (FRand() в

@@ -41,6 +41,13 @@ struct FApplyCommand
     TArray<FInventoryItem> Ingredients;
     FIntent Intent;
     bool bIsCrafting = false;   // true = крафт в инвентарь, false = применение на клетку
+
+    // Итог правильно исполненного ритуала (AGridWorldManager::TryAdvanceRitual,
+    // Core/Alchemy/RitualTypes.h, 2026-08-30) -- градации опасности по числу
+    // ингредиентов (ComputeApplyResult) для него не действуют: игрок сварил
+    // по верному порядку/месту/времени, не закинул всё разом, котёл не
+    // наказывает за укрощённую, а не проигнорированную сложность.
+    bool bIsRitual = false;
 };
 
 // S – сбор ресурса (Harvest)

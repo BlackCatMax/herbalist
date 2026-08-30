@@ -13,6 +13,7 @@
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Shrine/ShrineTypes.h"
 #include "Core/Zaryana/MemoryFragmentTypes.h"
+#include "Core/Alchemy/RitualTypes.h"
 #include "GridWorldManager.generated.h"
 
 class AHerbalistResourceActor;
@@ -128,6 +129,21 @@ public:
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent);
+
+    // ---- Ритуальная (пошаговая) варка — Core/Alchemy/RitualTypes.h.
+    // Внепайплайновая, как и Травник/подношение капищу: продвижение шага и
+    // хранение прогресса не идёт через Command/Delta (это не игровая
+    // причинность мира, а прогресс-бар конкретного рецепта у конкретного
+    // котла), но ЗАВЕРШЕНИЕ ритуала честно варит через тот же
+    // Simulation::ExecutePipeline, что и обычная варка. ----
+    UPROPERTY()
+    TMap<FIntPoint, FActiveRitualState> ActiveRituals;
+
+    // NewIngredients — то, что игрок добавляет ПРЯМО СЕЙЧАС (не накопленное
+    // ранее — это уже лежит в ActiveRituals[CauldronCell], если ритуал уже
+    // начат). OutPotion заполняется только при ERitualStepResult::Completed.
+    ERitualStepResult TryAdvanceRitual(const FIntPoint& CauldronCell, const TArray<FInventoryItem>& NewIngredients,
+        FRandomStream& Rng, FInventoryItem& OutPotion);
 
     // ---- Сбор ----
     FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
