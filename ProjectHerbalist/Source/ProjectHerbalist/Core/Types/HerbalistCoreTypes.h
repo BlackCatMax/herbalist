@@ -197,6 +197,14 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
     FName ManifestedEntityID = NAME_None;
 
+    // Физический актор, отражающий ManifestedEntityID выше (2026-08-30,
+    // "заводим родительские классы для сущностей") — тот же слабый указатель,
+    // что и ResourceActors ниже, синхронизируется в
+    // AGridWorldManager::SyncManifestedEntityActor каждый раз, когда
+    // ManifestedEntityID меняется в UpdateEntityManifestations.
+    UPROPERTY()
+    TWeakObjectPtr<class AHerbalistEntityActor> ManifestedEntityActor;
+
     // Список акторов ресурсов в этой клетке (слабые указатели, чтобы не мешать сборщику)
     UPROPERTY()
     TArray<TWeakObjectPtr<class AHerbalistResourceActor>> ResourceActors;

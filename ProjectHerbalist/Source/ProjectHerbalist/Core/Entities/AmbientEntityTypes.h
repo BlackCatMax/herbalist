@@ -144,6 +144,12 @@ struct FAmbientEntityDefinition
     // только триггер выше) бьёт по Direction. Только Nature заведена — не
     // нужны Body/Mind/Spirit, пока ни одно существо не просит их как эффект.
     UPROPERTY() float NatureRate = 0.0f;
+
+    // Физическое представление (2026-08-30, "заводим родительские классы для
+    // сущностей") — пусто = базовый AAmbientEntityActor (невидимый маркер).
+    // Конкретный Blueprint-наследник на существо (меш/партиклы) — контент,
+    // добавляется позже, не блокирует спавн/деспавн.
+    UPROPERTY() TSubclassOf<class AHerbalistEntityActor> ActorClass;
 };
 
 inline float GetAmbientTriggerAxisValue(const FGridCell& Cell, EAmbientTriggerAxis Axis)

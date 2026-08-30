@@ -3,19 +3,20 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/Interaction/Interactable.h"
 #include "AlchemyTableActor.generated.h"
 
 class UBoxComponent;
 class UAlchemyTransferWidget;
 
 UCLASS()
-class PROJECTHERBALIST_API AAlchemyTableActor : public AActor
+class PROJECTHERBALIST_API AAlchemyTableActor : public AActor, public IInteractable
 {
     GENERATED_BODY()
 
 public:
     AAlchemyTableActor();
-    void OnInteract(class AHerbalistPlayerController* PC);
+    virtual void OnInteract_Implementation(class AHerbalistPlayerController* PC) override;
     void SetGridCoords(const FIntPoint& InCoords) { GridCoords = InCoords; }
     FIntPoint GetGridCoords() const { return GridCoords; }
 

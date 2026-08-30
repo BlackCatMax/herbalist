@@ -17,6 +17,7 @@
 
 class AHerbalistResourceActor;
 class AMemoryFragmentActor;
+class AHerbalistEntityActor;
 class AHerbalistPlayerController;
 class ALandscape;
 struct FWorldSnapshot;
@@ -421,6 +422,18 @@ protected:
     // рефлексируется движком без доп. работы, а нужды в этом нет.
     TMap<FName, FIntPoint> LegendaryAnchors;
     void SeedLegendaryAnchors();
+
+    // Спавнит/деспавнит AHerbalistEntityActor на клетке, чтобы
+    // Cell.ManifestedEntityActor совпадал с Cell.ManifestedEntityID
+    // (2026-08-30, "заводим родительские классы для сущностей и связки") —
+    // общий на все три ранга бестиария (Низший/Основной/Легендарный), т.к.
+    // сам жизненный цикл проявления одинаков у всех троих (см. три прохода
+    // в UpdateEntityManifestations, каждый пишет ManifestedEntityID/None тем
+    // же способом). RequestedClass — ActorClass конкретного определения
+    // (может быть пуст); DefaultClass — класс ранга (AAmbientEntityActor/
+    // ALandmarkEntityActor/ALegendaryEntityActor), на который откатываемся,
+    // если контент ещё не назначил свой Blueprint-класс.
+    void SyncManifestedEntityActor(FGridCell& Cell, TSubclassOf<AHerbalistEntityActor> RequestedClass, TSubclassOf<AHerbalistEntityActor> DefaultClass);
 
     // ---- Капища ----
     TArray<FShrine> Shrines;

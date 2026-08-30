@@ -496,3 +496,51 @@ C2084). Вынесено в общий `Tests/TestWorldHelpers.h`. 82/82 все�
 изменений") — весь этот файл выделен из `ROADMAP.md`, которая разрослась до
 743 строк и перестала читаться как план. `ROADMAP.md` переписан заново,
 коротко, только с тем, что реально осталось открытым.
+
+### Родительские классы для сущностей бестиария
+
+По прямому запросу ("заводим все основные сущности, нужны родительские
+классы для их дальнейшей реализации и связки"). До этой правки весь
+бестиарий (§16.2/§16.3/§16.4, 58 карточек) существовал только как данные —
+таблицы определений и один `FName`-тег на клетке
+(`Cell.ManifestedEntityID`), ничего не спавнилось и не было видно. §16.2 в
+`16_Entity_Manifestation.md` прямо называлось "амбиентная зона, без актора" —
+осознанное решение сессии 2026-08-24, развёрнутое здесь по прямому запросу
+пользователя.
+
+**Общий интерфейс `IInteractable`** (`Core/Interaction/Interactable.h`) —
+заменяет ручную цепочку `Cast<>` в `AHerbalistPlayerController::Interact()`
+на один `Implements<UInteractable>()`+`Execute_OnInteract`. Выровнены
+сигнатуры трёх существующих интерактивных акторов (`AStorageContainer` брал
+`APlayerController*`, остальные — уже `AHerbalistPlayerController*`) —
+`AAlchemyTableActor`/`AStorageContainer`/`AMemoryFragmentActor` теперь все
+реализуют интерфейс. `AHerbalistResourceActor::Harvest()` сознательно НЕ
+переведён — отдельный игровой глагол (другая клавиша), не расхождение,
+которое стоило чинить ради единообразия.
+
+**`AHerbalistEntityActor`** (`Core/Entities/HerbalistEntityActor.h`) —
+родительский класс всех трёх рангов, без меша по умолчанию (невидимый
+маркер, готов принять контент позже). Три тонких под-класса
+(`AAmbientEntityActor`/`ALandmarkEntityActor`/`ALegendaryEntityActor`) — по
+одному C++-типу на ранг, чтобы поведение могло разойтись позже, не трогая
+базовый класс. `ALandmarkEntityActor::GetLandmark()` — единственная добавка
+сверх пустого маркера, читает уже существующий `FindLandmarkAt` (естественная
+точка для будущего визуального отклика на `Respect`).
+
+**`AGridWorldManager::SyncManifestedEntityActor`** (`GridWorldManagerEntities.cpp`)
+— один общий помощник на все три прохода `UpdateEntityManifestations`
+(Низший/Основной/Легендарный плюс отдельно закодированная Берегиня): у всех
+одинаковый жизненный цикл проявления (`Cell.ManifestedEntityID` ставится/
+снимается тем же способом), так что достаточно одной функции сравнения
+"актор ещё актуален?" вместо трёх разных. Новое поле `Cell.ManifestedEntityActor`
+(слабый указатель, тот же принцип, что уже `ResourceActors`). Три структуры
+определений (`FAmbientEntityDefinition`/`FLandmarkDefinition`/
+`FLegendaryEntityDefinition`) получили `TSubclassOf<AHerbalistEntityActor>
+ActorClass` — пусто = базовый класс ранга, конкретный Blueprint-наследник на
+существо (меш/партиклы) добавляется по одному позже, контентом, не блокирует
+спавн/деспавн уже сейчас.
+
+Регрессия: `Herbalist.EntityActor.{AmbientManifestationSpawnsAndDespawnsActor,
+LandmarkManifestationSpawnsActor, LegendaryManifestationSpawnsActor,
+ExistingInteractablesImplementTheSharedInterface}` (4 новых теста). 86/86
+всего зелёные.

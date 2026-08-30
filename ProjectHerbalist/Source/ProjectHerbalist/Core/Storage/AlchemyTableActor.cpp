@@ -47,7 +47,7 @@ void AAlchemyTableActor::BeginPlay()
     }
 }
 
-void AAlchemyTableActor::OnInteract(AHerbalistPlayerController* PC)
+void AAlchemyTableActor::OnInteract_Implementation(AHerbalistPlayerController* PC)
 {
     if (!PC || !AlchemyWidgetClass) return;
 

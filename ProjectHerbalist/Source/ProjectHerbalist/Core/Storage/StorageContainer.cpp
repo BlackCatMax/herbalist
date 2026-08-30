@@ -24,16 +24,11 @@ void AStorageContainer::BeginPlay()
     }
 }
 
-void AStorageContainer::OnInteract(APlayerController* PlayerController)
+void AStorageContainer::OnInteract_Implementation(AHerbalistPlayerController* PC)
 {
     UE_LOG(LogHerbalistAlchemy, Log, TEXT("AStorageContainer::OnInteract called"));
 
-    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(PlayerController);
-    if (!PC)
-    {
-        UE_LOG(LogHerbalistAlchemy, Error, TEXT("Failed to cast PlayerController to AHerbalistPlayerController"));
-        return;
-    }
+    if (!PC) return;
 
     if (TransferWidgetInstance && TransferWidgetInstance->IsInViewport())
     {

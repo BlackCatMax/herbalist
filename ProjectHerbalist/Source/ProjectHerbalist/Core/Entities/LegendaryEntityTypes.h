@@ -76,6 +76,11 @@ struct FLegendaryEntityDefinition
     UPROPERTY() float EffectRate = 0.0f;
     UPROPERTY() ELandmarkAxis EffectAxis2 = ELandmarkAxis::None;
     UPROPERTY() float EffectRate2 = 0.0f;
+
+    // Физическое представление (2026-08-30) — пусто = базовый
+    // ALegendaryEntityActor. См. комментарий у одноимённого поля в
+    // AmbientEntityTypes.h.
+    UPROPERTY() TSubclassOf<class AHerbalistEntityActor> ActorClass;
 };
 
 // Статический реестр — тот же паттерн, что GetAmbientEntityDefinitions()/

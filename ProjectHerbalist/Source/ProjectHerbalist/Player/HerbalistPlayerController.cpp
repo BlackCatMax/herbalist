@@ -3,6 +3,7 @@
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Storage/AlchemyTableActor.h"
 #include "Core/Zaryana/MemoryFragmentActor.h"
+#include "Core/Interaction/Interactable.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Save/HerbalistSaveSubsystem.h"
@@ -366,22 +367,13 @@ void AHerbalistPlayerController::Interact()
 
     AActor* HitActor = Hit.GetActor();
 
-    if (AStorageContainer* Storage = Cast<AStorageContainer>(HitActor))
+    // Один интерфейс вместо цепочки Cast<> на каждый интерактивный класс
+    // (2026-08-30, "заводим родительские классы для сущностей и связки") —
+    // см. Core/Interaction/Interactable.h. AHerbalistResourceActor::Harvest()
+    // намеренно не через этот путь, см. комментарий там же.
+    if (HitActor && HitActor->Implements<UInteractable>())
     {
-        Storage->OnInteract(this);
-        return;
-    }
-
-    if (AAlchemyTableActor* AlchemyTable = Cast<AAlchemyTableActor>(HitActor))
-    {
-        AlchemyTable->OnInteract(this);
-        return;
-    }
-
-    if (AMemoryFragmentActor* Fragment = Cast<AMemoryFragmentActor>(HitActor))
-    {
-        Fragment->OnInteract(this);
-        return;
+        IInteractable::Execute_OnInteract(HitActor, this);
     }
 }
 

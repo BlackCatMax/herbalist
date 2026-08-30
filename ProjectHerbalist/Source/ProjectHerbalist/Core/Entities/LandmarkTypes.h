@@ -61,6 +61,11 @@ struct FLandmarkDefinition
 
     UPROPERTY() ELandmarkAxis CurseAxis = ELandmarkAxis::None;
     UPROPERTY() float CurseRate = 0.0f;
+
+    // Физическое представление (2026-08-30) — пусто = базовый
+    // ALandmarkEntityActor. См. комментарий у одноимённого поля в
+    // AmbientEntityTypes.h.
+    UPROPERTY() TSubclassOf<class AHerbalistEntityActor> ActorClass;
 };
 
 // Direction нужен отдельно от Meta, т.к. это разные подобъекты FRealState —

@@ -54,7 +54,7 @@ void AMemoryFragmentActor::Tick(float DeltaTime)
     }
 }
 
-void AMemoryFragmentActor::OnInteract(AHerbalistPlayerController* PC)
+void AMemoryFragmentActor::OnInteract_Implementation(AHerbalistPlayerController* PC)
 {
     if (bCollected || !PC || !WorldManager) return;
     bCollected = true;

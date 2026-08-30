@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/Interaction/Interactable.h"
 #include "MemoryFragmentActor.generated.h"
 
 class AGridWorldManager;
@@ -16,7 +17,7 @@ class USphereComponent;
 // уже открываются AAlchemyTableActor/AStorageContainer (см.
 // AHerbalistPlayerController::Interact).
 UCLASS()
-class PROJECTHERBALIST_API AMemoryFragmentActor : public AActor
+class PROJECTHERBALIST_API AMemoryFragmentActor : public AActor, public IInteractable
 {
     GENERATED_BODY()
 
@@ -26,7 +27,7 @@ public:
     void Init(FName InDefinitionID, bool bInIsFalse, float InLifetimeSeconds,
         AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
 
-    void OnInteract(AHerbalistPlayerController* PC);
+    virtual void OnInteract_Implementation(AHerbalistPlayerController* PC) override;
 
     FName GetDefinitionID() const { return DefinitionID; }
     bool IsFalse() const { return bIsFalse; }

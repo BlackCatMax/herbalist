@@ -22,6 +22,10 @@
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Entities/LandmarkTypes.h"
 #include "Core/Entities/LegendaryEntityTypes.h"
+#include "Core/Entities/HerbalistEntityActor.h"
+#include "Core/Entities/AmbientEntityActor.h"
+#include "Core/Entities/LandmarkEntityActor.h"
+#include "Core/Entities/LegendaryEntityActor.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Types/HerbalistCoreMath.h"
@@ -422,6 +426,39 @@ void AGridWorldManager::SeedLegendaryAnchors()
     }
 }
 
+// Физический актор проявленной сущности (2026-08-30, "заводим родительские
+// классы для сущностей и связки") — общий для всех трёх рангов, т.к. у всех
+// троих один и тот же жизненный цикл проявления (см. три прохода ниже,
+// каждый пишет Cell.ManifestedEntityID/None одинаковым способом). Сравниваем
+// EntityID актора с EntityID клетки, а не просто "актор есть/нет" — если
+// клетку тем же тиком отобрал другой EntityID того же ранга (CanManifest
+// пропускает более приоритетного), старый актор должен уступить место новому.
+void AGridWorldManager::SyncManifestedEntityActor(FGridCell& Cell, TSubclassOf<AHerbalistEntityActor> RequestedClass, TSubclassOf<AHerbalistEntityActor> DefaultClass)
+{
+    AHerbalistEntityActor* Existing = Cell.ManifestedEntityActor.Get();
+    if (Existing && Existing->GetEntityID() == Cell.ManifestedEntityID)
+    {
+        return;   // уже актуален, ничего менять не нужно
+    }
+
+    if (Existing)
+    {
+        Existing->Destroy();
+        Cell.ManifestedEntityActor.Reset();
+    }
+
+    if (Cell.ManifestedEntityID.IsNone() || !GetWorld()) return;
+
+    const TSubclassOf<AHerbalistEntityActor> ClassToSpawn = RequestedClass ? RequestedClass : DefaultClass;
+    const FVector SpawnPos = GetCellWorldPosition(Cell.X, Cell.Y);
+    AHerbalistEntityActor* NewActor = GetWorld()->SpawnActor<AHerbalistEntityActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
+    if (NewActor)
+    {
+        NewActor->Init(Cell.ManifestedEntityID, FIntPoint(Cell.X, Cell.Y), this);
+        Cell.ManifestedEntityActor = NewActor;
+    }
+}
+
 // ============================================================================
 // ГЛАВНЫЙ ТИК ПРОЯВЛЕНИЙ
 // ============================================================================
@@ -493,6 +530,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // упрощение для v1: полноценное сложение эффектов нескольких
         // одноранговых Низших на одной клетке — отдельная задача, если
         // когда-нибудь понадобится.
+        // Запоминаем, чьим ActorClass спавнить актора после цикла (2026-08-30)
+        // — не более одного Def реально "выигрывает" клетку за тик (см.
+        // комментарий выше про CanManifest), так что одного указателя хватает.
+        const FAmbientEntityDefinition* ManifestingAmbientDef = nullptr;
         for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
         {
             if (Cell.Biome != Def.Biome) continue;
@@ -568,6 +609,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             if (bEligible && CanManifest(Cell, Def.EntityID))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
+                ManifestingAmbientDef = &Def;
                 // Самоусиливающийся эффект — тянем TargetState дальше, чем
                 // клетка уже есть, а не жёстко фиксируем; ApplyStateDelta/
                 // RegenerateCellParameters сами доведут State до цели.
@@ -615,6 +657,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 Cell.ManifestedEntityID = NAME_None;
             }
         }
+        SyncManifestedEntityActor(Cell, ManifestingAmbientDef ? ManifestingAmbientDef->ActorClass : nullptr, AAmbientEntityActor::StaticClass());
 
         // --- Берегиня: Легендарный, порог мирового состояния, Речная пойма ---
         if (Cell.Biome == EBiomeType::Floodplain && Cell.bIsWater)
@@ -653,6 +696,11 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 Cell.ManifestedEntityID = NAME_None;
             }
+            // Берегиня жёстко закодирована в этом файле (не через реестр
+            // LegendaryEntityTypes.h, см. GetEntityManifestationPriority выше),
+            // поэтому у неё нет своего FLegendaryEntityDefinition::ActorClass —
+            // всегда базовый класс ранга, без per-существо переопределения.
+            SyncManifestedEntityActor(Cell, nullptr, ALegendaryEntityActor::StaticClass());
         }
 
         // --- Опасная нечисть, §16.5: сквозная ночная фаза ---
@@ -823,6 +871,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         {
             Delta.TargetStateNudges.Add(Landmark.Cell, NewTarget);
         }
+        SyncManifestedEntityActor(*Cell, Def ? Def->ActorClass : nullptr, ALandmarkEntityActor::StaticClass());
     }
 
     // ---- Легендарный (реестр LegendaryEntityTypes.h) — проход по якорным
@@ -890,6 +939,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 Delta.TargetStateNudges.Add(*Anchor, NewTarget);
             }
+            SyncManifestedEntityActor(*Cell, Def.ActorClass, ALegendaryEntityActor::StaticClass());
         }
     }
 
