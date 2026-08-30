@@ -6,7 +6,7 @@ status: draft
 
 Этот раздел закрывает разрыв между `04_Compendium/Бестиарий` (62 карточки, полностью текстовые, без единой мехнической привязки) и `00_Core_Lock` §5, который требует: `Entity = Projection(BiomeState)`, `Entity_seen = Distort(Entity_real, Morok)`, и прямо запрещает независимую логику поведения (§11). Статус — черновик первого прохода, как и `15_Cycles_And_Shrines`.
 
-**Реализация, обновление 2026-08-24 (Фаза D ROADMAP.md, п.11):** §16.2 (Низший)
+**Реализация, обновление 2026-08-24 (см. CHANGELOG.md 2026-08-24):** §16.2 (Низший)
 с этой сессии — действительно "только данные", как и было задумано: таблица
 `FAmbientEntityDefinition` в `Core/Entities/AmbientEntityTypes.h`, обходится
 одним циклом в `AGridWorldManager::UpdateEntityManifestations`

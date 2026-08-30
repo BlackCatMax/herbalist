@@ -118,7 +118,7 @@ void AGridWorldManager::RunSimulationStep()
         }
     }
 
-    // Травник (07_UX §7.2.4, ROADMAP.md §2.1) — вне детерминированного
+    // Травник (07_UX §7.2.4, CHANGELOG.md 2026-08-23/24) — вне детерминированного
     // пайплайна, как и Footprint выше: презентационная фиксация, не часть
     // Command/Delta цикла. Сопоставляем команды Harvest/Apply(крафт) из
     // CommandsCopy с добавленными предметами из Delta.InventoryOps по порядку —

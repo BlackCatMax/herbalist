@@ -5,7 +5,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "HerbalistSaveSubsystem.generated.h"
 
-// Координатор сохранений v1 (ROADMAP.md §1): собирает состояние из
+// Координатор сохранений v1 (CHANGELOG.md 2026-08-24): собирает состояние из
 // AGridWorldManager + компонентов игрока в один UHerbalistSaveGame и обратно.
 // GameInstanceSubsystem, как реестры ингредиентов/воды — тот же паттерн:
 // не привязан к конкретному актору, переживает смену уровня.

@@ -56,9 +56,10 @@ struct PROJECTHERBALIST_API FJournalEntry
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
     EBiomeType Biome = EBiomeType::MixedForest;
 
-    // Фаза суток на момент записи (15_Cycles_And_Shrines §15.2) — единственный
-    // уже реализованный цикл; луна/сезон добавятся тем же полем, когда дойдут
-    // до кода (ROADMAP.md §3.2).
+    // Фаза суток на момент записи (15_Cycles_And_Shrines §15.2). Луна/сезон
+    // с 2026-08-24/29 тоже реализованы в коде (GetMoonPhase/GetSeason), но
+    // сюда, в саму запись, ещё не добавлены отдельными полями — не
+    // блокирует ничего конкретного, просто не заведено.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
     bool bWasNight = false;
 

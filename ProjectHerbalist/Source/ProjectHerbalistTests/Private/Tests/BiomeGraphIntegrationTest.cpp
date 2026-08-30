@@ -1,6 +1,6 @@
 // Source/ProjectHerbalistTests/Private/Tests/BiomeGraphIntegrationTest.cpp
 //
-// Тестовая дыра, названная в ROADMAP.md §6: ни один автотест до этого не
+// Тестовая дыра, названная в ROADMAP.md (см. CHANGELOG.md 2026-08-29): ни один автотест до этого не
 // гонял настоящий AGridWorldManager::Tick() с реально инициализированным
 // UBiomeGraphSubsystem (StepSimulation -> ApplyFieldsToGrid ->
 // ApplyBiomeInfluences) одновременно. Herbalist.Save.

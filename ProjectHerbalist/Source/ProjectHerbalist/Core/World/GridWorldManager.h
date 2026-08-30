@@ -276,8 +276,9 @@ public:
 
     // Игровые часы, независимые от GetWorld()->GetTimeSeconds() (движковое,
     // level-relative, обнуляется при перезапуске сессии) — нужны, чтобы фаза
-    // суток (и будущая погода через UltraDynamicSky, ROADMAP.md Фаза D §12)
-    // переживала сохранение/загрузку, а не начинала каждую сессию с рассвета.
+    // суток (и будущая погода через UltraDynamicSky, ROADMAP.md "Реальный
+    // Ultra Dynamic Weather") переживала сохранение/загрузку, а не начинала
+    // каждую сессию с рассвета.
     // Копится в Tick() на DeltaTime, восстанавливается из сейва при загрузке.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     float GetGameClockSeconds() const { return GameClockSeconds; }

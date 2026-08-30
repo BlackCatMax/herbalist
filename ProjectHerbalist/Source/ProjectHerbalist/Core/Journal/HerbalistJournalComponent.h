@@ -13,7 +13,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnJournalEntryAdded);
 // поэтому прогрессия — это сравнение глазами, не правка формулы шума).
 // Группировка/подсветка закономерностей по конкретному ингредиенту — ещё не
 // подключена к UI, хотя GetEntriesForIngredient ниже для неё уже готова
-// (ROADMAP.md §2.1/Фаза C §8). Пишется тем же способом, что и
+// (открытый пункт ROADMAP.md, "Травник: подсветка закономерностей"; история
+// решения — CHANGELOG.md 2026-08-24). Пишется тем же способом, что и
 // HerbalistInventoryComponent рядом — компонент на PlayerController, не подсистема.
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTHERBALIST_API UHerbalistJournalComponent : public UActorComponent

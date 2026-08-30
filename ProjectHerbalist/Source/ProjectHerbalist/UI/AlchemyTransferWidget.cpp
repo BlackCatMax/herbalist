@@ -234,8 +234,8 @@ void UAlchemyTransferWidget::CheckForNewPotion()
                 ResultSlot->AddItem(Item, 1);
                 LastCraftTime = 0.0f;
                 // Раньше здесь читались Item.State.* напрямую — самый прямой
-                // слив S_real игроку изо всех виджетов (07_UX, ROADMAP.md §3.1):
-                // сразу после варки, дословно числами. Берём то же искажённое
+                // слив S_real игроку изо всех виджетов (07_UX, CHANGELOG.md
+                // 2026-08-24): сразу после варки, дословно числами. Берём то же искажённое
                 // значение, что теперь уже посчитал сам ResultSlot.
                 const FRealState& Perceived = ResultSlot->GetPerceivedState();
                 SetStatusMessage(FString::Printf(TEXT("Создано зелье (сила: %.2f, искажение: %.2f)"),

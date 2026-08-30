@@ -1,6 +1,6 @@
 // BiomeGraphExportCommandlet.h
 //
-// ROADMAP.md §4 "DA_BiomeGraph -> JSON": MorokAffinity/ZaryanaAffinity/Stability
+// CHANGELOG.md 2026-08-23 "DA_BiomeGraph -> JSON": MorokAffinity/ZaryanaAffinity/Stability
 // решают, срабатывает ли Bifurcation, но живут только в бинарнике DA_BiomeGraph
 // (UBiomeGraphAsset, обычный UDataAsset — не UDataTable, у которого есть штатный
 // Import/Export CSV/JSON, тут его нет). Этот коммандлет — та же роль, что у

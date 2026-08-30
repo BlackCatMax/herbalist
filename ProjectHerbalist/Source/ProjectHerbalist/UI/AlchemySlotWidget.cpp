@@ -53,7 +53,7 @@ bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
         Count = FMath::Min(Amount, MaxCount);
         // Считаем один раз, на входе в слот — не при каждом UpdateDisplay,
         // иначе имя зелья/ингредиента мигало бы новым искажением на любой
-        // перерисовке (ROADMAP.md §3.1: иллюзия должна быть устойчивой).
+        // перерисовке (см. CHANGELOG.md 2026-08-23: иллюзия должна быть устойчивой).
         // GlobalPerceptionClarity (найдено при аудите 2026-08-24: котёл был
         // единственным местом, читающим восприятие мимо неё) — тот же
         // AGridWorldManager, откуда уже берётся CurrentAlchemyTable.
