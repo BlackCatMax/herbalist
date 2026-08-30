@@ -5,9 +5,11 @@
 > `PhysicsPipeline`, `WorldStateApplier`, `WorldManifestor`, `ComputeIntentCoherence()`),
 > которая **не реализована в коде** — ни одного из перечисленных типов/классов нет нигде в
 > `Source/`. Фактически реализованный пайплайн (`PipelineV2`, `SnapshotService`,
-> `CommandTypes`/`DeltaTypes`) описан в актуальном документе
-> [`PROJECT HERBALIST - REFACTORING PIPELINE 2.md`](../../../../PROJECT%20HERBALIST%20-%20REFACTORING%20PIPELINE%202.md)
-> (см. раздел «Фактический статус реализации»), который и является текущим источником истины.
+> `CommandTypes`/`DeltaTypes`) описан в [`PROJECT HERBALIST - REFACTORING PIPELINE 2.md`](PROJECT%20HERBALIST%20-%20REFACTORING%20PIPELINE%202.md)
+> (см. раздел «Фактический статус реализации») — но и тот документ теперь сам архивный
+> (обновлено 2026-08-30: не сверялся с кодом с 2026-08-12). Текущий источник истины —
+> `AUDIT_AND_REFACTORING_PLAN.md` (рабочий план) и `CHANGELOG.md` (летопись), оба в корне
+> проекта.
 >
 > Единственная часть этого контракта, подтверждённая кодом — структура `FMemoryState` (§7),
 > она перенесена в актуальный документ дословно. Остальные разделы (§4, §6, §9, §10) сохранены

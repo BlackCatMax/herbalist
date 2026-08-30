@@ -5,7 +5,10 @@
 (`DT_BiomeDefaults.json`, порт `PipelineV2.cpp` в Python).
 
 Документ — рабочий план, а не летопись. Летопись изменений живёт в
-`PROJECT HERBALIST - REFACTORING PIPELINE 2.md`.
+`CHANGELOG.md` (обновлено 2026-08-30 — раньше здесь стояла ссылка на
+`PROJECT HERBALIST - REFACTORING PIPELINE 2.md`, но тот документ не
+сверялся с кодом с 2026-08-12 и перенесён в архив,
+`herbalist_docs/Herbalist_Vault/03_Technical/Archive/`).
 Что **построить** (а не починить) — в `ROADMAP.md`.
 Что **пропустили все три прохода** — в `META_AUDIT.md`.
 
