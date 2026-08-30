@@ -342,6 +342,28 @@ namespace Simulation
 
         if (Ingredients.Num() == 0) return FRealState();
 
+        // --- 0. Уже готовый результат варки, не сырые ингредиенты --
+        // применение зелья на клетку (UsePotion -> AGridWorldManager::
+        // ApplyPotionToCell) заворачивает готовый предмет в тот же список
+        // Ingredients, что и сырые материалы при варке. Без этой проверки
+        // единственный небольшой предмет без воды в списке безусловно
+        // попадал бы под правило "обязательность воды" ниже (шаг 4a) и
+        // становился золой ЗАНОВО, стирая реально сваренное качество --
+        // находка сессии 2026-08-30 (PlaySessionIntegrationTest.cpp поймал
+        // сваренное Purity=0.69 зелье, ставшее золой при применении).
+        // Признак "это уже готовый результат, не сырьё" -- IngredientID
+        // совпадает с одним из трёх исходов этой же функции; собранные в
+        // мире ингредиенты этих ID не носят (зарезервированные имена
+        // выходов пайплайна, не строки из реестра ингредиентов).
+        if (Ingredients.Num() == 1)
+        {
+            const FName ID = Ingredients[0].IngredientID;
+            if (ID == FName(TEXT("Potion")) || ID == FName(TEXT("Ash")) || ID == FName(TEXT("BoiledWater")))
+            {
+                return Ingredients[0].State;
+            }
+        }
+
         const UHerbalistSettings* Settings = GetHerbalistSettings();
 
         // --- 1-2. Fold: ингредиенты и вода агрегируются раздельно; у обычных

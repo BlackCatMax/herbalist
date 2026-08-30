@@ -211,6 +211,16 @@ bool FHerbalistPlaySession_GatherBrewApplyEndToEnd::RunTest(const FString& Param
     }
 
     // --- Шаг 4: применить сваренное зелье на клетку-мишень ---
+    // Регрессия сессии 2026-08-30: применение зелья на клетку (UsePotion ->
+    // ApplyPotionToCell) заворачивает готовый предмет в тот же список
+    // Ingredients, что и сырые материалы при варке -- без явной проверки в
+    // ComputeApplyResult единственный небольшой предмет без воды в списке
+    // безусловно становился золой ЗАНОВО (правило "обязательность воды"),
+    // стирая реально сваренное качество. Фикс -- ComputeApplyResult
+    // распознаёт уже готовый результат по IngredientID и применяет его
+    // State напрямую. Захватываем State зелья ДО применения и проверяем,
+    // что клетка получила именно его, а не константы золы.
+    const FRealState BrewedPotionState = Inventory->GetItems()[0].State;
     FCommandEntry ApplyPotion;
     ApplyPotion.Primitive = ECommandPrimitive::Apply;
     ApplyPotion.Apply.TargetCell = FIntPoint(6, 5);
@@ -219,6 +229,12 @@ bool FHerbalistPlaySession_GatherBrewApplyEndToEnd::RunTest(const FString& Param
     const float TargetStressBefore = TargetCell->HarvestStress;
     FRandomStream RngApply(104);
     RunRealCommand(ApplyPotion, Manager, Inventory, RngApply);
+
+    TestTrue(TEXT("Applying the potion did NOT silently turn it back into ash (the 2026-08-30 regression)"),
+        FMath::IsNearlyEqual(TargetCell->State.Meta.Distortion, BrewedPotionState.Meta.Distortion, 0.0005f)
+        && FMath::IsNearlyEqual(TargetCell->State.Magnitude, BrewedPotionState.Magnitude, 0.0005f));
+    TestFalse(TEXT("Sanity: ash constants (Distortion=0.9) are not what landed on the cell"),
+        FMath::IsNearlyEqual(TargetCell->State.Meta.Distortion, 0.9f, 0.01f));
 
     TestEqual(TEXT("Potion consumed applying it to the cell"), Inventory->GetItems().Num(), 0);
     TestTrue(TEXT("Target cell HarvestStress increased by applying a potion"),

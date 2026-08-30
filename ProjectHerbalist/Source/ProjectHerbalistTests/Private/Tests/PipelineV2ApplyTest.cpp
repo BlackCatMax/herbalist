@@ -203,6 +203,67 @@ bool FPipelineV2ApplyWaterDilutionLinearTest::RunTest(const FString& Parameters)
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Регрессия сессии 2026-08-30 (найдена PlaySessionIntegrationTest.cpp):
+// применение уже сваренного зелья на клетку (UsePotion -> ApplyPotionToCell)
+// заворачивает готовый предмет в тот же список Ingredients, что и сырые
+// материалы при варке -- единственный небольшой предмет без воды безусловно
+// попадал бы под правило "обязательность воды" (шаг 4a) и становился золой
+// ЗАНОВО, стирая реально сваренное качество. ComputeApplyResult теперь
+// распознаёт уже готовый результат по IngredientID (Potion/Ash/BoiledWater)
+// и применяет его State напрямую, без повторного Fold/Morok/Zaryana/Bifurcation.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyAlreadyBrewedPotionKeepsItsOwnStateTest,
+    "ProjectHerbalist.PipelineV2.ApplyAlreadyBrewedPotionKeepsItsOwnState",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyAlreadyBrewedPotionKeepsItsOwnStateTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Отчётливое, узнаваемое состояние -- не пересекается ни с одной
+    // константой Ash (0.05/0.9/0.8/0.05/0.1) или дефолтом.
+    FInventoryItem Potion;
+    Potion.IngredientID = FName(TEXT("Potion"));
+    Potion.Count = 1;
+    Potion.bSubjectToDecay = false;
+    Potion.State.Magnitude = 0.55f;
+    Potion.State.Meta.Distortion = 0.33f;
+    Potion.State.Meta.Purity = 0.77f;
+    Potion.State.Meta.Stability = 0.44f;
+    Potion.State.Meta.Corruption = 0.22f;
+
+    FRandomStream Rng(1);
+    FStateDelta Delta = RunApply({ Potion }, /*bIsCrafting*/ false, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap);
+
+    const FGridCell* Modified = Delta.WorldChanges.Find(FIntPoint(5, 5));
+    if (!TestNotNull(TEXT("Cell modified"), Modified)) return false;
+
+    TestEqual(TEXT("Cell Magnitude matches the potion's own state exactly"), Modified->State.Magnitude, 0.55f);
+    TestEqual(TEXT("Cell Distortion matches the potion's own state exactly"), Modified->State.Meta.Distortion, 0.33f);
+    TestEqual(TEXT("Cell Purity matches the potion's own state exactly"), Modified->State.Meta.Purity, 0.77f);
+    TestEqual(TEXT("Cell Stability matches the potion's own state exactly"), Modified->State.Meta.Stability, 0.44f);
+    TestEqual(TEXT("Cell Corruption matches the potion's own state exactly"), Modified->State.Meta.Corruption, 0.22f);
+
+    // Тот же принцип должен работать и для золы/варёной воды, если их
+    // когда-нибудь тоже станет можно "применить" (сейчас UsePotion фильтрует
+    // только Potion, но правило в ComputeApplyResult общее для всех трёх).
+    FInventoryItem BoiledWater;
+    BoiledWater.IngredientID = FName(TEXT("BoiledWater"));
+    BoiledWater.Count = 1;
+    BoiledWater.State.Meta.Purity = 0.66f;
+    FRandomStream Rng2(2);
+    FStateDelta Delta2 = RunApply({ BoiledWater }, /*bIsCrafting*/ false, FIntPoint(5, 5), Rng2, WorldSnap, BiomeSnap);
+    const FGridCell* Modified2 = Delta2.WorldChanges.Find(FIntPoint(5, 5));
+    if (TestNotNull(TEXT("Cell modified (BoiledWater)"), Modified2))
+    {
+        TestEqual(TEXT("BoiledWater applied with its own Purity, not re-processed"), Modified2->State.Meta.Purity, 0.66f);
+    }
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyWaterDilutionExcessPenaltyTest,
     "ProjectHerbalist.PipelineV2.ApplyWaterDilutionExcessPenalty",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
