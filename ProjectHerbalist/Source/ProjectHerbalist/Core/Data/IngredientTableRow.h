@@ -138,6 +138,15 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     // другого инструмента (бонус, не отдельный гейт).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
     bool bDelicate = false;
+
+    // Пристройка сада (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31),
+    // в какой нише растёт нарочно у жилища — None для большинства (деревья,
+    // ещё не размеченные 66 из 76 карточек). AllowedBiomes выше остаётся
+    // единственной правдой о том, где растение растёт В МИРЕ; это поле —
+    // отдельный, параллельный список для клеток с постройкой-пристройкой,
+    // не замена и не переопределение AllowedBiomes.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Garden")
+    EGardenNiche GardenNiche = EGardenNiche::None;
 };
 
 // Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются

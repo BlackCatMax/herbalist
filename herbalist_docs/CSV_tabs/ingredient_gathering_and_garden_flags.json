@@ -1,0 +1,14 @@
+[
+  {"Name": "riv_11", "bIronAverse": true},
+  {"Name": "broad_08", "bIronAverse": true},
+  {"Name": "mix_06", "bDelicate": true, "GardenNiche": "ShadeBed"},
+  {"Name": "les_09", "GardenNiche": "Mycelium"},
+  {"Name": "mix_10", "GardenNiche": "Mycelium"},
+  {"Name": "bol_05", "GardenNiche": "RootCellar"},
+  {"Name": "bol_11", "GardenNiche": "RootCellar"},
+  {"Name": "riv_06", "GardenNiche": "Pond"},
+  {"Name": "riv_08", "GardenNiche": "Pond"},
+  {"Name": "ste_04", "GardenNiche": "SunnyBed"},
+  {"Name": "les_05", "GardenNiche": "SunnyBed"},
+  {"Name": "mix_04", "GardenNiche": "ShadeBed"}
+]

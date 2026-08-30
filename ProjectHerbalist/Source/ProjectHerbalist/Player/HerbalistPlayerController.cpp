@@ -455,6 +455,31 @@ void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
     UE_LOG(LogHerbalistPlayer, Log, TEXT("SetGatheringTool: %s"), *ToolName);
 }
 
+void AHerbalistPlayerController::SetGardenPlot(int32 X, int32 Y, FString NicheName)
+{
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: world manager not found"));
+        return;
+    }
+
+    NicheName.ToLowerInline();
+    EGardenNiche Niche = EGardenNiche::None;
+    if (NicheName == TEXT("mycelium"))     Niche = EGardenNiche::Mycelium;
+    else if (NicheName == TEXT("cellar"))  Niche = EGardenNiche::RootCellar;
+    else if (NicheName == TEXT("pond"))    Niche = EGardenNiche::Pond;
+    else if (NicheName == TEXT("sunny"))   Niche = EGardenNiche::SunnyBed;
+    else if (NicheName == TEXT("shade"))   Niche = EGardenNiche::ShadeBed;
+    else if (NicheName != TEXT("none"))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: unknown niche '%s' (ожидались mycelium/cellar/pond/sunny/shade/none)"), *NicheName);
+        return;
+    }
+
+    Manager->RegisterGardenPlot(FIntPoint(X, Y), Niche);
+}
+
 void AHerbalistPlayerController::Journal()
 {
     if (bIsAnyWidgetOpen && JournalWidgetInstance && JournalWidgetInstance->IsInViewport())

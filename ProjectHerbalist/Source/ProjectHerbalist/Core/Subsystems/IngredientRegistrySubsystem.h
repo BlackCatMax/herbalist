@@ -36,6 +36,14 @@ public:
     // целиком, не Biome+State по отдельности — ради HarvestStress.
     FName GetRandomResourceForBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
 
+    // Пристройка сада (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) —
+    // тот же вопрос "сколько шансов у кого" (близость State/сезон/окна), но
+    // кандидаты берутся из EGardenNiche ингредиента, не из AllowedBiomes
+    // клетки: постройка физически подделывает нишу, не переносит биом
+    // целиком. Пусто/None -> нет кандидатов, вызывающая сторона (SpawnResourcesInCell)
+    // должна сама решать, откатываться ли на GetRandomResourceForBiome.
+    FName GetRandomResourceForNiche(const FGridCell& Cell, EGardenNiche Niche, const FHarvestContext& Context, FRandomStream& Rng) const;
+
     void Reset();
 
 private:
@@ -45,5 +53,15 @@ private:
     TMap<EBiomeType, TArray<FName>> CachedResourcesByBiome;
     TMap<EBiomeType, TArray<int32>> CachedWeightsByBiome;
 
+    TMap<EGardenNiche, TArray<FName>> CachedResourcesByNiche;
+    TMap<EGardenNiche, TArray<int32>> CachedWeightsByNiche;
+
     void BuildCache();
+
+    // Общая взвешенная выборка (DESIGN_World_State.md §15/§16, звенья 3 и 8)
+    // — вынесена из GetRandomResourceForBiome, чтобы GetRandomResourceForNiche
+    // не дублировал ту же формулу (Suitability по State + сезон/время/луна/
+    // погода) над другим списком кандидатов.
+    FName PickWeightedResource(const TArray<FName>& Candidates, const TArray<int32>& BaseWeights,
+        const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
 };

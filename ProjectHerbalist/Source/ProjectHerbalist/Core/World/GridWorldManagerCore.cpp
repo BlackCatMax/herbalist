@@ -415,10 +415,21 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     Context.MoonPhase = GetMoonPhase();
     Context.bDryWeather = !IsRainy() && !IsBlizzard();
 
+    // Сад (§2.4): клетка с пристройкой — кандидаты из EGardenNiche, не из
+    // AllowedBiomes. Пусто (None) для подавляющего большинства клеток мира
+    // — обычный путь ниже не меняется вовсе для них.
+    const EGardenNiche* PlotNiche = GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
+
     int32 NumResources = WorldRNG.RandRange(1, 3);
     for (int32 i = 0; i < NumResources; ++i)
     {
-        FName IngredientID = IngredientSubsystem ? IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, WorldRNG) : NAME_None;
+        FName IngredientID = NAME_None;
+        if (IngredientSubsystem)
+        {
+            IngredientID = (PlotNiche && *PlotNiche != EGardenNiche::None)
+                ? IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, WorldRNG)
+                : IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, WorldRNG);
+        }
         if (IngredientID.IsNone()) continue;
 
         FVector Offset = FVector(WorldRNG.FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
@@ -463,6 +474,18 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
         Cell->ResourceActors.Add(NewActor);
         UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
     }
+}
+
+void AGridWorldManager::RegisterGardenPlot(const FIntPoint& Cell, EGardenNiche Niche)
+{
+    if (Niche == EGardenNiche::None)
+    {
+        GardenPlots.Remove(Cell);
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[Garden] Plot at (%d,%d) cleared"), Cell.X, Cell.Y);
+        return;
+    }
+    GardenPlots.Add(Cell, Niche);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Garden] Plot at (%d,%d) set to niche %d"), Cell.X, Cell.Y, (int32)Niche);
 }
 
 void AGridWorldManager::StartRegeneration(FGridCell& Cell)

@@ -46,6 +46,8 @@ void UIngredientRegistrySubsystem::BuildCache()
 {
     CachedResourcesByBiome.Empty();
     CachedWeightsByBiome.Empty();
+    CachedResourcesByNiche.Empty();
+    CachedWeightsByNiche.Empty();
 
     for (const auto& Pair : Rows)
     {
@@ -53,6 +55,14 @@ void UIngredientRegistrySubsystem::BuildCache()
         {
             CachedResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
             CachedWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
+        }
+
+        // Пристройка сада (§2.4) -- отдельный, параллельный ключ, не подмешан
+        // в AllowedBiomes выше: постройка подделывает нишу, не биом.
+        if (Pair.Value.GardenNiche != EGardenNiche::None)
+        {
+            CachedResourcesByNiche.FindOrAdd(Pair.Value.GardenNiche).Add(Pair.Key);
+            CachedWeightsByNiche.FindOrAdd(Pair.Value.GardenNiche).Add(Pair.Value.RarityWeight);
         }
     }
 }
@@ -134,6 +144,26 @@ FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& C
     const TArray<int32>* BaseWeights = CachedWeightsByBiome.Find(Cell.Biome);
     if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return (*Candidates)[0];
 
+    return PickWeightedResource(*Candidates, *BaseWeights, Cell, Context, Rng);
+}
+
+FName UIngredientRegistrySubsystem::GetRandomResourceForNiche(const FGridCell& Cell, EGardenNiche Niche, const FHarvestContext& Context, FRandomStream& Rng) const
+{
+    if (Niche == EGardenNiche::None) return NAME_None;
+
+    const TArray<FName>* Candidates = CachedResourcesByNiche.Find(Niche);
+    if (!Candidates || Candidates->Num() == 0) return NAME_None;
+    if (Candidates->Num() == 1) return (*Candidates)[0];
+
+    const TArray<int32>* BaseWeights = CachedWeightsByNiche.Find(Niche);
+    if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return (*Candidates)[0];
+
+    return PickWeightedResource(*Candidates, *BaseWeights, Cell, Context, Rng);
+}
+
+FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Candidates, const TArray<int32>& BaseWeights,
+    const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
+{
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     // Пригодность (DESIGN_World_State.md §15): AllowedBiomes уже отфильтровал
     // "кто может здесь расти" — Candidates. Здесь решается "сколько шансов у
@@ -149,14 +179,14 @@ FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& C
     const float WindowMismatch = Settings ? Settings->IngredientWindowMismatchMultiplier : 0.15f;
 
     TArray<float> EffectiveWeights;
-    EffectiveWeights.Reserve(Candidates->Num());
+    EffectiveWeights.Reserve(Candidates.Num());
     float TotalWeight = 0.0f;
-    for (int32 i = 0; i < Candidates->Num(); ++i)
+    for (int32 i = 0; i < Candidates.Num(); ++i)
     {
-        const FIngredientTableRow* Row = Rows.Find((*Candidates)[i]);
+        const FIngredientTableRow* Row = Rows.Find(Candidates[i]);
         if (!Row)
         {
-            EffectiveWeights.Add(static_cast<float>((*BaseWeights)[i]));
+            EffectiveWeights.Add(static_cast<float>(BaseWeights[i]));
             TotalWeight += EffectiveWeights.Last();
             continue;
         }
@@ -178,21 +208,21 @@ FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& C
         const float WeatherWindow = WindowMultiplier(Row->bRequiresDryWeather,
             Context.bDryWeather, WindowMismatch);
 
-        const float Weight = static_cast<float>((*BaseWeights)[i]) * Suitability * StressFactor
+        const float Weight = static_cast<float>(BaseWeights[i]) * Suitability * StressFactor
             * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow;
         EffectiveWeights.Add(Weight);
         TotalWeight += Weight;
     }
-    if (TotalWeight <= KINDA_SMALL_NUMBER) return (*Candidates)[0];
+    if (TotalWeight <= KINDA_SMALL_NUMBER) return Candidates[0];
 
     const float Roll = Rng.FRandRange(0.0f, TotalWeight);
     float Accum = 0.0f;
-    for (int32 i = 0; i < Candidates->Num(); ++i)
+    for (int32 i = 0; i < Candidates.Num(); ++i)
     {
         Accum += EffectiveWeights[i];
-        if (Roll <= Accum) return (*Candidates)[i];
+        if (Roll <= Accum) return Candidates[i];
     }
-    return Candidates->Last();
+    return Candidates.Last();
 }
 
 void UIngredientRegistrySubsystem::Reset()

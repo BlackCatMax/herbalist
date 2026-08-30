@@ -198,4 +198,74 @@ bool FHerbalistRegistry_SuitabilityBiasesTowardCloserBaseState::RunTest(const FS
     return true;
 }
 
+// Сад (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31): пристройка
+// подделывает нишу, не переносит биом клетки целиком — GetRandomResourceForNiche
+// должен находить кандидата по EGardenNiche, ИГНОРИРУЯ то, что AllowedBiomes
+// этого кандидата не совпадает с биомом клетки вообще (Кувшинка/Водоём растёт
+// в Речной пойме, но грядка стоит в Степи — постройка это и обходит).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_NicheCandidatesIgnoreAllowedBiomes,
+    "Herbalist.Registry.NicheCandidatesIgnoreAllowedBiomes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRegistry_NicheCandidatesIgnoreAllowedBiomes::RunTest(const FString& Parameters)
+{
+    UDataTable* Table = MakeIngredientTable();
+
+    // Речная трава, физически растущая только в Пойме -- но помечена как
+    // пристройка "Водоём".
+    FIngredientTableRow PondRow;
+    PondRow.AllowedBiomes = { EBiomeType::Floodplain };
+    PondRow.RarityWeight = 1;
+    PondRow.GardenNiche = EGardenNiche::Pond;
+    Table->AddRow(FName(TEXT("WaterLily")), PondRow);
+
+    // Обычная степная трава без пристройки -- не должна попадать в выборку
+    // по нише, даже если растёт в том же биоме, что клетка ниже.
+    FIngredientTableRow SteppeRow;
+    SteppeRow.AllowedBiomes = { EBiomeType::Steppe };
+    SteppeRow.RarityWeight = 1;
+    Table->AddRow(FName(TEXT("Wormwood")), SteppeRow);
+
+    UIngredientRegistrySubsystem* Registry = MakeRegistry(Table);
+
+    // Клетка физически в Степи -- пристройка "Водоём" стоит поверх неё.
+    FGridCell Cell;
+    Cell.Biome = EBiomeType::Steppe;
+    FHarvestContext Context;
+    FRandomStream Rng(777);
+
+    const FName Picked = Registry->GetRandomResourceForNiche(Cell, EGardenNiche::Pond, Context, Rng);
+    TestEqual(TEXT("Niche query returns the pond-tagged plant despite the cell being Steppe, not Floodplain"),
+        Picked, FName(TEXT("WaterLily")));
+
+    Registry->Reset();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_NicheNoneYieldsNoCandidate,
+    "Herbalist.Registry.NicheNoneYieldsNoCandidate",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRegistry_NicheNoneYieldsNoCandidate::RunTest(const FString& Parameters)
+{
+    UDataTable* Table = MakeIngredientTable();
+    FIngredientTableRow Row;
+    Row.AllowedBiomes = { EBiomeType::Steppe };
+    Row.GardenNiche = EGardenNiche::SunnyBed;
+    Table->AddRow(FName(TEXT("SomeHerb")), Row);
+
+    UIngredientRegistrySubsystem* Registry = MakeRegistry(Table);
+
+    FGridCell Cell;
+    Cell.Biome = EBiomeType::Steppe;
+    FHarvestContext Context;
+    FRandomStream Rng(778);
+
+    const FName Picked = Registry->GetRandomResourceForNiche(Cell, EGardenNiche::None, Context, Rng);
+    TestTrue(TEXT("Querying EGardenNiche::None always returns NAME_None, not an arbitrary candidate"), Picked.IsNone());
+
+    Registry->Reset();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS

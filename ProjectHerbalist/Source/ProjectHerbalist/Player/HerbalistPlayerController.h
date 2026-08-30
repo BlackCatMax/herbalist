@@ -120,6 +120,15 @@ public:
     UFUNCTION(Exec)
     void SetGatheringTool(FString ToolName);
 
+    // Зарегистрировать клетку как грядку сада с пристройкой NicheName
+    // (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) — "mycelium"/
+    // "cellar"/"pond"/"sunny"/"shade", "none" снимает регистрацию. v1:
+    // тот же приём, что SetGatheringTool — консоль вместо физической
+    // постройки-актора, сам механизм (AGridWorldManager::GardenPlots →
+    // GetRandomResourceForNiche) работает уже сейчас.
+    UFUNCTION(Exec)
+    void SetGardenPlot(int32 X, int32 Y, FString NicheName);
+
     // Экранный попап текста воспоминания Заряны/объявления Буяна
     // (UI/MemoryRevealWidget.h, "Прогрессия/Заряна" 2026-08-29) — вызывается
     // из AGridWorldManager (CollectMemoryFragment/CheckBuyanCondition), не

@@ -145,6 +145,21 @@ public:
     ERitualStepResult TryAdvanceRitual(const FIntPoint& CauldronCell, const TArray<FInventoryItem>& NewIngredients,
         FRandomStream& Rng, FInventoryItem& OutPotion);
 
+    // ---- Сад (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) ----
+    // Клетка с зарегистрированной пристройкой (Грибница/Погреб/Водоём/
+    // Открытая или Тенистая грядка) — SpawnResourcesInCell/StartRegeneration
+    // берут кандидатов из EGardenNiche ингредиента вместо AllowedBiomes
+    // клетки (постройка физически подделывает нишу, не переносит биом
+    // целиком, см. IngredientRegistrySubsystem::GetRandomResourceForNiche).
+    // v1: регистрируется Exec-командой (SetGardenPlot на PlayerController),
+    // не физической постройкой-актором — тот же принцип, что и у
+    // CurrentGatheringTool: сам механизм работает уже сейчас, экономика/
+    // визуал пристроек — отдельный, ещё не реализованный проход.
+    UPROPERTY()
+    TMap<FIntPoint, EGardenNiche> GardenPlots;
+
+    void RegisterGardenPlot(const FIntPoint& Cell, EGardenNiche Niche);
+
     // ---- Сбор ----
     FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
     FRealState HarvestFromCellSimple(int32 X, int32 Y);
