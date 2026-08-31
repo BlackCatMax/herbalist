@@ -9,16 +9,20 @@ tags: [technical, current, inventory]
 ## `FInventoryItem`
 
 struct FInventoryItem {
-    EResourceType Type;
+    FName IngredientID;
     FRealState State;
     int32 Count;
+    float CreationTime;
+    bool bSubjectToDecay;
+    bool bIsWater;
+    EAlchemyOutcome BrewOutcome;
 };
 
 ## Стекирование
 
 Два предмета считаются стекуемыми, если:
 
-- Одинаковый `Type`.
+- Одинаковый `IngredientID`.
     
 - Различия по ключевым параметрам не превышают порогов:
     

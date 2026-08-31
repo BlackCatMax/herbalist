@@ -38,7 +38,7 @@
     { "Name": "mix_04", "AllowedSeasons": ["Spring"], "HarvestTimeWindow": "Dawn", "bRequiresDryWeather": true },
     { "Name": "mix_05", "AllowedSeasons": ["Summer"], "bAutumnOnly": true, "bRequiresDryWeather": true, "bRequiresMoonPhase": true, "RequiredMoonPhase": "WaningMoon" },
     { "Name": "mix_06", "AllowedSeasons": ["Spring"], "HarvestTimeWindow": "Day", "bRequiresDryWeather": true },
-    { "Name": "mix_09", "AllowedSeasons": ["Summer"], "bRequiresMoonPhase": true, "RequiredMoonPhase": "FullMoon" },
+    { "Name": "mix_09", "AllowedSeasons": ["Summer"], "bRequiresMoonPhase": true, "RequiredMoonPhase": "FullMoon", "bRequiresDryWeather": true },
     { "Name": "mix_07", "AllowedSeasons": ["Spring"], "bRequiresMoonPhase": true, "RequiredMoonPhase": "WaningMoon" },
     { "Name": "mix_08", "AllowedSeasons": ["Spring", "Summer"], "bAutumnOnly": true, "bRequiresDryWeather": true, "bRequiresMoonPhase": true, "RequiredMoonPhase": "WaningMoon" },
 

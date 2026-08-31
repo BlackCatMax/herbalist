@@ -6,4 +6,4 @@ status: ✅
 
 **GDD:** Слой искажения восприятия.
 
-**Tech:** Perception::PerceiveValue — мультипликативное искажение с bounded output. Perception::PerceiveClass — вероятностная подмена класса. Использует глобальный Distortion из HerbalistPlayerController. **Реализовано: Фаза 3.**
+**Tech:** `Perception::PerceiveValue` — мультипликативное искажение значений с bounded output, использует глобальный Distortion из `HerbalistPlayerController`. **Реализовано.** `Perception::PerceiveClass` (вероятностная подмена класса) в коде не существует — не реализовано.

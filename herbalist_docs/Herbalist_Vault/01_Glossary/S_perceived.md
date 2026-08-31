@@ -6,6 +6,6 @@ status: ✅
 
 **GDD:** Воспринимаемое состояние мира. Формируется как искажённая версия [[S_real]] через Morok.
 
-**Tech:** Perception::PerceiveValue(RealValue, GlobalDistortion, Random) — мультипликативное искажение. Perception::PerceiveClass — вероятностная подмена. Используется в ItemTooltipWidget. **Реализовано: Фаза 3.**
+**Tech:** `Perception::PerceiveValue(RealValue, GlobalDistortion, Random)` — мультипликативное искажение значений, используется в `ItemTooltipWidget`. **Реализовано.** `Perception::PerceiveClass` (вероятностная подмена класса предмета) в коде не существует — не реализовано.
 
 **Связи:** [[S_real]], [[Morok]], [[Perception]], ItemTooltipWidget

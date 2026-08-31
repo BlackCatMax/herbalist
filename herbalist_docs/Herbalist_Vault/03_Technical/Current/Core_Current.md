@@ -37,6 +37,8 @@ struct FEnvironment {
 
 struct FMemoryState {
     float AccumulatedDistortion, StabilityMemory, HistoryPurity;
+    float DistortionVelocity, TimeOfLastDistortionChange;
+    bool bDegrading;
 };
 
 ### `FIntent`

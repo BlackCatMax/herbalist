@@ -6,7 +6,7 @@ tags: [glossary, index]
 
 ## Состояние
 - [[S_real]] ✅
-- [[S_Perceived]] ❌ (не реализовано)
+- [[S_Perceived]] ✅ (искажение значений реализовано; `PerceiveClass`, подмена класса, — нет)
 - [[S0]] (Алатырь) ✅
 
 ## Оси
@@ -40,7 +40,7 @@ tags: [glossary, index]
 
 ## Системы
 - [[GridWorldManager]] ✅
-- [[BiomeState]] ❌ (не реализовано)
+- [[BiomeState]] ✅ (динамично, `UBiomeGraphSubsystem`)
 
 ## Стихии
 - [[Вода]]
