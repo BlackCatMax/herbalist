@@ -206,6 +206,22 @@ struct PROJECTHERBALIST_API FWorldState
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FRealState CurrentState;
 };
 
+// Доля присутствия биома в клетке (PCG-сплайн-регионы, 2026-08-31) —
+// клетка на стыке нескольких ABiomeRegionVolume делит вес поровну между
+// ними (1/N, не авторская "сила" региона — вертикальный срез). Только
+// для взвешенного спавна ингредиентов (IngredientRegistrySubsystem::
+// GetRandomResourceForBiome) — все остальные потребители биома (капища,
+// хозяева места, биом-граф, тип воды) по-прежнему читают один дискретный
+// FGridCell::Biome ниже, не эту структуру, см. комментарий у BiomeWeights.
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FBiomeWeightEntry
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) EBiomeType Biome = EBiomeType::MixedForest;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) float Weight = 1.0f;
+};
+
 // ========== Структура клетки ==========
 USTRUCT(BlueprintType)
 struct PROJECTHERBALIST_API FGridCell
@@ -214,6 +230,16 @@ struct PROJECTHERBALIST_API FGridCell
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 X = 0, Y = 0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EBiomeType Biome = EBiomeType::MixedForest;
+
+    // Разбивка биома на доли (PCG-сплайн-регионы, 2026-08-31,
+    // AGridWorldManager::InitializeCells) — пусто = клетка вне всех
+    // регионов, GetRandomResourceForBiome в этом случае откатывается на
+    // {Biome: 1.0} выше, не крашит и не меняет поведение (обратная
+    // совместимость с тестами, которые выставляют только Biome). Biome
+    // выше — не производная от этого массива в общем случае, а
+    // независимо посчитанная доминанта (см. InitializeCells) — оба поля
+    // считаются одним проходом, не одно из другого.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FBiomeWeightEntry> BiomeWeights;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FRealState State;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FRealState TargetState;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FEnvironment Environment;
