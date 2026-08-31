@@ -195,7 +195,7 @@ S_perceived = Distort(S_real, Morok)
 1. **Начните с:** [[00_Core_Lock]] — фундамент системы
 2. **Затем:** [[01_Glossary/_Index|Глоссарий]] — все термины
 3. **Погружение:** [[13_World_Pipeline]] — полный цикл
-4. **Техническая реализация:** [[03_Technical/Current/Core_Current|Core_Current]] — ⚠️ `03_Technical/Current/` заморожен на прототипе апреля 2026 и заметно устарел относительно текущего кода (см. `World_Current.md`/`Alchemy_Current.md`); актуальный источник правды — `CHANGELOG.md`/`ROADMAP.md` в корне репозитория.
+4. **Техническая реализация:** [[03_Technical/Current/Core_Current|Core_Current]] — ⚠️ `03_Technical/Current/` заморожен на прототипе апреля 2026 и заметно устарел относительно текущего кода; `World_Current.md`/`Alchemy_Current.md` перенесены в `03_Technical/Archive/` 2026-08-31 (полная перезапись признана нецелесообразной). Актуальный источник правды — `CHANGELOG.md`/`ROADMAP.md` в корне репозитория.
 
 ---
 
