@@ -62,6 +62,15 @@ private:
     // — вынесена из GetRandomResourceForBiome, чтобы GetRandomResourceForNiche
     // не дублировал ту же формулу (Suitability по State + сезон/время/луна/
     // погода) над другим списком кандидатов.
-    FName PickWeightedResource(const TArray<FName>& Candidates, const TArray<int32>& BaseWeights,
+    //
+    // BaseWeights — TArray<float>, не int32 (правка 2026-08-31, PCG-биомы):
+    // GetRandomResourceForBiome домножает базовый вес карточки на долю
+    // клетки в биоме (Cell.BiomeWeights, может быть 0.5/0.33/...) до
+    // вызова этой функции — при исходном int32 умножение "1 (дефолтный
+    // RarityWeight) * 0.5" усекалось бы до 0, ингредиент с обычным весом
+    // становился бы невыбираемым на любом стыке двух регионов, без единой
+    // ошибки в логе. Сама функция ниже не меняется — она уже кастовала
+    // BaseWeights[i] в float на каждой итерации.
+    FName PickWeightedResource(const TArray<FName>& Candidates, const TArray<float>& BaseWeights,
         const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
 };

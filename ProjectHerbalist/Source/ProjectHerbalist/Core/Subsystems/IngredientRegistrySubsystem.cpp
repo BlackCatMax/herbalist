@@ -137,14 +137,52 @@ namespace
 
 FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
 {
-    const TArray<FName>* Candidates = CachedResourcesByBiome.Find(Cell.Biome);
-    if (!Candidates || Candidates->Num() == 0) return NAME_None;
-    if (Candidates->Num() == 1) return (*Candidates)[0];
+    // PCG-биомы (2026-08-31): Cell.BiomeWeights пуст для клетки вне всех
+    // ABiomeRegionVolume (см. AGridWorldManager::InitializeCells) --
+    // обязательный откат на {Cell.Biome: 1.0}, не опция. Сохраняет
+    // побитовую совместимость со всем, что конструирует FGridCell
+    // напрямую и выставляет только Biome (IngredientHarvestWindowTest.cpp/
+    // IngredientRegistryTest.cpp, 8 тестов, ни один не трогает BiomeWeights).
+    TArray<FBiomeWeightEntry> Weights = Cell.BiomeWeights;
+    if (Weights.Num() == 0)
+    {
+        FBiomeWeightEntry Fallback;
+        Fallback.Biome = Cell.Biome;
+        Fallback.Weight = 1.0f;
+        Weights.Add(Fallback);
+    }
 
-    const TArray<int32>* BaseWeights = CachedWeightsByBiome.Find(Cell.Biome);
-    if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return (*Candidates)[0];
+    // Один взвешенный ролл над объединённым списком кандидатов всех долей
+    // клетки, не отдельный RNG-бросок "какой биом сначала" -- сохраняет
+    // однодетерминированную схему, на которой держится весь пайплайн (тот
+    // же сид -> тот же результат, без лишнего потребления Rng).
+    TArray<FName> MergedCandidates;
+    TArray<float> MergedWeights;
+    for (const FBiomeWeightEntry& Entry : Weights)
+    {
+        const TArray<FName>* Candidates = CachedResourcesByBiome.Find(Entry.Biome);
+        if (!Candidates || Candidates->Num() == 0) continue;
 
-    return PickWeightedResource(*Candidates, *BaseWeights, Cell, Context, Rng);
+        const TArray<int32>* BaseWeights = CachedWeightsByBiome.Find(Entry.Biome);
+        // Кэши строятся в одном проходе BuildCache() и всегда одной длины
+        // -- на практике недостижимо, защитный пропуск этой доли, не крах.
+        if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) continue;
+
+        for (int32 i = 0; i < Candidates->Num(); ++i)
+        {
+            // Один и тот же FName-кандидат из двух пересекающихся биомов
+            // — сознательно НЕ дедуплицируется, вероятностная масса
+            // складывается (верно для равного распределения на стыке
+            // регионов — не "чинить" обратно в дедуп).
+            MergedCandidates.Add((*Candidates)[i]);
+            MergedWeights.Add(static_cast<float>((*BaseWeights)[i]) * Entry.Weight);
+        }
+    }
+
+    if (MergedCandidates.Num() == 0) return NAME_None;
+    if (MergedCandidates.Num() == 1) return MergedCandidates[0];
+
+    return PickWeightedResource(MergedCandidates, MergedWeights, Cell, Context, Rng);
 }
 
 FName UIngredientRegistrySubsystem::GetRandomResourceForNiche(const FGridCell& Cell, EGardenNiche Niche, const FHarvestContext& Context, FRandomStream& Rng) const
@@ -158,10 +196,19 @@ FName UIngredientRegistrySubsystem::GetRandomResourceForNiche(const FGridCell& C
     const TArray<int32>* BaseWeights = CachedWeightsByNiche.Find(Niche);
     if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return (*Candidates)[0];
 
-    return PickWeightedResource(*Candidates, *BaseWeights, Cell, Context, Rng);
+    // Ниша сада не пересекается (один Niche на клетку, не список) --
+    // просто перевод int32->float перед вызовом общей функции, без merge.
+    TArray<float> FloatWeights;
+    FloatWeights.Reserve(BaseWeights->Num());
+    for (int32 W : *BaseWeights)
+    {
+        FloatWeights.Add(static_cast<float>(W));
+    }
+
+    return PickWeightedResource(*Candidates, FloatWeights, Cell, Context, Rng);
 }
 
-FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Candidates, const TArray<int32>& BaseWeights,
+FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Candidates, const TArray<float>& BaseWeights,
     const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();
@@ -186,7 +233,7 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
         const FIngredientTableRow* Row = Rows.Find(Candidates[i]);
         if (!Row)
         {
-            EffectiveWeights.Add(static_cast<float>(BaseWeights[i]));
+            EffectiveWeights.Add(BaseWeights[i]);
             TotalWeight += EffectiveWeights.Last();
             continue;
         }
@@ -208,7 +255,7 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
         const float WeatherWindow = WindowMultiplier(Row->bRequiresDryWeather,
             Context.bDryWeather, WindowMismatch);
 
-        const float Weight = static_cast<float>(BaseWeights[i]) * Suitability * StressFactor
+        const float Weight = BaseWeights[i] * Suitability * StressFactor
             * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow;
         EffectiveWeights.Add(Weight);
         TotalWeight += Weight;
