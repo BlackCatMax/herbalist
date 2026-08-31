@@ -48,7 +48,7 @@ void AMemoryFragmentActor::Tick(float DeltaTime)
     RemainingLifetime -= DeltaTime;
     if (RemainingLifetime <= 0.0f)
     {
-        UE_LOG(LogHerbalistWorld, Log, TEXT("[MemoryFragment] %s at (%d,%d) faded uncollected"),
+        UE_LOG(LogHerbalistZaryana, Log, TEXT("[MemoryFragment] %s at (%d,%d) faded uncollected"),
             *DefinitionID.ToString(), GridX, GridY);
         Destroy();
     }

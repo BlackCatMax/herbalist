@@ -145,7 +145,7 @@ void AGridWorldManager::SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoin
     ActiveFragment = Fragment;
     FragmentSpawnCooldownRemaining = Settings ? Settings->MemoryFragmentSpawnCooldownSeconds : 300.0f;
 
-    UE_LOG(LogHerbalistWorld, Log, TEXT("[Zaryana] Fragment %s%s spawned at (%d,%d)"),
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] Fragment %s%s spawned at (%d,%d)"),
         *DefinitionID.ToString(), bActuallyFalse ? TEXT(" (FALSE)") : TEXT(""), Cell.X, Cell.Y);
 }
 
@@ -163,14 +163,14 @@ void AGridWorldManager::CollectMemoryFragment(FName DefinitionID, bool bIsFalse,
         // ID (CollectedFragmentIDs не трогаем) и слегка портит уже набранную
         // ясность, а не даёт её.
         GlobalPerceptionClarity = FMath::Max(GlobalPerceptionClarity - Def->ClarityGain * 0.5f, 0.0f);
-        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Zaryana] Ложное воспоминание (%s): \"%s\""),
+        UE_LOG(LogHerbalistZaryana, Warning, TEXT("[Zaryana] Ложное воспоминание (%s): \"%s\""),
             *DefinitionID.ToString(), *Def->FalseText.ToString());
     }
     else
     {
         CollectedFragmentIDs.Add(DefinitionID);
         GlobalPerceptionClarity = FMath::Clamp(GlobalPerceptionClarity + Def->ClarityGain, 0.0f, 1.0f);
-        UE_LOG(LogHerbalistWorld, Log, TEXT("[Zaryana] Подлинное воспоминание (%s): \"%s\" (Clarity=%.2f)"),
+        UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] Подлинное воспоминание (%s): \"%s\" (Clarity=%.2f)"),
             *DefinitionID.ToString(), *Def->TrueText.ToString(), GlobalPerceptionClarity);
     }
 
@@ -232,7 +232,7 @@ void AGridWorldManager::CheckBuyanCondition()
     }
 
     bBuyanReached = true;
-    UE_LOG(LogHerbalistWorld, Log, TEXT("[Zaryana] === БУЯН ДОСТИГНУТ === (AvgDistance=%.3f)"), AvgDistance);
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] === БУЯН ДОСТИГНУТ === (AvgDistance=%.3f)"), AvgDistance);
     // Открытие скрытой локации с живой/мёртвой водой — контентная задача
     // (level design), не код: см. DESIGN_World_State.md, раздел про Буян.
     // Здесь — только флаг, который такой контент сможет прочитать.
@@ -253,14 +253,14 @@ void AGridWorldManager::CheckBuyanCondition()
 
 void AGridWorldManager::ShowZaryanaStatus()
 {
-    UE_LOG(LogHerbalistWorld, Log, TEXT("=== ZARYANA STATUS ==="));
-    UE_LOG(LogHerbalistWorld, Log, TEXT("GlobalPerceptionClarity: %.2f"), GlobalPerceptionClarity);
-    UE_LOG(LogHerbalistWorld, Log, TEXT("Buyan reached: %s"), bBuyanReached ? TEXT("true") : TEXT("false"));
-    UE_LOG(LogHerbalistWorld, Log, TEXT("Collected fragments (%d):"), CollectedFragmentIDs.Num());
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("=== ZARYANA STATUS ==="));
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("GlobalPerceptionClarity: %.2f"), GlobalPerceptionClarity);
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("Buyan reached: %s"), bBuyanReached ? TEXT("true") : TEXT("false"));
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("Collected fragments (%d):"), CollectedFragmentIDs.Num());
     for (FName ID : CollectedFragmentIDs)
     {
-        UE_LOG(LogHerbalistWorld, Log, TEXT("  - %s"), *ID.ToString());
+        UE_LOG(LogHerbalistZaryana, Log, TEXT("  - %s"), *ID.ToString());
     }
-    UE_LOG(LogHerbalistWorld, Log, TEXT("Active fragment in world: %s"),
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("Active fragment in world: %s"),
         ActiveFragment.IsValid() ? *ActiveFragment->GetDefinitionID().ToString() : TEXT("none"));
 }

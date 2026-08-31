@@ -55,7 +55,7 @@ void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
         FGridCell* Cell = GetCell(Saved.X, Saved.Y);
         if (!Cell)
         {
-            UE_LOG(LogHerbalistWorld, Warning, TEXT("ApplySaveCells: no cell at (%d,%d), skipped (grid size mismatch?)"), Saved.X, Saved.Y);
+            UE_LOG(LogHerbalistSave, Warning, TEXT("ApplySaveCells: no cell at (%d,%d), skipped (grid size mismatch?)"), Saved.X, Saved.Y);
             continue;
         }
 

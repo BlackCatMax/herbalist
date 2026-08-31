@@ -46,7 +46,7 @@ void AAlchemyTableActor::BeginPlay()
         }
         else
         {
-            UE_LOG(LogHerbalistWorld, Warning, TEXT("AlchemyTableActor at %s is outside the grid — no shrine registered"), *GetActorLocation().ToString());
+            UE_LOG(LogHerbalistAlchemy, Warning, TEXT("AlchemyTableActor at %s is outside the grid — no shrine registered"), *GetActorLocation().ToString());
         }
         break;
     }

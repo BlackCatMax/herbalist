@@ -10,3 +10,5 @@ DEFINE_LOG_CATEGORY(LogHerbalistWorld);
 DEFINE_LOG_CATEGORY(LogHerbalistUI);
 DEFINE_LOG_CATEGORY(LogHerbalistPlayer);
 DEFINE_LOG_CATEGORY(LogHerbalistData);
+DEFINE_LOG_CATEGORY(LogHerbalistSave);
+DEFINE_LOG_CATEGORY(LogHerbalistZaryana);
