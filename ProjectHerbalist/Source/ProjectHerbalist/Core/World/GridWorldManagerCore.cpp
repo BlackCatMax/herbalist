@@ -9,6 +9,7 @@
 #include "Core/Types/BiomeRow.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
+#include "Core/World/BiomeRegionVolume.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
@@ -289,19 +290,90 @@ void AGridWorldManager::InitializeCells()
         };
     }
 
-    // Закрашиваем сетку блоками по 5x5 клеток
+    // PCG-биомы (2026-08-31) -- собираем ABiomeRegionVolume, расставленные
+    // в уровне, один раз до цикла по клеткам. Явно пересчитываем кэш точек
+    // каждого региона (Region->UpdateCachedPoints()), не полагаясь на то,
+    // что его собственный BeginPlay уже отработал -- UE не гарантирует
+    // порядок BeginPlay между акторами уровня.
+    TArray<ABiomeRegionVolume*> BiomeRegions;
+    for (TActorIterator<ABiomeRegionVolume> It(GetWorld()); It; ++It)
+    {
+        ABiomeRegionVolume* Region = *It;
+        if (!Region) continue;
+        Region->UpdateCachedPoints();
+        BiomeRegions.Add(Region);
+    }
+    if (BiomeRegions.Num() == 0)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: ни одного ABiomeRegionVolume не найдено в уровне -- вся сетка идёт по блочному фолбэку (5x5)"));
+    }
+
+    // Блочная раскраска 5x5 остаётся ФОЛБЭКОМ для клеток вне всех
+    // размещённых регионов (не отменена, не заменена целиком) -- система
+    // деградирует плавно, пока авторская расстановка регионов неполная,
+    // вместо краха/единственного дефолтного биома на пробелах.
     const int32 BlockSize = 5;
     const int32 BlocksX = GridSizeX / BlockSize;
     const int32 BlocksY = GridSizeY / BlockSize;
+    int32 FallbackCellCount = 0;
 
     for (int32 Y = 0; Y < GridSizeY; ++Y)
     {
         for (int32 X = 0; X < GridSizeX; ++X)
         {
             int32 Index = Y * GridSizeX + X;
-            EBiomeType biome = AllBiomes[( (Y / BlockSize) * BlocksX + (X / BlockSize) ) % AllBiomes.Num()];
-
             FGridCell& Cell = Cells[Index];
+
+            // Какие регионы содержат клетку -- равная доля на каждый
+            // (0.5/0.5 на двух, 1/3 на трёх и т.д., без авторского
+            // "усиления" региона -- вертикальный срез v1, прямое решение
+            // пользователя).
+            Cell.BiomeWeights.Reset();
+            const FVector CellWorldPos = GetCellWorldPositionFlat(X, Y);
+            for (ABiomeRegionVolume* Region : BiomeRegions)
+            {
+                if (Region && Region->IsPointInside(CellWorldPos))
+                {
+                    Cell.BiomeWeights.Add(FBiomeWeightEntry{ Region->Biome, 1.0f });
+                }
+            }
+
+            EBiomeType biome;
+            if (Cell.BiomeWeights.Num() > 0)
+            {
+                const float Share = 1.0f / Cell.BiomeWeights.Num();
+                for (FBiomeWeightEntry& Entry : Cell.BiomeWeights)
+                {
+                    Entry.Weight = Share;
+                }
+
+                // Доминанта -- наибольший вес; при точном равенстве (v1: у
+                // равных долей ВСЕГДА равенство) -- меньший порядковый
+                // номер EBiomeType. Не "первый по порядку акторов" --
+                // порядок TActorIterator зависит от порядка в Outliner/
+                // пересохранения уровня, скрытая невоспроизводимая
+                // зависимость, которой у старой блочной формулы не было.
+                biome = Cell.BiomeWeights[0].Biome;
+                float BestWeight = Cell.BiomeWeights[0].Weight;
+                for (int32 i = 1; i < Cell.BiomeWeights.Num(); ++i)
+                {
+                    const FBiomeWeightEntry& Entry = Cell.BiomeWeights[i];
+                    const bool bStrictlyBetter = Entry.Weight > BestWeight + KINDA_SMALL_NUMBER;
+                    const bool bTieBrokenByOrdinal = FMath::IsNearlyEqual(Entry.Weight, BestWeight, KINDA_SMALL_NUMBER)
+                        && static_cast<uint8>(Entry.Biome) < static_cast<uint8>(biome);
+                    if (bStrictlyBetter || bTieBrokenByOrdinal)
+                    {
+                        biome = Entry.Biome;
+                        BestWeight = Entry.Weight;
+                    }
+                }
+            }
+            else
+            {
+                biome = AllBiomes[( (Y / BlockSize) * BlocksX + (X / BlockSize) ) % AllBiomes.Num()];
+                ++FallbackCellCount;
+            }
+
             Cell.Biome        = biome;
             Cell.State        = FBiomeDefaults::GetDefaultState(biome);
             Cell.TargetState  = Cell.State;
@@ -313,6 +385,12 @@ void AGridWorldManager::InitializeCells()
             Cell.bIsWater     = false;
             Cell.WaterTypeID  = NAME_None;
         }
+    }
+
+    if (BiomeRegions.Num() > 0 && FallbackCellCount > 0)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: %d/%d клеток (%.0f%%) вне всех ABiomeRegionVolume -- для них взят блочный фолбэк"),
+            FallbackCellCount, TotalCells, TotalCells > 0 ? 100.0f * FallbackCellCount / TotalCells : 0.0f);
     }
 
     // ------------------------------------------------------------------------
