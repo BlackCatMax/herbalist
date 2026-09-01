@@ -690,6 +690,24 @@ public:
     // за одно применение (само применение — Exec-команда, не расходуется).
     UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0"))
     float InvisibilityCapDurationSeconds = 300.0f;
+
+    // Прогрев артефактов, вариант C (§21.4, 2026-09-01, ревизия "Update
+    // docs"/"Update artifacts") — зелье нужного типа, сваренное в родном
+    // регионе при проявленной сущности, прибавляет ArtifactWarmthGainPerBrew
+    // к FAcquiredArtifact::Warmth; "прогрет" = Warmth >= ArtifactWarmthThreshold.
+    // Черновые числа — порог соответствует примерно пяти удачным варкам
+    // подряд ("долгий хороший контакт", не одна варка).
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0"))
+    float ArtifactWarmthGainPerBrew = 0.2f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0"))
+    float ArtifactWarmthThreshold = 1.0f;
+
+    // Фонарь — исключение (§21.4: "асимметрия отражает нарративную: честные
+    // артефакты растут вглубь, краденый — вширь"), прогревается от
+    // GlobalPerceptionClarity напрямую, не от Warmth/зелья/региона.
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float LanternWarmClarityThreshold = 0.7f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

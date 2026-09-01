@@ -15,6 +15,61 @@
 #include "Core/Simulation/Private/PerceptionService.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+
+namespace
+{
+    // Тематика зелья по доминирующей черте существа (21_Journey_And_Artifacts.md
+    // §21.4, 2026-09-01, ревизия "Update docs"/"Update artifacts") — черновые
+    // эвристики на существующих осях FRealState, не точная спецификация: глава
+    // называет только направление ("зелье чистоты источника" и т.п.), не
+    // формулу. Рог/Гребень читаются одинаково (оба про "чистоту") — глава не
+    // даёт способа различить их механически, не изобретаю разницу сам.
+    bool MatchesArtifactPotionType(FName ArtifactID, const FRealState& PotionState)
+    {
+        if (ArtifactID == FName(TEXT("Рог")) || ArtifactID == FName(TEXT("Гребень")))
+        {
+            return PotionState.Meta.Purity >= 0.7f;   // "чистота источника" / "чистая вода"
+        }
+        if (ArtifactID == FName(TEXT("Молодильное яблоко")) || ArtifactID == FName(TEXT("Зеркальце")))
+        {
+            return PotionState.Meta.Purity >= 0.7f && PotionState.Meta.Distortion <= 0.2f;   // "истина/ясность"
+        }
+        if (ArtifactID == FName(TEXT("Камень-оберег")))
+        {
+            return PotionState.Meta.Stability >= 0.7f;
+        }
+        if (ArtifactID == FName(TEXT("Шапка-невидимка")))
+        {
+            // "Незаметность/тишина" — ближайшее честное чтение: не громкое
+            // (низкий Magnitude), не бросающееся в глаза (низкий Resonance,
+            // ось уже читается в проекте как "прозорливость/заметность").
+            return PotionState.Magnitude <= 0.5f && PotionState.Meta.Resonance <= 0.3f;
+        }
+        return false;   // Клубочек — отдельная, не осевая проверка (см. ниже); Фонарь не через Warmth вовсе
+    }
+
+    // Клубочек — "зелье, требующее ингредиентов из нескольких биомов, не
+    // одного — путешествие как рецепт" (§21.4). Нет per-предметного учёта,
+    // откуда конкретно собран ИМЕННО этот экземпляр — приближено через
+    // статический AllowedBiomes каждого использованного IngredientID
+    // (UIngredientRegistrySubsystem), не точная провенанс-система.
+    bool OfferingSpansMultipleBiomes(const TArray<FInventoryItem>& Ingredients, UIngredientRegistrySubsystem* IngredientSubsystem)
+    {
+        if (!IngredientSubsystem) return false;
+        TSet<EBiomeType> Biomes;
+        for (const FInventoryItem& Item : Ingredients)
+        {
+            const FIngredientTableRow* Row = IngredientSubsystem->GetRow(Item.IngredientID);
+            if (!Row) continue;
+            for (EBiomeType Biome : Row->AllowedBiomes)
+            {
+                Biomes.Add(Biome);
+            }
+        }
+        return Biomes.Num() >= 2;
+    }
+}
 
 void AGridWorldManager::Tick(float DeltaTime)
 {
@@ -286,6 +341,69 @@ void AGridWorldManager::RunSimulationStep()
                 Artifact.bBifurcationChargeSpent = true;
                 UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Камень-оберег charge spent"));
                 break;
+            }
+        }
+    }
+
+    // Прогрев артефактов, вариант C (21_Journey_And_Artifacts.md §21.4,
+    // 2026-09-01, ревизия "Update docs"/"Update artifacts") — зелье нужного
+    // типа, сваренное в родном регионе артефакта при уже проявленной
+    // сущности, поднимает Warmth. Тот же гейт (IsLegendaryManifested/
+    // IsBereginyaManifested), что уже определяет проявление сущности и
+    // доступность артефакта честным путём — переиспользован, не изобретён
+    // новый порог. Фонарь исключён (bWarmsFromGlobalClarity — свой путь
+    // через GlobalPerceptionClarity, IsArtifactWarmed).
+    if (Delta.InventoryOps.Num() > 0 && AcquiredArtifacts.Num() > 0)
+    {
+        int32 WarmthOpIndex = 0;
+        for (const FCommandEntry& Cmd : CommandsCopy)
+        {
+            if (Cmd.Primitive != ECommandPrimitive::Apply || !Cmd.Apply.bIsCrafting) continue;
+
+            while (WarmthOpIndex < Delta.InventoryOps.Num()
+                && !(Delta.InventoryOps[WarmthOpIndex].OpType == EInventoryOpType::Add
+                    && Delta.InventoryOps[WarmthOpIndex].ContainerID == 0))
+            {
+                ++WarmthOpIndex;
+            }
+            if (WarmthOpIndex >= Delta.InventoryOps.Num()) break;
+
+            const FInventoryItem& Produced = Delta.InventoryOps[WarmthOpIndex].Ingredient;
+            ++WarmthOpIndex;
+            if (Produced.IngredientID != FName(TEXT("Potion"))) continue;
+
+            const FGridCell* BrewCell = GetCellConst(Cmd.Apply.TargetCell.X, Cmd.Apply.TargetCell.Y);
+            if (!BrewCell) continue;
+
+            for (FAcquiredArtifact& Artifact : AcquiredArtifacts)
+            {
+                const FArtifactDefinition* Def = FindArtifactDefinition(Artifact.ArtifactID);
+                if (!Def || Def->bWarmsFromGlobalClarity || Def->Biome != BrewCell->Biome) continue;
+
+                const bool bLegendaryManifested = Def->LegendaryEntityID.IsNone()
+                    ? IsBereginyaManifested()
+                    : IsLegendaryManifested(Def->LegendaryEntityID);
+                if (!bLegendaryManifested) continue;
+
+                bool bTypeMatches = false;
+                if (Artifact.ArtifactID == FName(TEXT("Клубочек")))
+                {
+                    UGameInstance* GameInstanceRef = GetGameInstance();
+                    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstanceRef ? GameInstanceRef->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+                    bTypeMatches = OfferingSpansMultipleBiomes(Cmd.Apply.Ingredients, IngredientSubsystem);
+                }
+                else
+                {
+                    bTypeMatches = MatchesArtifactPotionType(Artifact.ArtifactID, Produced.State);
+                }
+                if (!bTypeMatches) continue;
+
+                const UHerbalistSettings* WarmthSettings = GetHerbalistSettings();
+                const float Gain = WarmthSettings ? WarmthSettings->ArtifactWarmthGainPerBrew : 0.2f;
+                const float Threshold = WarmthSettings ? WarmthSettings->ArtifactWarmthThreshold : 1.0f;
+                Artifact.Warmth = FMath::Min(Artifact.Warmth + Gain, Threshold);
+                UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] %s Warmth += %.2f (now %.2f)"),
+                    *Artifact.ArtifactID.ToString(), Gain, Artifact.Warmth);
             }
         }
     }

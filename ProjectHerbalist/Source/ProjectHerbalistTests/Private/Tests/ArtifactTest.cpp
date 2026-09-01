@@ -211,11 +211,11 @@ bool FHerbalistArtifact_LanternIsAlwaysAcquiredViaDeception::RunTest(const FStri
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_CompanionArtifactsDoNotAddToAcquiredList,
-    "Herbalist.Artifact.CompanionArtifactsDoNotAddToAcquiredList",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_CompanionArtifactsAddToAcquiredListOnGeneralPath,
+    "Herbalist.Artifact.CompanionArtifactsAddToAcquiredListOnGeneralPath",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistArtifact_CompanionArtifactsDoNotAddToAcquiredList::RunTest(const FString& Parameters)
+bool FHerbalistArtifact_CompanionArtifactsAddToAcquiredListOnGeneralPath::RunTest(const FString& Parameters)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
@@ -223,6 +223,10 @@ bool FHerbalistArtifact_CompanionArtifactsDoNotAddToAcquiredList::RunTest(const 
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
+    // §21.2 (ревизия "Update docs", 2026-09-01): "Аграфена их не даёт...
+    // оба -- такие же артефакты Легендарных, как остальные шесть" --
+    // Зеркальце/Клубочек теперь тоже получают запись в AcquiredArtifacts
+    // (нужна для Warmth/прогрева §21.4), не особый случай, как раньше.
     const FName LegendaryID(TEXT("Гамаюн"));
     const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(LegendaryID);
     if (!TestNotNull(TEXT("Гамаюн has a seeded anchor cell"), Anchor))
@@ -238,10 +242,11 @@ bool FHerbalistArtifact_CompanionArtifactsDoNotAddToAcquiredList::RunTest(const 
     TArray<FInventoryItem> Offered = { MakeOfferedItem(0.9f, 0.0f) };
     bool bViaDeception = true;
     const bool bAcquired = Manager->TryAcquireArtifact(FName(TEXT("Зеркальце")), Offered, bViaDeception);
-    TestTrue(TEXT("Зеркальце is 'acquired' (result true)"), bAcquired);
+    TestTrue(TEXT("Зеркальце acquired"), bAcquired);
     TestFalse(TEXT("...honestly"), bViaDeception);
-    TestEqual(TEXT("But it does not add an AcquiredArtifacts entry -- it is the shift 5 gift, not a new item"),
-        Manager->GetAcquiredArtifacts().Num(), 0);
+    TestEqual(TEXT("Now adds an AcquiredArtifacts entry, like any other artifact"),
+        Manager->GetAcquiredArtifacts().Num(), 1);
+    TestFalse(TEXT("Not warmed yet -- Warmth starts at 0"), Manager->IsArtifactWarmed(FName(TEXT("Зеркальце"))));
 
     Manager->Destroy();
     return true;

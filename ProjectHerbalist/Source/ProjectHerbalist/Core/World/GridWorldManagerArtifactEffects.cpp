@@ -1,15 +1,15 @@
 // Core/World/GridWorldManagerArtifactEffects.cpp
 //
-// Семь эффектов артефактов Легендарных (02_GDD/21_Journey_And_Artifacts.md
-// §21.3, 2026-09-01, ревизия "Ending and artifacts") — каждый сформулирован
-// как глагол/действие игрока, не модификатор клетки (§21.3 "Принцип
-// баланса"). Дубинка (Дубыня) сюда не входит — изъята из дизайна, см.
-// GridWorldManagerBases.cpp. Фонарь не имеет здесь функции вовсе — §21.3
-// прямо откладывает силу разоблачения, эффект остаётся "просто источник
-// света" (контент/актор, не код). Камень-оберег живёт не здесь, а в
+// Эффекты артефактов Легендарных (02_GDD/21_Journey_And_Artifacts.md §21.3,
+// 2026-09-01, ревизии "Ending and artifacts"/"Update docs"/"Update artifacts")
+// — каждый сформулирован как глагол/действие игрока, не модификатор клетки
+// (§21.3 "Принцип баланса"). Дубинка (Дубыня) сюда не входит — изъята из
+// дизайна, см. GridWorldManagerBases.cpp. Камень-оберег живёт не здесь, а в
 // PipelineV2.cpp/GridWorldManagerTick.cpp — этот файл только хранит
 // HasUnspentBifurcationCharm(), сама Bifurcation-логика в детерминированном
-// пайплайне.
+// пайплайне. Прогрев (Warmth, вариант C) накапливается в
+// GridWorldManagerTick.cpp::RunSimulationStep (на удачной варке), не здесь
+// — IsArtifactWarmed() ниже только читает результат.
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
@@ -121,4 +121,25 @@ bool AGridWorldManager::HasUnspentBifurcationCharm() const
 {
     return AcquiredArtifacts.ContainsByPredicate(
         [](const FAcquiredArtifact& A) { return A.ArtifactID == FName(TEXT("Камень-оберег")) && !A.bBifurcationChargeSpent; });
+}
+
+bool AGridWorldManager::UseLanternDisclosureOnCell(const FIntPoint& Cell, FText& OutDisclosure) const
+{
+    OutDisclosure = FText::GetEmpty();
+
+    const bool bHasLantern = AcquiredArtifacts.ContainsByPredicate(
+        [](const FAcquiredArtifact& A) { return A.ArtifactID == FName(TEXT("Фонарь")); });
+    if (!bHasLantern || !IsArtifactWarmed(FName(TEXT("Фонарь")))) return false;
+
+    const FGridCell* Target = GetCellConst(Cell.X, Cell.Y);
+    if (!Target) return false;
+
+    // §21.3: "на миг показывать настоящее состояние клетки без искажения
+    // S_Perceived, противовес ночной надбавке Морочников" — читает
+    // Meta НАПРЯМУЮ, тот же принцип честности, что уже UseHornOnCell (не
+    // через PerceiveRealState/ComputePerceptionDistortion).
+    OutDisclosure = FText::FromString(FString::Printf(TEXT(
+        "Фонарь на миг горит ровно и без тени -- клетка (%d,%d): Purity=%.2f, Corruption=%.2f, Distortion=%.2f."),
+        Cell.X, Cell.Y, Target->State.Meta.Purity, Target->State.Meta.Corruption, Target->State.Meta.Distortion));
+    return true;
 }

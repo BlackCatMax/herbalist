@@ -16,6 +16,33 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
+bool AGridWorldManager::IsArtifactWarmed(FName ArtifactID) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+
+    // Фонарь — исключение (§21.4): греется от общей GlobalPerceptionClarity,
+    // не от Warmth/зелья/региона. Не требует записи в AcquiredArtifacts для
+    // этой проверки саму по себе, но в игре недостижимо без предварительной
+    // честной... то есть обманной добычи (bDeceptionOnly) — проверка ниже
+    // остаётся честной сама по себе, вызывающая сторона уже гарантирует
+    // добычу перед использованием эффекта.
+    if (ArtifactID == FName(TEXT("Фонарь")))
+    {
+        const float ClarityThreshold = Settings ? Settings->LanternWarmClarityThreshold : 0.7f;
+        return GlobalPerceptionClarity >= ClarityThreshold;
+    }
+
+    const float WarmthThreshold = Settings ? Settings->ArtifactWarmthThreshold : 1.0f;
+    for (const FAcquiredArtifact& Artifact : AcquiredArtifacts)
+    {
+        if (Artifact.ArtifactID == ArtifactID)
+        {
+            return Artifact.Warmth >= WarmthThreshold;
+        }
+    }
+    return false;
+}
+
 bool AGridWorldManager::IsLegendaryManifested(FName EntityID) const
 {
     const FIntPoint* Anchor = LegendaryAnchors.Find(EntityID);
@@ -43,8 +70,8 @@ bool AGridWorldManager::TryAcquireArtifact(FName ArtifactID, const TArray<FInven
     const FArtifactDefinition* Def = FindArtifactDefinition(ArtifactID);
     if (!Def) return false;
 
-    // Уже добыт — не повторно (Зеркальце/Клубочек проверяются вызывающей
-    // стороной через bMirrorWarmed/bYarnBallWarmed, не через этот список).
+    // Уже добыт — не повторно (Зеркальце/Клубочек теперь тоже в этом
+    // списке, см. комментарий у AcquiredArtifacts.Add ниже).
     for (const FAcquiredArtifact& Existing : AcquiredArtifacts)
     {
         if (Existing.ArtifactID == ArtifactID) return false;
@@ -98,13 +125,17 @@ bool AGridWorldManager::TryAcquireArtifact(FName ArtifactID, const TArray<FInven
         return false;   // ни честно, ни обманом — подношение просто недостаточно
     }
 
-    if (!Def->bWarmsCompanionItem)
-    {
-        FAcquiredArtifact Acquired;
-        Acquired.ArtifactID = ArtifactID;
-        Acquired.bAcquiredViaDeception = bOutViaDeception;
-        AcquiredArtifacts.Add(Acquired);
-    }
+    // §21.2 (ревизия "Update docs", 2026-09-01): Зеркальце/Клубочек больше
+    // не особый случай — "работают по общему правилу §21.3" — тоже
+    // получают запись в AcquiredArtifacts (нужна для Warmth/прогрева §21.4,
+    // тот же механизм, что у остальных шести). bWarmsCompanionItem теперь
+    // значит только "вызывающая сторона (OfferForArtifact) дополнительно
+    // выставляет bHasMirror/bHasYarnBall на контроллере", не "пропустить
+    // запись здесь".
+    FAcquiredArtifact Acquired;
+    Acquired.ArtifactID = ArtifactID;
+    Acquired.bAcquiredViaDeception = bOutViaDeception;
+    AcquiredArtifacts.Add(Acquired);
 
     // НИТЬ МАТЕРИ (17_Hero_And_Community.md §17.7, Степь, событийный
     // триггер YarnBallAcquired) — Клубочек получен, "второй биом

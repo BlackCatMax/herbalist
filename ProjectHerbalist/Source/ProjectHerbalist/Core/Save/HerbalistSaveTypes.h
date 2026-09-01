@@ -161,14 +161,6 @@ public:
     UPROPERTY()
     bool bHasYarnBall = false;
 
-    // Прогретое состояние (§21.3-21.4, 2026-09-01) — та же логика, что
-    // bHasMirror/bHasYarnBall выше.
-    UPROPERTY()
-    bool bMirrorWarmed = false;
-
-    UPROPERTY()
-    bool bYarnBallWarmed = false;
-
     UPROPERTY()
     TArray<FInventoryItem> InventoryItems;
 

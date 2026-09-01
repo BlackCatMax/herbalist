@@ -64,30 +64,22 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Harvesting")
     EGatheringTool CurrentGatheringTool = EGatheringTool::BareHands;
 
-    // Два предмета-спутника (21_Journey_And_Artifacts.md §21.2) — один и
-    // тот же неполный дар Аграфены, переданный второпях (§17.1), не два
-    // отдельных подарка. НЕ предметы инвентаря (FInventoryItem заточен под
-    // распад/стек, плохо подходит постоянному дару) — два bool, тот же
-    // принцип, что уже CurrentGatheringTool не инвентарный предмет. TODO:
-    // выдача обоих true — на месте, где по сюжету происходит передача
-    // дара (не решаю сам, где именно — не лорная задача этой сессии).
+    // Два предмета-спутника (21_Journey_And_Artifacts.md §21.2, ревизия
+    // "Update docs" 2026-09-01) — НЕ предметы инвентаря (FInventoryItem
+    // заточен под распад/стек, плохо подходит постоянному дару), два bool,
+    // тот же принцип, что уже CurrentGatheringTool не инвентарный предмет.
+    // Выставляются в OfferForArtifact при честной добыче через общий путь
+    // §21.3, как любой другой артефакт — рамка "неполный дар Аграфены
+    // второпях" снята этой ревизией: "Аграфена их не даёт... оба — такие
+    // же артефакты Легендарных, как остальные шесть". Прогретое состояние
+    // — не отдельный bool здесь, а AGridWorldManager::IsArtifactWarmed
+    // ("Зеркальце"/"Клубочек") — тот же Warmth-механизм §21.4, что и у
+    // остальных шести (вариант C, прогрев через зелье в родном регионе).
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
     bool bHasMirror = false;
 
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
     bool bHasYarnBall = false;
-
-    // "Прогретое" состояние (21_Journey_And_Artifacts.md §21.3-21.4,
-    // 2026-09-01) — Зеркальце/Клубочек не заводят новый предмет как
-    // артефакты Гамаюна/Мать-Сыры-Земли, а переключают дар в это состояние
-    // (см. ArtifactTypes.h::bWarmsCompanionItem, OfferForArtifact ниже).
-    // Конкретный усиленный эффект НЕ реализован — §21.4 сама называет его
-    // только направлением, не финальным списком.
-    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
-    bool bMirrorWarmed = false;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
-    bool bYarnBallWarmed = false;
 
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
@@ -195,9 +187,11 @@ public:
     UFUNCTION(Exec)
     void FoundBase(int32 X, int32 Y);
 
-    // Отладочная выдача обоих предметов-спутников — заглушка на месте
-    // реального сюжетного вручения (см. bHasMirror/bHasYarnBall выше),
-    // тот же класс v1-упрощения, что и остальные Exec-команды этого файла.
+    // Отладочный ярлык — устанавливает bHasMirror/bHasYarnBall напрямую,
+    // в обход честной добычи через OfferForArtifact (§21.3). НЕ канонiчный
+    // путь получения с ревизии "Update docs" (2026-09-01) — тот же класс
+    // v1-упрощения, что и остальные тестовые Exec-команды этого файла,
+    // удобен для быстрой настройки сценария/теста без полного гейта.
     UFUNCTION(Exec)
     void GiveZaryanaGifts();
 
@@ -247,6 +241,13 @@ public:
     // подавляет новые проявления, можно активировать снова после истечения.
     UFUNCTION(Exec)
     void UseInvisibilityCap();
+
+    // Фонарь, прогретая версия (Болотный царь, §21.3, ревизия "Update
+    // docs") — честно показывает реальное состояние клетки (X,Y),
+    // требует и добытого Фонаря, и IsArtifactWarmed("Фонарь"); базовая
+    // версия остаётся просто светом, без этой команды.
+    UFUNCTION(Exec)
+    void UseLanternDisclosure(int32 X, int32 Y);
 
     // Три исхода у Буяна (18_Ending.md §18.1-18.2, 2026-09-01, ревизия
     // "Ending and artifacts") — выбор через действие (три разные команды),

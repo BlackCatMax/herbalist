@@ -185,4 +185,94 @@ bool FHerbalistArtifactEffects_BifurcationCharmDetectedWhileUnspent::RunTest(con
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifactEffects_IsArtifactWarmedReadsWarmthThreshold,
+    "Herbalist.ArtifactEffects.IsArtifactWarmedReadsWarmthThreshold",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifactEffects_IsArtifactWarmedReadsWarmthThreshold::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    TestFalse(TEXT("Not acquired -- not warmed"), Manager->IsArtifactWarmed(FName(TEXT("Рог"))));
+
+    FAcquiredArtifact Horn;
+    Horn.ArtifactID = FName(TEXT("Рог"));
+    Horn.Warmth = 0.5f;
+    Manager->SetAcquiredArtifacts({ Horn });
+    TestFalse(TEXT("Below default threshold (1.0) -- not warmed"), Manager->IsArtifactWarmed(FName(TEXT("Рог"))));
+
+    TArray<FAcquiredArtifact> Artifacts = Manager->GetAcquiredArtifacts();
+    Artifacts[0].Warmth = 1.0f;
+    Manager->SetAcquiredArtifacts(Artifacts);
+    TestTrue(TEXT("At threshold -- warmed"), Manager->IsArtifactWarmed(FName(TEXT("Рог"))));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifactEffects_LanternWarmthReadsGlobalClarityNotWarmthField,
+    "Herbalist.ArtifactEffects.LanternWarmthReadsGlobalClarityNotWarmthField",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifactEffects_LanternWarmthReadsGlobalClarityNotWarmthField::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // §21.4: "асимметрия" -- Фонарь читает GlobalPerceptionClarity, не
+    // Warmth, даже если Warmth сама по себе высока (не должна иметь значения).
+    FAcquiredArtifact Lantern;
+    Lantern.ArtifactID = FName(TEXT("Фонарь"));
+    Lantern.Warmth = 999.0f;
+    Manager->SetAcquiredArtifacts({ Lantern });
+
+    TestFalse(TEXT("High Warmth field alone does not warm the Lantern"), Manager->IsArtifactWarmed(FName(TEXT("Фонарь"))));
+
+    Manager->SetGlobalPerceptionClarity(0.9f);
+    TestTrue(TEXT("High GlobalPerceptionClarity warms the Lantern instead"), Manager->IsArtifactWarmed(FName(TEXT("Фонарь"))));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifactEffects_LanternDisclosureNeedsWarmedLantern,
+    "Herbalist.ArtifactEffects.LanternDisclosureNeedsWarmedLantern",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifactEffects_LanternDisclosureNeedsWarmedLantern::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FText Disclosure;
+    TestFalse(TEXT("No Фонарь -- no disclosure"), Manager->UseLanternDisclosureOnCell(FIntPoint(3, 3), Disclosure));
+
+    FAcquiredArtifact Lantern;
+    Lantern.ArtifactID = FName(TEXT("Фонарь"));
+    Manager->SetAcquiredArtifacts({ Lantern });
+    TestFalse(TEXT("Фонарь held but not warmed (low Clarity) -- still no disclosure"),
+        Manager->UseLanternDisclosureOnCell(FIntPoint(3, 3), Disclosure));
+
+    Manager->SetGlobalPerceptionClarity(0.9f);
+    if (FGridCell* Cell = Manager->GetCell(3, 3))
+    {
+        Cell->State.Meta.Purity = 0.42f;
+    }
+    TestTrue(TEXT("Warmed Фонарь -- discloses the real state"), Manager->UseLanternDisclosureOnCell(FIntPoint(3, 3), Disclosure));
+    TestTrue(TEXT("Disclosed text carries the real Purity value"), Disclosure.ToString().Contains(TEXT("0.42")));
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

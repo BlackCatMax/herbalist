@@ -10,11 +10,15 @@
 // проявленность проверяется отдельным IsBereginyaManifested()
 // (GridWorldManagerArtifacts.cpp), не общим IsLegendaryManifested().
 //
-// Зеркальце/Гамаюн и Клубочек/Мать-Сыра-Земля (bWarmsCompanionItem) — не
-// заводят новый предмет, это тот же дар Аграфены, что уже выдан в шаге 5
-// (bHasMirror/bHasYarnBall на контроллере); "добыча" здесь переключает его в
-// прогретое состояние (bMirrorWarmed/bYarnBallWarmed), не добавляет запись в
-// AGridWorldManager::AcquiredArtifacts.
+// Зеркальце/Гамаюн и Клубочек/Мать-Сыра-Земля (bWarmsCompanionItem) —
+// ревизия "Update docs" (2026-09-01, §21.2) сняла их особый статус:
+// "Аграфена их не даёт... оба — такие же артефакты, как остальные шесть".
+// Получают запись в AGridWorldManager::AcquiredArtifacts на общих
+// основаниях (нужна для Warmth/прогрева §21.4). bWarmsCompanionItem
+// теперь значит только "вызывающая сторона (HerbalistPlayerController::
+// OfferForArtifact) дополнительно выставляет bHasMirror/bHasYarnBall" —
+// оба предмета физически другой формы (не инвентарный слот), поэтому им
+// ещё и нужен этот второй, контроллерный флаг присутствия.
 #pragma once
 
 #include "CoreMinimal.h"

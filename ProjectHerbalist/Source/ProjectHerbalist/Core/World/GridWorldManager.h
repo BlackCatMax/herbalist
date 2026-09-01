@@ -552,15 +552,22 @@ public:
     // ВОСПРИНЯТЫЙ, через PerceiveRealState на текущей Clarity — та же
     // логика, что уже отличает S_real/S_Perceived в тултипе). Ключ по
     // ArtifactID, не LegendaryID — Гребень не имеет отдельного
-    // LegendaryEntityID (пуст в реестре), см. ArtifactTypes.h. Для
-    // Зеркальце/Клубочек (bWarmsCompanionItem) НЕ добавляет запись в
-    // AcquiredArtifacts — это тот же дар Аграфены из шага 5, вызывающая
-    // сторона (HerbalistPlayerController::OfferForArtifact) сама
-    // переключает bMirrorWarmed/bYarnBallWarmed по результату.
+    // LegendaryEntityID (пуст в реестре), см. ArtifactTypes.h. Зеркальце/
+    // Клубочек (bWarmsCompanionItem) добавляют запись в AcquiredArtifacts
+    // на общих основаниях (ревизия "Update docs", §21.2) — вызывающая
+    // сторона (HerbalistPlayerController::OfferForArtifact) дополнительно
+    // выставляет bHasMirror/bHasYarnBall по результату.
     bool TryAcquireArtifact(FName ArtifactID, const TArray<FInventoryItem>& Offered, bool& bOutViaDeception);
 
     const TArray<FAcquiredArtifact>& GetAcquiredArtifacts() const { return AcquiredArtifacts; }
     void SetAcquiredArtifacts(const TArray<FAcquiredArtifact>& InArtifacts) { AcquiredArtifacts = InArtifacts; }
+
+    // Прогрев, вариант C (§21.4, GridWorldManagerTick.cpp::RunSimulationStep
+    // накапливает Warmth на удачной варке нужного типа в родном регионе).
+    // Фонарь — особый случай внутри: читает GlobalPerceptionClarity, не
+    // Warmth (см. .cpp). Для артефактов, которых нет в AcquiredArtifacts
+    // (не добыты) — всегда false.
+    bool IsArtifactWarmed(FName ArtifactID) const;
 
     // ---- Семь эффектов артефактов (21_Journey_And_Artifacts.md §21.3,
     // 2026-09-01, ревизия "Ending and artifacts"): §21.3 "Принцип баланса"
@@ -603,6 +610,15 @@ public:
     // он реально ("не гарантирует успех" — расходуется самим фактом
     // держания во время варки, не только удачным спасением).
     bool HasUnspentBifurcationCharm() const;
+
+    // Фонарь, прогретая версия (21_Journey_And_Artifacts.md §21.3,
+    // 2026-09-01, ревизия "Update docs" — "снято с паузы", разрешено
+    // реализовать сейчас, но ТОЛЬКО для прогретого состояния). "На миг
+    // показывает настоящее состояние клетки без искажения S_Perceived" —
+    // читает Cell->State НАПРЯМУЮ (та же честность, что уже UseHornOnCell),
+    // для ЛЮБОЙ клетки, не только воды. Требует и добытого Фонаря, и
+    // IsArtifactWarmed("Фонарь") — базовая версия остаётся просто светом.
+    bool UseLanternDisclosureOnCell(const FIntPoint& Cell, FText& OutDisclosure) const;
 
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }

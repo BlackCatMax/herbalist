@@ -785,15 +785,18 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         return;
     }
 
-    // Зеркальце/Клубочек — не новый предмет, переключают дар из шага 5 в
-    // прогретое состояние (см. ArtifactTypes.h::bWarmsCompanionItem).
+    // Зеркальце/Клубочек — выдают базовый предмет-спутник на честной
+    // добыче через общий путь §21.3 (см. ArtifactTypes.h::
+    // bWarmsCompanionItem, комментарий у bHasMirror/bHasYarnBall в .h).
+    // Прогретое состояние — отдельно, через AGridWorldManager::
+    // IsArtifactWarmed, не здесь.
     if (ArtID == FName(TEXT("Зеркальце")))
     {
-        bMirrorWarmed = true;
+        bHasMirror = true;
     }
     else if (ArtID == FName(TEXT("Клубочек")))
     {
-        bYarnBallWarmed = true;
+        bHasYarnBall = true;
     }
 
     // Индексы по убыванию — RemoveItem(Index) не должен сдвинуть ещё не
@@ -853,6 +856,20 @@ void AHerbalistPlayerController::UseInvisibilityCap()
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseInvisibilityCap: no Шапка-невидимка"));
     }
+}
+
+void AHerbalistPlayerController::UseLanternDisclosure(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    FText Disclosure;
+    if (!WorldManager->UseLanternDisclosureOnCell(FIntPoint(X, Y), Disclosure))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseLanternDisclosure: no Фонарь, not warmed yet, or (%d,%d) is outside the grid"), X, Y);
+        return;
+    }
+    ShowMemoryRevealText(Disclosure);
 }
 
 void AHerbalistPlayerController::BecomeBuyanGuardian()

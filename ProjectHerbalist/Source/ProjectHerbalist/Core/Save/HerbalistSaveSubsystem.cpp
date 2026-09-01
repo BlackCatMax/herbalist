@@ -64,8 +64,6 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
         if (PC->JournalComponent) Save->JournalEntries = PC->JournalComponent->GetEntries();
         Save->bHasMirror = PC->bHasMirror;
         Save->bHasYarnBall = PC->bHasYarnBall;
-        Save->bMirrorWarmed = PC->bMirrorWarmed;
-        Save->bYarnBallWarmed = PC->bYarnBallWarmed;
         if (APawn* Pawn = PC->GetPawn())
         {
             Save->PlayerLocation = Pawn->GetActorLocation();
@@ -138,8 +136,6 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
         if (PC->JournalComponent) PC->JournalComponent->RestoreEntries(Save->JournalEntries);
         PC->bHasMirror = Save->bHasMirror;
         PC->bHasYarnBall = Save->bHasYarnBall;
-        PC->bMirrorWarmed = Save->bMirrorWarmed;
-        PC->bYarnBallWarmed = Save->bYarnBallWarmed;
         if (APawn* Pawn = PC->GetPawn())
         {
             Pawn->SetActorLocationAndRotation(Save->PlayerLocation, Save->PlayerRotation);
