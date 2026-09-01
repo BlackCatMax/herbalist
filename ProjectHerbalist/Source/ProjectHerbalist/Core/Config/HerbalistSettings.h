@@ -426,6 +426,19 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BuyanShrineRestorationThreshold = 0.7f;
 
+    // Путь 1 у Буяна — страж (18_Ending.md §18.2, 2026-09-01): "доступен
+    // при высокой GlobalPerceptionClarity и высокой Молве — герою, которому
+    // мир и люди уже доверяют". Мгновенный порог, без гистерезиса — тот же
+    // принцип, что уже держит CheckBuyanCondition (в проекте нет механизма
+    // длительности "устойчиво N секунд", находка разведки шага 1). Пути 2/3
+    // — без порога, §18.2 явно: "искушение не должно быть наградой за
+    // прогресс".
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BuyanGuardianClarityThreshold = 0.7f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+    float BuyanGuardianMolvaThreshold = 0.5f;
+
     // --- Передозировка зелий (обсуждение в сессии 2026-08-24) ---
     // Компендиум ("сок его — сильное сердечное зелье, но и яд лютый", Ландыш;
     // тот же паттерн у Полярного мака и Чистотела) — сила лекарства и его яд

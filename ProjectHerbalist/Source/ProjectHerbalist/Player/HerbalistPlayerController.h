@@ -227,6 +227,22 @@ public:
     UFUNCTION(Exec)
     void OfferForArtifact(FString ArtifactID, FString IngredientList);
 
+    // Три исхода у Буяна (18_Ending.md §18.1-18.2, 2026-09-01) — выбор
+    // через действие (три разные команды), не диалоговое меню (§18.1).
+    // Каждая требует AGridWorldManager::TryChooseBuyanPath == true, иначе
+    // ничего не показывает (см. .cpp — не переигрывается, путь 1 гейтится
+    // Clarity+Молвой). Показывают ТОЛЬКО заглушку — финальные тексты/сцены
+    // трёх концовок НЕ реализованы, лорная задача 22_Lore_Roadmap.md, не
+    // код (прямой запрос пользователя — не писать их).
+    UFUNCTION(Exec)
+    void BecomeBuyanGuardian();
+
+    UFUNCTION(Exec)
+    void TradePlacesWithZaryana();
+
+    UFUNCTION(Exec)
+    void AcceptBuyanReality();
+
     // Экранный попап текста воспоминания Заряны/объявления Буяна
     // (UI/MemoryRevealWidget.h, "Прогрессия/Заряна" 2026-08-29) — вызывается
     // из AGridWorldManager (CollectMemoryFragment/CheckBuyanCondition), не

@@ -32,6 +32,23 @@ enum class ESeason : uint8
     Winter    // Зима
 };
 
+// Три исхода у Буяна (02_GDD/18_Ending.md §18.1, 2026-09-01) — выбор через
+// действие (три разных Exec-команды на контроллере), не диалоговое меню
+// (§18.1: "сломало бы уже установленный принцип «характер через реакцию
+// мира, не через реплики»"). Финальные тексты/сцены НЕ реализованы —
+// лорная задача 22_Lore_Roadmap.md, здесь только ветвление и заглушки.
+// Живёт в HerbalistCoreTypes.h, не GridWorldManager.h (где его заводит
+// план шага 7) — тот же общий дом малых enum'ов, что уже EMoonPhase/ESeason
+// выше, нужен и HerbalistSaveTypes.h без затягивания всего GridWorldManager.h.
+UENUM(BlueprintType)
+enum class EBuyanPath : uint8
+{
+    None,
+    Guardian,       // Путь 1 — пожертвовать собой, стать стражем Буяна
+    TradePlaces,    // Путь 2 — обмануть смерть, поменяться местами с Заряной
+    AcceptReality   // Путь 3 — принять реальность как есть
+};
+
 UENUM(BlueprintType)
 enum class EBiomeType : uint8
 {

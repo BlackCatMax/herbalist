@@ -328,4 +328,63 @@ bool FHerbalistZaryana_KhlebSolSpawnsOnHighMolvaThreshold::RunTest(const FString
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_BuyanPathRequiresBuyanReachedAndOnlyChoosesOnce,
+    "Herbalist.Zaryana.BuyanPathRequiresBuyanReachedAndOnlyChoosesOnce",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_BuyanPathRequiresBuyanReachedAndOnlyChoosesOnce::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // Буян ещё не достигнут — путь 3 (без порога Clarity/Молвы) всё равно недоступен.
+    TestFalse(TEXT("No path before Buyan is reached"), Manager->TryChooseBuyanPath(EBuyanPath::AcceptReality));
+    TestEqual(TEXT("ChosenBuyanPath stays None"), (uint8)Manager->GetChosenBuyanPath(), (uint8)EBuyanPath::None);
+
+    Manager->SetBuyanReached(true);
+    TestTrue(TEXT("Path 3 available once Buyan is reached, no threshold"), Manager->TryChooseBuyanPath(EBuyanPath::AcceptReality));
+    TestEqual(TEXT("ChosenBuyanPath recorded"), (uint8)Manager->GetChosenBuyanPath(), (uint8)EBuyanPath::AcceptReality);
+
+    // Не переигрывается — второй выбор (даже другого пути) не проходит.
+    TestFalse(TEXT("Cannot choose a second path once one is chosen"), Manager->TryChooseBuyanPath(EBuyanPath::TradePlaces));
+    TestEqual(TEXT("ChosenBuyanPath unchanged"), (uint8)Manager->GetChosenBuyanPath(), (uint8)EBuyanPath::AcceptReality);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_BuyanGuardianPathGatedByClarityAndMolva,
+    "Herbalist.Zaryana.BuyanGuardianPathGatedByClarityAndMolva",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_BuyanGuardianPathGatedByClarityAndMolva::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetBuyanReached(true);
+
+    // Ни Clarity, ни Молва не заданы (дефолт 0) — путь 1 недоступен.
+    TestFalse(TEXT("Guardian path unavailable with low Clarity/Molva"), Manager->TryChooseBuyanPath(EBuyanPath::Guardian));
+    TestEqual(TEXT("ChosenBuyanPath still None"), (uint8)Manager->GetChosenBuyanPath(), (uint8)EBuyanPath::None);
+
+    // Высокая Clarity, но Молва по-прежнему низкая (дефолт 0) — всё ещё недоступен.
+    Manager->SetGlobalPerceptionClarity(1.0f);
+    TestFalse(TEXT("Guardian path unavailable with high Clarity alone"), Manager->TryChooseBuyanPath(EBuyanPath::Guardian));
+
+    // Оба порога пройдены — путь 1 доступен.
+    Manager->Molva = 1.0f;
+    TestTrue(TEXT("Guardian path available with both thresholds met"), Manager->TryChooseBuyanPath(EBuyanPath::Guardian));
+    TestEqual(TEXT("ChosenBuyanPath recorded as Guardian"), (uint8)Manager->GetChosenBuyanPath(), (uint8)EBuyanPath::Guardian);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

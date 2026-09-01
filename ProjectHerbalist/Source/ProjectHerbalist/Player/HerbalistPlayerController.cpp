@@ -808,6 +808,48 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         bViaDeception ? TEXT("via deception") : TEXT("honestly"));
 }
 
+void AHerbalistPlayerController::BecomeBuyanGuardian()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->TryChooseBuyanPath(EBuyanPath::Guardian))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BecomeBuyanGuardian: not available yet (Буян не достигнут, путь уже выбран, или Clarity/Молва ниже порога)"));
+        return;
+    }
+
+    ShowMemoryRevealText(FText::FromString(TEXT("[СТРАЖ БУЯНА — заглушка, финальный текст ждёт 22_Lore_Roadmap.md]")));
+}
+
+void AHerbalistPlayerController::TradePlacesWithZaryana()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->TryChooseBuyanPath(EBuyanPath::TradePlaces))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("TradePlacesWithZaryana: not available yet (Буян не достигнут или путь уже выбран)"));
+        return;
+    }
+
+    ShowMemoryRevealText(FText::FromString(TEXT("[ОБМЕН МЕСТАМИ С ЗАРЯНОЙ — заглушка, финальный текст ждёт 22_Lore_Roadmap.md]")));
+}
+
+void AHerbalistPlayerController::AcceptBuyanReality()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->TryChooseBuyanPath(EBuyanPath::AcceptReality))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("AcceptBuyanReality: not available yet (Буян не достигнут или путь уже выбран)"));
+        return;
+    }
+
+    ShowMemoryRevealText(FText::FromString(TEXT("[ПРИНЯТИЕ РЕАЛЬНОСТИ — заглушка, финальный текст ждёт 22_Lore_Roadmap.md]")));
+}
+
 void AHerbalistPlayerController::Journal()
 {
     if (bIsAnyWidgetOpen && JournalWidgetInstance && JournalWidgetInstance->IsInViewport())

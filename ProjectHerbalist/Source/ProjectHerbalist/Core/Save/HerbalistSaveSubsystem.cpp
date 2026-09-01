@@ -55,6 +55,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->ClarityAnchor = WorldManager->GetClarityAnchor();
     Save->bRosaFirstFalseSignalShown = WorldManager->IsRosaFirstFalseSignalShown();
     Save->bBuyanReached = WorldManager->IsBuyanReached();
+    Save->ChosenBuyanPath = WorldManager->GetChosenBuyanPath();
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
 
     if (AHerbalistPlayerController* PC = World ? Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()) : nullptr)
@@ -127,6 +128,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetClarityAnchor(Save->ClarityAnchor);
     WorldManager->SetRosaFirstFalseSignalShown(Save->bRosaFirstFalseSignalShown);
     WorldManager->SetBuyanReached(Save->bBuyanReached);
+    WorldManager->SetChosenBuyanPath(Save->ChosenBuyanPath);
     WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));
     WorldManager->ApplySaveCells(Save->Cells);
 

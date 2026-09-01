@@ -142,6 +142,12 @@ public:
     UPROPERTY()
     bool bBuyanReached = false;
 
+    // Три исхода у Буяна (18_Ending.md §18.1, 2026-09-01) — тот же класс
+    // поля, что bBuyanReached выше: не переигрывается, обязан пережить
+    // перезагрузку.
+    UPROPERTY()
+    EBuyanPath ChosenBuyanPath = EBuyanPath::None;
+
     UPROPERTY()
     TArray<FName> CollectedFragmentIDs;
 

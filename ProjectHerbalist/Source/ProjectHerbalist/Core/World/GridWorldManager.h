@@ -439,6 +439,24 @@ public:
     bool IsBuyanReached() const { return bBuyanReached; }
     void SetBuyanReached(bool bInReached) { bBuyanReached = bInReached; }
 
+    // Три исхода у Буяна (18_Ending.md §18.1-18.2, 2026-09-01) — выбранный
+    // путь, None пока игрок ничего не выбрал. Persisted тем же путём, что
+    // bBuyanReached выше.
+    EBuyanPath GetChosenBuyanPath() const { return ChosenBuyanPath; }
+    void SetChosenBuyanPath(EBuyanPath InPath) { ChosenBuyanPath = InPath; }
+
+    // Требует bBuyanReached==true и ChosenBuyanPath==None (не переигрывается,
+    // §18.1 — выбор один раз, не диалог с возможностью передумать). Путь 1
+    // (страж) дополнительно требует высокие GlobalPerceptionClarity И Молву
+    // (BuyanGuardianClarityThreshold/BuyanGuardianMolvaThreshold,
+    // мгновенный порог — в проекте вообще нет механизма длительности,
+    // находка разведки шага 1). Пути 2/3 — без порога, явно так в §18.2
+    // ("искушение не должно быть наградой за прогресс"). При успехе
+    // переводит ChosenBuyanPath и возвращает true — финальный текст/сцену
+    // показывает вызывающая сторона (HerbalistPlayerController), не эта
+    // функция: сама развязка — лорная задача 22_Lore_Roadmap.md.
+    bool TryChooseBuyanPath(EBuyanPath Path);
+
     const TSet<FName>& GetCollectedFragmentIDs() const { return CollectedFragmentIDs; }
     void SetCollectedFragmentIDs(const TSet<FName>& InIDs) { CollectedFragmentIDs = InIDs; }
 
@@ -639,6 +657,9 @@ protected:
     float ClarityAnchor = 0.0f;
 
     bool bBuyanReached = false;
+
+    // Три исхода у Буяна (18_Ending.md §18.1) — None, пока не выбран.
+    EBuyanPath ChosenBuyanPath = EBuyanPath::None;
     TSet<FName> CollectedFragmentIDs;   // подлинно собранные — больше не спавнятся
 
     TWeakObjectPtr<AMemoryFragmentActor> ActiveFragment;   // v1: не больше одного за раз

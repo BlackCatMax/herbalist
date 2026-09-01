@@ -324,6 +324,32 @@ void AGridWorldManager::CheckBuyanCondition()
     }
 }
 
+bool AGridWorldManager::TryChooseBuyanPath(EBuyanPath Path)
+{
+    if (!bBuyanReached || ChosenBuyanPath != EBuyanPath::None || Path == EBuyanPath::None)
+    {
+        return false;
+    }
+
+    if (Path == EBuyanPath::Guardian)
+    {
+        // Путь 1 (страж) — 18_Ending.md §18.2: высокая GlobalPerceptionClarity
+        // И высокая Молва, мгновенный порог. Пути 2/3 — без порога (ниже,
+        // в SetChosenBuyanPath не попадают сюда вовсе).
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float ClarityThreshold = Settings ? Settings->BuyanGuardianClarityThreshold : 0.7f;
+        const float MolvaThreshold = Settings ? Settings->BuyanGuardianMolvaThreshold : 0.5f;
+        if (GlobalPerceptionClarity < ClarityThreshold || Molva < MolvaThreshold)
+        {
+            return false;
+        }
+    }
+
+    ChosenBuyanPath = Path;
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] === ПУТЬ У БУЯНА ВЫБРАН: %d ==="), (int32)Path);
+    return true;
+}
+
 FName AGridWorldManager::GetActiveFragmentDefinitionID() const
 {
     return ActiveFragment.IsValid() ? ActiveFragment->GetDefinitionID() : NAME_None;
@@ -441,7 +467,7 @@ void AGridWorldManager::ShowZaryanaStatus()
     UE_LOG(LogHerbalistZaryana, Log, TEXT("GlobalPerceptionClarity: %.2f (Anchor: %.2f)"), GlobalPerceptionClarity, ClarityAnchor);
     UE_LOG(LogHerbalistZaryana, Log, TEXT("ZaryanaCell: %s, first false Rosa signal shown: %s"),
         *ZaryanaCell.ToString(), bRosaFirstFalseSignalShown ? TEXT("true") : TEXT("false"));
-    UE_LOG(LogHerbalistZaryana, Log, TEXT("Buyan reached: %s"), bBuyanReached ? TEXT("true") : TEXT("false"));
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("Buyan reached: %s (path: %d)"), bBuyanReached ? TEXT("true") : TEXT("false"), (int32)ChosenBuyanPath);
     UE_LOG(LogHerbalistZaryana, Log, TEXT("Collected fragments (%d):"), CollectedFragmentIDs.Num());
     for (FName ID : CollectedFragmentIDs)
     {
