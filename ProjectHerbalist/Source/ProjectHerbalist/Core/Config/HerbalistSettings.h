@@ -409,6 +409,15 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
     float RosaRadiusPerClarity = 15.0f;
 
+    // Клубочек (21_Journey_And_Artifacts.md §21.2) — игровых секунд на юнит
+    // дистанции при перемещении между базами. Черновое число: полный
+    // пересечение сетки 20x20 по умолчанию (~2500 юнитов) обходится примерно
+    // в 375 игровых секунд, ~20% игровых суток при дефолтном GameDayMinutes
+    // (32 мин) — заметная, но не разорительная трата, "стоит ли сейчас идти
+    // проверять грядку" (§20.2), не бесплатная телепортация.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float YarnBallSecondsPerUnit = 0.15f;
+
     // Буян (§15.5): средний Distance(State, S0) по клеткам ниже порога +
     // все капища мира выше порога Restoration.
     UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "0.0"))

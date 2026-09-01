@@ -680,6 +680,67 @@ void AHerbalistPlayerController::FoundBase(int32 X, int32 Y)
     Manager->RegisterBase(FIntPoint(X, Y));
 }
 
+void AHerbalistPlayerController::GiveZaryanaGifts()
+{
+    bHasMirror = true;
+    bHasYarnBall = true;
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("GiveZaryanaGifts: mirror and yarn ball granted"));
+}
+
+void AHerbalistPlayerController::UseMirror()
+{
+    if (!bHasMirror)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseMirror: player does not have the mirror"));
+        return;
+    }
+
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    const FRealState Perceived = WorldManager->GetZaryanaPerceivedState(MirrorPerceptionRng);
+    ShowMemoryRevealText(FText::FromString(FString::Printf(TEXT(
+        "Зеркальце показывает Заряну такой, какой её видно отсюда: Purity=%.2f, Corruption=%.2f, Distortion=%.2f."),
+        Perceived.Meta.Purity, Perceived.Meta.Corruption, Perceived.Meta.Distortion)));
+}
+
+void AHerbalistPlayerController::UseYarnBall(int32 BaseIndex)
+{
+    if (!bHasYarnBall)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseYarnBall: player does not have the yarn ball"));
+        return;
+    }
+
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    const TArray<FHerbalistBase>& Bases = WorldManager->GetBases();
+    if (!Bases.IsValidIndex(BaseIndex))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseYarnBall: invalid base index %d (%d bases founded)"), BaseIndex, Bases.Num());
+        return;
+    }
+
+    APawn* ControlledPawn = GetPawn();
+    if (!ControlledPawn) return;
+
+    const FVector TargetLocation = WorldManager->GetCellWorldPosition(Bases[BaseIndex].Cell.X, Bases[BaseIndex].Cell.Y);
+    const float Distance = FVector::Dist(ControlledPawn->GetActorLocation(), TargetLocation);
+
+    // НЕ мгновенная телепортация (§21.2) — тратит игровое время, соразмерное
+    // расстоянию, ДО перемещения пешки: погода/сутки/регенерация видят
+    // прошедшее время тем же способом, что и обычный ход Tick(), не задним числом.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float SecondsPerUnit = Settings ? Settings->YarnBallSecondsPerUnit : 0.15f;
+    const float ElapsedSeconds = Distance * SecondsPerUnit;
+    WorldManager->SetGameClockSeconds(WorldManager->GetGameClockSeconds() + ElapsedSeconds);
+
+    ControlledPawn->SetActorLocationAndRotation(TargetLocation, ControlledPawn->GetActorRotation());
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("UseYarnBall: travelled to base %d (%.0f units, +%.1fs game time)"),
+        BaseIndex, Distance, ElapsedSeconds);
+}
+
 void AHerbalistPlayerController::Journal()
 {
     if (bIsAnyWidgetOpen && JournalWidgetInstance && JournalWidgetInstance->IsInViewport())

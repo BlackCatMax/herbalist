@@ -139,6 +139,16 @@ public:
     UPROPERTY()
     TArray<FName> CollectedFragmentIDs;
 
+    // Предметы-спутники (21_Journey_And_Artifacts.md §21.2) — постоянный
+    // дар, не должен теряться при перезагрузке (контроллерное состояние,
+    // не мировое, но тот же принцип, что PlayerLocation ниже: сохраняем
+    // напрямую из PC в SaveGame()/LoadGame()).
+    UPROPERTY()
+    bool bHasMirror = false;
+
+    UPROPERTY()
+    bool bHasYarnBall = false;
+
     UPROPERTY()
     TArray<FInventoryItem> InventoryItems;
 

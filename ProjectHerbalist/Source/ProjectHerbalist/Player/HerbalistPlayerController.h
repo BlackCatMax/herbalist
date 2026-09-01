@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Math/RandomStream.h"
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
 #include "EnhancedInputComponent.h"
@@ -63,6 +64,19 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Harvesting")
     EGatheringTool CurrentGatheringTool = EGatheringTool::BareHands;
 
+    // Два предмета-спутника (21_Journey_And_Artifacts.md §21.2) — один и
+    // тот же неполный дар Аграфены, переданный второпях (§17.1), не два
+    // отдельных подарка. НЕ предметы инвентаря (FInventoryItem заточен под
+    // распад/стек, плохо подходит постоянному дару) — два bool, тот же
+    // принцип, что уже CurrentGatheringTool не инвентарный предмет. TODO:
+    // выдача обоих true — на месте, где по сюжету происходит передача
+    // дара (не решаю сам, где именно — не лорная задача этой сессии).
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
+    bool bHasMirror = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
+    bool bHasYarnBall = false;
+
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
 
@@ -87,6 +101,11 @@ public:
     AGridWorldManager* FindWorldManager() const;
     void GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
     void UpdateDistortionFromCell(int32 X, int32 Y);
+
+    // Свой фиксированный сид, не WorldRNG — тот же приём, что уже
+    // AlchemySlotWidget.cpp::PerceptionRng: наблюдение через Зеркальце не
+    // должно потреблять/возмущать детерминированный поток симуляции.
+    FRandomStream MirrorPerceptionRng = FRandomStream(20260901);
 	
     UFUNCTION(Exec)
     void TestNewTransfer(FName IngredientID, int32 Amount);
@@ -163,6 +182,27 @@ public:
     // дубликат) — на стороне AGridWorldManager::RegisterBase.
     UFUNCTION(Exec)
     void FoundBase(int32 X, int32 Y);
+
+    // Отладочная выдача обоих предметов-спутников — заглушка на месте
+    // реального сюжетного вручения (см. bHasMirror/bHasYarnBall выше),
+    // тот же класс v1-упрощения, что и остальные Exec-команды этого файла.
+    UFUNCTION(Exec)
+    void GiveZaryanaGifts();
+
+    // Зеркальце — наблюдение Заряны из любой базы, не перемещение
+    // (§21.2). Переиспользует AGridWorldManager::GetZaryanaPerceivedState
+    // (Слои 1+3 + честный шум PerceiveRealState, шаг 2) — не привилегированное
+    // окно истины, тот же шум, что и роса вживую.
+    UFUNCTION(Exec, BlueprintCallable, Category = "Zaryana")
+    void UseMirror();
+
+    // Клубочек — перемещение между уже основанными базами (индекс в
+    // AGridWorldManager::GetBases()), НЕ мгновенное: тратит игровое время,
+    // соразмерное дистанции (§21.2), двигая WorldManager->GameClockSeconds
+    // вперёд тем же способом, что и обычный ход времени — протаскивает
+    // погоду/сутки/регенерацию, не спецэффект.
+    UFUNCTION(Exec, BlueprintCallable, Category = "Zaryana")
+    void UseYarnBall(int32 BaseIndex);
 
     // Экранный попап текста воспоминания Заряны/объявления Буяна
     // (UI/MemoryRevealWidget.h, "Прогрессия/Заряна" 2026-08-29) — вызывается
