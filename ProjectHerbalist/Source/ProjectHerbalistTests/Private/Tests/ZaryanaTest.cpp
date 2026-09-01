@@ -298,4 +298,34 @@ bool FHerbalistZaryana_RosaFirstUntouchedDriftIsFlaggedOnceAsCoincidence::RunTes
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_KhlebSolSpawnsOnHighMolvaThreshold,
+    "Herbalist.Zaryana.KhlebSolSpawnsOnHighMolvaThreshold",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_KhlebSolSpawnsOnHighMolvaThreshold::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetZaryanaCellIfUnset(FIntPoint(0, 0));
+    // Изолируем ветку ХЛЕБ-СОЛЬ от двух других (LowLocalDistortion/
+    // ShrineRestored) — иначе дефолтное состояние тестовой сетки могло бы
+    // спавнить не тот фрагмент первым же вызовом.
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE"))});
+
+    Manager->Molva = 0.3f;
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("No fragment below the Molva threshold"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+
+    Manager->Molva = 0.8f;
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("KHLEB_SOL spawns once Molva crosses the threshold"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("KHLEB_SOL")));
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

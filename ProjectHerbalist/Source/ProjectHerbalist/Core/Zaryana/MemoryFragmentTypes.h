@@ -24,7 +24,9 @@ enum class EMemoryFragmentTrigger : uint8
     // Только что сварено осознанно и чисто (высокий Coherence, низкий Distortion).
     CoherentBrew,
     // Капище пересекло высокий порог Restoration.
-    ShrineRestored
+    ShrineRestored,
+    // Молва общины устойчиво высока (17_Hero_And_Community.md §17.6).
+    HighCommunityTrust
 };
 
 USTRUCT()

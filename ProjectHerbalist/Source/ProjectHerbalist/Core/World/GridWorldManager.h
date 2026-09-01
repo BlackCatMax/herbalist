@@ -424,6 +424,13 @@ public:
     const TSet<FName>& GetCollectedFragmentIDs() const { return CollectedFragmentIDs; }
     void SetCollectedFragmentIDs(const TSet<FName>& InIDs) { CollectedFragmentIDs = InIDs; }
 
+    // NAME_None, если фрагмент сейчас не заспавнен — публично только для
+    // тестируемости TrySpawnStateBasedFragment/SpawnMemoryFragmentAt, тем же
+    // принципом, что остальные Get*-геттеры внепайплайнового состояния выше.
+    // Определение — в GridWorldManagerZaryana.cpp: AMemoryFragmentActor
+    // здесь только forward-declared, полный тип нужен для вызова метода.
+    FName GetActiveFragmentDefinitionID() const;
+
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowZaryanaStatus();
 
@@ -453,6 +460,11 @@ public:
     // public тем же принципом, что UpdateShrines/RegenerateCellParameters —
     // тикается из UpdateMemoryFragments, но и напрямую тестируемо.
     void CheckBuyanCondition();
+
+    // Тем же принципом — публично для прямой тестируемости State-триггеров
+    // (LowLocalDistortion/ShrineRestored/HighCommunityTrust) без ожидания
+    // полного MemoryFragmentStateCheckInterval через UpdateMemoryFragments.
+    void TrySpawnStateBasedFragment();
 
     // Пересчитывает GlobalPerceptionClarity = Clamp(Max(ClarityAnchor,
     // ClarityAnchor + Response), 0, 1) из текущего ClarityAnchor и мирового
@@ -579,7 +591,6 @@ protected:
     float FragmentSpawnCooldownRemaining = 0.0f;
     float FragmentStateCheckAccumulator = 0.0f;
 
-    void TrySpawnStateBasedFragment();
     void SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoint& Cell, bool bIsFalse);
 
     // ---- Роса Заряны (19_Rosa_Signal.md §19.2) ----

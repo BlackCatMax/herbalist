@@ -104,7 +104,24 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     const float DistortionThreshold = Settings ? Settings->MemoryFragmentLowDistortionThreshold : 0.15f;
     const float ShrineThreshold = Settings ? Settings->MemoryFragmentShrineRestorationThreshold : 0.7f;
 
-    // ShrineRestored — проверяем первым, капищ мало, дёшево.
+    // HighCommunityTrust (§17.6, "устойчиво высокая Молва") — проверяем
+    // первым, дешевле даже капищ (одно поле, не цикл). Мгновенный порог,
+    // без гистерезиса. Спавнится у порога Заряны (ZaryanaCell) в
+    // буквальном соответствии с текстом фрагмента ("оставили... на
+    // пороге, пока я спала") — если её клетка ещё не размещена, фрагмент
+    // ждёт следующего опроса вместо спавна в произвольном месте.
+    const float HighMolvaThreshold = Settings ? Settings->MemoryFragmentHighMolvaThreshold : 0.5f;
+    if (Molva >= HighMolvaThreshold && ZaryanaCell != FIntPoint(-1, -1))
+    {
+        const FMemoryFragmentDefinition* BreadSaltDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("KHLEB_SOL")));
+        if (BreadSaltDef && !CollectedFragmentIDs.Contains(BreadSaltDef->ID))
+        {
+            SpawnMemoryFragmentAt(BreadSaltDef->ID, ZaryanaCell, /*bIsFalse=*/false);
+            return;
+        }
+    }
+
+    // ShrineRestored — проверяем следующим, капищ мало, дёшево.
     for (const FShrine& S : Shrines)
     {
         if (S.Restoration < ShrineThreshold) continue;
@@ -305,6 +322,11 @@ void AGridWorldManager::CheckBuyanCondition()
             "Морок стих. Впервые за долгий срок мир вокруг ровен, как гладь непотревоженной воды -- "
             "будто где-то там, за пределами видимого, лежит Буян.")));
     }
+}
+
+FName AGridWorldManager::GetActiveFragmentDefinitionID() const
+{
+    return ActiveFragment.IsValid() ? ActiveFragment->GetDefinitionID() : NAME_None;
 }
 
 void AGridWorldManager::SetZaryanaCellIfUnset(const FIntPoint& Cell)
