@@ -311,10 +311,14 @@ bool FHerbalistZaryana_KhlebSolSpawnsOnHighMolvaThreshold::RunTest(const FString
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     Manager->SetZaryanaCellIfUnset(FIntPoint(0, 0));
-    // Изолируем ветку ХЛЕБ-СОЛЬ от двух других (LowLocalDistortion/
-    // ShrineRestored) — иначе дефолтное состояние тестовой сетки могло бы
-    // спавнить не тот фрагмент первым же вызовом.
-    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE"))});
+    // Изолируем ветку ХЛЕБ-СОЛЬ от всех остальных State-триггеров — иначе
+    // дефолтное состояние тестовой сетки могло бы спавнить не тот фрагмент
+    // первым же вызовом (найдено 2026-09-01: клетки Тайги по умолчанию
+    // держат Distortion=0, ниже порога TISHINA_LESA/TIKHOE_MESTO тривиально
+    // с самого начала).
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("TISHINA_LESA")), FName(TEXT("OJIDANIE_BURI")), FName(TEXT("NE_POKHVALILA")),
+        FName(TEXT("NEUDOBNAYA_PRAVDA"))});
 
     Manager->Molva = 0.3f;
     Manager->TrySpawnStateBasedFragment();
@@ -384,6 +388,216 @@ bool FHerbalistZaryana_BuyanGuardianPathGatedByClarityAndMolva::RunTest(const FS
     Manager->Molva = 1.0f;
     TestTrue(TEXT("Guardian path available with both thresholds met"), Manager->TryChooseBuyanPath(EBuyanPath::Guardian));
     TestEqual(TEXT("ChosenBuyanPath recorded as Guardian"), (uint8)Manager->GetChosenBuyanPath(), (uint8)EBuyanPath::Guardian);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_TishinaLesaSpawnsOnlyInTaiga,
+    "Herbalist.Zaryana.TishinaLesaSpawnsOnlyInTaiga",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_TishinaLesaSpawnsOnlyInTaiga::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // Якорь Индрик-зверя гарантированно стоит на клетке биома Тайга (тот же
+    // приём, что уже LegendaryEntityTest.cpp/ArtifactTest.cpp).
+    const FIntPoint* TaigaAnchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Индрик-зверь")));
+    if (!TestNotNull(TEXT("Taiga cell available via Индрик-зверь anchor"), TaigaAnchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // Изолируем от всех остальных State-триггеров -- тот же класс
+    // контаминации, что уже пойман у KhlebSolSpawnsOnHighMolvaThreshold.
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("OJIDANIE_BURI")), FName(TEXT("NE_POKHVALILA")),
+        FName(TEXT("NEUDOBNAYA_PRAVDA"))});
+
+    if (FGridCell* Cell = Manager->GetCell(TaigaAnchor->X, TaigaAnchor->Y))
+    {
+        Cell->bIsWater = false;
+        Cell->State.Meta.Distortion = 0.0f;
+    }
+
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("TISHINA_LESA spawns on a low-Distortion Taiga cell"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("TISHINA_LESA")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_OjidanieBuriNeedsHighStabilityInTundra,
+    "Herbalist.Zaryana.OjidanieBuriNeedsHighStabilityInTundra",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_OjidanieBuriNeedsHighStabilityInTundra::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint* TundraAnchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Волот")));
+    if (!TestNotNull(TEXT("Tundra cell available via Волот anchor"), TundraAnchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // Изолируем от всех остальных State-триггеров, не только TIKHOE_MESTO --
+    // клетки Тайги по умолчанию держат Distortion=0, ниже порога
+    // TISHINA_LESA тривиально с самого начала (найдено 2026-09-01).
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("TISHINA_LESA")), FName(TEXT("NE_POKHVALILA")),
+        FName(TEXT("NEUDOBNAYA_PRAVDA"))});
+
+    if (FGridCell* Cell = Manager->GetCell(TundraAnchor->X, TundraAnchor->Y))
+    {
+        Cell->State.Meta.Stability = 0.3f;
+    }
+    Manager->TrySpawnStateBasedFragment();
+    TestNotEqual(TEXT("Low Stability -- does not spawn OJIDANIE_BURI"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
+
+    if (FGridCell* Cell = Manager->GetCell(TundraAnchor->X, TundraAnchor->Y))
+    {
+        Cell->State.Meta.Stability = 0.9f;
+    }
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("High Stability in Tundra -- spawns OJIDANIE_BURI"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_NePokhvalilaNeedsBabaYagaManifested,
+    "Herbalist.Zaryana.NePokhvalilaNeedsBabaYagaManifested",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_NePokhvalilaNeedsBabaYagaManifested::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Баба-Яга")));
+    if (!TestNotNull(TEXT("Баба-Яга has a seeded anchor cell"), Anchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // Изолируем от всех остальных State-триггеров -- та же контаминация,
+    // что уже пойман у KhlebSolSpawnsOnHighMolvaThreshold.
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("TISHINA_LESA")), FName(TEXT("OJIDANIE_BURI")),
+        FName(TEXT("NEUDOBNAYA_PRAVDA"))});
+
+    Manager->TrySpawnStateBasedFragment();
+    TestNotEqual(TEXT("Not manifested -- does not spawn NE_POKHVALILA"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("NE_POKHVALILA")));
+
+    if (FGridCell* Cell = Manager->GetCell(Anchor->X, Anchor->Y))
+    {
+        Cell->ManifestedEntityID = FName(TEXT("Баба-Яга"));
+    }
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("Баба-Яга manifested -- spawns NE_POKHVALILA"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("NE_POKHVALILA")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_NeudobnayaPravdaNeedsShrineInBroadleafForest,
+    "Herbalist.Zaryana.NeudobnayaPravdaNeedsShrineInBroadleafForest",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_NeudobnayaPravdaNeedsShrineInBroadleafForest::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // Якорь Дуб-старца гарантированно на клетке биома Широколиственный лес.
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Дуб-старец")));
+    if (!TestNotNull(TEXT("BroadleafForest cell available via Дуб-старец anchor"), Anchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // Изолируем от ПОДНОШЕНИЕ (то же капище иначе отдаст его первым) и от
+    // остальных State-триггеров -- та же контаминация, что уже пойман у
+    // KhlebSolSpawnsOnHighMolvaThreshold.
+    Manager->SetCollectedFragmentIDs({FName(TEXT("PODNOSHENIE")), FName(TEXT("TIKHOE_MESTO")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("TISHINA_LESA")), FName(TEXT("OJIDANIE_BURI")),
+        FName(TEXT("NE_POKHVALILA"))});
+
+    Manager->RegisterShrine(*Anchor, EShrineType::Ancestral);
+    if (FShrine* Shrine = Manager->FindShrineAt(*Anchor))
+    {
+        Shrine->Restoration = 0.9f;
+    }
+
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("Restored shrine in BroadleafForest -- spawns NEUDOBNAYA_PRAVDA"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("NEUDOBNAYA_PRAVDA")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_NitMateriDeliveredOnYarnBallAcquisition,
+    "Herbalist.Zaryana.NitMateriDeliveredOnYarnBallAcquisition",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_NitMateriDeliveredOnYarnBallAcquisition::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FName LegendaryID(TEXT("Мать-Сыра-Земля"));
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(LegendaryID);
+    if (!TestNotNull(TEXT("Мать-Сыра-Земля has a seeded anchor cell"), Anchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    if (FGridCell* Cell = Manager->GetCell(Anchor->X, Anchor->Y))
+    {
+        Cell->ManifestedEntityID = LegendaryID;
+    }
+
+    TestFalse(TEXT("Not collected before Клубочек is acquired"),
+        Manager->GetCollectedFragmentIDs().Contains(FName(TEXT("NIT_MATERI"))));
+
+    FInventoryItem Offering;
+    Offering.IngredientID = FName(TEXT("TestOffering"));
+    Offering.State.Meta.Purity = 0.9f;
+    Offering.Count = 1;
+    bool bViaDeception = true;
+    const bool bAcquired = Manager->TryAcquireArtifact(FName(TEXT("Клубочек")), { Offering }, bViaDeception);
+    TestTrue(TEXT("Клубочек acquired"), bAcquired);
+    TestTrue(TEXT("NIT_MATERI delivered directly on acquisition"),
+        Manager->GetCollectedFragmentIDs().Contains(FName(TEXT("NIT_MATERI"))));
 
     Manager->Destroy();
     return true;

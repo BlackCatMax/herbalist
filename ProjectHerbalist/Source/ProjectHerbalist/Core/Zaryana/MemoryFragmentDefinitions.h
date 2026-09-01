@@ -146,6 +146,89 @@ namespace HerbalistCore::Zaryana
             BuyanAcceptReality.ClarityGain = 0.05f;
             Out.Add(BuyanAcceptReality);
 
+            // Пять ключевых биомных фрагментов (17_Hero_And_Community.md
+            // §17.7, 2026-09-01) — закрывают оставшиеся пять биомов без
+            // своего фрагмента (Тайга/Тундра/Смеш.лес/Широколиств.лес/Степь).
+            // Тексты — точная цитата из главы (две опечатки источника —
+            // "paniкa"/"счла" — исправлены на "паника"/"сочла", не
+            // содержательная правка). ClarityGain=0.05, не 0.1 из
+            // иллюстративной арифметики §21.1 — та же причина, что уже у
+            // BUYAN_*/KHLEB_SOL выше: число не сходится и с уже реализованными
+            // фрагментами, не мой звонок менять экономику.
+
+            FMemoryFragmentDefinition TishinaLesa;
+            TishinaLesa.ID = FName(TEXT("TISHINA_LESA"));
+            TishinaLesa.Trigger = EMemoryFragmentTrigger::LowLocalDistortion;
+            TishinaLesa.TrueText = FText::FromString(TEXT(
+                "Аграфена долго не давала мне резать кору. Заставляла сперва час стоять и слушать -- не говорить "
+                "со мной, просто ждать, пока сама не услышу, где дерево дышит ровно, а где нет. Я злилась -- "
+                "думала, тянет время. Она сказала только: \"Разрежешь не там -- не узнаешь, что не там разрезала. "
+                "Дерево не переспросит\". Индрик слушает так же -- рогом, не глазами. Я тогда не поняла, при чём "
+                "тут зверь, которого никто не видел. Теперь понимаю."));
+            TishinaLesa.FalseText = FText::FromString(TEXT(
+                "Аграфена долго не давала мне резать кору. Взяла нож сама, показала, где резать -- три быстрых "
+                "движения, готово. \"Вот так. Запоминай\". Я запомнила с первого раза."));
+            TishinaLesa.ClarityGain = 0.05f;
+            Out.Add(TishinaLesa);
+
+            FMemoryFragmentDefinition OjidanieBuri;
+            OjidanieBuri.ID = FName(TEXT("OJIDANIE_BURI"));
+            OjidanieBuri.Trigger = EMemoryFragmentTrigger::HighStability;
+            OjidanieBuri.TrueText = FText::FromString(TEXT(
+                "Пурга шла на нас два дня, и Аграфена не спешила в укрытие -- сидела у входа в землянку, смотрела "
+                "на снег и молчала. Я просила уйти глубже. Она сказала: \"Кто бежит от бури первым, тот и решение "
+                "примет первым -- и торопливое\". Мы вышли, только когда снег сам лёг ровно. Я тогда думала -- она "
+                "просто не боится холода. Теперь думаю -- она ждала не бурю. Ждала, пока во мне уляжется паника."));
+            OjidanieBuri.FalseText = FText::FromString(TEXT(
+                "Пурга шла на нас два дня, и Аграфена сразу увела нас глубже в землянку, укрыла заранее -- она "
+                "всегда знала наперёд, что будет с погодой, и мы ничего не боялись."));
+            OjidanieBuri.ClarityGain = 0.05f;
+            Out.Add(OjidanieBuri);
+
+            FMemoryFragmentDefinition NePokhvalila;
+            NePokhvalila.ID = FName(TEXT("NE_POKHVALILA"));
+            NePokhvalila.Trigger = EMemoryFragmentTrigger::LegendaryZoneResolved;
+            NePokhvalila.TrueText = FText::FromString(TEXT(
+                "Я в первый раз сама, без неё, прошла мимо места, где чуяла что-то нехорошее -- не побежала, не "
+                "свернула, просто прошла ровным шагом, как она учила. Вернулась гордая, ждала слова. Аграфена "
+                "посмотрела на меня, кивнула один раз -- и спросила, что было на ужин. Ни слова о пройденном. Я "
+                "обиделась тогда. Теперь понимаю -- не потому что не заметила. Потому что заметила и сочла "
+                "достаточным просто кивнуть."));
+            NePokhvalila.FalseText = FText::FromString(TEXT(
+                "Я в первый раз сама, без неё, прошла мимо места, где чуяла что-то нехорошее. Вернулась, и "
+                "Аграфена обняла меня, сказала, что гордится, что я справилась не хуже неё самой."));
+            NePokhvalila.ClarityGain = 0.05f;
+            Out.Add(NePokhvalila);
+
+            FMemoryFragmentDefinition NeudobnayaPravda;
+            NeudobnayaPravda.ID = FName(TEXT("NEUDOBNAYA_PRAVDA"));
+            NeudobnayaPravda.Trigger = EMemoryFragmentTrigger::ShrineRestored;
+            NeudobnayaPravda.TrueText = FText::FromString(TEXT(
+                "Я принесла ей отвар, которым гордилась -- три дня варила, всё по науке. Она попробовала, "
+                "поморщилась и сказала прямо: \"Горький и бесполезный. Ты боялась ошибиться и потому не "
+                "рискнула\". Я плакала в тот вечер. Она не пришла утешать. Только на следующий день сказала: "
+                "\"Правда не становится добрее, если её смягчить. Она просто перестаёт быть правдой.\""));
+            NeudobnayaPravda.FalseText = FText::FromString(TEXT(
+                "Я принесла ей отвар, которым гордилась. Она попробовала, сказала, что неплохо для первого раза, "
+                "и что дальше будет только лучше -- не хотела меня расстраивать перед сложным годом."));
+            NeudobnayaPravda.ClarityGain = 0.05f;
+            Out.Add(NeudobnayaPravda);
+
+            FMemoryFragmentDefinition NitMateri;
+            NitMateri.ID = FName(TEXT("NIT_MATERI"));
+            NitMateri.Trigger = EMemoryFragmentTrigger::YarnBallAcquired;
+            NitMateri.TrueText = FText::FromString(TEXT(
+                "В степи всё тянется до горизонта одинаково, и я боялась заблудиться. Мать -- не Аграфена, мать, "
+                "ещё до неё -- учила меня не смотреть под ноги, а держать в голове одну далёкую точку и идти на "
+                "неё, не сверяясь ежеминутно. \"Земля не обманет, если не бежать от неё глазами\". Я тогда была "
+                "совсем маленькой и не запомнила её лица толком. Только это -- не смотреть под ноги."));
+            NitMateri.FalseText = FText::FromString(TEXT(
+                "В степи всё тянется до горизонта одинаково, и я боялась заблудиться. Мать дала мне клубок "
+                "цветной пряжи -- привязывала конец к колышку у дома, и я разматывала его, идя вперёд, чтобы "
+                "найти дорогу назад по нитке."));
+            NitMateri.ClarityGain = 0.05f;
+            Out.Add(NitMateri);
+
             return Out;
         }();
         return Definitions;

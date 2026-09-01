@@ -121,15 +121,47 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
         }
     }
 
-    // ShrineRestored — проверяем следующим, капищ мало, дёшево.
-    for (const FShrine& S : Shrines)
+    // NE_POKHVALILA (17_Hero_And_Community.md §17.7, Смешанный лес) —
+    // проверяем следующей, тоже дёшево (один якорь, не цикл). См. комментарий
+    // у EMemoryFragmentTrigger::LegendaryZoneResolved (MemoryFragmentTypes.h)
+    // — приближение открытого вопроса главы, не точная спецификация.
     {
-        if (S.Restoration < ShrineThreshold) continue;
-        const FMemoryFragmentDefinition* Def = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("PODNOSHENIE")));
-        if (Def && !CollectedFragmentIDs.Contains(Def->ID))
+        const FMemoryFragmentDefinition* Def = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("NE_POKHVALILA")));
+        if (Def && !CollectedFragmentIDs.Contains(Def->ID) && IsLegendaryManifested(FName(TEXT("Баба-Яга"))))
         {
-            SpawnMemoryFragmentAt(Def->ID, S.Cell, /*bIsFalse=*/false);
-            return;
+            const FIntPoint* Anchor = LegendaryAnchors.Find(FName(TEXT("Баба-Яга")));
+            if (Anchor)
+            {
+                SpawnMemoryFragmentAt(Def->ID, *Anchor, /*bIsFalse=*/false);
+                return;
+            }
+        }
+    }
+
+    // ShrineRestored — проверяем следующим, капищ мало, дёшево.
+    // NEUDOBNAYA_PRAVDA (§17.7, Широколиственный лес) — тот же триггер,
+    // скопирован на биом капища; проверяется в том же проходе по Shrines,
+    // не отдельным циклом.
+    {
+        const FMemoryFragmentDefinition* PodnoshenieDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("PODNOSHENIE")));
+        const FMemoryFragmentDefinition* PravdaDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("NEUDOBNAYA_PRAVDA")));
+        for (const FShrine& S : Shrines)
+        {
+            if (S.Restoration < ShrineThreshold) continue;
+
+            if (PodnoshenieDef && !CollectedFragmentIDs.Contains(PodnoshenieDef->ID))
+            {
+                SpawnMemoryFragmentAt(PodnoshenieDef->ID, S.Cell, /*bIsFalse=*/false);
+                return;
+            }
+
+            const FGridCell* ShrineCell = GetCellConst(S.Cell.X, S.Cell.Y);
+            if (PravdaDef && ShrineCell && ShrineCell->Biome == EBiomeType::BroadleafForest
+                && !CollectedFragmentIDs.Contains(PravdaDef->ID))
+            {
+                SpawnMemoryFragmentAt(PravdaDef->ID, S.Cell, /*bIsFalse=*/false);
+                return;
+            }
         }
     }
 
@@ -138,21 +170,53 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     // Собираем ВСЕ подходящие клетки и берём случайную (WorldRNG), не первую
     // встречную — иначе фрагмент почти всегда рождался бы в одном и том же
     // "первом по обходу" углу сетки (найдено при аудите 2026-08-24).
+    // TISHINA_LESA (§17.7, Тайга) и OJIDANIE_BURI (§17.7, Тундра, Stability
+    // вместо Distortion) — та же линейная развёртка клеток, тот же приём
+    // "собрать все подходящие, взять случайную", скопировано на биом.
     const FMemoryFragmentDefinition* QuietDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("TIKHOE_MESTO")));
-    if (QuietDef && !CollectedFragmentIDs.Contains(QuietDef->ID))
+    const FMemoryFragmentDefinition* TishinaDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("TISHINA_LESA")));
+    const FMemoryFragmentDefinition* BuriDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("OJIDANIE_BURI")));
+    const float StabilityThreshold = Settings ? Settings->MemoryFragmentHighStabilityThreshold : 0.7f;
+    const bool bNeedQuiet = QuietDef && !CollectedFragmentIDs.Contains(QuietDef->ID);
+    const bool bNeedTishina = TishinaDef && !CollectedFragmentIDs.Contains(TishinaDef->ID);
+    const bool bNeedBuri = BuriDef && !CollectedFragmentIDs.Contains(BuriDef->ID);
+    if (bNeedQuiet || bNeedTishina || bNeedBuri)
     {
-        TArray<FIntPoint> EligibleCells;
+        TArray<FIntPoint> EligibleCellsQuiet;
+        TArray<FIntPoint> EligibleCellsTishina;
+        TArray<FIntPoint> EligibleCellsBuri;
         for (const FGridCell& Cell : Cells)
         {
             if (Cell.bIsWater) continue;
-            if (Cell.State.Meta.Distortion < DistortionThreshold)
+            const bool bLowDistortion = Cell.State.Meta.Distortion < DistortionThreshold;
+            if (bNeedQuiet && bLowDistortion)
             {
-                EligibleCells.Add(FIntPoint(Cell.X, Cell.Y));
+                EligibleCellsQuiet.Add(FIntPoint(Cell.X, Cell.Y));
+            }
+            if (bNeedTishina && bLowDistortion && Cell.Biome == EBiomeType::Taiga)
+            {
+                EligibleCellsTishina.Add(FIntPoint(Cell.X, Cell.Y));
+            }
+            if (bNeedBuri && Cell.Biome == EBiomeType::Tundra && Cell.State.Meta.Stability >= StabilityThreshold)
+            {
+                EligibleCellsBuri.Add(FIntPoint(Cell.X, Cell.Y));
             }
         }
-        if (EligibleCells.Num() > 0)
+        if (bNeedTishina && EligibleCellsTishina.Num() > 0)
         {
-            const FIntPoint Chosen = EligibleCells[WorldRNG.RandRange(0, EligibleCells.Num() - 1)];
+            const FIntPoint Chosen = EligibleCellsTishina[WorldRNG.RandRange(0, EligibleCellsTishina.Num() - 1)];
+            SpawnMemoryFragmentAt(TishinaDef->ID, Chosen, /*bIsFalse=*/false);
+            return;
+        }
+        if (bNeedBuri && EligibleCellsBuri.Num() > 0)
+        {
+            const FIntPoint Chosen = EligibleCellsBuri[WorldRNG.RandRange(0, EligibleCellsBuri.Num() - 1)];
+            SpawnMemoryFragmentAt(BuriDef->ID, Chosen, /*bIsFalse=*/false);
+            return;
+        }
+        if (bNeedQuiet && EligibleCellsQuiet.Num() > 0)
+        {
+            const FIntPoint Chosen = EligibleCellsQuiet[WorldRNG.RandRange(0, EligibleCellsQuiet.Num() - 1)];
             SpawnMemoryFragmentAt(QuietDef->ID, Chosen, /*bIsFalse=*/false);
             return;
         }

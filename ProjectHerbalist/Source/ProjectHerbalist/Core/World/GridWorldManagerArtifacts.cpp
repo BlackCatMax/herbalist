@@ -12,6 +12,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Simulation/Private/PerceptionService.h"
+#include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
@@ -103,6 +104,16 @@ bool AGridWorldManager::TryAcquireArtifact(FName ArtifactID, const TArray<FInven
         Acquired.ArtifactID = ArtifactID;
         Acquired.bAcquiredViaDeception = bOutViaDeception;
         AcquiredArtifacts.Add(Acquired);
+    }
+
+    // НИТЬ МАТЕРИ (17_Hero_And_Community.md §17.7, Степь, событийный
+    // триггер YarnBallAcquired) — Клубочек получен, "второй биом
+    // путешествия". Доставляется напрямую здесь, тем же приёмом, что уже
+    // BuyanPathChosen/CoherentBrew — не через периодический опрос.
+    if (ArtifactID == FName(TEXT("Клубочек")))
+    {
+        AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr);
+        CollectMemoryFragment(FName(TEXT("NIT_MATERI")), /*bIsFalse=*/false, PC);
     }
 
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] %s acquired (%s), RealPurity=%.2f, PerceivedPurity=%.2f"),

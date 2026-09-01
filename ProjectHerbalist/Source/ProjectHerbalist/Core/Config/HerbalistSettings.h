@@ -375,6 +375,13 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
     float MemoryFragmentHighMolvaThreshold = 0.5f;
 
+    // OJIDANIE_BURI (17_Hero_And_Community.md §17.7, Тундра) — "клетка с
+    // высокой Stability, удержанной долго". Мгновенный порог, тот же
+    // принцип, что MemoryFragmentHighMolvaThreshold выше — в проекте нет
+    // механизма длительности.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MemoryFragmentHighStabilityThreshold = 0.7f;
+
     // Порог Coherence/Purity/Distortion для триггера CoherentBrew (варка).
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MemoryFragmentBrewCoherenceThreshold = 0.8f;
