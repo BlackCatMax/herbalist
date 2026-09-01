@@ -247,4 +247,48 @@ bool FHerbalistArtifact_CompanionArtifactsDoNotAddToAcquiredList::RunTest(const 
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_BabaYagaHonestPathNeedsNoSpecialCase,
+    "Herbalist.Artifact.BabaYagaHonestPathNeedsNoSpecialCase",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifact_BabaYagaHonestPathNeedsNoSpecialCase::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    // §21.3: "единственный Легендарный, для которого честный/обманный
+    // выбор — не наша механика поверх фольклора, а его собственная
+    // фольклорная суть... технически можно завести тем же
+    // TryAcquireArtifact, что и остальные семь, без специального случая" —
+    // этот тест доказывает именно это: ни один код-путь здесь не
+    // special-case на "Баба-Яга"/"Шапка-невидимка", проходит через общий
+    // честный/обманный гейт как любой другой артефакт.
+    const FName LegendaryID(TEXT("Баба-Яга"));
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(LegendaryID);
+    if (!TestNotNull(TEXT("Баба-Яга has a seeded anchor cell"), Anchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    if (FGridCell* Cell = Manager->GetCell(Anchor->X, Anchor->Y))
+    {
+        Cell->ManifestedEntityID = LegendaryID;
+    }
+
+    // Distortion=0, высокий real Purity -> честный путь, детерминированно
+    // (та же гарантия, что уже HonestOfferingAcquiresArtifact).
+    TArray<FInventoryItem> Offered = { MakeOfferedItem(0.9f, 0.0f) };
+    bool bViaDeception = true;
+    const bool bAcquired = Manager->TryAcquireArtifact(FName(TEXT("Шапка-невидимка")), Offered, bViaDeception);
+    TestTrue(TEXT("Шапка-невидимка acquired honestly through the general gate"), bAcquired);
+    TestFalse(TEXT("Honest path, not deception"), bViaDeception);
+    TestEqual(TEXT("Recorded like any other non-companion artifact"), Manager->GetAcquiredArtifacts().Num(), 1);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
