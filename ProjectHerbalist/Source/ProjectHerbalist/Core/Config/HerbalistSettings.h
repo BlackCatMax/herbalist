@@ -645,6 +645,17 @@ public:
     // спокойном темпе чтения, не хронометрировано точно под каждый текст.
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "1.0"))
     float MemoryRevealDisplaySeconds = 7.0f;
+
+    // Артефакты Легендарных (21_Journey_And_Artifacts.md §21.3-21.4,
+    // 2026-09-01) — единственная новая категория этого прохода без
+    // существующего аналога (найдено разведкой к шагу 6: ни "Bases", ни
+    // "Artifacts" не подходят ни под одну уже заведённую категорию).
+    // Порог среднего Purity подношения, выше которого путь считается
+    // честным (по РЕАЛЬНОМУ Purity) или обманным (по ВОСПРИНЯТОМУ, если
+    // реальный ниже) — та же логика, что уже отличает S_real/S_Perceived
+    // в тултипе (AlchemySlotWidget.cpp). Черновое число.
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ArtifactHonestPurityThreshold = 0.6f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

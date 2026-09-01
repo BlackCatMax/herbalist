@@ -77,6 +77,18 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
     bool bHasYarnBall = false;
 
+    // "Прогретое" состояние (21_Journey_And_Artifacts.md §21.3-21.4,
+    // 2026-09-01) — Зеркальце/Клубочек не заводят новый предмет как
+    // артефакты Гамаюна/Мать-Сыры-Земли, а переключают дар в это состояние
+    // (см. ArtifactTypes.h::bWarmsCompanionItem, OfferForArtifact ниже).
+    // Конкретный усиленный эффект НЕ реализован — §21.4 сама называет его
+    // только направлением, не финальным списком.
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
+    bool bMirrorWarmed = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Zaryana")
+    bool bYarnBallWarmed = false;
+
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
 
@@ -203,6 +215,17 @@ public:
     // погоду/сутки/регенерацию, не спецэффект.
     UFUNCTION(Exec, BlueprintCallable, Category = "Zaryana")
     void UseYarnBall(int32 BaseIndex);
+
+    // Подношение за артефакт Легендарной сущности (21_Journey_And_Artifacts.md
+    // §21.3-21.4) — тот же приём поиска по имени в инвентаре, что уже
+    // OfferToCommunity. ArtifactID — точное имя из ArtifactTypes.h ("Рог",
+    // "Гребень", "Молодильное яблоко", "Дубинка", "Камень-оберег", "Фонарь",
+    // "Зеркальце", "Клубочек"). Для двух последних — успех переключает
+    // bMirrorWarmed/bYarnBallWarmed вместо новой записи в
+    // AGridWorldManager::AcquiredArtifacts (см. AGridWorldManager::
+    // TryAcquireArtifact).
+    UFUNCTION(Exec)
+    void OfferForArtifact(FString ArtifactID, FString IngredientList);
 
     // Экранный попап текста воспоминания Заряны/объявления Буяна
     // (UI/MemoryRevealWidget.h, "Прогрессия/Заряна" 2026-08-29) — вызывается

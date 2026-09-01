@@ -741,6 +741,73 @@ void AHerbalistPlayerController::UseYarnBall(int32 BaseIndex)
         BaseIndex, Distance, ElapsedSeconds);
 }
 
+void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString IngredientList)
+{
+    if (!InventoryComponent) return;
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager) return;
+
+    // Тот же приём поиска по имени в инвентаре, что уже OfferToCommunity —
+    // подношение должно списать ровно то, что нашло, не случайную более
+    // позднюю копию с тем же IngredientID.
+    TArray<FInventoryItem> Items;
+    TArray<int32> Indices;
+    TArray<FString> Names;
+    IngredientList.ParseIntoArray(Names, TEXT(","), true);
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    for (const FString& Name : Names)
+    {
+        const FName IngID(*Name);
+        for (int32 i = 0; i < CurrentItems.Num(); ++i)
+        {
+            if (Indices.Contains(i)) continue;
+            if (CurrentItems[i].IngredientID == IngID)
+            {
+                Items.Add(CurrentItems[i]);
+                Indices.Add(i);
+                break;
+            }
+        }
+    }
+
+    if (Items.Num() == 0)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: no matching items in inventory"));
+        return;
+    }
+
+    const FName ArtID(*ArtifactID);
+    bool bViaDeception = false;
+    const bool bAcquired = Manager->TryAcquireArtifact(ArtID, Items, bViaDeception);
+    if (!bAcquired)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s not acquired (entity not manifested, already held, or offering too weak)"), *ArtifactID);
+        return;
+    }
+
+    // Зеркальце/Клубочек — не новый предмет, переключают дар из шага 5 в
+    // прогретое состояние (см. ArtifactTypes.h::bWarmsCompanionItem).
+    if (ArtID == FName(TEXT("Зеркальце")))
+    {
+        bMirrorWarmed = true;
+    }
+    else if (ArtID == FName(TEXT("Клубочек")))
+    {
+        bYarnBallWarmed = true;
+    }
+
+    // Индексы по убыванию — RemoveItem(Index) не должен сдвинуть ещё не
+    // обработанные позиции (тот же приём, что OfferToCommunity).
+    Indices.Sort([](int32 A, int32 B) { return A > B; });
+    for (int32 Index : Indices)
+    {
+        InventoryComponent->RemoveItem(Index, 1);
+    }
+
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("OfferForArtifact: %s acquired %s"), *ArtifactID,
+        bViaDeception ? TEXT("via deception") : TEXT("honestly"));
+}
+
 void AHerbalistPlayerController::Journal()
 {
     if (bIsAnyWidgetOpen && JournalWidgetInstance && JournalWidgetInstance->IsInViewport())

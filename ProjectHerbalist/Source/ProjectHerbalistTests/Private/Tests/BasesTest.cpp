@@ -88,4 +88,40 @@ bool FHerbalistBases_BrewingValidAtShrinesAndBasesOnly::RunTest(const FString& P
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBases_DubinkaClearsWaterForACamp,
+    "Herbalist.Bases.DubinkaClearsWaterForACamp",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBases_DubinkaClearsWaterForACamp::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    if (FGridCell* WaterCell = Manager->GetCell(4, 4))
+    {
+        WaterCell->bIsWater = true;
+    }
+
+    // Без Дубинки — вода по-прежнему отклоняется (регрессия на уже
+    // протестированное поведение выше).
+    Manager->RegisterBase(FIntPoint(4, 4));
+    TestEqual(TEXT("Water still rejected without Дубинка"), Manager->GetBases().Num(), 0);
+
+    // 21_Journey_And_Artifacts.md §21.3-21.4: "одним ударом расчищает место
+    // под стоянку в любом биоме" — единственный реально прошитый эффект
+    // артефактов этого прохода.
+    FAcquiredArtifact Dubinka;
+    Dubinka.ArtifactID = FName(TEXT("Дубинка"));
+    Manager->SetAcquiredArtifacts({ Dubinka });
+
+    Manager->RegisterBase(FIntPoint(4, 4));
+    TestEqual(TEXT("Дубинка clears water for a base"), Manager->GetBases().Num(), 1);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

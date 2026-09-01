@@ -13,6 +13,7 @@
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Shrine/ShrineTypes.h"
 #include "Core/Zaryana/MemoryFragmentTypes.h"
+#include "Core/Entities/ArtifactTypes.h"
 #include "Core/Alchemy/RitualTypes.h"
 #include "GridWorldManager.generated.h"
 
@@ -513,6 +514,36 @@ public:
     // один раз при инициализации (SeedLegendaryAnchors), не пересчитывается.
     const TMap<FName, FIntPoint>& GetLegendaryAnchors() const { return LegendaryAnchors; }
 
+    // Общий хелпер (21_Journey_And_Artifacts.md §21.3, 2026-09-01) — не
+    // существовал вовсе, весь прежний код инлайнил проверку прямо в цикл
+    // тика (UpdateEntityManifestations). Только для 16 сущностей реестра
+    // LegendaryEntityTypes.h — Берегиня не входит туда (см. её собственный
+    // комментарий в шапке файла), для неё — IsBereginyaManifested() ниже.
+    bool IsLegendaryManifested(FName EntityID) const;
+
+    // Берегиня — отдельная ветка (не через LegendaryAnchors, у неё нет
+    // фиксированного якоря: любая подходящая клетка Речной поймы может
+    // проявить её, GridWorldManagerEntities.cpp). Сканирует все клетки —
+    // редкий вызов (по требованию игрока при попытке добыть Гребень), не
+    // тиковый путь, дороговизна не имеет значения.
+    bool IsBereginyaManifested() const;
+
+    // Артефакты Легендарных (§21.3-21.4, GridWorldManagerArtifacts.cpp) —
+    // доступны только когда сущность уже проявлена; честный путь (высокий
+    // РЕАЛЬНЫЙ средний Purity подношения) или обманный (высокий только
+    // ВОСПРИНЯТЫЙ, через PerceiveRealState на текущей Clarity — та же
+    // логика, что уже отличает S_real/S_Perceived в тултипе). Ключ по
+    // ArtifactID, не LegendaryID — Гребень не имеет отдельного
+    // LegendaryEntityID (пуст в реестре), см. ArtifactTypes.h. Для
+    // Зеркальце/Клубочек (bWarmsCompanionItem) НЕ добавляет запись в
+    // AcquiredArtifacts — это тот же дар Аграфены из шага 5, вызывающая
+    // сторона (HerbalistPlayerController::OfferForArtifact) сама
+    // переключает bMirrorWarmed/bYarnBallWarmed по результату.
+    bool TryAcquireArtifact(FName ArtifactID, const TArray<FInventoryItem>& Offered, bool& bOutViaDeception);
+
+    const TArray<FAcquiredArtifact>& GetAcquiredArtifacts() const { return AcquiredArtifacts; }
+    void SetAcquiredArtifacts(const TArray<FAcquiredArtifact>& InArtifacts) { AcquiredArtifacts = InArtifacts; }
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -594,6 +625,9 @@ protected:
 
     // ---- Базы/лагеря (21_Journey_And_Artifacts.md §21.2) ----
     TArray<FHerbalistBase> Bases;
+
+    // ---- Артефакты Легендарных (21_Journey_And_Artifacts.md §21.3-21.4) ----
+    TArray<FAcquiredArtifact> AcquiredArtifacts;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

@@ -50,6 +50,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->Molva = WorldManager->Molva;
     Save->GardenPlots = WorldManager->GardenPlots;
     Save->Bases = WorldManager->GetBases();
+    Save->AcquiredArtifacts = WorldManager->GetAcquiredArtifacts();
     Save->GlobalPerceptionClarity = WorldManager->GetGlobalPerceptionClarity();
     Save->ClarityAnchor = WorldManager->GetClarityAnchor();
     Save->bRosaFirstFalseSignalShown = WorldManager->IsRosaFirstFalseSignalShown();
@@ -62,6 +63,8 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
         if (PC->JournalComponent) Save->JournalEntries = PC->JournalComponent->GetEntries();
         Save->bHasMirror = PC->bHasMirror;
         Save->bHasYarnBall = PC->bHasYarnBall;
+        Save->bMirrorWarmed = PC->bMirrorWarmed;
+        Save->bYarnBallWarmed = PC->bYarnBallWarmed;
         if (APawn* Pawn = PC->GetPawn())
         {
             Save->PlayerLocation = Pawn->GetActorLocation();
@@ -119,6 +122,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->Molva = Save->Molva;
     WorldManager->GardenPlots = Save->GardenPlots;
     WorldManager->SetBases(Save->Bases);
+    WorldManager->SetAcquiredArtifacts(Save->AcquiredArtifacts);
     WorldManager->SetGlobalPerceptionClarity(Save->GlobalPerceptionClarity);
     WorldManager->SetClarityAnchor(Save->ClarityAnchor);
     WorldManager->SetRosaFirstFalseSignalShown(Save->bRosaFirstFalseSignalShown);
@@ -132,6 +136,8 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
         if (PC->JournalComponent) PC->JournalComponent->RestoreEntries(Save->JournalEntries);
         PC->bHasMirror = Save->bHasMirror;
         PC->bHasYarnBall = Save->bHasYarnBall;
+        PC->bMirrorWarmed = Save->bMirrorWarmed;
+        PC->bYarnBallWarmed = Save->bYarnBallWarmed;
         if (APawn* Pawn = PC->GetPawn())
         {
             Pawn->SetActorLocationAndRotation(Save->PlayerLocation, Save->PlayerRotation);

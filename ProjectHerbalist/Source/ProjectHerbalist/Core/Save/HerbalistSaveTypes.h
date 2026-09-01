@@ -18,6 +18,7 @@
 #include "GameFramework/SaveGame.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Journal/JournalTypes.h"
+#include "Core/Entities/ArtifactTypes.h"
 #include "Core/Shrine/ShrineTypes.h"
 #include "HerbalistSaveTypes.generated.h"
 
@@ -114,6 +115,11 @@ public:
     UPROPERTY()
     TArray<FHerbalistBase> Bases;
 
+    // Артефакты Легендарных (§21.3-21.4, 2026-09-01) — тот же класс поля,
+    // что Bases выше.
+    UPROPERTY()
+    TArray<FAcquiredArtifact> AcquiredArtifacts;
+
     // Заряна (обсуждение в сессии 2026-08-24) — Clarity/Буян/собранные ID
     // растут медленно и редко, ровно то, что должно переживать сохранение.
     UPROPERTY()
@@ -148,6 +154,14 @@ public:
 
     UPROPERTY()
     bool bHasYarnBall = false;
+
+    // Прогретое состояние (§21.3-21.4, 2026-09-01) — та же логика, что
+    // bHasMirror/bHasYarnBall выше.
+    UPROPERTY()
+    bool bMirrorWarmed = false;
+
+    UPROPERTY()
+    bool bYarnBallWarmed = false;
 
     UPROPERTY()
     TArray<FInventoryItem> InventoryItems;
