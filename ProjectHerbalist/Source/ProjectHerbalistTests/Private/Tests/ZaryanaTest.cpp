@@ -174,4 +174,128 @@ bool FHerbalistZaryana_BuyanRequiresBothWorldStateAndShrines::RunTest(const FStr
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_RosaFallsBackToS0WhenCellUnset,
+    "Herbalist.Zaryana.RosaFallsBackToS0WhenCellUnset",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_RosaFallsBackToS0WhenCellUnset::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // ZaryanaCell по умолчанию (-1,-1) — не размещена ни левел-дизайнером,
+    // ни AlchemyTableActor::BeginPlay (в тестовом мире стола нет).
+    FRandomStream Rng(1);
+    const FRealState Perceived = Manager->GetZaryanaPerceivedState(Rng);
+    TestEqual(TEXT("Falls back to S0 without a placed ZaryanaCell"), Perceived.Meta.Purity, FAlatyr::S0.Meta.Purity);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_RosaLayer1MatchesCellStateAtFullClarity,
+    "Herbalist.Zaryana.RosaLayer1MatchesCellStateAtFullClarity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_RosaLayer1MatchesCellStateAtFullClarity::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetZaryanaCellIfUnset(FIntPoint(0, 0));
+    if (FGridCell* Cell = Manager->GetCell(0, 0))
+    {
+        Cell->State.Meta.Purity = 0.8f;
+        Cell->State.Meta.Corruption = 0.1f;
+    }
+    // Clarity=1 гасит шум формулы PerceiveRealState (NoiseScale = Distortion
+    // * (1-Clarity) = 0) — та же гарантия, что уже проверяет PerceptionServiceTest.cpp.
+    // Никаких капищ/хозяев рядом не зарегистрировано — Слой 3 не добавляет
+    // отдалённого влияния, чтение обязано точно совпасть со Слоем 1.
+    Manager->SetGlobalPerceptionClarity(1.0f);
+
+    FRandomStream Rng(1);
+    const FRealState Perceived = Manager->GetZaryanaPerceivedState(Rng);
+    TestEqual(TEXT("Layer 1 Purity passes through exactly at full Clarity, no nearby shrines"), Perceived.Meta.Purity, 0.8f);
+    TestEqual(TEXT("Layer 1 Corruption passes through exactly at full Clarity, no nearby shrines"), Perceived.Meta.Corruption, 0.1f);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_RosaSensingRadiusGrowsWithClarity,
+    "Herbalist.Zaryana.RosaSensingRadiusGrowsWithClarity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_RosaSensingRadiusGrowsWithClarity::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetZaryanaCellIfUnset(FIntPoint(0, 0));
+
+    // Капище далеко за пределами базового радиуса (дефолт 3), но внутри
+    // радиуса при высокой Clarity (дефолт 3 + 1.0*15 = 18) — §19.2 Слой 3.
+    Manager->RegisterShrine(FIntPoint(10, 0), EShrineType::Ancestral);
+    if (FShrine* Shrine = Manager->FindShrineAt(FIntPoint(10, 0)))
+    {
+        Shrine->Restoration = 1.0f;
+    }
+
+    Manager->SetGlobalPerceptionClarity(0.0f);
+    FRandomStream RngLow(1);
+    const FRealState PerceivedLowClarity = Manager->GetZaryanaPerceivedState(RngLow);
+
+    Manager->SetGlobalPerceptionClarity(1.0f);
+    FRandomStream RngHigh(1);
+    const FRealState PerceivedHighClarity = Manager->GetZaryanaPerceivedState(RngHigh);
+
+    TestTrue(TEXT("A distant restored shrine only lightens the reading once Clarity widens the radius"),
+        PerceivedHighClarity.Meta.Purity > PerceivedLowClarity.Meta.Purity);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_RosaFirstUntouchedDriftIsFlaggedOnceAsCoincidence,
+    "Herbalist.Zaryana.RosaFirstUntouchedDriftIsFlaggedOnceAsCoincidence",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_RosaFirstUntouchedDriftIsFlaggedOnceAsCoincidence::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetZaryanaCellIfUnset(FIntPoint(0, 0));
+
+    // Первый опрос — только фиксирует точку отсчёта, флаг ещё не может сработать.
+    Manager->UpdateRosaSignal();
+    TestFalse(TEXT("First poll only captures the baseline"), Manager->IsRosaFirstFalseSignalShown());
+
+    // Мир вокруг Заряны меняется сам (тот же эффект, что релаксация/биом-граф
+    // дают непрерывно) — без прямого применения зелья на её клетку.
+    if (FGridCell* Cell = Manager->GetCell(0, 0))
+    {
+        Cell->State.Meta.Purity = FMath::Clamp(Cell->State.Meta.Purity + 0.5f, 0.0f, 1.0f);
+    }
+
+    Manager->UpdateRosaSignal();
+    TestTrue(TEXT("Untouched drift flags the one-time false signal"), Manager->IsRosaFirstFalseSignalShown());
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

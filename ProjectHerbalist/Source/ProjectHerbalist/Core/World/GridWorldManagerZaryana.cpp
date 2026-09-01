@@ -17,6 +17,7 @@
 #include "Core/Journal/HerbalistJournalComponent.h"
 #include "Core/Journal/JournalTypes.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "Core/Simulation/Private/PerceptionService.h"
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -38,6 +39,7 @@ void AGridWorldManager::UpdateMemoryFragments(float DeltaTime)
     {
         FragmentStateCheckAccumulator = 0.0f;
         RecomputeGlobalPerceptionClarity();
+        UpdateRosaSignal();
         TrySpawnStateBasedFragment();
         CheckBuyanCondition();
     }
@@ -305,10 +307,118 @@ void AGridWorldManager::CheckBuyanCondition()
     }
 }
 
+void AGridWorldManager::SetZaryanaCellIfUnset(const FIntPoint& Cell)
+{
+    if (ZaryanaCell == FIntPoint(-1, -1))
+    {
+        ZaryanaCell = Cell;
+    }
+}
+
+FRealState AGridWorldManager::GetZaryanaPerceivedState(FRandomStream& Rng) const
+{
+    const FGridCell* Cell = GetCellConst(ZaryanaCell.X, ZaryanaCell.Y);
+    if (!Cell)
+    {
+        // ZaryanaCell ещё не размещена (ни левел-дизайнером, ни
+        // AAlchemyTableActor::BeginPlay) — нейтральный дефолт, не крэш.
+        return FAlatyr::S0;
+    }
+
+    // Слой 1 (§19.2): её собственная клетка, честный FRealState.
+    FRealState Blended = Cell->State;
+
+    // Слой 3 (§19.2): радиус чувствительности растёт с Clarity —
+    // "восстановленное капище на другом краю карты чуть светлит её кожу".
+    // Тот же HerbalistCore::Shrine::GetInfluenceAt, что уже использует
+    // остальной проект (GridWorldManagerEntities.cpp/PipelineV2.cpp), только
+    // с радиусом, растущим по Clarity, а не фиксированным ShrineInfluenceRadius.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float BaseRadius = Settings ? Settings->RosaBaseRadius : 3.0f;
+    const float RadiusPerClarity = Settings ? Settings->RosaRadiusPerClarity : 15.0f;
+    const int32 Radius = FMath::RoundToInt(BaseRadius + GlobalPerceptionClarity * RadiusPerClarity);
+
+    const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(ZaryanaCell, Shrines, Radius);
+
+    // Хозяева места в радиусе — тот же знаковый принцип (Respect), простое
+    // среднее по найденным: вертикальный срез, не полноценная модель веса
+    // по расстоянию.
+    float SumLandmarkRespect = 0.0f;
+    int32 LandmarkCount = 0;
+    for (const FEntityLandmark& L : EntityLandmarks)
+    {
+        const int32 Dist = FMath::Max(FMath::Abs(ZaryanaCell.X - L.Cell.X), FMath::Abs(ZaryanaCell.Y - L.Cell.Y));
+        if (Dist > Radius) continue;
+        SumLandmarkRespect += L.Respect;
+        ++LandmarkCount;
+    }
+    const float LandmarkInfluence = LandmarkCount > 0 ? SumLandmarkRespect / LandmarkCount : 0.0f;
+    const float DistantInfluence = (ShrineInfluence + LandmarkInfluence) * 0.5f;
+
+    // Тот же знаковый принцип, что подношение капищу/хозяину
+    // (GridWorldManagerTick.cpp): благое — светлит (Purity), скверное —
+    // темнит (Corruption). Небольшой множитель — это фоновый подмес
+    // отдалённого влияния, не замена Слоя 1.
+    Blended.Meta.Purity = FMath::Clamp(Blended.Meta.Purity + FMath::Max(DistantInfluence, 0.0f) * 0.1f, 0.0f, 1.0f);
+    Blended.Meta.Corruption = FMath::Clamp(Blended.Meta.Corruption + FMath::Max(-DistantInfluence, 0.0f) * 0.1f, 0.0f, 1.0f);
+
+    // Честный шум — та же формула/сид-паттерн, что уже AlchemySlotWidget.cpp
+    // (свой FRandomStream у вызывающего, не WorldRNG). §19.4: "снижает шум в
+    // самом важном показании игры" — роса не привилегированное окно истины.
+    return Simulation::FPerceptionService::PerceiveRealState(Blended, Rng, GlobalPerceptionClarity);
+}
+
+void AGridWorldManager::UpdateRosaSignal()
+{
+    const FGridCell* Cell = GetCellConst(ZaryanaCell.X, ZaryanaCell.Y);
+    if (!Cell)
+    {
+        bZaryanaCellTouchedSinceLastPoll = false;
+        return;
+    }
+
+    const float CurrentMagnitude = HerbalistCore::Math::Distance(Cell->State, FAlatyr::S0);
+
+    if (!bRosaBaselineCaptured)
+    {
+        // Первый опрос после размещения клетки — нет предыдущего значения
+        // для сравнения, только фиксируем точку отсчёта.
+        LastRosaRealMagnitude = CurrentMagnitude;
+        bRosaBaselineCaptured = true;
+        bZaryanaCellTouchedSinceLastPoll = false;
+        return;
+    }
+
+    // Слой 2 (§19.2, "не специфицирован главой жёстко" — решение по месту,
+    // см. план): роса поменялась сама, без прямого применения зелья на
+    // ZaryanaCell с прошлого опроса (флаг выставляется в
+    // GridWorldManagerTick.cpp::RunSimulationStep) — реальный мир вокруг
+    // неё дрейфует непрерывно и без игрока (релаксация к TargetState,
+    // биом-граф, эффекты проявленных сущностей), это и создаёт совпадение.
+    // Разовая метка на партию, не постоянная механика.
+    const bool bChanged = !FMath::IsNearlyEqual(CurrentMagnitude, LastRosaRealMagnitude, KINDA_SMALL_NUMBER);
+    if (bChanged && !bZaryanaCellTouchedSinceLastPoll && !bRosaFirstFalseSignalShown)
+    {
+        bRosaFirstFalseSignalShown = true;
+        UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] Роса дрогнула сама собой -- первое совпадение (Слой 2, §19.2)"));
+        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()))
+        {
+            PC->ShowMemoryRevealText(FText::FromString(TEXT(
+                "Роса на её коже дрогнула сама собой -- ты в этом не при чём. "
+                "Совпадение? Или мир шире, чем кажется отсюда?")));
+        }
+    }
+
+    LastRosaRealMagnitude = CurrentMagnitude;
+    bZaryanaCellTouchedSinceLastPoll = false;
+}
+
 void AGridWorldManager::ShowZaryanaStatus()
 {
     UE_LOG(LogHerbalistZaryana, Log, TEXT("=== ZARYANA STATUS ==="));
     UE_LOG(LogHerbalistZaryana, Log, TEXT("GlobalPerceptionClarity: %.2f (Anchor: %.2f)"), GlobalPerceptionClarity, ClarityAnchor);
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("ZaryanaCell: %s, first false Rosa signal shown: %s"),
+        *ZaryanaCell.ToString(), bRosaFirstFalseSignalShown ? TEXT("true") : TEXT("false"));
     UE_LOG(LogHerbalistZaryana, Log, TEXT("Buyan reached: %s"), bBuyanReached ? TEXT("true") : TEXT("false"));
     UE_LOG(LogHerbalistZaryana, Log, TEXT("Collected fragments (%d):"), CollectedFragmentIDs.Num());
     for (FName ID : CollectedFragmentIDs)

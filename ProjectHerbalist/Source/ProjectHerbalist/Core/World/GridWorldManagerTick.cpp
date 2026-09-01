@@ -252,6 +252,23 @@ void AGridWorldManager::RunSimulationStep()
         }
     }
 
+    // Роса Заряны (19_Rosa_Signal.md §19.2, Слой 2) — фиксируем прямое
+    // применение зелья на её клетку в этом тике, отдельно от подношений
+    // капищам/хозяевам выше: UpdateRosaSignal (GridWorldManagerZaryana.cpp)
+    // на следующем опросе должен отличить "игрок сам полил" от "роса
+    // дрогнула сама", а не решать это здесь.
+    if (Delta.WorldChanges.Num() > 0 && ZaryanaCell != FIntPoint(-1, -1))
+    {
+        for (const FCommandEntry& Cmd : CommandsCopy)
+        {
+            if (Cmd.Primitive == ECommandPrimitive::Apply && !Cmd.Apply.bIsCrafting && Cmd.Apply.TargetCell == ZaryanaCell)
+            {
+                bZaryanaCellTouchedSinceLastPoll = true;
+                break;
+            }
+        }
+    }
+
     // Запись кадра трассировки
     if (bEnableTrace)
     {

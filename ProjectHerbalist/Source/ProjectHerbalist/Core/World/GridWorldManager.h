@@ -427,6 +427,29 @@ public:
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowZaryanaStatus();
 
+    // ---- Чёрная роса Заряны (19_Rosa_Signal.md §19.2) ----
+    // Слои 1+3: реальное State клетки ZaryanaCell + подмешанное влияние
+    // капищ/хозяев в радиусе, растущем с Clarity, + честный шум
+    // PerceiveRealState (тот же приём, что уже AlchemySlotWidget.cpp —
+    // Rng принадлежит вызывающему, свой фиксированный сид, не WorldRNG).
+    FRealState GetZaryanaPerceivedState(FRandomStream& Rng) const;
+
+    // Слой 2 — обнаруживает, что роса (Слой 1) поменялась без прямого
+    // применения зелья на ZaryanaCell с прошлого опроса, и один раз за
+    // партию помечает это как совпадение. Публично тем же принципом, что
+    // CheckBuyanCondition — тикается из UpdateMemoryFragments, но и
+    // напрямую тестируемо.
+    void UpdateRosaSignal();
+
+    // AAlchemyTableActor::BeginPlay вызывает это на своей клетке (дом/очаг)
+    // сразу после регистрации капища/Домового — тот же принцип "дефолт
+    // рядом с домом", а явная расстановка ZaryanaCell левел-дизайнером в
+    // редакторе (EditAnywhere ниже) не перезаписывается.
+    void SetZaryanaCellIfUnset(const FIntPoint& Cell);
+
+    bool IsRosaFirstFalseSignalShown() const { return bRosaFirstFalseSignalShown; }
+    void SetRosaFirstFalseSignalShown(bool bInShown) { bRosaFirstFalseSignalShown = bInShown; }
+
     // public тем же принципом, что UpdateShrines/RegenerateCellParameters —
     // тикается из UpdateMemoryFragments, но и напрямую тестируемо.
     void CheckBuyanCondition();
@@ -558,6 +581,23 @@ protected:
 
     void TrySpawnStateBasedFragment();
     void SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoint& Cell, bool bIsFalse);
+
+    // ---- Роса Заряны (19_Rosa_Signal.md §19.2) ----
+    // (-1,-1) = не размещена — SetZaryanaCellIfUnset (AAlchemyTableActor::
+    // BeginPlay) или ручная расстановка в редакторе задают реальное значение.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Zaryana")
+    FIntPoint ZaryanaCell = FIntPoint(-1, -1);
+
+    // Слой 2 — состояние опроса, не игровой прогресс: намеренно не
+    // персистится (тот же класс полей, что FragmentStateCheckAccumulator
+    // выше), кроме итогового bRosaFirstFalseSignalShown ниже.
+    float LastRosaRealMagnitude = 0.0f;
+    bool bRosaBaselineCaptured = false;
+    bool bZaryanaCellTouchedSinceLastPoll = false;
+
+    // Разовая метка на партию — персистится (HerbalistSaveTypes.h), чтобы
+    // "первое совпадение" не срабатывало заново после каждой перезагрузки.
+    bool bRosaFirstFalseSignalShown = false;
 
     // ---- Инициализация ----
     UFUNCTION(BlueprintCallable, Category = "World|Init")

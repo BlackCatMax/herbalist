@@ -389,6 +389,18 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ClarityResponseRange = 0.2f;
 
+    // Роса Заряны (19_Rosa_Signal.md §19.2, Слой 3): радиус в клетках, с
+    // которого влияние капищ/хозяев места подмешивается в её State —
+    // растёт с Clarity ("восстановленное капище на другом краю карты чуть
+    // светлит её кожу"). Числа черновые — 3 клетки у Clarity=0 (её
+    // непосредственный двор), до ~18 у Clarity=1 (большая часть сетки
+    // 20x20 по умолчанию).
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float RosaBaseRadius = 3.0f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float RosaRadiusPerClarity = 15.0f;
+
     // Буян (§15.5): средний Distance(State, S0) по клеткам ниже порога +
     // все капища мира выше порога Restoration.
     UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "0.0"))

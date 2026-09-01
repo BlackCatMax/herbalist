@@ -118,6 +118,14 @@ public:
     UPROPERTY()
     float ClarityAnchor = 0.0f;
 
+    // Роса (19_Rosa_Signal.md §19.2, Слой 2) — разовая метка на партию,
+    // персистится, чтобы "первое совпадение" не срабатывало заново после
+    // каждой перезагрузки. ZaryanaCell саму не сохраняем — она левел-контент
+    // (тот же принцип, что позиция AAlchemyTableActor/Shrine.Cell), не
+    // рантайм-состояние.
+    UPROPERTY()
+    bool bRosaFirstFalseSignalShown = false;
+
     UPROPERTY()
     bool bBuyanReached = false;
 

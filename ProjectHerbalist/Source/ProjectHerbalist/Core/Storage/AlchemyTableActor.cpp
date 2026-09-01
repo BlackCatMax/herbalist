@@ -43,6 +43,10 @@ void AAlchemyTableActor::BeginPlay()
             // хозяин очага, не место на карте: там же, где котёл, не через
             // биом-сопоставление, тот же принцип, что и у капища выше.
             WorldManager->RegisterDomovoi(GridCoords);
+
+            // Роса Заряны (19_Rosa_Signal.md §19.2) — дефолт "рядом с домом",
+            // не перезаписывает явную расстановку левел-дизайнером.
+            WorldManager->SetZaryanaCellIfUnset(GridCoords);
         }
         else
         {
