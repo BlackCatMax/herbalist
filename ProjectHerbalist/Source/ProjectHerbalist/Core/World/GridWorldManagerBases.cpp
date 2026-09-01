@@ -33,20 +33,13 @@ void AGridWorldManager::RegisterBase(const FIntPoint& Cell)
     }
     if (Center->bIsWater)
     {
-        // Дубинка (Дубыня, 21_Journey_And_Artifacts.md §21.3-21.4) — "одним
-        // ударом расчищает место под стоянку в любом биоме". Единственный
-        // реально прошитый эффект артефактов этого прохода — прямая
-        // проверка здесь, RegisterBase остаётся единственной точкой входа
-        // для основания базы (FoundBase на контроллере просто её вызывает,
-        // не дублирует логику).
-        const bool bHasClub = AcquiredArtifacts.ContainsByPredicate(
-            [](const FAcquiredArtifact& A) { return A.ArtifactID == FName(TEXT("Дубинка")); });
-        if (!bHasClub)
-        {
-            UE_LOG(LogHerbalistWorld, Warning, TEXT("[Base] (%d,%d) is water — not registered"), Cell.X, Cell.Y);
-            return;
-        }
-        UE_LOG(LogHerbalistWorld, Log, TEXT("[Base] (%d,%d) is water, but Дубинка clears it for a camp"), Cell.X, Cell.Y);
+        // Дубинка/Дубыня изъяты из дизайна (21_Journey_And_Artifacts.md
+        // §21.3/§21.5, 2026-09-01, коммит "Ending and artifacts") — Смешанный
+        // лес теперь Баба-Яга/Шапка-невидимка, у которой нет эффекта,
+        // связанного с базами. Вода снова всегда запрещена для базы, тем же
+        // способом, что и до Дубинки — не регрессия, отмена конкретной фичи.
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Base] (%d,%d) is water — not registered"), Cell.X, Cell.Y);
+        return;
     }
     for (const FHerbalistBase& Existing : Bases)
     {

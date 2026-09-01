@@ -268,11 +268,19 @@ inline const TArray<FLegendaryEntityDefinition>& GetLegendaryEntityDefinitions()
             Defs.Add(D);
         }
 
-        // Дубыня (Смеш. лес): богатырь-древоборец -> Body + Nature, та же
-        // пара осей, что у Индрик-зверя (сила + связь с лесом), другой биом.
+        // Баба-Яга (Смеш. лес, 2026-09-01: заменила здесь Дубыню —
+        // 21_Journey_And_Artifacts.md §21.3/§21.5, "Ending and artifacts") —
+        // тот же слот/якорь/триггер, что был у Дубыни (Pole/MorokThreshold/
+        // EffectAxis не тронуты, сама глава не даёт им замены — только
+        // EntityID и флаворный комментарий). Смешанный лес как переходный,
+        // пограничный биом уже назван в главе (§21.3) подходящим её
+        // фольклорной пограничной роли; Body+Nature как "испытание силой и
+        // близостью к лесу" читается не хуже для неё, чем для богатыря-
+        // древоборца — тот же честный ближайший эквивалент, что уже применён
+        // к другим существам этого файла (жар-птица/Лихо/Вольга).
         {
             FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Дубыня"));
+            D.EntityID = FName(TEXT("Баба-Яга"));
             D.Biome = EBiomeType::MixedForest;
             D.bLandOnly = true;
             D.Pole = ELegendaryPole::Benign;

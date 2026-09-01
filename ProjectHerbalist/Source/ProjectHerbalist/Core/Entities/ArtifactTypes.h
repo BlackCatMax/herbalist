@@ -107,9 +107,11 @@ inline const TArray<FArtifactDefinition>& GetArtifactDefinitions()
             Defs.Add(D);
         }
         {
+            // Дубинка/Дубыня изъяты из дизайна этой ревизией (§21.3/§21.5,
+            // коммит "Ending and artifacts") — Смешанный лес теперь Баба-Яга.
             FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Дубинка"));
-            D.LegendaryEntityID = FName(TEXT("Дубыня"));
+            D.ArtifactID = FName(TEXT("Шапка-невидимка"));
+            D.LegendaryEntityID = FName(TEXT("Баба-Яга"));
             D.Biome = EBiomeType::MixedForest;
             Defs.Add(D);
         }

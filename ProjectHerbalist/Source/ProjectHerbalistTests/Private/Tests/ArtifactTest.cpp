@@ -149,9 +149,9 @@ bool FHerbalistArtifact_WeakOfferingFailsEitherWay::RunTest(const FString& Param
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
-    const FName LegendaryID(TEXT("Дубыня"));
+    const FName LegendaryID(TEXT("Баба-Яга"));
     const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(LegendaryID);
-    if (!TestNotNull(TEXT("Дубыня has a seeded anchor cell"), Anchor))
+    if (!TestNotNull(TEXT("Баба-Яга has a seeded anchor cell"), Anchor))
     {
         Manager->Destroy();
         return false;
@@ -166,7 +166,7 @@ bool FHerbalistArtifact_WeakOfferingFailsEitherWay::RunTest(const FString& Param
     TArray<FInventoryItem> WeakOffering = { MakeOfferedItem(0.1f, 0.0f) };
     bool bViaDeception = false;
     TestFalse(TEXT("A weak offering acquires nothing, honestly or not"),
-        Manager->TryAcquireArtifact(FName(TEXT("Дубинка")), WeakOffering, bViaDeception));
+        Manager->TryAcquireArtifact(FName(TEXT("Шапка-невидимка")), WeakOffering, bViaDeception));
     TestEqual(TEXT("Nothing recorded"), Manager->GetAcquiredArtifacts().Num(), 0);
 
     Manager->Destroy();
