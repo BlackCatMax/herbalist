@@ -16,6 +16,7 @@
 #include "Core/Types/HerbalistCoreMath.h"
 #include "Core/Journal/HerbalistJournalComponent.h"
 #include "Core/Journal/JournalTypes.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -36,9 +37,58 @@ void AGridWorldManager::UpdateMemoryFragments(float DeltaTime)
     if (FragmentStateCheckAccumulator >= CheckInterval)
     {
         FragmentStateCheckAccumulator = 0.0f;
+        RecomputeGlobalPerceptionClarity();
         TrySpawnStateBasedFragment();
         CheckBuyanCondition();
     }
+}
+
+void AGridWorldManager::RecomputeGlobalPerceptionClarity()
+{
+    // Отклик = среднее Restoration (капища) + Respect (хозяева) минус
+    // средний MorokHistory по узлам биом-графа (§20.3: "минус недавние
+    // Catastrophe-исходы" — отдельного счётчика Catastrophe в проекте нет,
+    // BiomeGraphSubsystem::RecordFootprint уже копит эквивалентный сигнал в
+    // FBiomeMemory::MorokHistory, экспоненциально затухающий сам по себе).
+    // Толкование "вложенных клеток" как ВСЕХ Shrines+EntityLandmarks, не
+    // только тех, куда игрок реально вкладывался — вертикальный срез, не
+    // полная семантика главы (в коде нет понятия "вложенная клетка").
+    float SumRestorationRespect = 0.0f;
+    int32 CountRestorationRespect = 0;
+    for (const FShrine& S : Shrines)
+    {
+        SumRestorationRespect += S.Restoration;
+        ++CountRestorationRespect;
+    }
+    for (const FEntityLandmark& L : EntityLandmarks)
+    {
+        SumRestorationRespect += L.Respect;
+        ++CountRestorationRespect;
+    }
+    const float AvgRestorationRespect = CountRestorationRespect > 0 ? SumRestorationRespect / CountRestorationRespect : 0.0f;
+
+    float AvgMorokHistory = 0.0f;
+    if (UBiomeGraphSubsystem* Graph = GetWorld() ? GetWorld()->GetSubsystem<UBiomeGraphSubsystem>() : nullptr)
+    {
+        const TMap<FName, FBiomeGraphNode>& Nodes = Graph->GetNodes();
+        if (Nodes.Num() > 0)
+        {
+            float SumMorokHistory = 0.0f;
+            for (const auto& NodePair : Nodes)
+            {
+                SumMorokHistory += NodePair.Value.Memory.MorokHistory;
+            }
+            AvgMorokHistory = SumMorokHistory / Nodes.Num();
+        }
+    }
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float ResponseRange = Settings ? Settings->ClarityResponseRange : 0.2f;
+    const float Response = FMath::Clamp(AvgRestorationRespect - AvgMorokHistory, -ResponseRange, ResponseRange);
+
+    // Clarity = max(Якорь, Якорь + Отклик) — отклик не может утащить
+    // Clarity ниже уже заработанного якоря, только поднять её выше (§20.3).
+    GlobalPerceptionClarity = FMath::Clamp(FMath::Max(ClarityAnchor, ClarityAnchor + Response), 0.0f, 1.0f);
 }
 
 void AGridWorldManager::TrySpawnStateBasedFragment()
@@ -160,18 +210,22 @@ void AGridWorldManager::CollectMemoryFragment(FName DefinitionID, bool bIsFalse,
     if (bIsFalse)
     {
         // Ложное воспоминание — не блокирует будущий подлинный спавн того же
-        // ID (CollectedFragmentIDs не трогаем) и слегка портит уже набранную
-        // ясность, а не даёт её.
-        GlobalPerceptionClarity = FMath::Max(GlobalPerceptionClarity - Def->ClarityGain * 0.5f, 0.0f);
+        // ID (CollectedFragmentIDs не трогаем). Изменение поведения
+        // (2026-09-01, §20.3 "якорь + отклик"): прямой штраф Clarity убран
+        // сознательно, не потерян — якорь монотонен по спецификации главы,
+        // штрафовать в нём больше нечего, а волатильный отклик и так честно
+        // отражает состояние мира на следующем пересчёте. Ложный фрагмент
+        // остаётся вредным иначе — он лжёт текстом, не крадёт прогресс.
         UE_LOG(LogHerbalistZaryana, Warning, TEXT("[Zaryana] Ложное воспоминание (%s): \"%s\""),
             *DefinitionID.ToString(), *Def->FalseText.ToString());
     }
     else
     {
         CollectedFragmentIDs.Add(DefinitionID);
-        GlobalPerceptionClarity = FMath::Clamp(GlobalPerceptionClarity + Def->ClarityGain, 0.0f, 1.0f);
-        UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] Подлинное воспоминание (%s): \"%s\" (Clarity=%.2f)"),
-            *DefinitionID.ToString(), *Def->TrueText.ToString(), GlobalPerceptionClarity);
+        ClarityAnchor = FMath::Clamp(ClarityAnchor + Def->ClarityGain, 0.0f, 1.0f);
+        RecomputeGlobalPerceptionClarity();
+        UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] Подлинное воспоминание (%s): \"%s\" (Anchor=%.2f, Clarity=%.2f)"),
+            *DefinitionID.ToString(), *Def->TrueText.ToString(), ClarityAnchor, GlobalPerceptionClarity);
     }
 
     // Экран + Травник, "Прогрессия/Заряна" 2026-08-29 — раньше сбор был виден
@@ -254,7 +308,7 @@ void AGridWorldManager::CheckBuyanCondition()
 void AGridWorldManager::ShowZaryanaStatus()
 {
     UE_LOG(LogHerbalistZaryana, Log, TEXT("=== ZARYANA STATUS ==="));
-    UE_LOG(LogHerbalistZaryana, Log, TEXT("GlobalPerceptionClarity: %.2f"), GlobalPerceptionClarity);
+    UE_LOG(LogHerbalistZaryana, Log, TEXT("GlobalPerceptionClarity: %.2f (Anchor: %.2f)"), GlobalPerceptionClarity, ClarityAnchor);
     UE_LOG(LogHerbalistZaryana, Log, TEXT("Buyan reached: %s"), bBuyanReached ? TEXT("true") : TEXT("false"));
     UE_LOG(LogHerbalistZaryana, Log, TEXT("Collected fragments (%d):"), CollectedFragmentIDs.Num());
     for (FName ID : CollectedFragmentIDs)

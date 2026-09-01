@@ -112,6 +112,12 @@ public:
     UPROPERTY()
     float GlobalPerceptionClarity = 0.0f;
 
+    // Якорь Clarity (20_Investment_And_Progression.md §20.3, 2026-09-01) —
+    // тот же принцип, что GlobalPerceptionClarity выше: растёт редко,
+    // должен пережить сохранение, восстанавливается как есть, без пересчёта.
+    UPROPERTY()
+    float ClarityAnchor = 0.0f;
+
     UPROPERTY()
     bool bBuyanReached = false;
 

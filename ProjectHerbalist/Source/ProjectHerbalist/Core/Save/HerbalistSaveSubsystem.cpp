@@ -50,6 +50,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->Molva = WorldManager->Molva;
     Save->GardenPlots = WorldManager->GardenPlots;
     Save->GlobalPerceptionClarity = WorldManager->GetGlobalPerceptionClarity();
+    Save->ClarityAnchor = WorldManager->GetClarityAnchor();
     Save->bBuyanReached = WorldManager->IsBuyanReached();
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
 
@@ -114,6 +115,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->Molva = Save->Molva;
     WorldManager->GardenPlots = Save->GardenPlots;
     WorldManager->SetGlobalPerceptionClarity(Save->GlobalPerceptionClarity);
+    WorldManager->SetClarityAnchor(Save->ClarityAnchor);
     WorldManager->SetBuyanReached(Save->bBuyanReached);
     WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));
     WorldManager->ApplySaveCells(Save->Cells);

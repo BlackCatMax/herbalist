@@ -38,11 +38,11 @@ bool FHerbalistZaryana_TrueFragmentRaisesClarityAndMarksCollected::RunTest(const
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_FalseFragmentLowersClarityAndDoesNotMarkCollected,
-    "Herbalist.Zaryana.FalseFragmentLowersClarityAndDoesNotMarkCollected",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_FalseFragmentDoesNotLowerAnchorAndDoesNotMarkCollected,
+    "Herbalist.Zaryana.FalseFragmentDoesNotLowerAnchorAndDoesNotMarkCollected",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistZaryana_FalseFragmentLowersClarityAndDoesNotMarkCollected::RunTest(const FString& Parameters)
+bool FHerbalistZaryana_FalseFragmentDoesNotLowerAnchorAndDoesNotMarkCollected::RunTest(const FString& Parameters)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
@@ -51,13 +51,83 @@ bool FHerbalistZaryana_FalseFragmentLowersClarityAndDoesNotMarkCollected::RunTes
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     const FName ID(TEXT("PERVAYA_VARKA"));
+    Manager->SetClarityAnchor(0.3f);
     Manager->SetGlobalPerceptionClarity(0.3f);
 
     Manager->CollectMemoryFragment(ID, /*bIsFalse=*/true, nullptr);
 
-    TestTrue(TEXT("Clarity dropped after a false fragment"), Manager->GetGlobalPerceptionClarity() < 0.3f);
+    // 2026-09-01, §20.3 "якорь + отклик": прямой штраф Clarity за ложный
+    // фрагмент убран сознательно (якорь монотонен по спецификации, отклик
+    // и так честно отражает мир) — Anchor и GlobalPerceptionClarity (никем
+    // не пересчитанный на этом пути) остаются на месте.
+    TestEqual(TEXT("Anchor unaffected by a false fragment"), Manager->GetClarityAnchor(), 0.3f);
+    TestEqual(TEXT("Clarity unaffected by a false fragment"), Manager->GetGlobalPerceptionClarity(), 0.3f);
     TestFalse(TEXT("False collection does not mark the ID collected — a true one can still spawn later"),
         Manager->GetCollectedFragmentIDs().Contains(ID));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_ClarityAnchorNeverDecreasesAcrossFragments,
+    "Herbalist.Zaryana.ClarityAnchorNeverDecreasesAcrossFragments",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_ClarityAnchorNeverDecreasesAcrossFragments::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    TestEqual(TEXT("Anchor starts at zero"), Manager->GetClarityAnchor(), 0.0f);
+
+    Manager->CollectMemoryFragment(FName(TEXT("TIKHOE_MESTO")), /*bIsFalse=*/false, nullptr);
+    const float AnchorAfterFirst = Manager->GetClarityAnchor();
+    TestTrue(TEXT("Anchor rose after first true fragment"), AnchorAfterFirst > 0.0f);
+
+    // Ложный фрагмент между двумя подлинными — не должен откатить якорь.
+    Manager->CollectMemoryFragment(FName(TEXT("PODNOSHENIE")), /*bIsFalse=*/true, nullptr);
+    TestEqual(TEXT("Anchor unchanged by an intervening false fragment"), Manager->GetClarityAnchor(), AnchorAfterFirst);
+
+    Manager->CollectMemoryFragment(FName(TEXT("PODNOSHENIE")), /*bIsFalse=*/false, nullptr);
+    TestTrue(TEXT("Anchor rose again after second true fragment"), Manager->GetClarityAnchor() > AnchorAfterFirst);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_ClarityResponseClampedAndFlooredByAnchor,
+    "Herbalist.Zaryana.ClarityResponseClampedAndFlooredByAnchor",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_ClarityResponseClampedAndFlooredByAnchor::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetClarityAnchor(0.4f);
+    Manager->RegisterShrine(FIntPoint(1, 1), EShrineType::Ancestral);
+
+    // Капище на нуле — отклик уходит в минус, но пол (§20.3) не даёт
+    // Clarity упасть ниже уже заработанного якоря.
+    if (FShrine* Shrine = Manager->FindShrineAt(FIntPoint(1, 1))) { Shrine->Restoration = 0.0f; }
+    Manager->RecomputeGlobalPerceptionClarity();
+    TestTrue(TEXT("Clarity never drops below the anchor even with a bad response"),
+        Manager->GetGlobalPerceptionClarity() >= Manager->GetClarityAnchor() - KINDA_SMALL_NUMBER);
+
+    // Капище на максимуме — отклик положителен и не может увести Clarity
+    // выше Anchor + ClarityResponseRange (дефолт 0.2).
+    if (FShrine* Shrine = Manager->FindShrineAt(FIntPoint(1, 1))) { Shrine->Restoration = 1.0f; }
+    Manager->RecomputeGlobalPerceptionClarity();
+    TestTrue(TEXT("Clarity rises above the anchor with a good response"),
+        Manager->GetGlobalPerceptionClarity() > Manager->GetClarityAnchor());
+    TestTrue(TEXT("Clarity does not exceed Anchor + ClarityResponseRange"),
+        Manager->GetGlobalPerceptionClarity() <= Manager->GetClarityAnchor() + 0.2f + KINDA_SMALL_NUMBER);
 
     Manager->Destroy();
     return true;

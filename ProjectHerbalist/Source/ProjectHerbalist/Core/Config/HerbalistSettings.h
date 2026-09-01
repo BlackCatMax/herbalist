@@ -380,6 +380,15 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MemoryFragmentFalseRiskGlobalDistortion = 0.5f;
 
+    // Clarity = якорь + отклик (20_Investment_And_Progression.md §20.3,
+    // 2026-09-01). Якорь (ClarityAnchor) растёт только от подлинных
+    // фрагментов и никогда не уменьшается; отклик — волатильный слой поверх
+    // него, ±ClarityResponseRange от среднего Restoration/Respect по
+    // капищам/хозяевам минус средний MorokHistory по узлам биом-графа.
+    // Число из главы (±0.2) черновое, как и остальные Zaryana-числа выше.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ClarityResponseRange = 0.2f;
+
     // Буян (§15.5): средний Distance(State, S0) по клеткам ниже порога +
     // все капища мира выше порога Restoration.
     UPROPERTY(config, EditAnywhere, Category = "Zaryana|Buyan", meta = (ClampMin = "0.0"))

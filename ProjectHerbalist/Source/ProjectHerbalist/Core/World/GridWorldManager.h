@@ -411,6 +411,12 @@ public:
     float GetGlobalPerceptionClarity() const { return GlobalPerceptionClarity; }
     void SetGlobalPerceptionClarity(float InClarity) { GlobalPerceptionClarity = InClarity; }
 
+    // Якорь Clarity (20_Investment_And_Progression.md §20.3) — монотонная
+    // база от подлинных фрагментов памяти; GlobalPerceptionClarity выше —
+    // производная величина, пересчитываемая из якоря + отклика мира.
+    float GetClarityAnchor() const { return ClarityAnchor; }
+    void SetClarityAnchor(float InAnchor) { ClarityAnchor = InAnchor; }
+
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Zaryana")
     bool IsBuyanReached() const { return bBuyanReached; }
     void SetBuyanReached(bool bInReached) { bBuyanReached = bInReached; }
@@ -424,6 +430,15 @@ public:
     // public тем же принципом, что UpdateShrines/RegenerateCellParameters —
     // тикается из UpdateMemoryFragments, но и напрямую тестируемо.
     void CheckBuyanCondition();
+
+    // Пересчитывает GlobalPerceptionClarity = Clamp(Max(ClarityAnchor,
+    // ClarityAnchor + Response), 0, 1) из текущего ClarityAnchor и мирового
+    // отклика (20_Investment_And_Progression.md §20.3). Тикается из
+    // UpdateMemoryFragments на том же периодическом опросе, что и
+    // TrySpawnStateBasedFragment/CheckBuyanCondition, плюс вызывается сразу
+    // при сборе подлинного фрагмента (ClarityAnchor меняется событийно, не
+    // только по таймеру) — публично тем же принципом, что и CheckBuyanCondition.
+    void RecomputeGlobalPerceptionClarity();
 
     // ---- Сохранения (Core/Save/HerbalistSaveTypes.h) ----
     TArray<FSavedCellState> CaptureSaveCells() const;
@@ -527,6 +542,13 @@ protected:
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;
+
+    // Якорь (20_Investment_And_Progression.md §20.3, 2026-09-01) — растёт
+    // только от подлинных фрагментов, никогда не уменьшается.
+    // GlobalPerceptionClarity выше — производная, пересчитывается из этого
+    // поля + отклика мира в RecomputeGlobalPerceptionClarity().
+    float ClarityAnchor = 0.0f;
+
     bool bBuyanReached = false;
     TSet<FName> CollectedFragmentIDs;   // подлинно собранные — больше не спавнятся
 
