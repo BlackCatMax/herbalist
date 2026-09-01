@@ -429,7 +429,14 @@ FRealState AGridWorldManager::GetZaryanaPerceivedState(FRandomStream& Rng) const
     // Честный шум — та же формула/сид-паттерн, что уже AlchemySlotWidget.cpp
     // (свой FRandomStream у вызывающего, не WorldRNG). §19.4: "снижает шум в
     // самом важном показании игры" — роса не привилегированное окно истины.
-    return Simulation::FPerceptionService::PerceiveRealState(Blended, Rng, GlobalPerceptionClarity);
+    //
+    // Молодильное яблоко (§21.3, 2026-09-01) — расходуемое временное окно
+    // полного гашения шума (эффективная Clarity = 1.0, NoiseScale=0), не
+    // трогает саму GlobalPerceptionClarity (постоянная прогрессия) —
+    // "короткая версия того, что Clarity даёт навсегда".
+    const float EffectiveClarity = (GameClockSeconds < YouthAppleClarityBoostExpiryGameSeconds)
+        ? 1.0f : GlobalPerceptionClarity;
+    return Simulation::FPerceptionService::PerceiveRealState(Blended, Rng, EffectiveClarity);
 }
 
 void AGridWorldManager::UpdateRosaSignal()

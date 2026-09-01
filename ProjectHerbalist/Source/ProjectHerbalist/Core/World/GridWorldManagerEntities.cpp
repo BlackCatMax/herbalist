@@ -665,7 +665,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 bEligible = bEligible && !Cell.Memory.bDegrading;
             }
 
-            if (bEligible && CanManifest(Cell, Def.EntityID))
+            // Шапка-невидимка (21_Journey_And_Artifacts.md §21.3, 2026-09-01)
+            // — подавляет только НОВЫЕ проявления, не уже активные (Гребень
+            // снимает уже проявленное, это другой предмет).
+            if (bEligible && CanManifest(Cell, Def.EntityID) && (bWasActive || !IsInvisibilityCapActive()))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
                 ManifestingAmbientDef = &Def;
@@ -1004,7 +1007,11 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 bEligible = (bMorokEligible || bShrineEligible) && !Cell->Memory.bDegrading;
             }
 
-            if (bEligible && CanManifest(*Cell, Def.EntityID))
+            // Шапка-невидимка (21_Journey_And_Artifacts.md §21.3, 2026-09-01)
+            // — подавляет только НОВЫЕ проявления (bWasActive уже true
+            // проходит как раньше), "не даёт проявиться", не снимает уже
+            // проявленное (это Гребень, UseCombOnCell).
+            if (bEligible && CanManifest(*Cell, Def.EntityID) && (bWasActive || !IsInvisibilityCapActive()))
             {
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);

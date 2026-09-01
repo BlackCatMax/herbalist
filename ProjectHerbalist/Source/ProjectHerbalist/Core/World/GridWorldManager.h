@@ -562,6 +562,48 @@ public:
     const TArray<FAcquiredArtifact>& GetAcquiredArtifacts() const { return AcquiredArtifacts; }
     void SetAcquiredArtifacts(const TArray<FAcquiredArtifact>& InArtifacts) { AcquiredArtifacts = InArtifacts; }
 
+    // ---- Семь эффектов артефактов (21_Journey_And_Artifacts.md §21.3,
+    // 2026-09-01, ревизия "Ending and artifacts"): §21.3 "Принцип баланса"
+    // — ни один не открывает эксклюзивный доступ, только ускоряет/упрощает.
+    // GridWorldManagerArtifactEffects.cpp. ----
+
+    // Рог (Индрик-зверь) — "слушает воду": честная диагностика (не через
+    // PerceiveRealState — сознательно точнее тултипа, это весь смысл
+    // предмета) реального состояния клетки-родника, ничего не меняет.
+    // Возвращает false, если клетка не вода или артефакт не добыт.
+    bool UseHornOnCell(const FIntPoint& Cell, FText& OutDiagnosis) const;
+
+    // Гребень (Берегиня) — расходуемый побег: мгновенно снимает
+    // проявленную сущность (Низший/Основной/Легендарный ранг) с указанной
+    // клетки, если такая есть, и списывается из AcquiredArtifacts. Флаг+
+    // немедленный эффект, не полноценная блокировка передвижения — в
+    // проекте нет механики непроходимости клеток, заводить её ради одного
+    // предмета не стал (согласовано с пользователем).
+    bool UseCombOnCell(const FIntPoint& Cell);
+
+    // Молодильное яблоко (Дуб-старец) — расходуемое временное окно
+    // сниженного шума росы Заряны (GetZaryanaPerceivedState) вместо
+    // постоянного, как у GlobalPerceptionClarity. Длительность —
+    // MolodilnoeYablokoWindowSeconds (черновое число).
+    bool UseYouthApple();
+
+    // Шапка-невидимка (Баба-Яга) — временное, повторно используемое:
+    // пока активно, подавляет НОВЫЕ проявления Низшего/Легендарного ранга
+    // по всей сетке (упрощение "текущей зоны" из главы — полноценного
+    // понятия игровой зоны в проекте нет). Не снимает уже проявленное
+    // (это Гребень) — только не даёт проявиться новому.
+    bool UseInvisibilityCap();
+    bool IsInvisibilityCapActive() const;
+
+    // Камень-оберег (Волот) — не Exec-команда: пассивно активен для
+    // любой команды Apply, пока в AcquiredArtifacts есть неспущенный
+    // заряд (см. FApplyCommand::bBifurcationCharmActive,
+    // PipelineV2.cpp::ComputeApplyResult). Списывается после первой варки
+    // с активным зарядом в RunSimulationStep, независимо от того, спас ли
+    // он реально ("не гарантирует успех" — расходуется самим фактом
+    // держания во время варки, не только удачным спасением).
+    bool HasUnspentBifurcationCharm() const;
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -646,6 +688,15 @@ protected:
 
     // ---- Артефакты Легендарных (21_Journey_And_Artifacts.md §21.3-21.4) ----
     TArray<FAcquiredArtifact> AcquiredArtifacts;
+
+    // Молодильное яблоко — GameClockSeconds, до которого действует окно
+    // сниженного шума росы. 0 = не активно (GameClockSeconds никогда не
+    // отрицателен, безопасный сентинел).
+    float YouthAppleClarityBoostExpiryGameSeconds = 0.0f;
+
+    // Шапка-невидимка — GameClockSeconds, до которого подавлены новые
+    // проявления. Тот же сентинел, что и выше.
+    float InvisibilityCapExpiryGameSeconds = 0.0f;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

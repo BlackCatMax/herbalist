@@ -61,6 +61,13 @@ struct FAcquiredArtifact
     UPROPERTY() FName ArtifactID;
     UPROPERTY() bool bAcquiredViaDeception = false;
     UPROPERTY() float Warmth = 0.0f;
+
+    // Только Камень-оберег (§21.3: "гасит худший исход Bifurcation один
+    // раз... затем расходуется до следующего прогрева"). Прогрев (Warmth
+    // выше) не тикает активно в этом проходе — на практике "до следующего
+    // прогрева" здесь означает "до конца партии", раз recharge не
+    // реализован; честно, не выдаю за постоянную защиту.
+    UPROPERTY() bool bBifurcationChargeSpent = false;
 };
 
 inline const TArray<FArtifactDefinition>& GetArtifactDefinitions()

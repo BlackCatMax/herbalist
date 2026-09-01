@@ -143,6 +143,10 @@ void UAlchemyTransferWidget::OnMixClicked()
     Cmd.Apply.Ingredients = Ingredients;
     // Coherence считается Pipeline'ом из Ingredients (ComputeIntentCoherence).
     Cmd.Apply.bIsCrafting = true;
+    // Камень-оберег (21_Journey_And_Artifacts.md §21.3) — реальный путь
+    // варки идёт отсюда, не через ApplyAlchemyResult (тот — только
+    // применение уже готового зелья/предмета на клетку).
+    Cmd.Apply.bBifurcationCharmActive = WorldManager->HasUnspentBifurcationCharm();
 
     WorldManager->QueueCommand(Cmd);
 

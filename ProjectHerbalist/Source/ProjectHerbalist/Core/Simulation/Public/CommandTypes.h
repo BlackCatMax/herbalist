@@ -59,6 +59,18 @@ struct FApplyCommand
     // по верному порядку/месту/времени, не закинул всё разом, котёл не
     // наказывает за укрощённую, а не проигнорированную сложность.
     bool bIsRitual = false;
+
+    // Камень-оберег (21_Journey_And_Artifacts.md §21.3, 2026-09-01) --
+    // резолвится вне Pipeline, тем же принципом, что bIsRitual выше:
+    // вызывающая сторона (AGridWorldManager::ApplyAlchemyResult/
+    // HasUnspentBifurcationCharm, AlchemyTransferWidget.cpp) проверяет
+    // AcquiredArtifacts перед постановкой команды в очередь, Pipeline не
+    // лезет в мировое состояние сам. НЕ прошито для завершения ритуала
+    // (GridWorldManagerRitual.cpp) -- тот путь идёт мимо обычной очереди
+    // команд/RunSimulationStep, куда привязан пост-обработка списания
+    // заряда, и ритуалы и так уже обходят градации риска Bifurcation
+    // (RiskyCount=0 при bIsRitual) -- отдельная, более редкая задача.
+    bool bBifurcationCharmActive = false;
 };
 
 // S – сбор ресурса (Harvest)

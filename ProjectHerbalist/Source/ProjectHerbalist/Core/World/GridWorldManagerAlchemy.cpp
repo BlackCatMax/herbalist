@@ -17,6 +17,10 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     Cmd.Apply.TargetCell     = FIntPoint(X, Y);
     Cmd.Apply.Ingredients    = Ingredients;
     Cmd.Apply.Intent         = Intent;
+    // Камень-оберег (21_Journey_And_Artifacts.md §21.3) — резолвится здесь,
+    // вне Pipeline, тем же принципом, что и остальные внепайплайновые
+    // входы команды (bIsRitual и т.п.).
+    Cmd.Apply.bBifurcationCharmActive = HasUnspentBifurcationCharm();
     QueueCommand(Cmd);
 
     UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());

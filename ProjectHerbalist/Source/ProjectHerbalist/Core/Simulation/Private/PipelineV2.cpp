@@ -499,7 +499,8 @@ namespace Simulation
                                         FRandomStream& Rng,
                                         EAlchemyOutcome& OutOutcome,
                                         FVector4& OutAxisDeltaForFootprint,
-                                        bool bIsRitual = false)
+                                        bool bIsRitual = false,
+                                        bool bBifurcationCharmActive = false)
     {
         OutOutcome = EAlchemyOutcome::Valid;
         OutAxisDeltaForFootprint = FVector4(0.f, 0.f, 0.f, 0.f);
@@ -763,7 +764,16 @@ namespace Simulation
 
             if (Result.Meta.Distortion >= EffectiveCollapseThreshold)
             {
-                const bool bPurify = Rng.FRand() < Result.Meta.Stability * PurifyOddsMultiplier;
+                // Всегда тянем бросок, даже с активным заговором — держание
+                // Камня-оберега не должно менять потребление Rng для
+                // последующих бросков того же тика (детерминизм/трассировка).
+                const bool bRolledPurify = Rng.FRand() < Result.Meta.Stability * PurifyOddsMultiplier;
+                // Камень-оберег (21_Journey_And_Artifacts.md §21.3,
+                // 2026-09-01) — "гасит худший исход один раз, не гарантирует
+                // успех": не трогает GuaranteedCatastropheCount-ветку выше
+                // (та безусловна по дизайну), только этот вероятностный
+                // бросок — превращает неудачный в Purified.
+                const bool bPurify = bRolledPurify || bBifurcationCharmActive;
                 if (bPurify)
                 {
                     Result.Meta.Distortion = 0.4f;
@@ -934,7 +944,7 @@ namespace Simulation
 
         EAlchemyOutcome Outcome = EAlchemyOutcome::Valid;
         FVector4 AxisDeltaForFootprint;
-        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint, Cmd.bIsRitual);
+        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint, Cmd.bIsRitual, Cmd.bBifurcationCharmActive);
 
         // 2. Удаляем использованные ингредиенты из инвентаря
         for (const FInventoryItem& Ing : Cmd.Ingredients)

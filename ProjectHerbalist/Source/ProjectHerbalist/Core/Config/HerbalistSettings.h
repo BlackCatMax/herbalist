@@ -669,6 +669,20 @@ public:
     // в тултипе (AlchemySlotWidget.cpp). Черновое число.
     UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ArtifactHonestPurityThreshold = 0.6f;
+
+    // Семь эффектов артефактов (§21.3, 2026-09-01, ревизия "Ending and
+    // artifacts"). Черновые числа, как и остальные новые Zaryana/Artifacts
+    // числа этой сессии.
+
+    // Молодильное яблоко — секунд игрового времени, на которое эффективная
+    // Clarity росы поднимается до 1.0 (полное гашение шума), пока окно не истекло.
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0"))
+    float YouthAppleWindowSeconds = 180.0f;
+
+    // Шапка-невидимка — секунд игрового времени подавления новых проявлений
+    // за одно применение (само применение — Exec-команда, не расходуется).
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0"))
+    float InvisibilityCapDurationSeconds = 300.0f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

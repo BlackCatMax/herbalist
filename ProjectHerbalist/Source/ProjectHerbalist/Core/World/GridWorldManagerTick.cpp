@@ -269,6 +269,27 @@ void AGridWorldManager::RunSimulationStep()
         }
     }
 
+    // Камень-оберег (21_Journey_And_Artifacts.md §21.3, 2026-09-01) —
+    // списывается после ЛЮБОЙ команды Apply (крафт ИЛИ применение на
+    // клетку — Bifurcation в ComputeApplyResult не различает их), с
+    // которой заряд был активен, независимо от того, спас ли он реально
+    // ("не гарантирует успех" — расходуется самим фактом держания во
+    // время варки).
+    for (const FCommandEntry& Cmd : CommandsCopy)
+    {
+        if (Cmd.Primitive != ECommandPrimitive::Apply || !Cmd.Apply.bBifurcationCharmActive) continue;
+
+        for (FAcquiredArtifact& Artifact : AcquiredArtifacts)
+        {
+            if (Artifact.ArtifactID == FName(TEXT("Камень-оберег")) && !Artifact.bBifurcationChargeSpent)
+            {
+                Artifact.bBifurcationChargeSpent = true;
+                UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Камень-оберег charge spent"));
+                break;
+            }
+        }
+    }
+
     // Запись кадра трассировки
     if (bEnableTrace)
     {

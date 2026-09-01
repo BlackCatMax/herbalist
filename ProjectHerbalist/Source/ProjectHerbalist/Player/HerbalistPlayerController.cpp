@@ -808,6 +808,53 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         bViaDeception ? TEXT("via deception") : TEXT("honestly"));
 }
 
+void AHerbalistPlayerController::UseHorn(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    FText Diagnosis;
+    if (!WorldManager->UseHornOnCell(FIntPoint(X, Y), Diagnosis))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseHorn: no Рог, or (%d,%d) is not water"), X, Y);
+        return;
+    }
+    ShowMemoryRevealText(Diagnosis);
+}
+
+void AHerbalistPlayerController::UseComb(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->UseCombOnCell(FIntPoint(X, Y)))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseComb: no Гребень, or (%d,%d) is outside the grid"), X, Y);
+    }
+}
+
+void AHerbalistPlayerController::UseYouthApple()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->UseYouthApple())
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseYouthApple: no Молодильное яблоко"));
+    }
+}
+
+void AHerbalistPlayerController::UseInvisibilityCap()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->UseInvisibilityCap())
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseInvisibilityCap: no Шапка-невидимка"));
+    }
+}
+
 void AHerbalistPlayerController::BecomeBuyanGuardian()
 {
     AGridWorldManager* WorldManager = FindWorldManager();
