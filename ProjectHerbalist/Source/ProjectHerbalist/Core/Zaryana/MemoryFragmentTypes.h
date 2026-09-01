@@ -26,7 +26,13 @@ enum class EMemoryFragmentTrigger : uint8
     // Капище пересекло высокий порог Restoration.
     ShrineRestored,
     // Молва общины устойчиво высока (17_Hero_And_Community.md §17.6).
-    HighCommunityTrust
+    HighCommunityTrust,
+    // Один из трёх исходов у Буяна выбран (18_Ending.md §18.1,
+    // 21_Journey_And_Artifacts.md §21.1: "гарантированный фрагмент на
+    // Буяне, три вариации"). Не спавнится через TrySpawnStateBasedFragment
+    // — доставляется напрямую из AGridWorldManager::TryChooseBuyanPath,
+    // тем же внепайплайновым, событийным приёмом, что уже CoherentBrew.
+    BuyanPathChosen
 };
 
 USTRUCT()

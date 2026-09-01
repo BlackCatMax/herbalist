@@ -347,6 +347,8 @@ bool FHerbalistZaryana_BuyanPathRequiresBuyanReachedAndOnlyChoosesOnce::RunTest(
     Manager->SetBuyanReached(true);
     TestTrue(TEXT("Path 3 available once Buyan is reached, no threshold"), Manager->TryChooseBuyanPath(EBuyanPath::AcceptReality));
     TestEqual(TEXT("ChosenBuyanPath recorded"), (uint8)Manager->GetChosenBuyanPath(), (uint8)EBuyanPath::AcceptReality);
+    TestTrue(TEXT("A successful choice delivers the matching guaranteed ending fragment"),
+        Manager->GetCollectedFragmentIDs().Contains(FName(TEXT("BUYAN_ACCEPT_REALITY"))));
 
     // Не переигрывается — второй выбор (даже другого пути) не проходит.
     TestFalse(TEXT("Cannot choose a second path once one is chosen"), Manager->TryChooseBuyanPath(EBuyanPath::TradePlaces));

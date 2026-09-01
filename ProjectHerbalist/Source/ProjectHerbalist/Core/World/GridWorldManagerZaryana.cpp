@@ -347,6 +347,22 @@ bool AGridWorldManager::TryChooseBuyanPath(EBuyanPath Path)
 
     ChosenBuyanPath = Path;
     UE_LOG(LogHerbalistZaryana, Log, TEXT("[Zaryana] === ПУТЬ У БУЯНА ВЫБРАН: %d ==="), (int32)Path);
+
+    // Гарантированный финальный фрагмент, три вариации (18_Ending.md §18.1,
+    // 21_Journey_And_Artifacts.md §21.1, 2026-09-01) — доставляется
+    // напрямую, тем же событийным приёмом, что уже CoherentBrew
+    // (TryTriggerCoherentBrewFragment), не через случайный спавн/false-ролл.
+    static const TMap<EBuyanPath, FName> PathToFragmentID = {
+        { EBuyanPath::Guardian, FName(TEXT("BUYAN_GUARDIAN")) },
+        { EBuyanPath::TradePlaces, FName(TEXT("BUYAN_TRADE_PLACES")) },
+        { EBuyanPath::AcceptReality, FName(TEXT("BUYAN_ACCEPT_REALITY")) },
+    };
+    if (const FName* FragmentID = PathToFragmentID.Find(Path))
+    {
+        AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+        CollectMemoryFragment(*FragmentID, /*bIsFalse=*/false, PC);
+    }
+
     return true;
 }
 
