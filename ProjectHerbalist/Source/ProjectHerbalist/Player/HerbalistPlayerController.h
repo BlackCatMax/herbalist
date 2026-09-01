@@ -156,6 +156,14 @@ public:
     UFUNCTION(Exec)
     void SetGardenPlot(int32 X, int32 Y, FString NicheName);
 
+    // Основать базу (21_Journey_And_Artifacts.md §21.2, 2026-09-01) — v1
+    // тот же приём, что SetGardenPlot: консоль вместо физической
+    // постройки-актора, сам механизм (AGridWorldManager::Bases →
+    // IsValidBrewingLocation) работает уже сейчас. Валидация (не вода, не
+    // дубликат) — на стороне AGridWorldManager::RegisterBase.
+    UFUNCTION(Exec)
+    void FoundBase(int32 X, int32 Y);
+
     // Экранный попап текста воспоминания Заряны/объявления Буяна
     // (UI/MemoryRevealWidget.h, "Прогрессия/Заряна" 2026-08-29) — вызывается
     // из AGridWorldManager (CollectMemoryFragment/CheckBuyanCondition), не

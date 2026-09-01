@@ -352,6 +352,23 @@ public:
     // Tick() каждый кадр, но и напрямую тестируемо без полной PIE-сессии.
     void UpdateShrines(float DeltaTime);
 
+    // ---- Базы/лагеря (21_Journey_And_Artifacts.md §21.2, GridWorldManagerBases.cpp) ----
+    // Проверяет не воду и не дубликат; Biome резолвится от клетки. Тот же
+    // принцип идемпотентности, что RegisterShrine/RegisterDomovoi.
+    void RegisterBase(const FIntPoint& Cell);
+
+    const TArray<FHerbalistBase>& GetBases() const { return Bases; }
+    void SetBases(const TArray<FHerbalistBase>& InBases) { Bases = InBases; }
+
+    // Место варки привязано к дому/базе (§20.2 "место варки — привязано к
+    // дому/базе"): true для клетки любого капища (AAlchemyTableActor всегда
+    // регистрирует капище на своей клетке — см. RegisterShrine выше, это
+    // одна и та же клетка по построению) ИЛИ любой зарегистрированной базы.
+    // Физическая постройка-стол на каждой базе — контент/редактор, не код
+    // (тот же принцип, что уже у инструментов/сада: механизм есть, визуал —
+    // отдельная задача), эта функция не вызывается пока ниоткуда в коде.
+    bool IsValidBrewingLocation(const FIntPoint& Cell) const;
+
     // ---- Общинный кластер (DESIGN_Community_And_Homestead.md §1,
     // 17_Hero_And_Community.md §17.3, реализация 2026-08-31): Молва,
     // Подношение общине, Торговля с общиной — один накопитель, три
@@ -574,6 +591,9 @@ protected:
 
     // ---- Капища ----
     TArray<FShrine> Shrines;
+
+    // ---- Базы/лагеря (21_Journey_And_Artifacts.md §21.2) ----
+    TArray<FHerbalistBase> Bases;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

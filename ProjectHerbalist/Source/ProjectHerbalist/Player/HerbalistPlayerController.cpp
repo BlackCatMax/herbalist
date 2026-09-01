@@ -668,6 +668,18 @@ void AHerbalistPlayerController::SetGardenPlot(int32 X, int32 Y, FString NicheNa
     Manager->RegisterGardenPlot(FIntPoint(X, Y), Niche);
 }
 
+void AHerbalistPlayerController::FoundBase(int32 X, int32 Y)
+{
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("FoundBase: world manager not found"));
+        return;
+    }
+
+    Manager->RegisterBase(FIntPoint(X, Y));
+}
+
 void AHerbalistPlayerController::Journal()
 {
     if (bIsAnyWidgetOpen && JournalWidgetInstance && JournalWidgetInstance->IsInViewport())

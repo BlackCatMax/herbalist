@@ -49,6 +49,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->Shrines = WorldManager->GetShrines();
     Save->Molva = WorldManager->Molva;
     Save->GardenPlots = WorldManager->GardenPlots;
+    Save->Bases = WorldManager->GetBases();
     Save->GlobalPerceptionClarity = WorldManager->GetGlobalPerceptionClarity();
     Save->ClarityAnchor = WorldManager->GetClarityAnchor();
     Save->bRosaFirstFalseSignalShown = WorldManager->IsRosaFirstFalseSignalShown();
@@ -115,6 +116,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetShrines(Save->Shrines);
     WorldManager->Molva = Save->Molva;
     WorldManager->GardenPlots = Save->GardenPlots;
+    WorldManager->SetBases(Save->Bases);
     WorldManager->SetGlobalPerceptionClarity(Save->GlobalPerceptionClarity);
     WorldManager->SetClarityAnchor(Save->ClarityAnchor);
     WorldManager->SetRosaFirstFalseSignalShown(Save->bRosaFirstFalseSignalShown);

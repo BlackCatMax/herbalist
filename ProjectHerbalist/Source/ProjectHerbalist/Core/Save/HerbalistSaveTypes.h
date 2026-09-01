@@ -107,6 +107,13 @@ public:
     UPROPERTY()
     TMap<FIntPoint, EGardenNiche> GardenPlots;
 
+    // Базы/лагеря (21_Journey_And_Artifacts.md §21.2, 2026-09-01) — тот же
+    // класс поля, что GardenPlots выше: игровое решение игрока (RegisterBase
+    // вызывается только через Exec-команду FoundBase), не деривация из
+    // клетки. Тот же аудиторский урок — не забыть сохранить на этот раз.
+    UPROPERTY()
+    TArray<FHerbalistBase> Bases;
+
     // Заряна (обсуждение в сессии 2026-08-24) — Clarity/Буян/собранные ID
     // растут медленно и редко, ровно то, что должно переживать сохранение.
     UPROPERTY()

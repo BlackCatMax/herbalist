@@ -290,6 +290,27 @@ struct PROJECTHERBALIST_API FEntityLandmark
     float Respect = 0.0f;
 };
 
+// ========== Базы/лагеря игрока (21_Journey_And_Artifacts.md §21.2, 2026-09-01) ==========
+// Место за пределами Домового очага, где герой обжился — второй (и далее)
+// дом, привязка для Клубочка (перемещение, шаг 5) и валидное место варки
+// (IsValidBrewingLocation, GridWorldManagerBases.cpp).
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FHerbalistBase
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Bases")
+    FIntPoint Cell = FIntPoint(-1, -1);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Bases")
+    EBiomeType Biome = EBiomeType::ForestSteppe;
+
+    // Название базы — контент/локализация, не хардкодится здесь. NAME_None
+    // до того, как левел-дизайнер/UI назначит реальное имя.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Bases")
+    FName DisplayNameID = NAME_None;
+};
+
 USTRUCT(BlueprintType)
 struct PROJECTHERBALIST_API FConditionModifier
 {
