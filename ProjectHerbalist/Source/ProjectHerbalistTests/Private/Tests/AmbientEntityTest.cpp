@@ -183,10 +183,15 @@ bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell:
     Manager->SetGameClockSeconds(31.0f * 60.0f);   // ночь
     const float DistortionBeforeNight = Cell->TargetState.Meta.Distortion;
     const float CorruptionBeforeNight = Cell->TargetState.Meta.Corruption;
+    const float SpiritBeforeNight = Cell->TargetState.Direction.Spirit;
     Manager->UpdateEntityManifestations(1.0f);
 
     TestTrue(TEXT("TargetState.Distortion nudged up at night"), Cell->TargetState.Meta.Distortion > DistortionBeforeNight);
     TestTrue(TEXT("TargetState.Corruption nudged up at night"), Cell->TargetState.Meta.Corruption > CorruptionBeforeNight);
+    // §15.2, третья часть строки Ночи ("усиление оси Spirit в Direction",
+    // Tier 1 п.1.1, 2026-09-02) -- та же клетка, тот же нудж-блок IsNight(),
+    // раньше проверялись только Meta-поля.
+    TestTrue(TEXT("TargetState.Direction.Spirit nudged up at night"), Cell->TargetState.Direction.Spirit > SpiritBeforeNight);
     TestEqual(TEXT("Night horror does not claim ManifestedEntityID -- it's atmosphere, not a 'owner'"),
         Cell->ManifestedEntityID, FName(NAME_None));
 

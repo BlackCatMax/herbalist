@@ -83,7 +83,8 @@ namespace
 
     FStateDelta RunApply(const TArray<FInventoryItem>& Ingredients, bool bIsCrafting,
         const FIntPoint& TargetCell, FRandomStream& Rng,
-        const FWorldSnapshot& WorldSnap, const FBiomeSnapshot& BiomeSnap, float CallerCoherence = 0.f)
+        const FWorldSnapshot& WorldSnap, const FBiomeSnapshot& BiomeSnap, float CallerCoherence = 0.f,
+        EMoonPhase MoonPhase = EMoonPhase::NewMoon)
     {
         FInventorySnapshot InvSnap;
         FCommandBatch CmdBatch;
@@ -93,6 +94,7 @@ namespace
         Entry.Apply.Ingredients = Ingredients;
         Entry.Apply.bIsCrafting = bIsCrafting;
         Entry.Apply.Intent.Coherence = CallerCoherence;
+        Entry.Apply.MoonPhase = MoonPhase;
         CmdBatch.AddCommand(Entry);
         return Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
     }
@@ -822,6 +824,55 @@ bool FPipelineV2ApplyBiomeContextRaisesDistortionTest::RunTest(const FString& Pa
         TestEqual(TEXT("Footprint biome ID matches target cell's biome"),
             MorokDelta.Footprints[0].BiomeID, FBiomeDefaults::BiomeTypeToName(EBiomeType::MixedForest));
     }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Полнолуние поднимает Морок при варке (15_Cycles_And_Shrines.md §15.3,
+// Tier 1 п.1.2, 2026-09-02, "вместе с силой растёт и Morok... ставки выше в
+// обе стороны") -- та же надбавка, что уже усиливает сбор при полной луне
+// (MoonPhaseTest.cpp), теперь и для MorokExponent в ComputeApplyResult.
+// Требует реального ненулевого MorokField в контексте биома -- при
+// EffectiveMorok=0 экспонента остаётся нулевой независимо от буста
+// (см. FPipelineV2ApplyBiomeContextRaisesDistortionTest выше).
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyFullMoonRaisesMorokDistortionTest,
+    "ProjectHerbalist.PipelineV2.ApplyFullMoonRaisesMorokDistortion",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyFullMoonRaisesMorokDistortionTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+
+    TArray<FInventoryItem> Ingredients = { MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f), MakeWater(0.5f, 0.4f) };
+
+    FBiomeSnapshot BiomeSnap;
+    FBiomeFieldContext Ctx;
+    Ctx.MorokField = 0.9f;
+    Ctx.MorokAffinity = 1.0f;
+    BiomeSnap.Contexts.Add(FBiomeDefaults::BiomeTypeToName(EBiomeType::MixedForest), Ctx);
+
+    FRandomStream RngNewMoon(21);
+    FStateDelta NewMoonDelta = RunApply(Ingredients, /*bIsCrafting*/ false, FIntPoint(5, 5), RngNewMoon, WorldSnap, BiomeSnap, 0.f, EMoonPhase::NewMoon);
+
+    FRandomStream RngFullMoon(21);
+    FStateDelta FullMoonDelta = RunApply(Ingredients, /*bIsCrafting*/ false, FIntPoint(5, 5), RngFullMoon, WorldSnap, BiomeSnap, 0.f, EMoonPhase::FullMoon);
+
+    const FGridCell* NewMoonCell = NewMoonDelta.WorldChanges.Find(FIntPoint(5, 5));
+    const FGridCell* FullMoonCell = FullMoonDelta.WorldChanges.Find(FIntPoint(5, 5));
+    if (!TestNotNull(TEXT("New Moon cell modified"), NewMoonCell) || !TestNotNull(TEXT("Full Moon cell modified"), FullMoonCell))
+        return false;
+
+    TestTrue(TEXT("Full Moon raises Distortion above the same brew at New Moon, same seed/ingredients/biome"),
+        FullMoonCell->State.Meta.Distortion > NewMoonCell->State.Meta.Distortion + KINDA_SMALL_NUMBER);
+
+    // Сама Полнолунная надбавка к сбору (Direction.Spirit/Potency/Resonance,
+    // MoonFullBoostStrength) не должна просочиться в Apply -- она читается
+    // только в GenerateHarvestResult, отдельном пути.
+    TestTrue(TEXT("Full Moon does not also boost harvest-side Meta.Potency here -- that's a separate command path"),
+        FMath::IsNearlyEqual(FullMoonCell->State.Meta.Potency, NewMoonCell->State.Meta.Potency, 0.001f));
+
     return true;
 }
 

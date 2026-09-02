@@ -90,6 +90,11 @@ ERitualStepResult AGridWorldManager::TryAdvanceRitual(const FIntPoint& CauldronC
             Entry.Apply.Ingredients = NewState.AccumulatedIngredients;
             Entry.Apply.bIsCrafting = true;
             Entry.Apply.bIsRitual = true;
+            // Камень-оберег (21_Journey_And_Artifacts.md §21.3, Tier 1 п.1.3,
+            // 2026-09-02) -- та же проверка, что уже AGridWorldManager::
+            // ApplyAlchemyResult делает для обычной варки (GridWorldManagerAlchemy.cpp),
+            // здесь была пропущена: ритуальная варка идёт мимо того пути.
+            Entry.Apply.bBifurcationCharmActive = HasUnspentBifurcationCharm();
             Batch.AddCommand(Entry);
             FStateDelta Delta = Simulation::ExecutePipeline(EmptyWorldSnap, EmptyInvSnap, EmptyBiomeSnap, Batch, Rng);
 

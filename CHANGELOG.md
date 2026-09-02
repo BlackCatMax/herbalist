@@ -3692,3 +3692,73 @@ ODR-довод unity-сборки, что и у `SpawnAndBeginPlay`/`InitGraph` 
 границу).
 
 **Итог:** 242 → 246 тестов. Полный прогон: **246/246, ноль регрессий.**
+
+### Tier 1 точечного развития: 4 находки из curried-noodling-cherny.md (2026-09-02)
+
+Первый проход по плану "точечное развитие существующих механик" (см. план
+из предыдущей сессии) — из заявленных 7 пунктов Tier 1 три (1.5 защита
+артефактов от выброса, 1.6 мёртвые `ETimeOfDayMask`/`ESeasonMask`, 1.7
+фильтр Травника по ингредиенту) сняты пользователем с повестки этого
+прохода после разведки: 1.5 — в коде нет вообще никакого пути "выбросить
+предмет" ни для одного типа, защищать нечего; 1.6 — объявлений уже нет в
+коде (убраны раньше, план устарел); 1.7 — реализуемо только на
+`UJournalWidget`, но ни один `UUserWidget` в проекте не покрыт
+автотестами, отложено. Оставшиеся четыре реализованы:
+
+**1.1 — Ночь усиливает ось Spirit (15_Cycles_And_Shrines.md §15.2).**
+Разведка нашла расхождение с планом, написанным в прошлой сессии по
+памяти: строка Ночи в таблице суток — тот же разлитый-по-сетке нудж
+`TargetState`, что уже даёт Ночи Distortion/Corruption
+(`GridWorldManagerEntities.cpp`, блок `IsNight()`), НЕ формула сбора
+(`GenerateHarvestResult`), как предполагал план. Добавлен третий нудж в
+тот же блок: `NewTarget.Direction.Spirit` растёт на `NightHorrorSpiritRate`
+(новая настройка, 0.003 — тот же порядок величины, что уже
+`NightHorrorDistortionRate`/`NightHorrorCorruptionRate` рядом). Regression:
+расширен уже существующий `Herbalist.AmbientEntity.NightHorrorAffectsEveryBiomeWithoutClaimingTheCell`
+проверкой `Direction.Spirit`, не отдельный новый тест.
+
+**1.2 — Полнолуние поднимает Морок при варке (15_Cycles_And_Shrines.md §15.3,
+"вместе с силой растёт и Morok... ставки выше в обе стороны").** Раньше
+`MoonPhase` жил только на `FHarvestCommand` (сбор) — `FApplyCommand`
+(варка/применение) получил свой `EMoonPhase MoonPhase` (резолвится вне
+Pipeline, тем же принципом, что `bBifurcationCharmActive`/`bIsRitual`;
+заполняется в `AGridWorldManager::ApplyAlchemyResult` через `GetMoonPhase()`).
+`ComputeApplyResult` домножает `MorokExponent` на `(1 + MoonFullMorokBoostStrength)`
+при Полнолунии (новая настройка, 0.15 — тот же порядок величины, что уже
+`MoonFullBoostStrength` у сбора) — чем выше экспонента, тем сильнее
+Distortion/Corruption тянет к 1, а значит и вероятнее пробить
+`EffectiveCollapseThreshold` дальше по формуле (Bifurcation), в любую из
+двух сторон исхода. НЕ прошито для завершения ритуала
+(`GridWorldManagerRitual.cpp` — идёт мимо `QueueCommand`), тот же класс
+разрыва, что и у Камень-оберега ниже. Тест:
+`ProjectHerbalist.PipelineV2.ApplyFullMoonRaisesMorokDistortion`
+(`PipelineV2ApplyTest.cpp`) — тот же сид/ингредиенты/контекст биома, что
+уже `FPipelineV2ApplyBiomeContextRaisesDistortionTest`, только Полнолуние
+против Новолуния.
+
+**1.3 — Камень-оберег не работал в ритуальной варке (21_Journey_And_Artifacts.md
+§21.3).** `AGridWorldManager::TryAdvanceRitual` собирает свой
+`FCommandEntry` для завершения ритуала напрямую (мимо `ApplyAlchemyResult`,
+где обычно резолвится `bBifurcationCharmActive`) — пропущенная строка,
+прямая аналогия уже существующей у обычной варки. Добавлено:
+`Entry.Apply.bBifurcationCharmActive = HasUnspentBifurcationCharm();`.
+**Известный, задокументированный в коде и тесте разрыв:** списание заряда
+(`GridWorldManagerTick.cpp`, "Камень-оберег списывается") читает
+`CommandsCopy` внутри `RunSimulationStep` — ритуал идёт мимо него (тот же
+путь, что и у 1.2 выше), поэтому оберег теперь спасает ритуальную варку от
+Bifurcation, но заряд не тратится: пока не заведена более широкая починка
+(Tier 2 п.2.4 плана — провести завершение ритуала через `QueueCommand`),
+Камень-оберег + ритуал — рабочий бесконечный комбо. Тест
+`Herbalist.Ritual.BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent`
+(`RitualBrewingTest.cpp`) фиксирует обе половины явно — и что оберег
+реально спасает (Stability=0.0 гарантированно даёт Catastrophe без него,
+Purified с ним), и что заряд не списывается.
+
+**1.4 — устаревший комментарий "Капищ (3 эффекта из 4)".**
+`MemoryFragmentTypes.h` сравнивал вертикальный срез фрагментов Заряны с
+капищами как будто у тех всё ещё 3 эффекта из 4 — капища закрыли все 4 ещё
+2026-08-29 (`ShrineTypes.h`). Однострочная правка, без нового теста
+(комментарий, не код).
+
+**Итог:** 246 → 248 тестов (2 новых + 1 расширенный существующий). Полный
+прогон: **248/248, ноль регрессий.**

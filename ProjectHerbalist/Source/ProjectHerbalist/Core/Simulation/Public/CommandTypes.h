@@ -71,6 +71,18 @@ struct FApplyCommand
     // заряда, и ритуалы и так уже обходят градации риска Bifurcation
     // (RiskyCount=0 при bIsRitual) -- отдельная, более редкая задача.
     bool bBifurcationCharmActive = false;
+
+    // Лунный цикл (15_Cycles_And_Shrines.md §15.3, 2026-09-02, Tier 1 п.1.2) --
+    // "вместе с силой растёт и Morok... ставки выше в обе стороны", часть
+    // текста строки Полнолуния, до сих пор реализованная только для сбора
+    // (FHarvestCommand::MoonPhase, GenerateHarvestResult). Тот же принцип
+    // "резолвится вне Pipeline" (см. bBifurcationCharmActive/bIsRitual выше):
+    // вызывающая сторона (AGridWorldManager::ApplyAlchemyResult) читает
+    // GetMoonPhase(). НЕ прошито для завершения ритуала
+    // (GridWorldManagerRitual.cpp) -- тот путь идёт мимо обычной очереди
+    // команд, тот же известный, отдельно задокументированный разрыв, что и у
+    // bBifurcationCharmActive.
+    EMoonPhase MoonPhase = EMoonPhase::NewMoon;
 };
 
 // S – сбор ресурса (Harvest)

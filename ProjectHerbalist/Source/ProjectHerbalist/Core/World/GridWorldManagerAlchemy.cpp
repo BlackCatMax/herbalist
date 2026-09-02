@@ -21,6 +21,10 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     // вне Pipeline, тем же принципом, что и остальные внепайплайновые
     // входы команды (bIsRitual и т.п.).
     Cmd.Apply.bBifurcationCharmActive = HasUnspentBifurcationCharm();
+    // Полнолуние поднимает Морок при варке (15_Cycles_And_Shrines.md §15.3,
+    // Tier 1 п.1.2) -- тот же принцип, что и заряд оберега выше: резолвится
+    // здесь, вне Pipeline.
+    Cmd.Apply.MoonPhase = GetMoonPhase();
     QueueCommand(Cmd);
 
     UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());

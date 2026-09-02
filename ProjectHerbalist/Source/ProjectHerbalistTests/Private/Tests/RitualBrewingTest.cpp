@@ -270,4 +270,74 @@ bool FHerbalistRitual_BypassesIngredientCountRisk::RunTest(const FString& Parame
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Камень-оберег в ритуальной варке (21_Journey_And_Artifacts.md §21.3,
+// Tier 1 п.1.3, 2026-09-02) -- TryAdvanceRitual раньше никогда не читал
+// bBifurcationCharmActive (обходит обычный AGridWorldManager::
+// ApplyAlchemyResult, где заряд резолвится). Ингредиенты с Stability=0.0 --
+// Rng.FRand() < 0.0*PurifyOddsMultiplier гарантированно ложно при любом
+// сиде, без оберега это надёжный Catastrophe, не вероятностный.
+//
+// Известный, принятый разрыв (см. комментарий у FApplyCommand::
+// bBifurcationCharmActive и Tier 2 п.2.4 curried-noodling-cherny.md):
+// списание заряда (GridWorldManagerTick.cpp, "Камень-оберег списывается")
+// читает CommandsCopy внутри RunSimulationStep -- ритуал идёт мимо него,
+// поэтому заряд спасает варку, но не тратится. Тест фиксирует это явно,
+// не прячет.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent,
+    "Herbalist.Ritual.BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    // --- Без оберега: тот же критический состав (Distortion=0.95,
+    // Stability=0.0) должен надёжно сорваться в Catastrophe ---
+    Manager->SetGameClockSeconds(DuskMoment);
+    TArray<FInventoryItem> Step1NoCharm = { MakeRitualIngredient(TEXT("A"), 0.95f, 0.0f), MakeRitualIngredient(TEXT("B"), 0.95f, 0.0f), MakeBogWater() };
+    FRandomStream RngNoCharm1(1);
+    FInventoryItem Dummy;
+    Manager->TryAdvanceRitual(FIntPoint(1, 1), Step1NoCharm, RngNoCharm1, Dummy);
+
+    Manager->SetGameClockSeconds(DawnMoment);
+    TArray<FInventoryItem> Step2NoCharm = { MakeRitualIngredient(TEXT("C"), 0.95f, 0.0f) };
+    FRandomStream RngNoCharm2(1);
+    FInventoryItem PotionNoCharm;
+    const ERitualStepResult ResultNoCharm = Manager->TryAdvanceRitual(FIntPoint(1, 1), Step2NoCharm, RngNoCharm2, PotionNoCharm);
+    if (!TestTrue(TEXT("Ritual completes even without the charm"), ResultNoCharm == ERitualStepResult::Completed)) { Manager->Destroy(); return false; }
+    TestEqual(TEXT("Sanity: Stability=0.0 reliably breaks into Catastrophe without the charm"),
+        PotionNoCharm.BrewOutcome, EAlchemyOutcome::Catastrophe);
+
+    // --- С обержегом: тот же состав, другая клетка котла (свежий ритуал) ---
+    FAcquiredArtifact Stone;
+    Stone.ArtifactID = FName(TEXT("Камень-оберег"));
+    Manager->SetAcquiredArtifacts({ Stone });
+
+    Manager->SetGameClockSeconds(DuskMoment);
+    TArray<FInventoryItem> Step1WithCharm = { MakeRitualIngredient(TEXT("A"), 0.95f, 0.0f), MakeRitualIngredient(TEXT("B"), 0.95f, 0.0f), MakeBogWater() };
+    FRandomStream RngWithCharm1(1);
+    Manager->TryAdvanceRitual(FIntPoint(2, 2), Step1WithCharm, RngWithCharm1, Dummy);
+
+    Manager->SetGameClockSeconds(DawnMoment);
+    TArray<FInventoryItem> Step2WithCharm = { MakeRitualIngredient(TEXT("C"), 0.95f, 0.0f) };
+    FRandomStream RngWithCharm2(1);
+    FInventoryItem PotionWithCharm;
+    const ERitualStepResult ResultWithCharm = Manager->TryAdvanceRitual(FIntPoint(2, 2), Step2WithCharm, RngWithCharm2, PotionWithCharm);
+    if (!TestTrue(TEXT("Ritual completes with the charm"), ResultWithCharm == ERitualStepResult::Completed)) { Manager->Destroy(); return false; }
+    TestEqual(TEXT("Unspent Камень-оберег turns the same critical ritual brew into Purified"),
+        PotionWithCharm.BrewOutcome, EAlchemyOutcome::Purified);
+
+    // --- Известный разрыв: заряд НЕ списывается ритуальным путём ---
+    TestFalse(TEXT("Known gap (Tier 2 п.2.4): charge is not marked spent -- TryAdvanceRitual bypasses RunSimulationStep's spend logic"),
+        Manager->GetAcquiredArtifacts()[0].bBifurcationChargeSpent);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif

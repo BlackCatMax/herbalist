@@ -135,13 +135,17 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Time|Moon", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MoonWaxingBoostStrength = 0.15f;
 
-    // Полнолуние: "усиливает Spirit, Potency, Resonance". Спецификация также
-    // говорит, что вместе с силой растёт и Morok ("ставки выше в обе
-    // стороны") — эта часть не реализована в v1 (влияет на Bifurcation/
-    // варку, не на сбор), см. 16_Entity_Manifestation-подобную оговорку
-    // "не всё сразу" в 15_Cycles_And_Shrines.md §15.6.
+    // Полнолуние: "усиливает Spirit, Potency, Resonance".
     UPROPERTY(config, EditAnywhere, Category = "Time|Moon", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MoonFullBoostStrength = 0.15f;
+
+    // Вторая половина той же строки §15.3 ("вместе с силой растёт и Morok...
+    // ставки выше в обе стороны"), закрыта отдельно 2026-09-02 (Tier 1
+    // п.1.2, FApplyCommand::MoonPhase/ComputeApplyResult) — тот же порядок
+    // величины, что усиление сбора выше, не отдельная договорённость по
+    // балансу.
+    UPROPERTY(config, EditAnywhere, Category = "Time|Moon", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MoonFullMorokBoostStrength = 0.15f;
 
     // --- Inventory Decay ---
     // Скорость порчи: увеличение Distortion в секунду при отсутствии Stability.
@@ -223,6 +227,12 @@ public:
 
     UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float NightHorrorCorruptionRate = 0.002f;
+
+    // Третья часть той же строки таблицы §15.2 ("усиление оси Spirit в
+    // Direction"), закрыта отдельно от Distortion/Corruption выше (2026-09-02,
+    // Tier 1 п.1.1) -- тот же порядок величины, не отдельная договорённость.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float NightHorrorSpiritRate = 0.003f;
 
     // Рассвет/Закат/Полудница (§15.2, 2026-08-29) — таблица суток раньше
     // была закрыта только на Ночь (AUDIT_AND_REFACTORING_PLAN.md §7.2).

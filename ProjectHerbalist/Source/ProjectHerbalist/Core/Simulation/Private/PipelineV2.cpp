@@ -500,7 +500,8 @@ namespace Simulation
                                         EAlchemyOutcome& OutOutcome,
                                         FVector4& OutAxisDeltaForFootprint,
                                         bool bIsRitual = false,
-                                        bool bBifurcationCharmActive = false)
+                                        bool bBifurcationCharmActive = false,
+                                        EMoonPhase MoonPhase = EMoonPhase::NewMoon)
     {
         OutOutcome = EAlchemyOutcome::Valid;
         OutAxisDeltaForFootprint = FVector4(0.f, 0.f, 0.f, 0.f);
@@ -702,7 +703,17 @@ namespace Simulation
         // от давления Морока и гасится Stability — 03_Narrative,
         // "нестабильность усиливается в нарушенной среде, она ослабевает
         // в согласованных условиях".
-        const float MorokExponent = EffectiveMorok * MorokPressure * (1.f - Result.Meta.Stability);
+        // Полнолуние, §15.3: "вместе с силой растёт и Morok... ставки выше в
+        // обе стороны" -- та же надбавка, что уже усиливает сбор при полной
+        // луне (MoonFullBoostStrength, GenerateHarvestResult), здесь толкает
+        // экспоненту Морока, а не оси напрямую: чем она выше, тем сильнее
+        // ApplyMorokPush тянет Distortion/Corruption к 1, а значит и вероятнее
+        // пробить EffectiveCollapseThreshold ниже (шаг 8) -- ставки растут в
+        // обе стороны эффекта, не только в сторону "хуже", т.к. тот же бросок
+        // может и очиститься (bRolledPurify), не только сорваться.
+        const float MoonFullMorokBoostStrength = Settings ? Settings->MoonFullMorokBoostStrength : 0.15f;
+        const float MoonFullMorokBoost = (MoonPhase == EMoonPhase::FullMoon) ? MoonFullMorokBoostStrength : 0.0f;
+        const float MorokExponent = EffectiveMorok * MorokPressure * (1.f - Result.Meta.Stability) * (1.f + MoonFullMorokBoost);
         auto ApplyMorokPush = [MorokExponent](float Value)
         {
             return (Value > KINDA_SMALL_NUMBER) ? FMath::Pow(Value, 1.f / (1.f + MorokExponent)) : Value;
@@ -944,7 +955,7 @@ namespace Simulation
 
         EAlchemyOutcome Outcome = EAlchemyOutcome::Valid;
         FVector4 AxisDeltaForFootprint;
-        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint, Cmd.bIsRitual, Cmd.bBifurcationCharmActive);
+        FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint, Cmd.bIsRitual, Cmd.bBifurcationCharmActive, Cmd.MoonPhase);
 
         // 2. Удаляем использованные ингредиенты из инвентаря
         for (const FInventoryItem& Ing : Cmd.Ingredients)

@@ -523,6 +523,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const int32 ShrineInfluenceRadius = Settings ? Settings->ShrineInfluenceRadius          : 3;
     const float NightHorrorDistortionRate = Settings ? Settings->NightHorrorDistortionRate  : 0.003f;
     const float NightHorrorCorruptionRate = Settings ? Settings->NightHorrorCorruptionRate  : 0.002f;
+    const float NightHorrorSpiritRate     = Settings ? Settings->NightHorrorSpiritRate      : 0.003f;
     const float WinterPurityRate = Settings ? Settings->WinterPurityRate                    : 0.002f;
     const bool bIsWinter = GetSeason() == ESeason::Winter;   // одинаково для всей сетки за этот тик
     const float DawnPurityRate      = Settings ? Settings->DawnPurityRate      : 0.004f;
@@ -808,6 +809,21 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 NewTarget.Meta.Distortion = NewDistortion;
                 NewTarget.Meta.Corruption = NewCorruption;
+                bChanged = true;
+            }
+
+            // §15.2, третья часть той же строки таблицы ("усиление оси Spirit
+            // в Direction"), не реализованная вместе с Distortion/Corruption
+            // выше 2026-08-29 — "полночь... самое сильное окно для
+            // духовно-ориентированных трав". Direction, не Meta -- тот же
+            // принцип Max(0, ...) без верхнего клампа, что уже применяют
+            // ApplyLandmarkAxisNudge и NatureRate-нудж Низших выше в этом
+            // файле: NormalizeSum пересчитывает сумму отдельно при
+            // релаксации, здесь клампить в 1.0 незачем.
+            const float NewSpirit = FMath::Max(0.0f, NewTarget.Direction.Spirit + NightHorrorSpiritRate * DeltaTime);
+            if (!FMath::IsNearlyEqual(NewSpirit, NewTarget.Direction.Spirit, KINDA_SMALL_NUMBER))
+            {
+                NewTarget.Direction.Spirit = NewSpirit;
                 bChanged = true;
             }
         }
