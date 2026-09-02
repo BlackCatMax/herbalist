@@ -343,9 +343,58 @@ bool FHerbalistZaryana_KhlebSolSpawnsOnHighMolvaThreshold::RunTest(const FString
     Manager->TrySpawnStateBasedFragment();
     TestEqual(TEXT("No fragment below the Molva threshold"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
 
+    // "Устойчиво высокая Молва" (§17.6, 2026-09-02) -- теперь выдержано, не
+    // мгновенный порог: KhlebSolSustainedSeconds (дефолт 30с) / CheckInterval
+    // (дефолт 5с) = 6 опросов подряд, не один.
     Manager->Molva = 0.8f;
+    for (int32 i = 0; i < 5; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();
+        TestEqual(TEXT("Not sustained long enough yet -- no spawn"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+    }
     Manager->TrySpawnStateBasedFragment();
-    TestEqual(TEXT("KHLEB_SOL spawns once Molva crosses the threshold"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("KHLEB_SOL")));
+    TestEqual(TEXT("KHLEB_SOL spawns once Molva has stayed high for the full sustained window"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("KHLEB_SOL")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_KhlebSolResetsSustainedAccumulatorOnDrop,
+    "Herbalist.Zaryana.KhlebSolResetsSustainedAccumulatorOnDrop",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_KhlebSolResetsSustainedAccumulatorOnDrop::RunTest(const FString& Parameters)
+{
+    // Один провал условия между опросами обязан сбросить накопление целиком
+    // (§17.6 "устойчиво" -- не "почти всё время"), не просто затормозить его.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetZaryanaCellIfUnset(FIntPoint(0, 0));
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("TISHINA_LESA")), FName(TEXT("OJIDANIE_BURI")), FName(TEXT("NE_POKHVALILA")),
+        FName(TEXT("NEUDOBNAYA_PRAVDA"))});
+
+    Manager->Molva = 0.8f;
+    for (int32 i = 0; i < 5; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();   // 5/6 opросов -- почти выдержано
+    }
+    TestEqual(TEXT("Not spawned yet after 5 of 6 sustained polls"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+
+    Manager->Molva = 0.1f;   // условие сорвалось на один опрос
+    Manager->TrySpawnStateBasedFragment();
+    Manager->Molva = 0.8f;   // условие снова держится
+    for (int32 i = 0; i < 5; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();
+        TestEqual(TEXT("Accumulator restarted from zero after the drop -- still not enough"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+    }
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("Spawns only after a full fresh sustained window since the drop"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("KHLEB_SOL")));
 
     Manager->Destroy();
     return true;
@@ -439,14 +488,98 @@ bool FHerbalistZaryana_TishinaLesaSpawnsOnlyInTaiga::RunTest(const FString& Para
         FName(TEXT("KHLEB_SOL")), FName(TEXT("OJIDANIE_BURI")), FName(TEXT("NE_POKHVALILA")),
         FName(TEXT("NEUDOBNAYA_PRAVDA"))});
 
+    // Все прочие клетки Тайги по умолчанию тоже держат Distortion=0
+    // (найдено ранее в этом файле, "KhlebSolSpawnsOnHighMolvaThreshold") --
+    // без этого их аккумуляторы копились бы параллельно с якорной клеткой
+    // и случайный выбор мог унести спавн на любую из них. Форсируем ИХ
+    // высокий Distortion, чтобы кандидатом на TISHINA_LESA была только
+    // клетка-якорь.
+    Manager->ForEachCell([TaigaAnchor](FGridCell& C)
+    {
+        if (C.Biome == EBiomeType::Taiga && FIntPoint(C.X, C.Y) != *TaigaAnchor)
+        {
+            C.State.Meta.Distortion = 0.9f;
+        }
+    });
+
     if (FGridCell* Cell = Manager->GetCell(TaigaAnchor->X, TaigaAnchor->Y))
     {
         Cell->bIsWater = false;
         Cell->State.Meta.Distortion = 0.0f;
     }
 
+    // "Длительная низкая Distortion" (§17.7, 2026-09-02) -- выдержано, не
+    // мгновенно: TishinaLesaSustainedSeconds (дефолт 60с) / CheckInterval
+    // (дефолт 5с) = 12 опросов подряд на ЭТОЙ ЖЕ клетке.
+    for (int32 i = 0; i < 11; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();
+        TestEqual(TEXT("Not sustained long enough yet -- no spawn"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+    }
     Manager->TrySpawnStateBasedFragment();
-    TestEqual(TEXT("TISHINA_LESA spawns on a low-Distortion Taiga cell"),
+    TestEqual(TEXT("TISHINA_LESA spawns once the Taiga cell has held low Distortion for the full window"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("TISHINA_LESA")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_TishinaLesaResetsPerCellAccumulatorOnDrop,
+    "Herbalist.Zaryana.TishinaLesaResetsPerCellAccumulatorOnDrop",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_TishinaLesaResetsPerCellAccumulatorOnDrop::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint* TaigaAnchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Индрик-зверь")));
+    if (!TestNotNull(TEXT("Taiga cell available via Индрик-зверь anchor"), TaigaAnchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("OJIDANIE_BURI")), FName(TEXT("NE_POKHVALILA")),
+        FName(TEXT("NEUDOBNAYA_PRAVDA"))});
+
+    // Изолируем от прочих клеток Тайги (по умолчанию тоже Distortion=0) --
+    // тот же приём, что уже в TishinaLesaSpawnsOnlyInTaiga выше, иначе их
+    // независимо накапливающиеся аккумуляторы маскируют сброс именно на
+    // клетке-якоре случайным выбором среди нескольких готовых клеток.
+    Manager->ForEachCell([TaigaAnchor](FGridCell& C)
+    {
+        if (C.Biome == EBiomeType::Taiga && FIntPoint(C.X, C.Y) != *TaigaAnchor)
+        {
+            C.State.Meta.Distortion = 0.9f;
+        }
+    });
+
+    FGridCell* Cell = Manager->GetCell(TaigaAnchor->X, TaigaAnchor->Y);
+    if (!TestNotNull(TEXT("Cell exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->bIsWater = false;
+    Cell->State.Meta.Distortion = 0.0f;
+
+    for (int32 i = 0; i < 11; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();   // 11/12 -- почти выдержано
+    }
+    TestEqual(TEXT("Not spawned yet after 11 of 12 sustained polls"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+
+    Cell->State.Meta.Distortion = 0.9f;   // условие сорвалось на этой клетке
+    Manager->TrySpawnStateBasedFragment();
+    Cell->State.Meta.Distortion = 0.0f;   // условие снова держится
+
+    for (int32 i = 0; i < 11; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();
+        TestEqual(TEXT("Per-cell accumulator restarted from zero after the drop"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+    }
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("Spawns only after a full fresh sustained window on this cell since the drop"),
         Manager->GetActiveFragmentDefinitionID(), FName(TEXT("TISHINA_LESA")));
 
     Manager->Destroy();
@@ -487,12 +620,81 @@ bool FHerbalistZaryana_OjidanieBuriNeedsHighStabilityInTundra::RunTest(const FSt
     TestNotEqual(TEXT("Low Stability -- does not spawn OJIDANIE_BURI"),
         Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
 
+    // "Удержанной долго" (§17.7, 2026-09-02) -- выдержано, не мгновенно:
+    // OjidanieBuriSustainedSeconds (дефолт 120с) / CheckInterval (дефолт 5с)
+    // = 24 опроса подряд на этой же клетке.
     if (FGridCell* Cell = Manager->GetCell(TundraAnchor->X, TundraAnchor->Y))
     {
         Cell->State.Meta.Stability = 0.9f;
     }
+    for (int32 i = 0; i < 23; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();
+        TestNotEqual(TEXT("Not sustained long enough yet -- no OJIDANIE_BURI"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
+    }
     Manager->TrySpawnStateBasedFragment();
-    TestEqual(TEXT("High Stability in Tundra -- spawns OJIDANIE_BURI"),
+    TestEqual(TEXT("High Stability held for the full sustained window -- spawns OJIDANIE_BURI"),
+        Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_OjidanieBuriResetsPerCellAccumulatorOnDrop,
+    "Herbalist.Zaryana.OjidanieBuriResetsPerCellAccumulatorOnDrop",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_OjidanieBuriResetsPerCellAccumulatorOnDrop::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint* TundraAnchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Волот")));
+    if (!TestNotNull(TEXT("Tundra cell available via Волот anchor"), TundraAnchor))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("TISHINA_LESA")), FName(TEXT("NE_POKHVALILA")),
+        FName(TEXT("NEUDOBNAYA_PRAVDA"))});
+
+    // Тот же изолирующий приём, что уже TishinaLesaResetsPerCellAccumulatorOnDrop --
+    // защитно, даже если default-Stability Тундры сейчас ниже порога и без
+    // этого (эмпирически подтверждено в OjidanieBuriNeedsHighStabilityInTundra
+    // выше), не полагаемся на это молча.
+    Manager->ForEachCell([TundraAnchor](FGridCell& C)
+    {
+        if (C.Biome == EBiomeType::Tundra && FIntPoint(C.X, C.Y) != *TundraAnchor)
+        {
+            C.State.Meta.Stability = 0.1f;
+        }
+    });
+
+    FGridCell* Cell = Manager->GetCell(TundraAnchor->X, TundraAnchor->Y);
+    if (!TestNotNull(TEXT("Cell exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->State.Meta.Stability = 0.9f;
+
+    for (int32 i = 0; i < 23; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();   // 23/24 -- почти выдержано
+    }
+    TestNotEqual(TEXT("Not spawned yet after 23 of 24 sustained polls"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
+
+    Cell->State.Meta.Stability = 0.1f;   // условие сорвалось на этой клетке
+    Manager->TrySpawnStateBasedFragment();
+    Cell->State.Meta.Stability = 0.9f;   // условие снова держится
+
+    for (int32 i = 0; i < 23; ++i)
+    {
+        Manager->TrySpawnStateBasedFragment();
+        TestNotEqual(TEXT("Per-cell accumulator restarted from zero after the drop"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
+    }
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("Spawns only after a full fresh sustained window on this cell since the drop"),
         Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
 
     Manager->Destroy();

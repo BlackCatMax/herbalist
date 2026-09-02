@@ -848,6 +848,18 @@ protected:
     float FragmentSpawnCooldownRemaining = 0.0f;
     float FragmentStateCheckAccumulator = 0.0f;
 
+    // "Выдержано N секунд" (2026-09-02, HerbalistCore::Math::TickSustainedCondition) —
+    // опросное состояние, тот же класс поля, что FragmentStateCheckAccumulator
+    // выше: не игровой прогресс, намеренно не персистится (перезагрузка просто
+    // начинает отсчёт заново, тот же принцип, что уже у Слоя 2 росы). KHLEB_SOL —
+    // один скаляр (Molva не привязана к клетке); TISHINA_LESA/OJIDANIE_BURI —
+    // per-клеточные аккумуляторы (какая именно клетка выдержала условие, важно
+    // для места спавна фрагмента), сбрасываются целиком при первом же провале
+    // условия на конкретной клетке.
+    float KhlebSolSustainedMolvaSeconds = 0.0f;
+    TMap<FIntPoint, float> TishinaLesaHoldSeconds;
+    TMap<FIntPoint, float> OjidanieBuriHoldSeconds;
+
     void SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoint& Cell, bool bIsFalse);
 
     // ---- Роса Заряны (19_Rosa_Signal.md §19.2) ----

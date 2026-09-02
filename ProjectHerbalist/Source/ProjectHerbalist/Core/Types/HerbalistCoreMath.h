@@ -63,6 +63,31 @@ namespace HerbalistCore::Math
         return bCurrentlyActive ? (Value > Threshold - Margin) : (Value > Threshold + Margin);
     }
 
+    // "Выдержано N секунд" (2026-09-02, разведка нашла три места, каждое
+    // приближённое до мгновенного порога с явным комментарием "в проекте
+    // нет механизма длительности" — TISHINA_LESA/OJIDANIE_BURI/KHLEB_SOL,
+    // MemoryFragmentDefinitions.h/17_Hero_And_Community §17.6-17.7:
+    // "устойчиво"/"длительная"/"удержанной долго") — временной аналог
+    // PassesHysteresisThreshold выше, тот же принцип "вынесено сюда при
+    // появлении второго потребителя", здесь сразу три. Не Tick()-приводимый
+    // (DeltaTime каждый кадр) — вызывающая сторона опрашивает периодически
+    // (TrySpawnStateBasedFragment, раз в MemoryFragmentStateCheckInterval),
+    // поэтому шаг — интервал опроса, не DeltaTime кадра. Условие держится
+    // непрерывно -> накапливает; однажды сорвалось -> сбрасывается в ноль
+    // целиком (не частично) — то же "всё или ничего", что и подразумевает
+    // слово "устойчиво"/"удержанной": один провал должен заставить ждать
+    // заново, не просто затормозить накопление.
+    inline bool TickSustainedCondition(float& AccumulatedSeconds, bool bConditionHolds, float PollDeltaSeconds, float RequiredSeconds)
+    {
+        if (!bConditionHolds)
+        {
+            AccumulatedSeconds = 0.0f;
+            return false;
+        }
+        AccumulatedSeconds += PollDeltaSeconds;
+        return AccumulatedSeconds >= RequiredSeconds;
+    }
+
     // Передозировка (обсуждение в сессии 2026-08-24, компендиум: "сок его —
     // сильное сердечное зелье, но и яд лютый" — Ландыш, тот же паттерн у
     // Полярного мака и Чистотела: сила лекарства и его яд — одна ось, не

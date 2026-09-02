@@ -40,9 +40,13 @@ enum class EMemoryFragmentTrigger : uint8
     // смотрят на биом клетки вовсе).
 
     // Устойчиво высокая Stability конкретной клетки, скопировано на биом
-    // (OJIDANIE_BURI, Тундра). Мгновенный порог, без гистерезиса — в
-    // проекте нет механизма длительности "устойчиво N секунд" (та же
-    // находка разведки, что уже не раз применена в этой сессии).
+    // (OJIDANIE_BURI, Тундра). **Реализовано как настоящее "выдержано N
+    // секунд" 2026-09-02** — HerbalistCore::Math::TickSustainedCondition
+    // (HerbalistCoreMath.h), per-клеточный аккумулятор
+    // (AGridWorldManager::OjidanieBuriHoldSeconds), не мгновенный порог, как
+    // раньше (комментарий здесь был устаревшим — механизм длительности
+    // теперь есть в проекте, тот же аппарат покрывает и TISHINA_LESA/
+    // KHLEB_SOL, см. TrySpawnStateBasedFragment, GridWorldManagerZaryana.cpp).
     HighStability,
 
     // Клетка-якорь Легендарного сейчас в благом проявленном состоянии

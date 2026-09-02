@@ -119,14 +119,29 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     const float DistortionThreshold = Settings ? Settings->MemoryFragmentLowDistortionThreshold : 0.15f;
     const float ShrineThreshold = Settings ? Settings->MemoryFragmentShrineRestorationThreshold : 0.7f;
 
+    // Шаг опроса для "выдержано N секунд" ниже (TickSustainedCondition) — эта
+    // функция сама не знает, сколько реального/игрового времени прошло с
+    // прошлого вызова (её зовут и из UpdateMemoryFragments раз в
+    // MemoryFragmentStateCheckInterval, и напрямую из тестов) — считаем один
+    // вызов = один шаг опроса номинальной длины настройки, тот же принцип,
+    // что уже применяют капищные/энтити-триггеры к "разу в N секунд".
+    const float CheckInterval = Settings ? Settings->MemoryFragmentStateCheckInterval : 5.0f;
+
     // HighCommunityTrust (§17.6, "устойчиво высокая Молва") — проверяем
-    // первым, дешевле даже капищ (одно поле, не цикл). Мгновенный порог,
-    // без гистерезиса. Спавнится у порога Заряны (ZaryanaCell) в
-    // буквальном соответствии с текстом фрагмента ("оставили... на
-    // пороге, пока я спала") — если её клетка ещё не размещена, фрагмент
-    // ждёт следующего опроса вместо спавна в произвольном месте.
+    // первым, дешевле даже капищ (одно поле, не цикл). "Устойчиво" — теперь
+    // выдержано (HerbalistCore::Math::TickSustainedCondition, 2026-09-02),
+    // не мгновенный порог: Molva должна оставаться высокой
+    // KhlebSolSustainedSeconds подряд (в шагах опроса), один провал условия
+    // между опросами сбрасывает накопление целиком. Спавнится у порога
+    // Заряны (ZaryanaCell) в буквальном соответствии с текстом фрагмента
+    // ("оставили... на пороге, пока я спала") — если её клетка ещё не
+    // размещена, фрагмент ждёт следующего опроса вместо спавна в
+    // произвольном месте.
     const float HighMolvaThreshold = Settings ? Settings->MemoryFragmentHighMolvaThreshold : 0.5f;
-    if (Molva >= HighMolvaThreshold && ZaryanaCell != FIntPoint(-1, -1))
+    const float KhlebSolSustained = Settings ? Settings->KhlebSolSustainedSeconds : 30.0f;
+    const bool bKhlebSolSustainedLongEnough = HerbalistCore::Math::TickSustainedCondition(
+        KhlebSolSustainedMolvaSeconds, Molva >= HighMolvaThreshold, CheckInterval, KhlebSolSustained);
+    if (bKhlebSolSustainedLongEnough && ZaryanaCell != FIntPoint(-1, -1))
     {
         const FMemoryFragmentDefinition* BreadSaltDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("KHLEB_SOL")));
         if (BreadSaltDef && !CollectedFragmentIDs.Contains(BreadSaltDef->ID))
@@ -192,6 +207,8 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     const FMemoryFragmentDefinition* TishinaDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("TISHINA_LESA")));
     const FMemoryFragmentDefinition* BuriDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("OJIDANIE_BURI")));
     const float StabilityThreshold = Settings ? Settings->MemoryFragmentHighStabilityThreshold : 0.7f;
+    const float TishinaLesaSustained = Settings ? Settings->TishinaLesaSustainedSeconds : 60.0f;
+    const float OjidanieBuriSustained = Settings ? Settings->OjidanieBuriSustainedSeconds : 120.0f;
     const bool bNeedQuiet = QuietDef && !CollectedFragmentIDs.Contains(QuietDef->ID);
     const bool bNeedTishina = TishinaDef && !CollectedFragmentIDs.Contains(TishinaDef->ID);
     const bool bNeedBuri = BuriDef && !CollectedFragmentIDs.Contains(BuriDef->ID);
@@ -203,18 +220,41 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
         for (const FGridCell& Cell : Cells)
         {
             if (Cell.bIsWater) continue;
+            const FIntPoint CellCoord(Cell.X, Cell.Y);
             const bool bLowDistortion = Cell.State.Meta.Distortion < DistortionThreshold;
+
+            // TIKHOE_MESTO остаётся мгновенным порогом намеренно — её
+            // собственный текст (§21.1) не требует длительности, только
+            // TISHINA_LESA (ниже) делит с ней тот же State-порог, но со
+            // своим требованием "выдержано".
             if (bNeedQuiet && bLowDistortion)
             {
-                EligibleCellsQuiet.Add(FIntPoint(Cell.X, Cell.Y));
+                EligibleCellsQuiet.Add(CellCoord);
             }
-            if (bNeedTishina && bLowDistortion && Cell.Biome == EBiomeType::Taiga)
+
+            // TISHINA_LESA (§17.7: "длительная низкая Distortion в Тайге") —
+            // тикаем аккумулятор для КАЖДОЙ клетки Тайги, не только уже
+            // подходящих сейчас: провал условия должен сбросить накопление
+            // этой конкретной клетки, а не просто не увеличить его.
+            if (bNeedTishina && Cell.Biome == EBiomeType::Taiga)
             {
-                EligibleCellsTishina.Add(FIntPoint(Cell.X, Cell.Y));
+                float& Hold = TishinaLesaHoldSeconds.FindOrAdd(CellCoord);
+                if (HerbalistCore::Math::TickSustainedCondition(Hold, bLowDistortion, CheckInterval, TishinaLesaSustained))
+                {
+                    EligibleCellsTishina.Add(CellCoord);
+                }
             }
-            if (bNeedBuri && Cell.Biome == EBiomeType::Tundra && Cell.State.Meta.Stability >= StabilityThreshold)
+
+            // OJIDANIE_BURI (§17.7: "клетка с высокой Stability, удержанной
+            // долго") — тот же приём per-клеточного аккумулятора.
+            if (bNeedBuri && Cell.Biome == EBiomeType::Tundra)
             {
-                EligibleCellsBuri.Add(FIntPoint(Cell.X, Cell.Y));
+                const bool bHighStability = Cell.State.Meta.Stability >= StabilityThreshold;
+                float& Hold = OjidanieBuriHoldSeconds.FindOrAdd(CellCoord);
+                if (HerbalistCore::Math::TickSustainedCondition(Hold, bHighStability, CheckInterval, OjidanieBuriSustained))
+                {
+                    EligibleCellsBuri.Add(CellCoord);
+                }
             }
         }
         if (bNeedTishina && EligibleCellsTishina.Num() > 0)

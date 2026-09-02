@@ -382,6 +382,36 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MemoryFragmentHighStabilityThreshold = 0.7f;
 
+    // "Выдержано N секунд" (2026-09-02, HerbalistCore::Math::TickSustainedCondition)
+    // — три триггера, чей текст главы явно требует длительности
+    // ("устойчиво"/"длительная"/"удержанной долго"), раньше приближённые до
+    // мгновенного порога за неимением механизма. Опрашивается раз в
+    // MemoryFragmentStateCheckInterval (не каждый кадр) — секунды здесь
+    // считаются шагами опроса, не игровыми/реальными секундами напрямую.
+    //
+    // TIKHOE_MESTO (тот же LowLocalDistortion, что TISHINA_LESA) НЕ входит
+    // сюда — её собственный текст (§21.1) не содержит слова длительности,
+    // только TISHINA_LESA ("длительная") получает это требование, хотя оба
+    // используют один и тот же State-порог.
+
+    // ТАЙГА / TISHINA_LESA (§17.7: "длительная низкая Distortion в Тайге").
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float TishinaLesaSustainedSeconds = 60.0f;
+
+    // ТУНДРА / OJIDANIE_BURI (§17.7: "клетка с высокой Stability, удержанной
+    // долго") — дольше Тайги: собственный текст фрагмента подчёркивает
+    // "долго" сильнее ("пурга шла... два дня"), не просто "длительная".
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float OjidanieBuriSustainedSeconds = 120.0f;
+
+    // ХЛЕБ-СОЛЬ / KHLEB_SOL (§17.6: "устойчиво высокая Молва") — короче
+    // клеточных триггеров: Molva сама по себе не колеблется пассивно (растёт
+    // только явным подношением, MolvaOfferingGain), риск случайного мгновенного
+    // всплеска ниже, чем у State клетки — не нужно ждать так же долго, чтобы
+    // отфильтровать шум, которого структурно почти нет.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float KhlebSolSustainedSeconds = 30.0f;
+
     // Порог Coherence/Purity/Distortion для триггера CoherentBrew (варка).
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MemoryFragmentBrewCoherenceThreshold = 0.8f;
