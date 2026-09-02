@@ -8,6 +8,7 @@
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Entities/AmbientEntityTypes.h"
+#include "Core/Entities/LandmarkTypes.h"
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -80,5 +81,11 @@ void AProjectHerbalistGameModeBase::BeginPlay()
     if (GetAmbientEntityDefinitions().Num() == 0)
     {
         UE_LOG(LogHerbalist, Error, TEXT("GetAmbientEntityDefinitions() вернул пустой реестр -- DT_AmbientEntities не найден или пуст, Низший ранг бестиария не будет проявляться."));
+    }
+
+    // Тот же прогрев кэша, что и у Низшего ранга выше (2026-09-02, юнит 2/3).
+    if (GetLandmarkDefinitions().Num() == 0)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("GetLandmarkDefinitions() вернул пустой реестр -- DT_Landmarks не найден или пуст, Основной ранг бестиария (хозяева) не будет проявляться."));
     }
 }

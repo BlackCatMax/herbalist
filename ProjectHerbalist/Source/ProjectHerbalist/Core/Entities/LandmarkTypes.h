@@ -19,10 +19,22 @@
 // уже существующий словарь (Corruption/Distortion/Stability), не новая
 // придуманная "усталость"/"страх" и т.п., тем же принципом, что уже
 // применён к Полевику ("наведение усталости" -> Stability, не новая ось).
+//
+// 2026-09-02, юнит 2/3 миграции бестиария на DataTable (прямой запрос
+// пользователя, "чёткая дата-драйвен архитектура по всем карточкам всего
+// проекта") -- тот же паттерн, что уже AmbientEntityTypes.h (юнит 1/3):
+// GetLandmarkDefinitions() ниже лениво грузит /Game/Herbalist/Data/DT_Landmarks
+// вместо литерального массива. См. подробное обоснование ленивой
+// (не push-через-GameModeBase) загрузки в AmbientEntityTypes.h -- то же
+// рассуждение целиком применимо здесь: headless-автотесты не вызывают
+// AProjectHerbalistGameModeBase::BeginPlay(), несколько тестов
+// (LandmarkTest.cpp) зовут GetLandmarkDefinitions()/FindLandmarkDefinition()
+// напрямую, ожидая реальные 15 карточек.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Engine/DataTable.h"
 #include "LandmarkTypes.generated.h"
 
 UENUM()
@@ -44,13 +56,21 @@ enum class ELandmarkAxis : uint8
     Resonance
 };
 
-USTRUCT()
-struct FLandmarkDefinition
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FLandmarkDefinition : public FTableRowBase
 {
     GENERATED_BODY()
 
     UPROPERTY() FName EntityID;
     UPROPERTY() EBiomeType Biome = EBiomeType::ForestSteppe;
+
+    // Явный порядок регистрации (2026-09-02, тот же приём, что уже
+    // FAmbientEntityDefinition::SortOrder) -- у Landmark сегодня нет
+    // задокументированной зависимости от порядка (SeedTestLandmarks ищет
+    // первую свободную клетку своего биома, не соревнуется за неё с
+    // другими Def), но поле заведено для единообразия и на случай будущей
+    // такой зависимости.
+    UPROPERTY() int32 SortOrder = 0;
 
     // До двух осей на благословение (Полевик и Переплут — единственные,
     // где карточка явно называет два эффекта сразу; у остальных Axis2 = None).
@@ -112,218 +132,36 @@ inline void ApplyLandmarkAxisNudge(FRealState& Target, ELandmarkAxis Axis, float
     }
 }
 
-// Статический реестр — тот же паттерн, что GetAmbientEntityDefinitions()
-// (AmbientEntityTypes.h) и HerbalistCore::Zaryana::GetMemoryFragmentDefinitions().
+// Ленивая загрузка из /Game/Herbalist/Data/DT_Landmarks (2026-09-02, см.
+// комментарий у файла выше и у GetAmbientEntityDefinitions() в
+// AmbientEntityTypes.h -- тот же паттерн). LogTemp, не HerbalistLogChannels.h
+// категория -- эта функция inline, компилируется в любой модуль, который
+// её вызывает (включая ProjectHerbalistTests через новый коммандлет),
+// категории без API-экспорта дают LNK2001 при линковке из чужого модуля
+// (найдено и починено на юните 1/3, тот же урок применён здесь заранее).
 inline const TArray<FLandmarkDefinition>& GetLandmarkDefinitions()
 {
     static const TArray<FLandmarkDefinition> Definitions = []()
     {
+        check(IsInGameThread());   // LoadObject не потокобезопасен
+
         TArray<FLandmarkDefinition> Defs;
-
-        // Полевик (Лесостепь) — уже был реализован до 2026-08-29, числа не
-        // менялись, только перенесены сюда из захардкоженного блока.
-        // "Благословлённое зерно" (08_Content/бестиарий: повышенная Potency
-        // и Purity); "порча посевов, наведение усталости" -> Stability.
+        UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_Landmarks"));
+        if (!Table)
         {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Полевик"));
-            D.Biome = EBiomeType::ForestSteppe;
-            D.BlessAxis = ELandmarkAxis::Potency;  D.BlessRate = 0.01f;
-            D.BlessAxis2 = ELandmarkAxis::Purity;  D.BlessRate2 = 0.005f;
-            D.CurseAxis = ELandmarkAxis::Stability; D.CurseRate = -0.02f;
-            Defs.Add(D);
+            UE_LOG(LogTemp, Error, TEXT("GetLandmarkDefinitions: не удалось загрузить DT_Landmarks -- Основной ранг бестиария будет пуст"));
+            return Defs;
         }
+        Table->AddToRoot();
 
-        // Аука (Тайга) — "мох с дерева, где он сидел, усиливает разум и
-        // скрытность" -> Mind. Разгневанный уводит с тропы шутки ради ->
-        // дезориентация, Distortion.
+        TArray<FLandmarkDefinition*> Rows;
+        Table->GetAllRows(TEXT("GetLandmarkDefinitions"), Rows);
+        Defs.Reserve(Rows.Num());
+        for (const FLandmarkDefinition* Row : Rows)
         {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Аука"));
-            D.Biome = EBiomeType::Taiga;
-            D.BlessAxis = ELandmarkAxis::Mind; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.02f;
-            Defs.Add(D);
+            if (Row) Defs.Add(*Row);
         }
-
-        // Дух Медведя (Тайга) — "Body" по прямому тексту §16.3 самого GDD,
-        // подтверждено карточкой (d_manifest[Body]=0.9, доминирующая ось).
-        // Разгневанный медвежий дух — самый опасный ("danger: Высокая") из
-        // всей пачки, curse на Stability, не мельче остальных.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Дух Медведя"));
-            D.Biome = EBiomeType::Taiga;
-            D.BlessAxis = ELandmarkAxis::Body; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Stability; D.CurseRate = -0.025f;
-            Defs.Add(D);
-        }
-
-        // Хозяин Севера (Тундра) — ледяной артефакт даёт "защиту от
-        // обморожения, выносливость" -> Stability. Разгневанный испытывает
-        // холодом и страхом путника -> Distortion.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Хозяин Севера"));
-            D.Biome = EBiomeType::Tundra;
-            D.BlessAxis = ELandmarkAxis::Stability; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.02f;
-            Defs.Add(D);
-        }
-
-        // Гуменник (Широколиств. лес) — "благословенное зерно повышает
-        // Potency зелий изобилия" -> Potency. Хозяйство без ухода портится
-        // без явного мех. акта поджога (декоративная угроза в тексте) ->
-        // Stability как общий "запущенное хозяйство" эффект.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Гуменник"));
-            D.Biome = EBiomeType::BroadleafForest;
-            D.BlessAxis = ELandmarkAxis::Potency; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Stability; D.CurseRate = -0.02f;
-            Defs.Add(D);
-        }
-
-        // Овинник (Широколиств. лес) — "пепел из его овина повышает Purity
-        // и защиту от огня" -> Purity. Обиженный овинник — угроза пожара ->
-        // Corruption как "порча хозяйства через недобрый огонь".
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Овинник"));
-            D.Biome = EBiomeType::BroadleafForest;
-            D.BlessAxis = ELandmarkAxis::Purity; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Corruption; D.CurseRate = 0.02f;
-            Defs.Add(D);
-        }
-
-        // Кикимора болотная (Болото) — единственная неоднозначная фигура
-        // пачки: собственная карточка называет её "дар" (волос/слюна)
-        // ингредиентом для зелий обмана, ПОВЫШАЮЩИМ Distortion уже в
-        // благосклонном варианте — не Purity/Potency, как у прочих
-        // "хозяйственных" духов. Bless -> Resonance (её колдовская
-        // прозорливость, не морок впрямую); curse -> Distortion сильнее
-        // обычного (morok_affinity 0.6, выше среднего по пачке) —
-        // она уже наполовину созданию Морока принадлежит, недовольная
-        // отпускает его без остатка.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Кикимора болотная"));
-            D.Biome = EBiomeType::Bog;
-            D.BlessAxis = ELandmarkAxis::Resonance; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.025f;
-            Defs.Add(D);
-        }
-
-        // Переплут (Степь) — "шерсть/молоко благословлённого скота
-        // повышают Body и Nature" -- единственный второй случай (после
-        // Полевика) с двумя явно названными осями в самой карточке.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Переплут"));
-            D.Biome = EBiomeType::Steppe;
-            D.BlessAxis = ELandmarkAxis::Body; D.BlessRate = 0.008f;
-            D.BlessAxis2 = ELandmarkAxis::Nature; D.BlessRate2 = 0.008f;
-            D.CurseAxis = ELandmarkAxis::Stability; D.CurseRate = -0.02f;
-            Defs.Add(D);
-        }
-
-        // Бродницы (Речная пойма) — либо безопасно проводят через брод,
-        // либо заманивают в глубину. Bless -> Stability (уверенная,
-        // безопасная переправа); curse -> Distortion (заведёт на глубину,
-        // потеря ориентации).
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Бродницы"));
-            D.Biome = EBiomeType::Floodplain;
-            D.BlessAxis = ELandmarkAxis::Stability; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.02f;
-            Defs.Add(D);
-        }
-
-        // Боровик (Смеш. лес) — "грибы, собранные с его благословения,
-        // отличаются повышенной Potency" -> Potency.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Боровик"));
-            D.Biome = EBiomeType::MixedForest;
-            D.BlessAxis = ELandmarkAxis::Potency; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Stability; D.CurseRate = -0.02f;
-            Defs.Add(D);
-        }
-
-        // Луговой (Смеш. лес) — "трава с его луга отличается высокой
-        // Purity" -> Purity.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Луговой"));
-            D.Biome = EBiomeType::MixedForest;
-            D.BlessAxis = ELandmarkAxis::Purity; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.015f;
-            Defs.Add(D);
-        }
-
-        // Курганники (Лесостепь, изначально §16.2 — требовал подношения,
-        // значит на деле §16.3) — "пыль кургана для оберегов и связи с
-        // предками" -> Spirit (духовная ось, не физическая защита).
-        // Потревоживших курган без спроса карточка прямо проклинает
-        // болезнью -> Corruption.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Курганники"));
-            D.Biome = EBiomeType::ForestSteppe;
-            D.BlessAxis = ELandmarkAxis::Spirit; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Corruption; D.CurseRate = 0.025f;
-            Defs.Add(D);
-        }
-
-        // Жердяи (Широколиств. лес, изначально §16.2) — "оберег из щепки
-        // одержимого шеста" -> Stability (защитная тема, они охраняют
-        // границу владения). Пугают, не вредят напрямую -> Distortion,
-        // мягче Курганников (danger: Низкая у Жердяев против Средней).
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Жердяи"));
-            D.Biome = EBiomeType::BroadleafForest;
-            D.BlessAxis = ELandmarkAxis::Stability; D.BlessRate = 0.008f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.012f;
-            Defs.Add(D);
-        }
-
-        // Курганные огни (Степь, изначально §16.2) — "связь с предками и
-        // поиск сокрытого" -> Resonance (прозорливость/поиск, не прямая
-        // духовная ось, как у Курганников — разная механика для двух
-        // родственных по лору, но разных по карточке сущностей). Могут
-        // завести в ловушку -> Distortion.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Курганные огни"));
-            D.Biome = EBiomeType::Steppe;
-            D.BlessAxis = ELandmarkAxis::Resonance; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.02f;
-            Defs.Add(D);
-        }
-
-        // Домовой (жилище игрока, DESIGN_Community_And_Homestead.md §2.1,
-        // 2026-08-31) — не биом, регистрируется напрямую на клетке
-        // AAlchemyTableActor (bManualRegistrationOnly=true, SeedTestLandmarks
-        // пропускает). Хороший Respect защищает дом — Stability, тот же
-        // смысл, что уже даёт капищам устойчивость к порче (§12.10). Плохой
-        // — мелкие пакости, Corruption. При-сильно плохом (ниже -0.6) —
-        // второй, более резкий удар (Stability вниз тоже) — эскалация в
-        // домашнюю Кикимору (собрана этой же сессией,
-        // DESIGN_Brewing_Situations_And_Lore.md), не отдельная сущность.
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Домовой"));
-            D.bManualRegistrationOnly = true;
-            D.BlessAxis = ELandmarkAxis::Stability; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Corruption; D.CurseRate = 0.015f;
-            D.AggravatedCurseAxis = ELandmarkAxis::Stability;
-            D.AggravatedCurseRate = -0.02f;
-            D.AggravatedCurseThreshold = -0.6f;
-            Defs.Add(D);
-        }
-
+        Defs.Sort([](const FLandmarkDefinition& A, const FLandmarkDefinition& B) { return A.SortOrder < B.SortOrder; });
         return Defs;
     }();
     return Definitions;
