@@ -677,7 +677,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // (§16.4, 2026-09-02) — та же подавляющая проверка, но
             // масштабированная на конкретный биом клетки, не всю сетку.
             if (bEligible && CanManifest(Cell, Def.EntityID) &&
-                (bWasActive || (!IsInvisibilityCapActive() && !IsAlkonostSuppressionActiveForBiome(Cell.Biome))))
+                (bWasActive || (!IsInvisibilityCapActive(FIntPoint(Cell.X, Cell.Y)) && !IsAlkonostSuppressionActiveForBiome(Cell.Biome))))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
                 ManifestingAmbientDef = &Def;
@@ -1032,7 +1032,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // (§16.4, 2026-09-02) — та же подавляющая проверка, масштабированная
             // на биом якорной клетки, не всю сетку.
             if (bEligible && CanManifest(*Cell, Def.EntityID) &&
-                (bWasActive || (!IsInvisibilityCapActive() && !IsAlkonostSuppressionActiveForBiome(Cell->Biome))))
+                (bWasActive || (!IsInvisibilityCapActive(*Anchor) && !IsAlkonostSuppressionActiveForBiome(Cell->Biome))))
             {
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);

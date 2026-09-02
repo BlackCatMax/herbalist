@@ -778,6 +778,15 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0"))
     float InvisibilityCapDurationSeconds = 300.0f;
 
+    // Радиус настоящей зоны Шапки (2026-09-02, "чиним до настоящей зоны") —
+    // §21.3: "выводит клетку/зону из-под срабатывания", раньше в коде был
+    // безусловным на всю сетку (находка разведки — у предмета не было
+    // понятия зоны вовсе). Chebyshev-радиус вокруг клетки игрока в момент
+    // применения — тот же порядок величины, что уже ShrineInfluenceRadius/
+    // RosaCorruptedCircleRadius ("несколько клеток"), не одна и не полсетки.
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0"))
+    int32 InvisibilityCapRadius = 3;
+
     // Прогрев артефактов, вариант C (§21.4, 2026-09-01, ревизия "Update
     // docs"/"Update artifacts") — зелье нужного типа, сваренное в родном
     // регионе при проявленной сущности, прибавляет ArtifactWarmthGainPerBrew

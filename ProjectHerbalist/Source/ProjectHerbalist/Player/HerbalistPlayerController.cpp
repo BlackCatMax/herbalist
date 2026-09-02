@@ -916,7 +916,18 @@ void AHerbalistPlayerController::UseInvisibilityCap()
     AGridWorldManager* WorldManager = FindWorldManager();
     if (!WorldManager) return;
 
-    if (!WorldManager->UseInvisibilityCap())
+    // Настоящая зона (2026-09-02) — центр берётся от клетки, где стоит
+    // игрок в момент применения, тот же приём определения клетки, что уже
+    // AAlchemyTableActor::BeginPlay использует для капища (WorldPositionToCell).
+    APawn* ControlledPawn = GetPawn();
+    int32 X = 0, Y = 0;
+    if (!ControlledPawn || !WorldManager->WorldPositionToCell(ControlledPawn->GetActorLocation(), X, Y))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseInvisibilityCap: no pawn, or pawn is outside the grid"));
+        return;
+    }
+
+    if (!WorldManager->UseInvisibilityCap(FIntPoint(X, Y)))
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseInvisibilityCap: no Шапка-невидимка"));
     }

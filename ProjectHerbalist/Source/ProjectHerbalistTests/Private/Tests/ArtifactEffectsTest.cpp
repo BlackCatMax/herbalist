@@ -143,15 +143,49 @@ bool FHerbalistArtifactEffects_InvisibilityCapActivatesAndDoesNotConsume::RunTes
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     TestFalse(TEXT("Not active before use"), Manager->IsInvisibilityCapActive());
-    TestFalse(TEXT("No Шапка -- no effect"), Manager->UseInvisibilityCap());
+    TestFalse(TEXT("No Шапка -- no effect"), Manager->UseInvisibilityCap(FIntPoint(5, 5)));
 
     FAcquiredArtifact Cap;
     Cap.ArtifactID = FName(TEXT("Шапка-невидимка"));
     Manager->SetAcquiredArtifacts({ Cap });
 
-    TestTrue(TEXT("Шапка activates"), Manager->UseInvisibilityCap());
+    TestTrue(TEXT("Шапка activates"), Manager->UseInvisibilityCap(FIntPoint(5, 5)));
     TestTrue(TEXT("Active immediately after use"), Manager->IsInvisibilityCapActive());
     TestEqual(TEXT("NOT consumed -- reusable, unlike Гребень/Яблоко"), Manager->GetAcquiredArtifacts().Num(), 1);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifactEffects_InvisibilityCapOnlyProtectsARealZoneAroundItsCenter,
+    "Herbalist.ArtifactEffects.InvisibilityCapOnlyProtectsARealZoneAroundItsCenter",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifactEffects_InvisibilityCapOnlyProtectsARealZoneAroundItsCenter::RunTest(const FString& Parameters)
+{
+    // §21.3, 2026-09-02: "выводит клетку/зону из-под срабатывания" -- не
+    // всю сетку, как раньше. Проверяет саму геометрию зоны, не только
+    // включён/выключен таймер.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FAcquiredArtifact Cap;
+    Cap.ArtifactID = FName(TEXT("Шапка-невидимка"));
+    Manager->SetAcquiredArtifacts({ Cap });
+
+    TestFalse(TEXT("A cell far from any center is never protected before activation"),
+        Manager->IsInvisibilityCapActive(FIntPoint(10, 10)));
+
+    Manager->UseInvisibilityCap(FIntPoint(5, 5));   // радиус по умолчанию 3
+
+    TestTrue(TEXT("The activation cell itself is protected"), Manager->IsInvisibilityCapActive(FIntPoint(5, 5)));
+    TestTrue(TEXT("A cell within the radius is protected"), Manager->IsInvisibilityCapActive(FIntPoint(7, 6)));
+    TestFalse(TEXT("A cell outside the radius is NOT protected, even while the Шапка is active"),
+        Manager->IsInvisibilityCapActive(FIntPoint(9, 9)));
+    TestTrue(TEXT("The general (location-less) check still reports active"), Manager->IsInvisibilityCapActive());
 
     Manager->Destroy();
     return true;

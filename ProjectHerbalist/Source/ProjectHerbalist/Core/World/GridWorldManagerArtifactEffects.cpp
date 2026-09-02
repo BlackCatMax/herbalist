@@ -94,7 +94,7 @@ bool AGridWorldManager::UseYouthApple()
     return true;
 }
 
-bool AGridWorldManager::UseInvisibilityCap()
+bool AGridWorldManager::UseInvisibilityCap(const FIntPoint& Cell)
 {
     const bool bHasCap = AcquiredArtifacts.ContainsByPredicate(
         [](const FAcquiredArtifact& A) { return A.ArtifactID == FName(TEXT("Шапка-невидимка")); });
@@ -103,18 +103,30 @@ bool AGridWorldManager::UseInvisibilityCap()
     // §21.3: "временно выводит клетку/зону из-под срабатывания амбиентных
     // проявлений и угроз Легендарного уровня" — НЕ расходуется (в отличие
     // от Гребня/Яблока), тот же предмет можно активировать снова после
-    // истечения окна.
+    // истечения окна (переактивация переносит зону на новую клетку).
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float DurationSeconds = Settings ? Settings->InvisibilityCapDurationSeconds : 300.0f;
+    InvisibilityCapCenter = Cell;
     InvisibilityCapExpiryGameSeconds = GameClockSeconds + DurationSeconds;
 
-    UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Шапка-невидимка active until %.1f"), InvisibilityCapExpiryGameSeconds);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Шапка-невидимка active at (%d,%d) until %.1f"),
+        Cell.X, Cell.Y, InvisibilityCapExpiryGameSeconds);
     return true;
 }
 
 bool AGridWorldManager::IsInvisibilityCapActive() const
 {
     return GameClockSeconds < InvisibilityCapExpiryGameSeconds;
+}
+
+bool AGridWorldManager::IsInvisibilityCapActive(const FIntPoint& Cell) const
+{
+    if (!IsInvisibilityCapActive()) return false;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 Radius = Settings ? Settings->InvisibilityCapRadius : 3;
+    const int32 Dist = FMath::Max(FMath::Abs(Cell.X - InvisibilityCapCenter.X), FMath::Abs(Cell.Y - InvisibilityCapCenter.Y));
+    return Dist <= Radius;
 }
 
 bool AGridWorldManager::HasUnspentBifurcationCharm() const
