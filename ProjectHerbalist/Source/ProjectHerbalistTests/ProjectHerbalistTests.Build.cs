@@ -19,7 +19,8 @@ public class ProjectHerbalistTests : ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[]
         {
             "AutomationTest",
-            "Json"   // BiomeGraphExportCommandlet.cpp
+            "Json",          // BiomeGraphExportCommandlet.cpp
+            "AssetRegistry"  // FAssetRegistryModule::AssetCreated -- новые *CreateCommandlet, создающие DataTable-ассет с нуля (2026-09-02)
         });
 
         // GEditor/UEditorEngine (SaveSystemTest.cpp — GetEditorWorldContext) — только

@@ -7,6 +7,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Entities/AmbientEntityTypes.h"
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -68,5 +69,16 @@ void AProjectHerbalistGameModeBase::BeginPlay()
     else
     {
         UE_LOG(LogHerbalist, Error, TEXT("Failed to load DT_BiomeDefaults! Biomes will not work correctly."));
+    }
+
+    // Прогрев кэша бестиария Низшего ранга (2026-09-02, миграция на
+    // DataTable) -- необязательно для работы (GetAmbientEntityDefinitions()
+    // сама лениво грузит DT_AmbientEntities при первом обращении, см.
+    // AmbientEntityTypes.h), но так пропавший ассет громко ловится на
+    // старте игры, а не на первом тике UpdateEntityManifestations, и это
+    // единообразно с остальными тремя таблицами выше.
+    if (GetAmbientEntityDefinitions().Num() == 0)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("GetAmbientEntityDefinitions() вернул пустой реестр -- DT_AmbientEntities не найден или пуст, Низший ранг бестиария не будет проявляться."));
     }
 }
