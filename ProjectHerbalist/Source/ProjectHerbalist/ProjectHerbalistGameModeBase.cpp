@@ -9,6 +9,7 @@
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Entities/LandmarkTypes.h"
+#include "Core/Entities/LegendaryEntityTypes.h"
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -87,5 +88,12 @@ void AProjectHerbalistGameModeBase::BeginPlay()
     if (GetLandmarkDefinitions().Num() == 0)
     {
         UE_LOG(LogHerbalist, Error, TEXT("GetLandmarkDefinitions() вернул пустой реестр -- DT_Landmarks не найден или пуст, Основной ранг бестиария (хозяева) не будет проявляться."));
+    }
+
+    // Тот же прогрев кэша, юнит 3/3 (последний). Берегиня не входит --
+    // отдельный, per-клеточный путь, не в этом реестре.
+    if (GetLegendaryEntityDefinitions().Num() == 0)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("GetLegendaryEntityDefinitions() вернул пустой реестр -- DT_LegendaryEntities не найден или пуст, Легендарный ранг бестиария (кроме Берегини) не будет проявляться."));
     }
 }

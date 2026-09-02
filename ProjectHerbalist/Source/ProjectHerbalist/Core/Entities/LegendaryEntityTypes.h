@@ -34,11 +34,18 @@
 // Награда (редкий ингредиент/разовое видение) НЕ реализована — только
 // проявление (ManifestedEntityID) и TargetState-эффект, тот же вертикальный
 // срез, что уже применён ко всем прежним пачкам бестиария в этой сессии.
+//
+// 2026-09-02, юнит 3/3 (последний) миграции бестиария на DataTable —
+// тот же паттерн, что AmbientEntityTypes.h (1/3) и LandmarkTypes.h (2/3):
+// GetLegendaryEntityDefinitions() ниже лениво грузит
+// /Game/Herbalist/Data/DT_LegendaryEntities. Берегиня (см. выше) остаётся
+// вне этого файла и вне миграции — свой per-клеточный путь.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Entities/LandmarkTypes.h"   // ELandmarkAxis/ApplyLandmarkAxisNudge — тот же словарь осей, не новый
+#include "Engine/DataTable.h"
 #include "LegendaryEntityTypes.generated.h"
 
 UENUM()
@@ -48,8 +55,8 @@ enum class ELegendaryPole : uint8
     Malign    // высокий MorokField узла (спайк)
 };
 
-USTRUCT()
-struct FLegendaryEntityDefinition
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FLegendaryEntityDefinition : public FTableRowBase
 {
     GENERATED_BODY()
 
@@ -57,6 +64,14 @@ struct FLegendaryEntityDefinition
     UPROPERTY() EBiomeType Biome = EBiomeType::Bog;
     UPROPERTY() bool bLandOnly = false;
     UPROPERTY() bool bWaterOnly = false;
+
+    // Явный порядок регистрации (2026-09-02, тот же приём, что уже
+    // FAmbientEntityDefinition/FLandmarkDefinition::SortOrder) -- у
+    // Legendary тоже нет задокументированной зависимости от порядка
+    // (каждый Def привязан к своему якорю через SeedLegendaryAnchors,
+    // не соревнуется за клетку в момент проявления), заведено для
+    // единообразия.
+    UPROPERTY() int32 SortOrder = 0;
 
     UPROPERTY() ELegendaryPole Pole = ELegendaryPole::Benign;
 
@@ -83,269 +98,35 @@ struct FLegendaryEntityDefinition
     UPROPERTY() TSubclassOf<class AHerbalistEntityActor> ActorClass;
 };
 
-// Статический реестр — тот же паттерн, что GetAmbientEntityDefinitions()/
-// GetLandmarkDefinitions().
+// Ленивая загрузка из /Game/Herbalist/Data/DT_LegendaryEntities
+// (2026-09-02) -- тот же паттерн, что GetAmbientEntityDefinitions()/
+// GetLandmarkDefinitions(), см. подробное обоснование в AmbientEntityTypes.h.
+// LogTemp, не HerbalistLogChannels.h категория -- та же причина (LNK2001,
+// найдено на юните 1/3): inline-функция компилируется и в
+// ProjectHerbalistTests через новый коммандлет.
 inline const TArray<FLegendaryEntityDefinition>& GetLegendaryEntityDefinitions()
 {
     static const TArray<FLegendaryEntityDefinition> Definitions = []()
     {
+        check(IsInGameThread());   // LoadObject не потокобезопасен
+
         TArray<FLegendaryEntityDefinition> Defs;
-
-        // --- Опасный полюс: MorokField-спайк узла биома ---
-
-        // Болотный царь (Болото, Смертельная): "мощь порчи и разложения" ->
-        // Corruption, тяжелее любого низшего/основного curse в этом биоме.
+        UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_LegendaryEntities"));
+        if (!Table)
         {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Болотный царь"));
-            D.Biome = EBiomeType::Bog;
-            D.Pole = ELegendaryPole::Malign;
-            D.MorokThreshold = 0.75f;
-            D.EffectAxis = ELandmarkAxis::Corruption; D.EffectRate = 0.03f;
-            Defs.Add(D);
+            UE_LOG(LogTemp, Error, TEXT("GetLegendaryEntityDefinitions: не удалось загрузить DT_LegendaryEntities -- Легендарный ранг бестиария будет пуст (кроме Берегини, она отдельно)"));
+            return Defs;
         }
+        Table->AddToRoot();
 
-        // Лихо Одноглазое (Болото, Смертельная): "меняет судьбу" -- в модели
-        // нет судьбы/удачи как оси, ближайший честный эквивалент --
-        // дезориентация/хаос итога (Distortion), не выдуманная новая ось.
+        TArray<FLegendaryEntityDefinition*> Rows;
+        Table->GetAllRows(TEXT("GetLegendaryEntityDefinitions"), Rows);
+        Defs.Reserve(Rows.Num());
+        for (const FLegendaryEntityDefinition* Row : Rows)
         {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Лихо Одноглазое"));
-            D.Biome = EBiomeType::Bog;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Malign;
-            D.MorokThreshold = 0.8f;
-            D.EffectAxis = ELandmarkAxis::Distortion; D.EffectRate = 0.03f;
-            Defs.Add(D);
+            if (Row) Defs.Add(*Row);
         }
-
-        // Водяной царь (Речная пойма, ВОДА, Смертельная): "власть над водой
-        // и погодой" -> Distortion (буря/хаос стихии) + Stability-- (никакой
-        // твёрдой опоры под ногами рядом с ним).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Водяной царь"));
-            D.Biome = EBiomeType::Floodplain;
-            D.bWaterOnly = true;
-            D.Pole = ELegendaryPole::Malign;
-            D.MorokThreshold = 0.75f;
-            D.EffectAxis = ELandmarkAxis::Distortion; D.EffectRate = 0.025f;
-            D.EffectAxis2 = ELandmarkAxis::Stability; D.EffectRate2 = -0.015f;
-            Defs.Add(D);
-        }
-
-        // Суховей (Степь, Высокая): "иссушение и увядание" -> Corruption
-        // (порча урожая/растительности, тот же язык, что у Суховеек §16.2,
-        // только на порядок сильнее и на уровне графа, не клетки).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Суховей"));
-            D.Biome = EBiomeType::Steppe;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Malign;
-            D.MorokThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Corruption; D.EffectRate = 0.02f;
-            Defs.Add(D);
-        }
-
-        // --- Благой полюс: устойчиво низкий MorokField узла ИЛИ капище рядом ---
-
-        // Дуб-старец (Широколиств. лес, Нейтральный): "древняя мудрость и
-        // непоколебимость" -> Stability.
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Дуб-старец"));
-            D.Biome = EBiomeType::BroadleafForest;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Stability; D.EffectRate = 0.015f;
-            Defs.Add(D);
-        }
-
-        // Гамаюн (Лесостепь): вещая птица истины -- "снимает морок,
-        // показывает правду" -> Purity (расчищает искажение до ясности,
-        // тот же язык, что и у остальных "очищающих" эффектов проекта).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Гамаюн"));
-            D.Biome = EBiomeType::ForestSteppe;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Purity; D.EffectRate = 0.015f;
-            Defs.Add(D);
-        }
-
-        // Алконост (Степь): райская птица радости -- "исцеление душевных
-        // ран" -> Purity (тот же язык оздоровления, что у Гамаюна, разная
-        // птица квартета, тот же ближайший честный эквивалент "радости").
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Алконост"));
-            D.Biome = EBiomeType::Steppe;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Purity; D.EffectRate = 0.012f;
-            Defs.Add(D);
-        }
-
-        // Мать-Сыра-Земля (степная, Нейтральный): "земля-хранительница,
-        // общий стабилизатор и очиститель" -> Stability + Purity, единый
-        // "материнский" эффект, тот же двухосевой паттерн, что уже есть у
-        // Полевика/Переплута/Мокоши (капище) в этой сессии.
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Мать-Сыра-Земля"));
-            D.Biome = EBiomeType::Steppe;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.65f;
-            D.EffectAxis = ELandmarkAxis::Stability; D.EffectRate = 0.012f;
-            D.EffectAxis2 = ELandmarkAxis::Purity;   D.EffectRate2 = 0.008f;
-            Defs.Add(D);
-        }
-
-        // Индрик-зверь (Тайга): "зверь-владыка, первозданная мощь и связь
-        // с природой" -> Potency + Nature (Direction), сила и дикость разом.
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Индрик-зверь"));
-            D.Biome = EBiomeType::Taiga;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Potency; D.EffectRate = 0.012f;
-            D.EffectAxis2 = ELandmarkAxis::Nature; D.EffectRate2 = 0.01f;
-            Defs.Add(D);
-        }
-
-        // Волот (Тундра): "древний великан-страж, незыблемая опора и
-        // стойкость к морозу" -> Stability, тот же язык, что уже есть у
-        // Хозяина Севера (капище той же Тундры), другой масштаб (Легендарный).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Волот"));
-            D.Biome = EBiomeType::Tundra;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Stability; D.EffectRate = 0.015f;
-            Defs.Add(D);
-        }
-
-        // Полкан (Лесостепь): полуконь-получеловек, воинская сила -> Body.
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Полкан"));
-            D.Biome = EBiomeType::ForestSteppe;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Body; D.EffectRate = 0.012f;
-            Defs.Add(D);
-        }
-
-        // Вольга (Тайга): богатырь-оборотень, сила и превращение -> Body
-        // (сама способность к превращению не моделируется отдельной осью --
-        // тот же честный отказ от выдуманной оси, что у Лихо Одноглазого).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Вольга"));
-            D.Biome = EBiomeType::Taiga;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Body; D.EffectRate = 0.012f;
-            Defs.Add(D);
-        }
-
-        // Баба-Яга (Смеш. лес, 2026-09-01: заменила здесь Дубыню —
-        // 21_Journey_And_Artifacts.md §21.3/§21.5, "Ending and artifacts") —
-        // тот же слот/якорь/триггер, что был у Дубыни (Pole/MorokThreshold/
-        // EffectAxis не тронуты, сама глава не даёт им замены — только
-        // EntityID и флаворный комментарий). Смешанный лес как переходный,
-        // пограничный биом уже назван в главе (§21.3) подходящим её
-        // фольклорной пограничной роли; Body+Nature как "испытание силой и
-        // близостью к лесу" читается не хуже для неё, чем для богатыря-
-        // древоборца — тот же честный ближайший эквивалент, что уже применён
-        // к другим существам этого файла (жар-птица/Лихо/Вольга).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Баба-Яга"));
-            D.Biome = EBiomeType::MixedForest;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Body;   D.EffectRate = 0.01f;
-            D.EffectAxis2 = ELandmarkAxis::Nature; D.EffectRate2 = 0.01f;
-            Defs.Add(D);
-        }
-
-        // жар-птица (Смеш. лес): "перо = удача/богатство" -- в модели нет
-        // удачи как оси, ближайший честный эквивалент -- Resonance (та же
-        // "прозорливость/везение" трактовка, что уже у Курганных огней,
-        // "поиск сокрытого" §16.3).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("жар-птица"));
-            D.Biome = EBiomeType::MixedForest;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Benign;
-            D.MorokThreshold = 0.2f;
-            D.bHasShrinePath = true; D.ShrineThreshold = 0.75f;
-            D.EffectAxis = ELandmarkAxis::Resonance; D.EffectRate = 0.015f;
-            Defs.Add(D);
-        }
-
-        // --- Зеркальный полюс: высокий MorokField, но не хищный эффект ---
-        // §16.4: "их проявление привязано не к Restoration, а к глубине
-        // искажения... зеркальны благому триггеру: легендарные хранители
-        // самого испорченного состояния, не самого чистого". Malign по
-        // механике триггера (высокий MorokField), но эффект не Corruption-
-        // урон, а Distortion/Resonance -- "забвение", не разрушение.
-
-        // Сирин (Тундра, Нейтральный, но опасна): птица забвения и тоски ->
-        // Distortion + Resonance -- "забвение", завершает квартет вещих
-        // птиц (Алконост=радость, Гамаюн=истина, Сирин=забвение-тоска,
-        // жар-птица=удача, §16.4 "смысловой квартет").
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Сирин"));
-            D.Biome = EBiomeType::Tundra;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Malign;
-            D.MorokThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Distortion; D.EffectRate = 0.02f;
-            D.EffectAxis2 = ELandmarkAxis::Resonance; D.EffectRate2 = 0.015f;
-            Defs.Add(D);
-        }
-
-        // Кикимора-владычица (Широколиств. лес, Нейтральный, danger
-        // Высокая): "владычица обмана и скрытности" -> Distortion +
-        // Resonance, тот же расклад осей, что уже выбран для Кикиморы
-        // болотной (капище того же семейства, меньший масштаб).
-        {
-            FLegendaryEntityDefinition D;
-            D.EntityID = FName(TEXT("Кикимора-владычица"));
-            D.Biome = EBiomeType::BroadleafForest;
-            D.bLandOnly = true;
-            D.Pole = ELegendaryPole::Malign;
-            D.MorokThreshold = 0.7f;
-            D.EffectAxis = ELandmarkAxis::Distortion; D.EffectRate = 0.02f;
-            D.EffectAxis2 = ELandmarkAxis::Resonance; D.EffectRate2 = 0.012f;
-            Defs.Add(D);
-        }
-
+        Defs.Sort([](const FLegendaryEntityDefinition& A, const FLegendaryEntityDefinition& B) { return A.SortOrder < B.SortOrder; });
         return Defs;
     }();
     return Definitions;
