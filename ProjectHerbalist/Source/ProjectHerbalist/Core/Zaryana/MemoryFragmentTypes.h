@@ -99,6 +99,15 @@ struct PROJECTHERBALIST_API FMemoryFragmentDefinition : public FTableRowBase
 
     // Насколько подлинный сбор поднимает GlobalPerceptionClarity.
     UPROPERTY() float ClarityGain = 0.05f;
+
+    // Физическое представление (2026-09-02) — пусто = базовый
+    // AMemoryFragmentActor. Тот же приём, что уже у всех трёх рангов
+    // бестиария (см. FAmbientEntityDefinition::ActorClass): до этой правки
+    // спавн жёстко брал AMemoryFragmentActor::StaticClass(), из-за чего
+    // Blueprint-наследник фрагмента было невозможно подставить из редактора
+    // вообще, а меш базовому классу никто не назначал — фрагменты были
+    // невидимы без единого способа это исправить контентом.
+    UPROPERTY() TSubclassOf<class AMemoryFragmentActor> ActorClass;
 };
 
 // Заспавненный в мире фрагмент — не предмет инвентаря, временное проявление

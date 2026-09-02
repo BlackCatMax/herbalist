@@ -5,6 +5,8 @@
 #include "Engine/DeveloperSettings.h"
 #include "HerbalistSettings.generated.h"
 
+class UStaticMesh;
+
 UCLASS(config = Game, defaultconfig, meta = (DisplayName = "Herbalist Settings"))
 class PROJECTHERBALIST_API UHerbalistSettings : public UDeveloperSettings
 {
@@ -12,6 +14,23 @@ class PROJECTHERBALIST_API UHerbalistSettings : public UDeveloperSettings
 
 public:
     UHerbalistSettings();
+
+    // --- Меши-заглушки (2026-09-02, подготовка к работе в редакторе) ---
+    // Проявленные сущности и фрагменты памяти спавнятся базовыми классами
+    // без меша (невидимый маркер) до тех пор, пока на карточку не назначен
+    // свой Blueprint (ActorClass в DT_AmbientEntities/DT_Landmarks/
+    // DT_LegendaryEntities/DT_MemoryFragments). Пока таких Blueprint'ов нет,
+    // весь бестиарий (60 карточек) и фрагменты не видны в мире вовсе, и
+    // проверить их глазами в PIE невозможно. Эти два поля дают общий
+    // видимый плейсхолдер: назначается в Project Settings -> Herbalist
+    // Settings, применяется ТОЛЬКО если у заспавненного актора меш не
+    // выставлен (то есть настоящий Blueprint карточки всегда побеждает и
+    // никогда не перетирается). Пусто = прежнее поведение, невидимый маркер.
+    UPROPERTY(config, EditAnywhere, Category = "Content|Placeholders")
+    TSoftObjectPtr<UStaticMesh> PlaceholderEntityMesh;
+
+    UPROPERTY(config, EditAnywhere, Category = "Content|Placeholders")
+    TSoftObjectPtr<UStaticMesh> PlaceholderMemoryFragmentMesh;
 
     // --- Pipeline coefficients ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))

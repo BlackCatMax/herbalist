@@ -4,6 +4,8 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
+#include "Core/Config/HerbalistSettings.h"
+#include "Engine/StaticMesh.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
@@ -37,6 +39,20 @@ void AMemoryFragmentActor::Init(FName InDefinitionID, bool bInIsFalse, float InL
     WorldManager = InWorldManager;
     GridX = InGridX;
     GridY = InGridY;
+
+    // Меш-заглушка (2026-09-02) — та же логика и та же оговорка, что у
+    // AHerbalistEntityActor::Init: применяется, только если у класса,
+    // которым нас заспавнили, меша нет (Blueprint карточки всегда главнее).
+    if (MeshComponent && !MeshComponent->GetStaticMesh())
+    {
+        if (const UHerbalistSettings* Settings = GetHerbalistSettings())
+        {
+            if (UStaticMesh* Placeholder = Settings->PlaceholderMemoryFragmentMesh.LoadSynchronous())
+            {
+                MeshComponent->SetStaticMesh(Placeholder);
+            }
+        }
+    }
 }
 
 void AMemoryFragmentActor::Tick(float DeltaTime)

@@ -325,7 +325,11 @@ void AGridWorldManager::SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoin
 
     if (!GetWorld()) return;
     const FVector SpawnPos = GetCellWorldPosition(Cell.X, Cell.Y) + FVector(0, 0, 30.0f);
-    AMemoryFragmentActor* Fragment = GetWorld()->SpawnActor<AMemoryFragmentActor>(AMemoryFragmentActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
+    // Класс из карточки (2026-09-02) — пусто = базовый, тот же приём, что у
+    // трёх рангов бестиария (SyncManifestedEntityActor).
+    TSubclassOf<AMemoryFragmentActor> ClassToSpawn = Def->ActorClass;
+    if (!ClassToSpawn) ClassToSpawn = AMemoryFragmentActor::StaticClass();
+    AMemoryFragmentActor* Fragment = GetWorld()->SpawnActor<AMemoryFragmentActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
     if (!Fragment) return;
 
     const float Lifetime = Settings ? Settings->MemoryFragmentLifetimeSeconds : 120.0f;

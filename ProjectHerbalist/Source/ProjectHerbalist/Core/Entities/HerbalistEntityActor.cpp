@@ -1,6 +1,8 @@
 // HerbalistEntityActor.cpp
 #include "Core/Entities/HerbalistEntityActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "Core/Config/HerbalistSettings.h"
+#include "Engine/StaticMesh.h"
 
 AHerbalistEntityActor::AHerbalistEntityActor()
 {
@@ -21,4 +23,19 @@ void AHerbalistEntityActor::Init(FName InEntityID, const FIntPoint& InCell, AGri
     EntityID = InEntityID;
     GridCell = InCell;
     WorldManagerRef = InWorldManager;
+
+    // Меш-заглушка (2026-09-02) — только если у класса, которым нас
+    // заспавнили, меша нет вовсе. Blueprint карточки (ActorClass в таблице
+    // ранга) выставляет свой меш в дефолтах компонента, и тогда эта ветка не
+    // срабатывает — плейсхолдер никогда не перетирает настоящий контент.
+    if (MeshComponent && !MeshComponent->GetStaticMesh())
+    {
+        if (const UHerbalistSettings* Settings = GetHerbalistSettings())
+        {
+            if (UStaticMesh* Placeholder = Settings->PlaceholderEntityMesh.LoadSynchronous())
+            {
+                MeshComponent->SetStaticMesh(Placeholder);
+            }
+        }
+    }
 }
