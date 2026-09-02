@@ -60,6 +60,20 @@ void AHerbalistResourceActor::BeginPlay()
         UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: Auto-assigned to cell (%d,%d)"),
             *GetName(), GridX, GridY);
     }
+
+    // Актор, поставленный в мир напрямую (уровень/PCG-граф) без вызова
+    // Init() -- WorldManager/GridX/GridY выше уже определены автоматически,
+    // регистрация та же, что Init() делает для C++-пути.
+    RegisterOnCell();
+}
+
+void AHerbalistResourceActor::RegisterOnCell()
+{
+    if (!WorldManager) return;
+    if (FGridCell* Cell = WorldManager->GetCell(GridX, GridY))
+    {
+        Cell->ResourceActors.AddUnique(this);
+    }
 }
 
 void AHerbalistResourceActor::FindAndSetWorldManager()
@@ -94,6 +108,11 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
     GridX = InGridX;
     GridY = InGridY;
     SetActorLocation(Location);
+
+    // Саморегистрация в Cell.ResourceActors (2026-09-02) -- та же RegisterOnCell,
+    // что и у BeginPlay()'s авто-определения; AddUnique внутри неё не
+    // задвоит, если Init() вызван на уже зарегистрированном акторе повторно.
+    RegisterOnCell();
 
     if (Mesh)
     {

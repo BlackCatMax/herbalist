@@ -161,15 +161,13 @@ bool FHerbalistResourceActor_HarvestMarksInProgressAndRemovesFromCell::RunTest(c
     AHerbalistResourceActor* Actor = World->SpawnActor<AHerbalistResourceActor>();
     if (!TestNotNull(TEXT("Resource actor spawned"), Actor)) { Manager->Destroy(); return false; }
 
+    // Init() сам регистрирует актора в Cell->ResourceActors (2026-09-02,
+    // единая точка входа для любого источника спавна -- C++ или PCG-граф,
+    // спавнящий этот актор напрямую).
     Actor->Init(FName(TEXT("Probe")), FText(), nullptr, FRealState(), FVector::ZeroVector,
         Manager, 5, 5);
-    // AHerbalistResourceActor::Init() намеренно не регистрирует себя в
-    // Cell->ResourceActors (это делает SpawnResourcesInCell на стороне
-    // менеджера) -- воспроизводим то же предусловие вручную, как это было
-    // бы в реальном мире на момент сбора.
-    Cell->ResourceActors.Add(Actor);
 
-    TestEqual(TEXT("Precondition: actor registered on the cell"), Cell->ResourceActors.Num(), 1);
+    TestEqual(TEXT("Init() registered the actor on the cell"), Cell->ResourceActors.Num(), 1);
 
     Actor->Harvest();
 
@@ -184,6 +182,99 @@ bool FHerbalistResourceActor_HarvestMarksInProgressAndRemovesFromCell::RunTest(c
     TestEqual(TEXT("Cell's resource list stays empty, not negative/corrupted"), Cell->ResourceActors.Num(), 0);
 
     Actor->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Актор, поставленный в мир напрямую (уровень/PCG-граф) без единого вызова
+// Init() -- BeginPlay() сам находит WorldManager и вычисляет клетку по
+// позиции (пре-существующий код, 2026-09-02 добавлена регистрация в
+// Cell.ResourceActors тем же путём, что уже даёт Init(), см. RegisterOnCell).
+// Ровно тот сценарий, ради которого пользователь спрашивал про PCG-граф,
+// спавнящий BP-акторы ингредиентов напрямую через свой Spawn Actor узел.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistResourceActor_ActorPlacedWithoutInitAutoRegistersOnItsCell,
+    "Herbalist.ResourceActor.ActorPlacedWithoutInitAutoRegistersOnItsCell",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistResourceActor_ActorPlacedWithoutInitAutoRegistersOnItsCell::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(3, 4);
+    if (!TestNotNull(TEXT("Cell (3,4) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->ResourceActors.Empty();   // InitializeCells могла что-то насажать сюда
+
+    const FVector CellPos = Manager->GetCellWorldPositionFlat(3, 4);
+    AHerbalistResourceActor* Actor = World->SpawnActor<AHerbalistResourceActor>(
+        AHerbalistResourceActor::StaticClass(), CellPos, FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Resource actor spawned"), Actor)) { Manager->Destroy(); return false; }
+
+    // SetWorldManager ДО DispatchBeginPlay -- BeginPlay's `if (!WorldManager)
+    // FindAndSetWorldManager()` иначе рискует найти НЕ Manager этого теста
+    // через TActorIterator (тот же класс гонки, что уже чинили в сессии для
+    // AHerbalistPlayerController::FindWorldManager -- персистентный
+    // editor-мир для тестов грузит L_TestDev с реальным, размещённым на
+    // уровне AGridWorldManager пользователя, который в этой headless-сессии
+    // никогда не проходит BeginPlay сам: TActorIterator находит его первым,
+    // GetCell на нём падал бы, если бы не защита выше). Реальный PCG-граф
+    // ставит актор в уже играющий мир с одним настоящим менеджером --
+    // неоднозначности, которую здесь эмулируем явной инъекцией, там нет.
+    Actor->SetWorldManager(Manager);
+    Actor->DispatchBeginPlay();
+
+    // Ни SetGridPosition, ни Init() не вызываются -- ровно как PCG Spawn
+    // Actor узел, просто ставящий актор в точку без дополнительной
+    // настройки графа (WorldManager выше -- только чтобы не гадать, какой
+    // из нескольких менеджеров найдёт TActorIterator в тестовом мире).
+    TestEqual(TEXT("BeginPlay auto-detected GridX from world position"), Actor->GetGridX(), 3);
+    TestEqual(TEXT("BeginPlay auto-detected GridY from world position"), Actor->GetGridY(), 4);
+    TestEqual(TEXT("Actor auto-registered itself on its cell's ResourceActors"), Cell->ResourceActors.Num(), 1);
+    if (Cell->ResourceActors.Num() == 1)
+    {
+        TestEqual(TEXT("The registered entry is this actor"), Cell->ResourceActors[0].Get(), Actor);
+    }
+
+    Actor->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Найдено при реализации теста выше (краш "Array index out of bounds",
+// 2026-09-02): GetCell() сравнивал X/Y только с GridSizeX/GridSizeY
+// (намерение, валидно сразу после конструктора), не с фактическим
+// Cells.Num() (заполняется только в InitializeCells/BeginPlay) -- менеджер,
+// ещё не прошедший BeginPlay в этой игровой сессии (реальный сценарий:
+// PCG-граф спавнит ресурсный актор, чей BeginPlay находит через
+// TActorIterator менеджер, который сам ещё не успел инициализироваться),
+// падал с выходом за границы массива вместо честного nullptr.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistResourceActor_GetCellBeforeInitializeCellsReturnsNullNotCrash,
+    "Herbalist.ResourceActor.GetCellBeforeInitializeCellsReturnsNullNotCrash",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistResourceActor_GetCellBeforeInitializeCellsReturnsNullNotCrash::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    // Спавним менеджер БЕЗ DispatchBeginPlay -- Cells остаётся пустым, но
+    // GridSizeX/GridSizeY уже валидны (дефолт конструктора, 20).
+    AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(5, 5);
+    TestNull(TEXT("GetCell on an un-initialized manager returns null, not a crash"), Cell);
+
+    const FGridCell* ConstCell = Manager->GetCellConst(5, 5);
+    TestNull(TEXT("GetCellConst on an un-initialized manager returns null, not a crash"), ConstCell);
+
     Manager->Destroy();
     return true;
 }

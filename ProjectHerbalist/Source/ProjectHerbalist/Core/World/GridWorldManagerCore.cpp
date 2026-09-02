@@ -185,15 +185,29 @@ bool AGridWorldManager::IsCellClaimedByBiomeRegion(const FGridCell& Cell) const
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
 {
-    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY)
-        return &Cells[Y * GridSizeX + X];
+    // Cells.IsValidIndex, не только сравнение с GridSizeX/GridSizeY (2026-09-02):
+    // GridSizeX/GridSizeY -- это НАМЕРЕНИЕ (EditAnywhere-свойство актора,
+    // валидно сразу после конструктора), а Cells реально заполняется только
+    // в InitializeCells() (BeginPlay). Актор, размещённый на уровне, но ещё
+    // не прошедший BeginPlay в этой конкретной игровой сессии (например,
+    // редакторский предпросмотр без Play, или другой AGridWorldManager,
+    // случайно найденный через TActorIterator раньше "правильного") имел бы
+    // валидный по GridSizeX/Y индекс, но Cells.Num()==0 -- падение с
+    // Array index out of bounds вместо честного nullptr. Нашёл
+    // AHerbalistResourceActor::RegisterOnCell(), вызываемый из BeginPlay
+    // ресурсного актора, спавненного PCG-графом раньше, чем менеджер успел
+    // инициализировать сетку.
+    const int32 Index = Y * GridSizeX + X;
+    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY && Cells.IsValidIndex(Index))
+        return &Cells[Index];
     return nullptr;
 }
 
 const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
 {
-    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY)
-        return &Cells[Y * GridSizeX + X];
+    const int32 Index = Y * GridSizeX + X;
+    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY && Cells.IsValidIndex(Index))
+        return &Cells[Index];
     return nullptr;
 }
 
@@ -606,8 +620,10 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
         if (NewActor)
         {
+            // Регистрация в Cell.ResourceActors теперь делает сам Init()
+            // (2026-09-02) -- единая точка входа для любого источника спавна,
+            // не только этого C++-пути.
             NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y, Row->Resilience, Row->bIronAverse, Row->bDelicate);
-            Cell.ResourceActors.Add(NewActor);
             UE_LOG(LogHerbalistWorld, Verbose, TEXT("Spawned %s at cell (%d,%d) with Z=%.1f"), *IngredientID.ToString(), Cell.X, Cell.Y, SpawnPos.Z);
         }
     }
@@ -646,8 +662,8 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
     if (NewActor)
     {
+        // Регистрация в Cell.ResourceActors теперь делает сам Init() (2026-09-02).
         NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y, Row->Resilience, Row->bIronAverse, Row->bDelicate);
-        Cell->ResourceActors.Add(NewActor);
         UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
     }
 }

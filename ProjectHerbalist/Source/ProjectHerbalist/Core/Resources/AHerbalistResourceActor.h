@@ -65,6 +65,14 @@ protected:
     virtual void BeginPlay() override;
     virtual void PostInitializeComponents() override;
 
+    // Регистрирует this в WorldManager->GetCell(GridX,GridY)->ResourceActors,
+    // если оба валидны (2026-09-02). Единая точка входа, вызывается и из
+    // Init(), и из BeginPlay() после авто-определения клетки по позиции --
+    // актор, спавненный PCG-графом напрямую (без явного вызова Init) и
+    // просто упавший на нужную клетку, тоже должен попасть в учёт
+    // менеджера (сбор/возрождение/сохранение/дебаг читают этот список).
+    void RegisterOnCell();
+
     UFUNCTION(BlueprintImplementableEvent, Category = "Herbalist|Effects")
     void OnHarvestStarted();
 
