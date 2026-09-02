@@ -153,6 +153,17 @@ public:
     // (те не "контент биома", а свойство места/времени в целом).
     bool IsCellClaimedByBiomeRegion(const FGridCell& Cell) const;
 
+    // Какой именно регион реально заявил эту клетку (2026-09-02, для
+    // пер-региональных настроек плотности -- MinResourcesPerCell/
+    // MaxResourcesPerCell/ResourceRegrowthTimeSeconds/WaterDensity на самом
+    // ABiomeRegionVolume). nullptr — клетка вне всех регионов ИЛИ регионов
+    // на уровне вообще нет (в обоих случаях вызывающая сторона откатывается
+    // на прежние глобальные дефолты). Если клетку перекрывают несколько
+    // регионов одного биома (редкий, не запрещённый на уровне случай) --
+    // берётся первый найденный в CachedBiomeRegions, тот же порядок, что
+    // уже определяет доминирующий биом в InitializeCells.
+    ABiomeRegionVolume* GetClaimingRegion(const FGridCell& Cell) const;
+
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);

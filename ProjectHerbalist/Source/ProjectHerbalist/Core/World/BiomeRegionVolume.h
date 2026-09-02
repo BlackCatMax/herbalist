@@ -46,6 +46,32 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome", meta = (ClampMin = "8", ClampMax = "500"))
     int32 SplineResolution = 64;
 
+    // ---- Плотность контента этого КОНКРЕТНОГО региона (2026-09-02, прямой
+    // запрос пользователя: "настройки под все дела в этих волюмах") -- до
+    // этого числа плотности были одним значением на весь мир
+    // (AGridWorldManager::SpawnResourcesInCell/StartRegeneration/
+    // InitializeCells), одинаковым для двух разных, по-своему нарисованных
+    // регионов ОДНОГО типа биома. Дефолты ниже -- ровно те же числа, что
+    // раньше были хардкодом/глобальной настройкой, так что поведение не
+    // меняется, пока их не подвинуть руками на конкретном волюме.
+
+    // Было: WorldRNG.RandRange(1, 3), один диапазон на всю сетку.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0"))
+    int32 MinResourcesPerCell = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0"))
+    int32 MaxResourcesPerCell = 3;
+
+    // Было: AGridWorldManager::ResourceRegrowthTime, одно число на менеджере
+    // для всего мира сразу.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.1"))
+    float ResourceRegrowthTimeSeconds = 10.0f;
+
+    // Было: TargetWaterCount = TotalCells / 5 в InitializeCells -- 20% воды
+    // без учёта биома вообще (степь и болото заливались одинаково).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float WaterDensity = 0.2f;
+
     // Принудительно пересчитать кэш точек сплайна. GridWorldManager вызывает
     // это явно на каждом найденном регионе перед проверкой клеток — не
     // полагается на то, что BeginPlay() региона уже отработал (UE не
