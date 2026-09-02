@@ -166,6 +166,23 @@ FVector AGridWorldManager::GetSpawnPositionWithinBiome(int32 X, int32 Y, float J
     return Candidate;
 }
 
+bool AGridWorldManager::IsCellClaimedByBiomeRegion(const FGridCell& Cell) const
+{
+    // На уровне вообще нет ни одного ABiomeRegionVolume -- блочный фолбэк
+    // остаётся ЕДИНСТВЕННЫМ источником биома для всей сетки (тестовое
+    // окружение, сцены без PCG-авторства), а не заплаткой для нескольких
+    // клеток. Старое поведение не меняется.
+    if (CachedBiomeRegions.Num() == 0) return true;
+
+    // Регионы на уровне есть -- клетка "заявлена" только если реально
+    // попала хотя бы в один (тот же признак, что уже использует
+    // GetSpawnPositionWithinBiome). Пустой BiomeWeights здесь означает
+    // блочный фолбэк красил клетку каким-то биомом ради математики
+    // релаксации/восстановления -- это не то же самое, что "здесь должен
+    // быть контент этого биома".
+    return Cell.BiomeWeights.Num() > 0;
+}
+
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
 {
     if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY)
@@ -539,6 +556,13 @@ void AGridWorldManager::InitializeCells()
 
 void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
 {
+    // PCG-биомы (2026-09-02, прямое требование пользователя) -- клетка вне
+    // всех размещённых на уровне ABiomeRegionVolume не спавнит ресурсы,
+    // даже если блочный фолбэк формально приписал ей какой-то биом. Без
+    // регионов на уровне вовсе (тесты, сцены без PCG-авторства) -- проверка
+    // всегда true, ничего не меняется.
+    if (!IsCellClaimedByBiomeRegion(Cell)) return;
+
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
 

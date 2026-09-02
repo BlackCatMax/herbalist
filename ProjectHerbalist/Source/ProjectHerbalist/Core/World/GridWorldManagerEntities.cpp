@@ -402,6 +402,11 @@ void AGridWorldManager::SeedTestLandmarks()
         for (const FGridCell& Cell : Cells)
         {
             if (Cell.Biome != Def.Biome || Cell.bIsWater) continue;
+            // PCG-биомы (2026-09-02) -- та же логика, что у спавна
+            // ресурсов/проявления: не сеять хозяина на клетку вне всех
+            // размещённых регионов, только потому что блочный фолбэк
+            // формально приписал ей подходящий биом.
+            if (!IsCellClaimedByBiomeRegion(Cell)) continue;
             const FIntPoint Coord(Cell.X, Cell.Y);
             if (CellsUsed.Contains(Coord)) continue;
 
@@ -459,6 +464,8 @@ void AGridWorldManager::SeedLegendaryAnchors()
             if (Cell.Biome != Def.Biome) continue;
             if (Def.bLandOnly && Cell.bIsWater) continue;
             if (Def.bWaterOnly && !Cell.bIsWater) continue;
+            // PCG-биомы (2026-09-02) -- тот же гейт, что у SeedTestLandmarks выше.
+            if (!IsCellClaimedByBiomeRegion(Cell)) continue;
             const FIntPoint Coord(Cell.X, Cell.Y);
             if (CellsUsed.Contains(Coord)) continue;
 
@@ -564,6 +571,15 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         bool bChanged = false;
         FRealState NewTarget = Cell.TargetState;
 
+        // PCG-биомы (2026-09-02, прямое требование пользователя) -- клетка
+        // вне всех размещённых на уровне ABiomeRegionVolume не манифестирует
+        // биом-специфичный контент (Низший/Берегиня ниже), даже если
+        // блочный фолбэк формально приписал ей какой-то биом. НЕ гейтит
+        // "сквозную" ночную нечисть §16.5 (без привязки к биому по дизайну)
+        // и атмосферные Meta-нуджи выше в этом файле (Рассвет/Закат/Ночь/
+        // Полудница) -- те не "контент биома", а свойство места/времени.
+        const bool bBiomeContentAllowed = IsCellClaimedByBiomeRegion(Cell);
+
         // --- Низший ранг: амбиентные зоны, §16.2, таблица определений в
         // AmbientEntityTypes.h. До 2026-08-29 биом был уникален на
         // определение (один Низший на биом), и цикл останавливался на первом
@@ -586,6 +602,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         const FAmbientEntityDefinition* ManifestingAmbientDef = nullptr;
         for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
         {
+            if (!bBiomeContentAllowed) continue;
             if (Cell.Biome != Def.Biome) continue;
             if (Def.bLandOnly && Cell.bIsWater) continue;
             if (Def.bWaterOnly && !Cell.bIsWater) continue;
@@ -736,7 +753,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         SyncManifestedEntityActor(Cell, ManifestingAmbientDef ? ManifestingAmbientDef->ActorClass : nullptr, AAmbientEntityActor::StaticClass());
 
         // --- Берегиня: Легендарный, порог мирового состояния, Речная пойма ---
-        if (Cell.Biome == EBiomeType::Floodplain && Cell.bIsWater)
+        if (Cell.Biome == EBiomeType::Floodplain && Cell.bIsWater && bBiomeContentAllowed)
         {
             const bool bWasActive = Cell.ManifestedEntityID == EntityID_Bereginya;
 
