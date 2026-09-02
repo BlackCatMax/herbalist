@@ -16,7 +16,10 @@ class PROJECTHERBALIST_API UInventoryWidget : public UUserWidget
 public:
     void BindInventory(UHerbalistInventoryComponent* InInventory);
     UHerbalistInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
-    void SetOtherInventory(UHerbalistInventoryComponent* InOther);
+    // SetOtherInventory удалена 2026-09-02 (чистка мёртвого кода) — объявление
+    // без единой реализации в проекте (линковка упала бы на первом же вызове),
+    // никто не звал. Перенос между инвентарями идёт через drag-n-drop
+    // (NativeOnDrop ниже) и AlchemyTransferWidget.
 
 protected:
     virtual void NativeConstruct() override;

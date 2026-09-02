@@ -17,6 +17,8 @@ public:
     static FRealState GetDefaultWaterState(EBiomeType Biome);
 
     static FName BiomeTypeToName(EBiomeType Biome);
-    static EBiomeType NameToBiomeType(FName Name);
+    // NameToBiomeType удалена 2026-09-02 (чистка мёртвого кода) — обратное
+    // преобразование не звалось ниоткуда, вместе с ней ушёл и обслуживавший
+    // только её NameToBiomeMap в .cpp. Прямое BiomeTypeToName выше живёт.
     static TArray<EBiomeType> GetAllBiomeTypes();
 };

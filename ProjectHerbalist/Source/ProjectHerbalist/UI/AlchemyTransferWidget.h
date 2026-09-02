@@ -21,7 +21,9 @@ public:
     UAlchemyTransferWidget(const FObjectInitializer& ObjectInitializer);
 
     void BindInventory(UHerbalistInventoryComponent* InPlayerInventory);
-    bool TryAddItemToSlot(const FInventoryItem& Item);
+    // TryAddItemToSlot удалена 2026-09-02 (чистка мёртвого кода) — «положить
+    // предмет в первый подходящий слот» не звалось ниоткуда; реальный путь
+    // предмета в стол идёт через FindSuitableSlot ниже + drag-n-drop слота.
     UAlchemySlotWidget* FindSuitableSlot(const FInventoryItem& Item) const;
 
     virtual void NativeConstruct() override;

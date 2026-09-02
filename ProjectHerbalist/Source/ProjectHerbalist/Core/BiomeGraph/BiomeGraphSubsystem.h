@@ -75,7 +75,6 @@ protected:
     mutable TWeakObjectPtr<AGridWorldManager> CachedGridWorldManager;
 
     AGridWorldManager* FindGridWorldManager() const;
-    bool IsGridValid() const;
 
     TMap<FName, TArray<int32>> AdjacencyList;
     void BuildAdjacencyList();

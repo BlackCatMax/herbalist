@@ -450,14 +450,6 @@ void AHerbalistPlayerController::CloseAnyWidget()
 // ТЕСТОВЫЕ КОМАНДЫ (СТАРЫЕ)
 // ============================================================================
 
-void AHerbalistPlayerController::HarvestTest(int32 X, int32 Y)
-{
-    if (AGridWorldManager* WorldManager = FindWorldManager())
-    {
-        WorldManager->HarvestTest(X, Y);
-    }
-}
-
 void AHerbalistPlayerController::ApplyTest(int32 X, int32 Y)
 {
     if (AGridWorldManager* WorldManager = FindWorldManager())
@@ -1188,14 +1180,6 @@ void AHerbalistPlayerController::LoadGame()
         {
             SaveSubsystem->LoadGame();
         }
-    }
-}
-
-void AHerbalistPlayerController::MassHarvestTest(int32 X, int32 Y, int32 Count)
-{
-    if (AGridWorldManager* WorldManager = FindWorldManager())
-    {
-        WorldManager->MassHarvestTest(X, Y, Count);
     }
 }
 

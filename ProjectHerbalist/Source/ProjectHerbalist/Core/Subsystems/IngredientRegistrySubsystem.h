@@ -25,8 +25,6 @@ public:
     bool IsWater(FName IngredientID) const;
     bool IsKnown(FName IngredientID) const;
 
-    TArray<FName> GetResourcesForBiome(EBiomeType Biome) const;
-
     // Пригодность (DESIGN_World_State.md §15/§16, звенья 3 и 8): AllowedBiomes
     // уже решил, КТО может расти здесь (кэш CachedResourcesByBiome) — Cell и
     // HarvestContext решают, СКОЛЬКО шансов у каждого кандидата: близость к

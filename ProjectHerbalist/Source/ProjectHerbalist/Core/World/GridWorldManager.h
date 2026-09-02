@@ -200,19 +200,19 @@ public:
     void RegisterGardenPlot(const FIntPoint& Cell, EGardenNiche Niche);
 
     // ---- Сбор ----
-    FRealState HarvestFromCell(int32 X, int32 Y, const FConditionModifier& Conditions = FConditionModifier());
-    FRealState HarvestFromCellSimple(int32 X, int32 Y);
+    // HarvestFromCell/HarvestFromCellSimple удалены 2026-09-02 (чистка мёртвого
+    // кода): обе с давних пор были заглушками-пустышками ("deprecated, use
+    // command-based harvest", возвращали пустой FRealState), никем не
+    // вызывались. Настоящий сбор идёт командой через пайплайн, см.
+    // OnResourceCollected/PipelineV2.
     void ApplyPotionToCell(int32 X, int32 Y, const FRealState& PotionState);
     FRealState CollectWater(int32 X, int32 Y);
     void OnResourceCollected(AHerbalistResourceActor* Actor);
 
     // ---- Отладка (консольные команды) ----
-    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
-    void HarvestTest(int32 X, int32 Y);
-
-    UFUNCTION(Exec, BlueprintCallable, Category = "Test")
-    void MassHarvestTest(int32 X, int32 Y, int32 Count);
-
+    // HarvestTest/MassHarvestTest удалены 2026-09-02 вместе с телом файла
+    // GridWorldManagerHarvest.cpp -- обе только логировали "deprecated" и не
+    // делали ничего, оставаясь при этом видимыми Exec-командами в консоли.
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ApplyTest(int32 X, int32 Y);
 

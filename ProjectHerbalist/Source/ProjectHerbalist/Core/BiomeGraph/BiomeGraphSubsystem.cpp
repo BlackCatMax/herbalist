@@ -66,11 +66,6 @@ void UBiomeGraphSubsystem::BuildAdjacencyList()
     }
 }
 
-bool UBiomeGraphSubsystem::IsGridValid() const
-{
-    return FindGridWorldManager() != nullptr;
-}
-
 AGridWorldManager* UBiomeGraphSubsystem::FindGridWorldManager() const
 {
     if (CachedGridWorldManager.IsValid())

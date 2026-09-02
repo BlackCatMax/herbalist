@@ -1,8 +1,9 @@
 // ArtifactTypes.h
 //
 // Артефакты Легендарных сущностей (21_Journey_And_Artifacts.md §21.3-21.4,
-// 2026-09-01). Тот же паттерн статического реестра, что LegendaryEntityTypes.h/
-// LandmarkTypes.h/AmbientEntityTypes.h.
+// 2026-09-01). Тот же паттерн реестра-DataTable, что LegendaryEntityTypes.h/
+// LandmarkTypes.h/AmbientEntityTypes.h (все четверо мигрировали 2026-09-02,
+// см. ниже).
 //
 // Восемь строк ровно по таблице §21.3. Гребень → LegendaryEntityID
 // "Берегиня" — 2026-09-02, унификация Берегини: она теперь обычная строка

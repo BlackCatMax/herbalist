@@ -123,13 +123,6 @@ bool UIngredientRegistrySubsystem::IsKnown(FName IngredientID) const
     return false;
 }
 
-TArray<FName> UIngredientRegistrySubsystem::GetResourcesForBiome(EBiomeType Biome) const
-{
-    if (!bInitialized) return TArray<FName>();
-    const TArray<FName>* Found = CachedResourcesByBiome.Find(Biome);
-    return Found ? *Found : TArray<FName>();
-}
-
 namespace
 {
     // Мягкий гейт "окна" (сезон/время суток/луна/погода) — DESIGN_World_State.md

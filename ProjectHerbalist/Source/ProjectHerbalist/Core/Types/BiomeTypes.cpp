@@ -47,26 +47,11 @@ static const TMap<EBiomeType, FName> BiomeToNameMap = {
     { EBiomeType::Bog,             TEXT("Bog") }
 };
 
-static const TMap<FName, EBiomeType> NameToBiomeMap = []()
-    {
-        TMap<FName, EBiomeType> Map;
-        for (const auto& Pair : BiomeToNameMap)
-            Map.Add(Pair.Value, Pair.Key);
-        return Map;
-    }();
-
 FName FBiomeDefaults::BiomeTypeToName(EBiomeType Biome)
 {
     if (const FName* Name = BiomeToNameMap.Find(Biome))
         return *Name;
     return TEXT("MixedForest");
-}
-
-EBiomeType FBiomeDefaults::NameToBiomeType(FName Name)
-{
-    if (const EBiomeType* Biome = NameToBiomeMap.Find(Name))
-        return *Biome;
-    return EBiomeType::MixedForest;
 }
 
 TArray<EBiomeType> FBiomeDefaults::GetAllBiomeTypes()

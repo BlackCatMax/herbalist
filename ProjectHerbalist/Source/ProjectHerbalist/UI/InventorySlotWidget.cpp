@@ -25,11 +25,6 @@ void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& I
     UpdateDisplay();
 }
 
-void UInventorySlotWidget::Refresh()
-{
-    UpdateDisplay();
-}
-
 int32 UInventorySlotWidget::FindRealIndex() const
 {
     if (!InventoryComponent) return -1;

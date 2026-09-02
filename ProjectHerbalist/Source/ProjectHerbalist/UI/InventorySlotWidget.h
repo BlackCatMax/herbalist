@@ -17,7 +17,9 @@ class PROJECTHERBALIST_API UInventorySlotWidget : public UUserWidget
 
 public:
     void InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory);
-    void Refresh();
+    // Refresh() удалена 2026-09-02 (чистка мёртвого кода) — тонкая обёртка над
+    // приватным UpdateDisplay(), не звалась ниоткуда: слот перерисовывается
+    // через InitializeSlot при перестроении списка (UInventoryWidget).
 
 protected:
     virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;

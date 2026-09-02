@@ -27,19 +27,6 @@ void UAlchemyTransferWidget::BindInventory(UHerbalistInventoryComponent* InPlaye
     }
 }
 
-bool UAlchemyTransferWidget::TryAddItemToSlot(const FInventoryItem& Item)
-{
-    if (WaterSlot->CanAcceptItem(Item) && WaterSlot->AddItem(Item, 1))
-        return true;
-    if (IngredientSlot1->CanAcceptItem(Item) && IngredientSlot1->AddItem(Item, 1))
-        return true;
-    if (IngredientSlot2->CanAcceptItem(Item) && IngredientSlot2->AddItem(Item, 1))
-        return true;
-    if (IngredientSlot3->CanAcceptItem(Item) && IngredientSlot3->AddItem(Item, 1))
-        return true;
-    return false;
-}
-
 UAlchemySlotWidget* UAlchemyTransferWidget::FindSuitableSlot(const FInventoryItem& Item) const
 {
     if (WaterSlot && WaterSlot->CanAcceptItem(Item)) return WaterSlot;

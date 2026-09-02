@@ -1,5 +1,10 @@
 // BiomeGraphCommands.cpp
-#include "BiomeGraphCommands.h"
+//
+// Консольные команды биом-графа регистрируются статическими
+// FAutoConsoleCommand-объектами ниже (сама их конструкция при загрузке
+// модуля и есть регистрация). Заголовок BiomeGraphCommands.h с пустой
+// функцией Register(), которую никто никогда не вызывал, удалён
+// 2026-09-02 при чистке мёртвого кода.
 #include "BiomeGraphSubsystem.h"
 #include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
@@ -89,7 +94,3 @@ static FAutoConsoleCommandWithWorld CmdToggleCellInfluence(
     })
 );
 #endif // WITH_EDITOR
-
-void BiomeGraphCommands::Register()
-{
-}

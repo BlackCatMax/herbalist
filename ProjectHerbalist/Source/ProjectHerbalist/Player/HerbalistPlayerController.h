@@ -84,14 +84,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UI")
     void CloseAnyWidget();
 
-    UFUNCTION(Exec)
-    void HarvestTest(int32 X, int32 Y);
+    // HarvestTest/MassHarvestTest удалены 2026-09-02 (чистка мёртвого кода) --
+    // обёртки над одноимёнными заглушками AGridWorldManager, которые только
+    // логировали "deprecated" и ничего не делали.
     UFUNCTION(Exec)
     void ApplyTest(int32 X, int32 Y);
     UFUNCTION(Exec)
     void ShowInventory();
-    UFUNCTION(Exec)
-    void MassHarvestTest(int32 X, int32 Y, int32 Count);
 	
 	UFUNCTION(Exec)
 	void TestNewHarvest(int32 X, int32 Y, FName IngredientID);
@@ -354,7 +353,9 @@ protected:
     void Interact();
 
     bool GetHitResultFromCamera(FHitResult& OutHit, ECollisionChannel Channel = ECC_Visibility);
-    void OnLeftClick();
+    // OnLeftClick() удалён 2026-09-02 (чистка мёртвого кода) — объявление без
+    // реализации и без единого вызова; левый клик обрабатывается Harvest()/
+    // Interact() через привязки ввода выше.
     void OnRightClick();
     void OnApplyAlchemyKey();
 
