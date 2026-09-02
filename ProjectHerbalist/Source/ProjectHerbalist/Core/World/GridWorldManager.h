@@ -435,6 +435,9 @@ public:
     float GetClarityAnchor() const { return ClarityAnchor; }
     void SetClarityAnchor(float InAnchor) { ClarityAnchor = InAnchor; }
 
+    float GetClarityResponseSmoothed() const { return ClarityResponseSmoothed; }
+    void SetClarityResponseSmoothed(float InResponse) { ClarityResponseSmoothed = InResponse; }
+
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Zaryana")
     bool IsBuyanReached() const { return bBuyanReached; }
     void SetBuyanReached(bool bInReached) { bBuyanReached = bInReached; }
@@ -487,8 +490,21 @@ public:
     // AAlchemyTableActor::BeginPlay вызывает это на своей клетке (дом/очаг)
     // сразу после регистрации капища/Домового — тот же принцип "дефолт
     // рядом с домом", а явная расстановка ZaryanaCell левел-дизайнером в
-    // редакторе (EditAnywhere ниже) не перезаписывается.
+    // редакторе (EditAnywhere ниже) не перезаписывается. Первое (и только
+    // первое, тот же idempotent-гейт) размещение сразу сеет "испорченный
+    // круг" §19.4a вокруг клетки — см. SeedRosaCorruptedCircle ниже.
     void SetZaryanaCellIfUnset(const FIntPoint& Cell);
+
+    // Первый кадр игры (19_Rosa_Signal.md §19.4a, 2026-09-02) — "место
+    // вокруг них испорчено... трава полегла неестественно ровным кругом,
+    // цвет земли темнее". Вертикальный срез: реальная расстановка
+    // Distortion/Corruption клеток вокруг ZaryanaCell радиусом в несколько
+    // клеток, спадающая к краям — не катсцена (в проекте нет системы
+    // катсцен/Sequencer для нарратива, весь текстовый нарратив идёт через
+    // ShowMemoryRevealText/UE_LOG, тот же канал использован здесь). Публично
+    // тем же принципом, что и другие Zaryana-хелперы (SeedTestLandmarks и
+    // др.) — тестируемо напрямую, не только через SetZaryanaCellIfUnset.
+    void SeedRosaCorruptedCircle(const FIntPoint& Center);
 
     bool IsRosaFirstFalseSignalShown() const { return bRosaFirstFalseSignalShown; }
     void SetRosaFirstFalseSignalShown(bool bInShown) { bRosaFirstFalseSignalShown = bInShown; }
@@ -559,6 +575,19 @@ public:
     // выставляет bHasMirror/bHasYarnBall по результату.
     bool TryAcquireArtifact(FName ArtifactID, const TArray<FInventoryItem>& Offered, bool& bOutViaDeception);
 
+    // Сцена обмана Болотного царя (§21.3, подраздел "Сцена обмана Болотного
+    // царя", 2026-09-02) — НЕ подношение лицом к лицу (TryAcquireArtifact
+    // выше): обманное зелье-приманка, вылитое рядом с проявленным Царём,
+    // физически ворует Фонарь, пока он отвлечён. Тот же принцип S_Perceived-
+    // обмана (сравнение воспринятой/реальной Purity), но применён к
+    // физическому присутствию в клетке, не к явному подношению — и, в
+    // отличие от TryAcquireArtifact, по-настоящему вероятностный исход, не
+    // детерминированный порог (см. .cpp). Возвращает true, если ПОПЫТКА
+    // состоялась (приманка израсходована вызывающей стороной), независимо
+    // от того, удалась ли она — bOutGranted отличает эти два случая, тот же
+    // паттерн out-параметра, что уже bOutViaDeception выше.
+    bool TryLureSwampTsarWithPotion(const FIntPoint& Cell, const FRealState& PotionState, bool& bOutGranted);
+
     const TArray<FAcquiredArtifact>& GetAcquiredArtifacts() const { return AcquiredArtifacts; }
     void SetAcquiredArtifacts(const TArray<FAcquiredArtifact>& InArtifacts) { AcquiredArtifacts = InArtifacts; }
 
@@ -619,6 +648,65 @@ public:
     // для ЛЮБОЙ клетки, не только воды. Требует и добытого Фонаря, и
     // IsArtifactWarmed("Фонарь") — базовая версия остаётся просто светом.
     bool UseLanternDisclosureOnCell(const FIntPoint& Cell, FText& OutDisclosure) const;
+
+    // ---- Перья вещих птиц (16_Entity_Manifestation.md §16.4, эндгейм-
+    // трофеи, 2026-09-02) — Алконост/Гамаюн/Сирин/Жар-птица. Не часть
+    // ArtifactTypes.h: ни Алконост, ни Сирин, ни жар-птица не входят в
+    // таблицу §21.3 (только Гамаюн — через Зеркальце), у них нет базового
+    // "артефакта" в том смысле. Тот же паттерн именованных функций, что
+    // GridWorldManagerArtifactEffects.cpp применяет к каждому из семи
+    // эффектов, не общий registry-цикл: только четыре штуки, у каждой
+    // содержательно разная логика получения/эффекта. GridWorldManager
+    // ProphetFeathers.cpp. ----
+
+    // Общий гейт получения — тот же благой полюс §16.4, что уже даёт
+    // базовые артефакты Легендарным. FeatherID — точное имя: "Перо
+    // Гамаюна"/"Перо Алконоста"/"Перо Сирина"/"Перо Жар-птицы". Гамаюн —
+    // единственное из четырёх, требующее ещё и уже добытого и прогретого
+    // Зеркальца (см. .cpp) — точная цитата §16.4: "требуют уже добытого
+    // базового артефакта (Перо Гамаюна бесполезно без Зеркальца) ИЛИ
+    // очень редкого мирового события" — три остальных гейтятся вторым,
+    // не первым условием.
+    bool TryAcquireProphetFeather(FName FeatherID);
+
+    const TArray<FName>& GetAcquiredFeathers() const { return AcquiredFeathers; }
+    void SetAcquiredFeathers(const TArray<FName>& InFeathers) { AcquiredFeathers = InFeathers; }
+
+    // Перо Гамаюна — съедено, навсегда закрепляет вероятностный шанс
+    // "усиленного (прогретого) Зеркальце — иногда пророческое" (§21.4) как
+    // гарантированный. Требует уже добытого Пера (TryAcquireProphetFeather).
+    bool EatGamayunFeather();
+    bool IsGamayunPropheticGuaranteed() const { return bGamayunPropheticGuaranteed; }
+    void SetGamayunPropheticGuaranteed(bool bIn) { bGamayunPropheticGuaranteed = bIn; }
+
+    // Честное (без шума PerceiveRealState) чтение Заряны — Слои 1+3 §19.2,
+    // без Слоя честного шума. Отдельно от GetZaryanaPerceivedState — та же
+    // прямая честность, что уже применяют UseHornOnCell/
+    // UseLanternDisclosureOnCell к клеткам, только для Заряны.
+    FRealState GetZaryanaTrueState() const;
+
+    // Перо Алконоста — масштабированная вверх версия Шапки-невидимки
+    // (§21.3): подавляет НОВЫЕ проявления Низшего/Легендарного ранга (тот
+    // же охват рангов, что уже Шапка — §21.3 явно не упоминает Основной)
+    // на ВЕСЬ указанный биом сразу, не только текущую (в этом коде — всю
+    // сетку, см. комментарий у UseInvisibilityCap) зону активации Шапки.
+    // Тот же таймер (InvisibilityCapDurationSeconds), не отдельная
+    // настройка — прямое указание задачи "тем же таймером".
+    bool UseAlkonostFeatherOnBiome(EBiomeType Biome);
+    bool IsAlkonostSuppressionActiveForBiome(EBiomeType Biome) const;
+
+    // Перо Сирина — одноразовое: при активном Malign-спайке Легендарного
+    // уровня в биоме клетки (X,Y) честно (без искажения S_Perceived, та же
+    // прямая честность, что уже UseHornOnCell/UseLanternDisclosureOnCell)
+    // показывает Cell.State, не нанося вреда самого спайка игроку.
+    bool UseSirinFeatherOnCell(const FIntPoint& Cell, FText& OutDisclosure);
+
+    // Перо Жар-птицы — единственный из четырёх с ПОСТОЯННЫМ эффектом:
+    // помечает клетку как никогда не деградирующую (bEternallyPure,
+    // HerbalistCoreTypes.h) — исключена из RegenerateCellParameters/
+    // амбиентных, основных и легендарных проявлений навсегда.
+    bool UseZharPtitsaFeatherOnCell(const FIntPoint& Cell);
+    bool IsCellEternallyPure(const FIntPoint& Cell) const;
 
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
@@ -705,6 +793,26 @@ protected:
     // ---- Артефакты Легендарных (21_Journey_And_Artifacts.md §21.3-21.4) ----
     TArray<FAcquiredArtifact> AcquiredArtifacts;
 
+    // ---- Перья вещих птиц (16_Entity_Manifestation.md §16.4) ----
+    TArray<FName> AcquiredFeathers;
+
+    // Перо Гамаюна съедено -- перманентный флаг, переживает потерю самого
+    // Пера из AcquiredFeathers (оно расходуется на поедание).
+    bool bGamayunPropheticGuaranteed = false;
+
+    // Перо Алконоста — один активный слот подавления (как у Шапки), биом +
+    // до какого GameClockSeconds. Следующее применение просто перезаписывает
+    // оба поля, тот же принцип, что InvisibilityCapExpiryGameSeconds.
+    EBiomeType AlkonostSuppressedBiome = EBiomeType::ForestSteppe;
+    float AlkonostSuppressionExpiryGameSeconds = 0.0f;
+
+    // Общая часть GetZaryanaPerceivedState/GetZaryanaTrueState — Слои 1+3
+    // §19.2 (реальное State клетки + подмешанное влияние капищ/хозяев в
+    // радиусе), без честного шума PerceiveRealState. Вынесена отдельно
+    // 2026-09-02 для Пера Гамаюна (GetZaryanaTrueState — то же самое, но без
+    // шума вовсе).
+    FRealState ComputeZaryanaBlendedState() const;
+
     // Молодильное яблоко — GameClockSeconds, до которого действует окно
     // сниженного шума росы. 0 = не активно (GameClockSeconds никогда не
     // отрицателен, безопасный сентинел).
@@ -722,6 +830,13 @@ protected:
     // GlobalPerceptionClarity выше — производная, пересчитывается из этого
     // поля + отклика мира в RecomputeGlobalPerceptionClarity().
     float ClarityAnchor = 0.0f;
+
+    // Сглаженный отклик мира (§20.3, 2026-09-02) — экспоненциально лерпится
+    // к сырому Response при каждом RecomputeGlobalPerceptionClarity, не
+    // применяется мгновенно. Персистится (HerbalistSaveTypes.h) — иначе
+    // перезагрузка сбрасывала бы уже накопленную сходимость к нулю,
+    // мгновенно меняя видимую Clarity на месте.
+    float ClarityResponseSmoothed = 0.0f;
 
     bool bBuyanReached = false;
 

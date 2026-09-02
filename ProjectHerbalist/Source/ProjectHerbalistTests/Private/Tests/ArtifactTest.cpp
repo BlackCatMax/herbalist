@@ -9,6 +9,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Entities/ArtifactTypes.h"
+#include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -27,6 +28,17 @@ namespace
         Item.State.Meta.Distortion = Distortion;
         Item.Count = 1;
         return Item;
+    }
+
+    // Distortion=0 -> PerceiveRealState гарантированно без шума (та же
+    // гарантия, что уже используют MakeOfferedItem-тесты выше) -- нужна для
+    // детерминированных тестов "Сцены обмана Болотного царя".
+    FRealState MakeLurePotionState(float Purity)
+    {
+        FRealState State;
+        State.Meta.Purity = Purity;
+        State.Meta.Distortion = 0.0f;
+        return State;
     }
 }
 
@@ -292,6 +304,193 @@ bool FHerbalistArtifact_BabaYagaHonestPathNeedsNoSpecialCase::RunTest(const FStr
     TestFalse(TEXT("Honest path, not deception"), bViaDeception);
     TestEqual(TEXT("Recorded like any other non-companion artifact"), Manager->GetAcquiredArtifacts().Num(), 1);
 
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_LureRequiresTsarManifestedAndProximity,
+    "Herbalist.Artifact.LureRequiresTsarManifestedAndProximity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifact_LureRequiresTsarManifestedAndProximity::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = InitGraph(World);
+    if (!TestNotNull(TEXT("Graph initialized"), Graph)) { Manager->Destroy(); return false; }
+
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Болотный царь")));
+    if (!TestNotNull(TEXT("Болотный царь has a seeded anchor cell"), Anchor))
+    {
+        Graph->Deinitialize();
+        Manager->Destroy();
+        return false;
+    }
+
+    bool bGranted = true;
+    TestFalse(TEXT("Not manifested -- no attempt possible"),
+        Manager->TryLureSwampTsarWithPotion(*Anchor, MakeLurePotionState(1.0f), bGranted));
+    TestFalse(TEXT("bOutGranted stays false when the attempt itself fails"), bGranted);
+
+    // Спайк -- Царь проявлен.
+    FBiomeGraphNode* Node = Graph->GetMutableNode(FBiomeDefaults::BiomeTypeToName(EBiomeType::Bog));
+    if (!TestNotNull(TEXT("Bog node exists"), Node)) { Graph->Deinitialize(); Manager->Destroy(); return false; }
+    Node->MorokField = 0.9f;
+    Manager->UpdateEntityManifestations(1.0f);
+    TestTrue(TEXT("Болотный царь now manifested"), Manager->IsLegendaryManifested(FName(TEXT("Болотный царь"))));
+
+    // Далеко от его якоря (за пределами LurePotionRadius=1) -- всё ещё нет попытки.
+    const FIntPoint Far(Anchor->X + 5, Anchor->Y + 5);
+    bGranted = true;
+    TestFalse(TEXT("Too far from the anchor -- no attempt"),
+        Manager->TryLureSwampTsarWithPotion(Far, MakeLurePotionState(1.0f), bGranted));
+    TestFalse(TEXT("bOutGranted stays false when the attempt fails"), bGranted);
+
+    // Прямо на его клетке -- попытка теперь состоится.
+    bGranted = false;
+    TestTrue(TEXT("On the anchor cell -- attempt proceeds"),
+        Manager->TryLureSwampTsarWithPotion(*Anchor, MakeLurePotionState(1.0f), bGranted));
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_LureWithMaxPerceivedPurityAlwaysSucceeds,
+    "Herbalist.Artifact.LureWithMaxPerceivedPurityAlwaysSucceeds",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifact_LureWithMaxPerceivedPurityAlwaysSucceeds::RunTest(const FString& Parameters)
+{
+    // Purity=1.0, Distortion=0 -> PerceivedPurity==1.0 exactly (no noise) ->
+    // Chance=(1.0-0.6)/(1.0-0.6)=1.0 -> WorldRNG.FRand() всегда в [0,1),
+    // строго меньше 1.0 -- детерминированный успех без завязки на конкретный сид.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = InitGraph(World);
+    if (!TestNotNull(TEXT("Graph initialized"), Graph)) { Manager->Destroy(); return false; }
+
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Болотный царь")));
+    if (!TestNotNull(TEXT("Болотный царь has a seeded anchor cell"), Anchor))
+    {
+        Graph->Deinitialize();
+        Manager->Destroy();
+        return false;
+    }
+    FBiomeGraphNode* Node = Graph->GetMutableNode(FBiomeDefaults::BiomeTypeToName(EBiomeType::Bog));
+    Node->MorokField = 0.9f;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    bool bGranted = false;
+    const bool bAttempted = Manager->TryLureSwampTsarWithPotion(*Anchor, MakeLurePotionState(1.0f), bGranted);
+    TestTrue(TEXT("Attempt proceeds"), bAttempted);
+    TestTrue(TEXT("Maximally convincing decoy always steals the Фонарь"), bGranted);
+    TestEqual(TEXT("Фонарь recorded as acquired via deception"), Manager->GetAcquiredArtifacts().Num(), 1);
+    if (Manager->GetAcquiredArtifacts().Num() == 1)
+    {
+        TestTrue(TEXT("Recorded via deception"), Manager->GetAcquiredArtifacts()[0].bAcquiredViaDeception);
+    }
+
+    // Уже добыт -- вторая попытка не проходит гейт вовсе.
+    bGranted = true;
+    TestFalse(TEXT("Cannot lure a second time once the Фонарь is already held"),
+        Manager->TryLureSwampTsarWithPotion(*Anchor, MakeLurePotionState(1.0f), bGranted));
+    TestFalse(TEXT("bOutGranted stays false on the blocked second attempt"), bGranted);
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_LureWithUnconvincingPotionFailsWithoutGranting,
+    "Herbalist.Artifact.LureWithUnconvincingPotionFailsWithoutGranting",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifact_LureWithUnconvincingPotionFailsWithoutGranting::RunTest(const FString& Parameters)
+{
+    // Purity=0.1, Distortion=0 -> PerceivedPurity==0.1 exactly, ниже
+    // ArtifactHonestPurityThreshold (0.6) -- Chance=0, никогда не ворует.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = InitGraph(World);
+    if (!TestNotNull(TEXT("Graph initialized"), Graph)) { Manager->Destroy(); return false; }
+
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Болотный царь")));
+    if (!TestNotNull(TEXT("Болотный царь has a seeded anchor cell"), Anchor))
+    {
+        Graph->Deinitialize();
+        Manager->Destroy();
+        return false;
+    }
+    FBiomeGraphNode* Node = Graph->GetMutableNode(FBiomeDefaults::BiomeTypeToName(EBiomeType::Bog));
+    Node->MorokField = 0.9f;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    bool bGranted = true;
+    const bool bAttempted = Manager->TryLureSwampTsarWithPotion(*Anchor, MakeLurePotionState(0.1f), bGranted);
+    TestTrue(TEXT("Attempt proceeds (potion is spent) even though it fails"), bAttempted);
+    TestFalse(TEXT("Unconvincing decoy never steals the Фонарь"), bGranted);
+    TestEqual(TEXT("Nothing recorded"), Manager->GetAcquiredArtifacts().Num(), 0);
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_InvisibilityCapGuaranteesLureRegardlessOfRoll,
+    "Herbalist.Artifact.InvisibilityCapGuaranteesLureRegardlessOfRoll",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifact_InvisibilityCapGuaranteesLureRegardlessOfRoll::RunTest(const FString& Parameters)
+{
+    // §21.3: "если у игрока уже есть Шапка -- отвлечение гарантировано, не
+    // вероятностно" -- Purity чуть выше порога (Chance далёк от 1.0 без
+    // Шапки) должно всё равно гарантированно сработать с ней.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = InitGraph(World);
+    if (!TestNotNull(TEXT("Graph initialized"), Graph)) { Manager->Destroy(); return false; }
+
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Болотный царь")));
+    if (!TestNotNull(TEXT("Болотный царь has a seeded anchor cell"), Anchor))
+    {
+        Graph->Deinitialize();
+        Manager->Destroy();
+        return false;
+    }
+    FBiomeGraphNode* Node = Graph->GetMutableNode(FBiomeDefaults::BiomeTypeToName(EBiomeType::Bog));
+    Node->MorokField = 0.9f;
+    Manager->UpdateEntityManifestations(1.0f);
+
+    FAcquiredArtifact Cap;
+    Cap.ArtifactID = FName(TEXT("Шапка-невидимка"));
+    Manager->SetAcquiredArtifacts({ Cap });
+
+    // Purity=0.61 -- barely above the 0.6 threshold, Chance without the cap
+    // would be (0.61-0.6)/(1.0-0.6)=0.025 (2.5%), essentially never
+    // succeeding on a real dice roll -- but the cap bypasses the roll.
+    bool bGranted = false;
+    const bool bAttempted = Manager->TryLureSwampTsarWithPotion(*Anchor, MakeLurePotionState(0.61f), bGranted);
+    TestTrue(TEXT("Attempt proceeds"), bAttempted);
+    TestTrue(TEXT("Шапка guarantees the theft despite a barely-convincing decoy"), bGranted);
+
+    Graph->Deinitialize();
     Manager->Destroy();
     return true;
 }

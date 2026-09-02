@@ -53,6 +53,9 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->AcquiredArtifacts = WorldManager->GetAcquiredArtifacts();
     Save->GlobalPerceptionClarity = WorldManager->GetGlobalPerceptionClarity();
     Save->ClarityAnchor = WorldManager->GetClarityAnchor();
+    Save->ClarityResponseSmoothed = WorldManager->GetClarityResponseSmoothed();
+    Save->AcquiredFeathers = WorldManager->GetAcquiredFeathers();
+    Save->bGamayunPropheticGuaranteed = WorldManager->IsGamayunPropheticGuaranteed();
     Save->bRosaFirstFalseSignalShown = WorldManager->IsRosaFirstFalseSignalShown();
     Save->bBuyanReached = WorldManager->IsBuyanReached();
     Save->ChosenBuyanPath = WorldManager->GetChosenBuyanPath();
@@ -124,6 +127,9 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetAcquiredArtifacts(Save->AcquiredArtifacts);
     WorldManager->SetGlobalPerceptionClarity(Save->GlobalPerceptionClarity);
     WorldManager->SetClarityAnchor(Save->ClarityAnchor);
+    WorldManager->SetClarityResponseSmoothed(Save->ClarityResponseSmoothed);
+    WorldManager->SetAcquiredFeathers(Save->AcquiredFeathers);
+    WorldManager->SetGamayunPropheticGuaranteed(Save->bGamayunPropheticGuaranteed);
     WorldManager->SetRosaFirstFalseSignalShown(Save->bRosaFirstFalseSignalShown);
     WorldManager->SetBuyanReached(Save->bBuyanReached);
     WorldManager->SetChosenBuyanPath(Save->ChosenBuyanPath);

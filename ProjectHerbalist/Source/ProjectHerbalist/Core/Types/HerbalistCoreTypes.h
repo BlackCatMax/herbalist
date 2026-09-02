@@ -284,6 +284,19 @@ struct PROJECTHERBALIST_API FGridCell
     // Список акторов ресурсов в этой клетке (слабые указатели, чтобы не мешать сборщику)
     UPROPERTY()
     TArray<TWeakObjectPtr<class AHerbalistResourceActor>> ResourceActors;
+
+    // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, эндгейм-трофей) —
+    // постоянная метка "никогда не деградирует". Единственный из четырёх
+    // эффектов перьев с постоянным, не временным/одноразовым действием.
+    // Клетка исключается из бистабильной релаксации/заражения соседей
+    // (RegenerateCellParameters, GridWorldManagerCore.cpp) и из всех трёх
+    // рангов проявления сущностей (UpdateEntityManifestations,
+    // GridWorldManagerEntities.cpp) — не только Низшего/Легендарного, как
+    // Шапка/Алконост, полная неприкосновенность, а не только защита от
+    // амбиентной угрозы. Apply-команды (варка, вылитая прямо на клетку)
+    // не гейтятся этим флагом — вне заявленного в задаче объёма.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
+    bool bEternallyPure = false;
 };
 
 // ========== Сущности-"хозяева" (Основной уровень, 16_Entity_Manifestation §16.3) ==========

@@ -152,3 +152,91 @@ bool AGridWorldManager::TryAcquireArtifact(FName ArtifactID, const TArray<FInven
         AvgRealPurity, AvgPerceivedPurity);
     return true;
 }
+
+bool AGridWorldManager::TryLureSwampTsarWithPotion(const FIntPoint& Cell, const FRealState& PotionState, bool& bOutGranted)
+{
+    bOutGranted = false;
+
+    static const FName LanternID(TEXT("Фонарь"));
+    static const FName TsarID(TEXT("Болотный царь"));
+    static const FName CapID(TEXT("Шапка-невидимка"));
+
+    // Уже добыт -- нечего красть повторно (тот же дубликат-гейт, что уже
+    // TryAcquireArtifact выше).
+    const bool bAlreadyAcquired = AcquiredArtifacts.ContainsByPredicate(
+        [](const FAcquiredArtifact& A) { return A.ArtifactID == LanternID; });
+    if (bAlreadyAcquired) return false;
+
+    // Царь должен быть проявлен (Malign-спайк, §16.4) -- тот же гейт, что
+    // уже TryAcquireArtifact применяет к честному/обманному подношению.
+    if (!IsLegendaryManifested(TsarID)) return false;
+
+    const FIntPoint* Anchor = LegendaryAnchors.Find(TsarID);
+    if (!Anchor) return false;
+
+    // "рядом с... Царём" -- Chebyshev-соседство с его якорной клеткой (та
+    // же метрика расстояния, что уже применяет влияние хозяев места в
+    // GetZaryanaPerceivedState), не обязательно ровно его клетка.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 Radius = Settings ? Settings->LurePotionRadius : 1;
+    const int32 Dist = FMath::Max(FMath::Abs(Cell.X - Anchor->X), FMath::Abs(Cell.Y - Anchor->Y));
+    if (Dist > Radius) return false;
+
+    // Воспринятая Purity приманки -- тот же принцип S_real/S_Perceived, что
+    // уже отличает честный/обманный путь выше, свой фиксированный сид (не
+    // WorldRNG) — наблюдение/оценка приманки не должно возмущать
+    // детерминированный поток симуляции, тот же довод, что уже у Rng в
+    // TryAcquireArtifact.
+    FRandomStream PerceptionRng(20260902 + GetTypeHash(Cell));
+    const float PerceivedPurity = Simulation::FPerceptionService::PerceiveRealState(PotionState, PerceptionRng, GlobalPerceptionClarity).Meta.Purity;
+
+    const float HonestThreshold = Settings ? Settings->ArtifactHonestPurityThreshold : 0.6f;
+    if (PerceivedPurity < HonestThreshold)
+    {
+        // Приманка недостаточно убедительна -- попытка состоялась (зелье
+        // расходуется вызывающей стороной), но Царь её не покупает.
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Lure potion at (%d,%d) unconvincing, PerceivedPurity=%.2f"),
+            Cell.X, Cell.Y, PerceivedPurity);
+        return true;
+    }
+
+    // Шапка-невидимка (§21.3, "необязательный ускоритель, не ключ") --
+    // владение гарантирует исход вместо броска, но НЕ снимает требование
+    // убедительной приманки выше: иначе Шапка стала бы отдельным, более
+    // коротким путём к Фонарю в обход приманки вовсе, а не мостиком между
+    // двумя артефактами -- "без Шапки путь всё равно доступен через одни
+    // приманки" осталось бы верным лишь формально.
+    const bool bHasCap = AcquiredArtifacts.ContainsByPredicate(
+        [](const FAcquiredArtifact& A) { return A.ArtifactID == CapID; });
+
+    bool bSuccess = bHasCap;
+    if (!bHasCap)
+    {
+        // По-настоящему вероятностный исход (§21.3 "Сцена обмана") -- в
+        // отличие от детерминированного порога TryAcquireArtifact, шанс
+        // растёт линейно от порога убедительности (0%) до предельно
+        // убедительной приманки (100%). WorldRNG (не PerceptionRng выше) --
+        // настоящий игровой бросок, тот же принцип, что уже применяет
+        // SpawnMemoryFragmentAt к риску ложного фрагмента (WorldRNG.FRand()).
+        const float Chance = FMath::Clamp(
+            (PerceivedPurity - HonestThreshold) / FMath::Max(1.0f - HonestThreshold, KINDA_SMALL_NUMBER), 0.0f, 1.0f);
+        bSuccess = WorldRNG.FRand() < Chance;
+    }
+
+    if (!bSuccess)
+    {
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Lure potion at (%d,%d) convincing (PerceivedPurity=%.2f) but the roll failed"),
+            Cell.X, Cell.Y, PerceivedPurity);
+        return true;
+    }
+
+    FAcquiredArtifact Acquired;
+    Acquired.ArtifactID = LanternID;
+    Acquired.bAcquiredViaDeception = true;
+    AcquiredArtifacts.Add(Acquired);
+    bOutGranted = true;
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Фонарь stolen from Болотный царь via lure potion at (%d,%d), PerceivedPurity=%.2f%s"),
+        Cell.X, Cell.Y, PerceivedPurity, bHasCap ? TEXT(" (Шапка guaranteed)") : TEXT(""));
+    return true;
+}

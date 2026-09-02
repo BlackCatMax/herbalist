@@ -824,6 +824,15 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
 
     for (FGridCell& Cell : Cells)
     {
+        // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
+        // клетка, помеченная навечно чистой, полностью исключена из этой
+        // функции: ни бистабильная релаксация, ни заражение соседей, ни
+        // обычная релаксация к TargetState её не трогают — заморожена на
+        // текущем значении, как и просит §16.4 ("заморозь TargetState/
+        // State на текущем значении"). Заражение соседей всё ещё может
+        // толкать её TargetState ИЗВНЕ (см. guard у Neighbor ниже, отдельно).
+        if (Cell.bEternallyPure) continue;
+
         // Бистабильная релаксация (обсуждение в сессии 2026-08-24) — общий
         // случай того, что раньше делали только Гнильники для Болота. Гистерезис
         // на Corruption клетки решает, куда сама релаксация её тянет: выше порога
@@ -878,7 +887,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
                 for (const FIntPoint& Offset : ContagionOffsets)
                 {
                     FGridCell* Neighbor = GetCell(Cell.X + Offset.X, Cell.Y + Offset.Y);
-                    if (!Neighbor) continue;
+                    if (!Neighbor || Neighbor->bEternallyPure) continue;
 
                     const float NewCorruption = FMath::Clamp(Neighbor->TargetState.Meta.Corruption + ContagionRate * DeltaTime, 0.0f, 1.0f);
                     const float NewPurity     = FMath::Clamp(Neighbor->TargetState.Meta.Purity     - ContagionRate * DeltaTime, 0.0f, 1.0f);

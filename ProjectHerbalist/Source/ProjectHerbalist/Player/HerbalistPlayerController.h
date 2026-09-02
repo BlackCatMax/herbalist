@@ -249,6 +249,46 @@ public:
     UFUNCTION(Exec)
     void UseLanternDisclosure(int32 X, int32 Y);
 
+    // ---- Перья вещих птиц (16_Entity_Manifestation.md §16.4, эндгейм-
+    // трофеи, 2026-09-02) — тот же приём общего гейта получения по имени,
+    // что уже OfferForArtifact, плюс отдельные именованные команды на
+    // использование, тот же приём, что уже UseHorn/UseComb/... ----
+
+    // FeatherID — "Перо Гамаюна"/"Перо Алконоста"/"Перо Сирина"/"Перо
+    // Жар-птицы". Условия получения — AGridWorldManager::
+    // TryAcquireProphetFeather.
+    UFUNCTION(Exec)
+    void AcquireFeather(FString FeatherID);
+
+    // Перо Гамаюна — съедено, навсегда закрепляет пророческое Зеркальце.
+    UFUNCTION(Exec)
+    void EatGamayunFeather();
+
+    // Перо Алконоста — биом клетки (X,Y), где стоит игрок, подавлен на весь
+    // таймер Шапки.
+    UFUNCTION(Exec)
+    void UseAlkonostFeather(int32 X, int32 Y);
+
+    // Перо Сирина — честное чтение клетки (X,Y) при активном Malign-спайке
+    // в её биоме, без вреда самого спайка.
+    UFUNCTION(Exec)
+    void UseSirinFeather(int32 X, int32 Y);
+
+    // Перо Жар-птицы — постоянная метка клетки (X,Y) как никогда не
+    // деградирующей.
+    UFUNCTION(Exec)
+    void UseZharPtitsaFeather(int32 X, int32 Y);
+
+    // Сцена обмана Болотного царя (21_Journey_And_Artifacts.md §21.3,
+    // подраздел "Сцена обмана Болотного царя", 2026-09-02) — НЕ
+    // OfferForArtifact: обманное зелье-приманка из инвентаря (найдена по
+    // IngredientID, тот же приём поиска, что уже OfferForArtifact),
+    // вылитая на клетку (X,Y) рядом с проявленным Царём. Расходуется в
+    // любом случае (попытка/приманка потрачена), исход — вероятностный,
+    // см. AGridWorldManager::TryLureSwampTsarWithPotion.
+    UFUNCTION(Exec)
+    void LureSwampTsar(int32 X, int32 Y, FString PotionIngredientID);
+
     // Три исхода у Буяна (18_Ending.md §18.1-18.2, 2026-09-01, ревизия
     // "Ending and artifacts") — выбор через действие (три разные команды),
     // не диалоговое меню (§18.1). Каждая требует AGridWorldManager::

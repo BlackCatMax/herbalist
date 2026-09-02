@@ -698,10 +698,32 @@ void AHerbalistPlayerController::UseMirror()
     AGridWorldManager* WorldManager = FindWorldManager();
     if (!WorldManager) return;
 
-    const FRealState Perceived = WorldManager->GetZaryanaPerceivedState(MirrorPerceptionRng);
+    // "Усиленное Зеркальце — иногда пророческое" (21_Journey_And_Artifacts.md
+    // §21.4) — раньше только направление, не реализовано (Warmth не давала
+    // Зеркальцу никакого эффекта вовсе). Реализовано здесь 2026-09-02 как
+    // прямое условие для Пера Гамаюна (16_Entity_Manifestation.md §16.4):
+    // прогретое Зеркальце даёт вероятностный шанс честного (без шума
+    // PerceiveRealState) чтения вместо обычного зашумлённого; съеденное
+    // Перо Гамаюна закрепляет этот шанс как гарантированный навсегда
+    // (AGridWorldManager::IsGamayunPropheticGuaranteed).
+    static const FName MirrorID(TEXT("Зеркальце"));
+    bool bProphetic = false;
+    if (WorldManager->IsArtifactWarmed(MirrorID))
+    {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const float Chance = WorldManager->IsGamayunPropheticGuaranteed()
+            ? 1.0f : (Settings ? Settings->MirrorPropheticChance : 0.3f);
+        bProphetic = MirrorPerceptionRng.FRand() < Chance;
+    }
+
+    const FRealState Result = bProphetic
+        ? WorldManager->GetZaryanaTrueState()
+        : WorldManager->GetZaryanaPerceivedState(MirrorPerceptionRng);
+
     ShowMemoryRevealText(FText::FromString(FString::Printf(TEXT(
-        "Зеркальце показывает Заряну такой, какой её видно отсюда: Purity=%.2f, Corruption=%.2f, Distortion=%.2f."),
-        Perceived.Meta.Purity, Perceived.Meta.Corruption, Perceived.Meta.Distortion)));
+        "Зеркальце показывает Заряну %s: Purity=%.2f, Corruption=%.2f, Distortion=%.2f."),
+        bProphetic ? TEXT("такой, какая она есть на самом деле -- ясно, без сомнений") : TEXT("такой, какой её видно отсюда"),
+        Result.Meta.Purity, Result.Meta.Corruption, Result.Meta.Distortion)));
 }
 
 void AHerbalistPlayerController::UseYarnBall(int32 BaseIndex)
@@ -811,6 +833,48 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         bViaDeception ? TEXT("via deception") : TEXT("honestly"));
 }
 
+void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionIngredientID)
+{
+    if (!InventoryComponent) return;
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    const FName ID(*PotionIngredientID);
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    int32 FoundIndex = INDEX_NONE;
+    for (int32 i = 0; i < CurrentItems.Num(); ++i)
+    {
+        if (CurrentItems[i].IngredientID == ID)
+        {
+            FoundIndex = i;
+            break;
+        }
+    }
+    if (FoundIndex == INDEX_NONE)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LureSwampTsar: no %s in inventory"), *PotionIngredientID);
+        return;
+    }
+
+    bool bGranted = false;
+    const bool bAttempted = WorldManager->TryLureSwampTsarWithPotion(FIntPoint(X, Y), CurrentItems[FoundIndex].State, bGranted);
+    if (!bAttempted)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LureSwampTsar: Болотный царь not manifested near (%d,%d), or Фонарь already held"), X, Y);
+        return;
+    }
+
+    // Приманка расходуется в любом случае -- удалась она или нет (тот же
+    // приём индексов по убыванию не нужен, здесь ровно один предмет).
+    InventoryComponent->RemoveItem(FoundIndex, 1);
+
+    ShowMemoryRevealText(bGranted
+        ? FText::FromString(TEXT("Пока Болотный царь таращится на подделку, вы хватаете настоящий Фонарь и уходите в туман."))
+        : FText::FromString(TEXT("Царь на миг замирает над ложным зельем -- и тут же снова смотрит на вас. Не в этот раз.")));
+
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("LureSwampTsar: attempt at (%d,%d), %s"), X, Y, bGranted ? TEXT("Фонарь stolen") : TEXT("failed"));
+}
+
 void AHerbalistPlayerController::UseHorn(int32 X, int32 Y)
 {
     AGridWorldManager* WorldManager = FindWorldManager();
@@ -870,6 +934,80 @@ void AHerbalistPlayerController::UseLanternDisclosure(int32 X, int32 Y)
         return;
     }
     ShowMemoryRevealText(Disclosure);
+}
+
+void AHerbalistPlayerController::AcquireFeather(FString FeatherID)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    const FName ID(*FeatherID);
+    if (!WorldManager->TryAcquireProphetFeather(ID))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("AcquireFeather: %s not acquired (trigger not met, already held, or unknown feather)"), *FeatherID);
+        return;
+    }
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("AcquireFeather: %s acquired"), *FeatherID);
+}
+
+void AHerbalistPlayerController::EatGamayunFeather()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->EatGamayunFeather())
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EatGamayunFeather: no Перо Гамаюна"));
+        return;
+    }
+    ShowMemoryRevealText(FText::FromString(TEXT("Съеденное перо оставляет во рту вкус ясности. Теперь Зеркальце больше не лжёт -- когда прогрето, оно всегда покажет правду.")));
+}
+
+void AHerbalistPlayerController::UseAlkonostFeather(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    const FGridCell* Cell = WorldManager->GetCellConst(X, Y);
+    if (!Cell)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseAlkonostFeather: (%d,%d) is outside the grid"), X, Y);
+        return;
+    }
+
+    if (!WorldManager->UseAlkonostFeatherOnBiome(Cell->Biome))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseAlkonostFeather: no Перо Алконоста"));
+        return;
+    }
+    ShowMemoryRevealText(FText::FromString(TEXT("Песнь Алконоста стелется над всем краем -- на время морок не смеет здесь проявиться.")));
+}
+
+void AHerbalistPlayerController::UseSirinFeather(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    FText Disclosure;
+    if (!WorldManager->UseSirinFeatherOnCell(FIntPoint(X, Y), Disclosure))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseSirinFeather: no Перо Сирина, or no active Malign spike in that biome"));
+        return;
+    }
+    ShowMemoryRevealText(Disclosure);
+}
+
+void AHerbalistPlayerController::UseZharPtitsaFeather(int32 X, int32 Y)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+
+    if (!WorldManager->UseZharPtitsaFeatherOnCell(FIntPoint(X, Y)))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseZharPtitsaFeather: no Перо Жар-птицы, or (%d,%d) is outside the grid"), X, Y);
+        return;
+    }
+    ShowMemoryRevealText(FText::FromString(TEXT("Клетка вспыхивает ровным, негаснущим светом -- маленький, вечный отголосок Буяна на карте.")));
 }
 
 void AHerbalistPlayerController::BecomeBuyanGuardian()

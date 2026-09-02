@@ -86,11 +86,26 @@ void AGridWorldManager::RecomputeGlobalPerceptionClarity()
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float ResponseRange = Settings ? Settings->ClarityResponseRange : 0.2f;
-    const float Response = FMath::Clamp(AvgRestorationRespect - AvgMorokHistory, -ResponseRange, ResponseRange);
+    const float RawResponse = FMath::Clamp(AvgRestorationRespect - AvgMorokHistory, -ResponseRange, ResponseRange);
+
+    // Сглаженная сходимость (§20.3, 2026-09-02 — см. обоснование ставки у
+    // ClarityResponseLerpRate, HerbalistSettings.h): без этого одиночный
+    // резкий обвал/взлёт Restoration/Respect по вложенным клеткам между
+    // двумя опросами мгновенно снимал/добавлял бы всю ClarityResponseRange
+    // разом — заметный скачок за один пятисекундный тик. Экспоненциальный
+    // Lerp к сырому Response — тот же приём, что уже Memory.HistoryPurity
+    // ("медленная скользящая средняя"), но на два порядка более медленной
+    // ставке (HistoryPurity лерпится каждый тик симуляции, ~20 раз в
+    // секунду; отклик Clarity — раз в MemoryFragmentStateCheckInterval, 5с).
+    const float LerpRate = Settings ? Settings->ClarityResponseLerpRate : 0.002f;
+    ClarityResponseSmoothed = FMath::Lerp(ClarityResponseSmoothed, RawResponse, LerpRate);
 
     // Clarity = max(Якорь, Якорь + Отклик) — отклик не может утащить
     // Clarity ниже уже заработанного якоря, только поднять её выше (§20.3).
-    GlobalPerceptionClarity = FMath::Clamp(FMath::Max(ClarityAnchor, ClarityAnchor + Response), 0.0f, 1.0f);
+    // Гарантия структурная (Max()), не зависит от диапазона/сглаживания
+    // выше — даже мгновенно отрицательный ClarityResponseSmoothed не
+    // проваливает Clarity ниже Anchor.
+    GlobalPerceptionClarity = FMath::Clamp(FMath::Max(ClarityAnchor, ClarityAnchor + ClarityResponseSmoothed), 0.0f, 1.0f);
 }
 
 void AGridWorldManager::TrySpawnStateBasedFragment()
@@ -440,10 +455,61 @@ void AGridWorldManager::SetZaryanaCellIfUnset(const FIntPoint& Cell)
     if (ZaryanaCell == FIntPoint(-1, -1))
     {
         ZaryanaCell = Cell;
+        SeedRosaCorruptedCircle(Cell);
     }
 }
 
-FRealState AGridWorldManager::GetZaryanaPerceivedState(FRandomStream& Rng) const
+void AGridWorldManager::SeedRosaCorruptedCircle(const FIntPoint& Center)
+{
+    // §19.4a: "трава полегла неестественно ровным кругом, цвет земли на пару
+    // тонов темнее... из этого круга, в чащу, уползает низкое облако
+    // Морока" — вертикальный срез: реальная State-порча (не TargetState),
+    // спадающая от центра к краю. Намеренно НЕ трогаем TargetState — это
+    // остаточный след одного уже случившегося события (облако уже ушло,
+    // §19.4a: "оно уже сделало то, зачем приходило"), не активный источник
+    // порчи вроде Гнильников; клетка вправе естественно зарасти со временем
+    // через RegenerateCellParameters, как и любой другой шрам мира.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 Radius = Settings ? Settings->RosaCorruptedCircleRadius : 3;
+    const float PeakDistortion = Settings ? Settings->RosaCorruptedCirclePeakDistortion : 0.5f;
+    const float PeakCorruption = Settings ? Settings->RosaCorruptedCirclePeakCorruption : 0.4f;
+    if (Radius <= 0) return;
+
+    for (int32 DY = -Radius; DY <= Radius; ++DY)
+    {
+        for (int32 DX = -Radius; DX <= Radius; ++DX)
+        {
+            // Chebyshev-расстояние — тот же "круг" по клеткам, что уже
+            // определяет радиус влияния хозяев места в GetZaryanaPerceivedState.
+            const int32 Dist = FMath::Max(FMath::Abs(DX), FMath::Abs(DY));
+            if (Dist > Radius) continue;
+
+            FGridCell* Cell = GetCell(Center.X + DX, Center.Y + DY);
+            if (!Cell) continue;
+
+            // Спадает линейно к краю, полная сила в центре (Dist=0).
+            const float Factor = 1.0f - static_cast<float>(Dist) / static_cast<float>(Radius > 0 ? Radius : 1);
+            Cell->State.Meta.Distortion = FMath::Clamp(Cell->State.Meta.Distortion + PeakDistortion * Factor, 0.0f, 1.0f);
+            Cell->State.Meta.Corruption = FMath::Clamp(Cell->State.Meta.Corruption + PeakCorruption * Factor, 0.0f, 1.0f);
+            MarkCellDirty(Cell->X, Cell->Y);
+        }
+    }
+
+    // Заглушка на постановку (§19.4a: "камера, тайминг, конкретная
+    // анимация облака всё ещё открытые вопросы", §19.5) — в проекте нет
+    // системы катсцен/Sequencer/Niagara-партиклов для нарратива; облако,
+    // уползающее в чащу, остаётся визуальной/партикл-задачей контента,
+    // не кода. Текстовая версия сцены — тот же канал, что уже несёт
+    // остальной непроизнесённый нарратив Заряны (ShowMemoryRevealText).
+    if (AHerbalistPlayerController* PC = GetWorld() ? Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()) : nullptr)
+    {
+        PC->ShowMemoryRevealText(FText::FromString(TEXT(
+            "Трава вокруг вас полегла ровным кругом, земля темнее, чем должна быть. "
+            "Низкое облако -- не туман, что-то плотнее -- беззвучно уползает в чащу и не оборачивается.")));
+    }
+}
+
+FRealState AGridWorldManager::ComputeZaryanaBlendedState() const
 {
     const FGridCell* Cell = GetCellConst(ZaryanaCell.X, ZaryanaCell.Y);
     if (!Cell)
@@ -490,6 +556,13 @@ FRealState AGridWorldManager::GetZaryanaPerceivedState(FRandomStream& Rng) const
     Blended.Meta.Purity = FMath::Clamp(Blended.Meta.Purity + FMath::Max(DistantInfluence, 0.0f) * 0.1f, 0.0f, 1.0f);
     Blended.Meta.Corruption = FMath::Clamp(Blended.Meta.Corruption + FMath::Max(-DistantInfluence, 0.0f) * 0.1f, 0.0f, 1.0f);
 
+    return Blended;
+}
+
+FRealState AGridWorldManager::GetZaryanaPerceivedState(FRandomStream& Rng) const
+{
+    const FRealState Blended = ComputeZaryanaBlendedState();
+
     // Честный шум — та же формула/сид-паттерн, что уже AlchemySlotWidget.cpp
     // (свой FRandomStream у вызывающего, не WorldRNG). §19.4: "снижает шум в
     // самом важном показании игры" — роса не привилегированное окно истины.
@@ -501,6 +574,15 @@ FRealState AGridWorldManager::GetZaryanaPerceivedState(FRandomStream& Rng) const
     const float EffectiveClarity = (GameClockSeconds < YouthAppleClarityBoostExpiryGameSeconds)
         ? 1.0f : GlobalPerceptionClarity;
     return Simulation::FPerceptionService::PerceiveRealState(Blended, Rng, EffectiveClarity);
+}
+
+FRealState AGridWorldManager::GetZaryanaTrueState() const
+{
+    // Перо Гамаюна / прогретое Зеркальце (§16.4/§21.4) — честное чтение,
+    // без шума PerceiveRealState вовсе. Та же прямая честность, что уже
+    // UseHornOnCell/UseLanternDisclosureOnCell применяют к клеткам, здесь —
+    // к Заряне.
+    return ComputeZaryanaBlendedState();
 }
 
 void AGridWorldManager::UpdateRosaSignal()

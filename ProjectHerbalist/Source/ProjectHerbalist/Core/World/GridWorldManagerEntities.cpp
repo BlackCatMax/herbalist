@@ -665,10 +665,19 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 bEligible = bEligible && !Cell.Memory.bDegrading;
             }
 
+            // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
+            // клетка, помеченная навечно чистой, исключена из ЛЮБых
+            // проявлений навсегда, тот же принцип, что !Cell.Memory.bDegrading
+            // выше, но безусловный (не только для тематически несогласованных осей).
+            bEligible = bEligible && !Cell.bEternallyPure;
+
             // Шапка-невидимка (21_Journey_And_Artifacts.md §21.3, 2026-09-01)
             // — подавляет только НОВЫЕ проявления, не уже активные (Гребень
-            // снимает уже проявленное, это другой предмет).
-            if (bEligible && CanManifest(Cell, Def.EntityID) && (bWasActive || !IsInvisibilityCapActive()))
+            // снимает уже проявленное, это другой предмет). Перо Алконоста
+            // (§16.4, 2026-09-02) — та же подавляющая проверка, но
+            // масштабированная на конкретный биом клетки, не всю сетку.
+            if (bEligible && CanManifest(Cell, Def.EntityID) &&
+                (bWasActive || (!IsInvisibilityCapActive() && !IsAlkonostSuppressionActiveForBiome(Cell.Biome))))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
                 ManifestingAmbientDef = &Def;
@@ -907,8 +916,12 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // застревал бы на клетке, которую бистабильность уже зафиксировала
         // испорченной. Проклятие не гейтим — оно тематически согласовано с
         // испорченным полюсом, тот же принцип, что у Гнильников/Злого полюса.
-        const bool bBlessEligible = PassesHysteresisThreshold(bWasBlessed, Landmark.Respect, 0.5f, HysteresisMargin) && !Cell->Memory.bDegrading;
-        const bool bCurseEligible = PassesHysteresisThreshold(bWasCursed, -Landmark.Respect, 0.3f, HysteresisMargin);
+        // Перо Жар-птицы (§16.4, 2026-09-02) — навечно чистая клетка
+        // исключена из этого ранга тоже (не только Низшего/Легендарного, за
+        // которыми уже следит Шапка/Алконост) — полная неприкосновенность,
+        // не только защита от амбиентной угрозы.
+        const bool bBlessEligible = PassesHysteresisThreshold(bWasBlessed, Landmark.Respect, 0.5f, HysteresisMargin) && !Cell->Memory.bDegrading && !Cell->bEternallyPure;
+        const bool bCurseEligible = PassesHysteresisThreshold(bWasCursed, -Landmark.Respect, 0.3f, HysteresisMargin) && !Cell->bEternallyPure;
 
         // Какую ось благословлять/проклинать и с какой скоростью — из
         // реестра §16.3 (LandmarkTypes.h), не захардкожено на Полевика.
@@ -1007,11 +1020,19 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 bEligible = (bMorokEligible || bShrineEligible) && !Cell->Memory.bDegrading;
             }
 
+            // Перо Жар-птицы (§16.4, 2026-09-02) — тот же безусловный гейт,
+            // что уже применён к Низшему/Основному выше, для обоих полюсов
+            // разом (Malign и Benign).
+            bEligible = bEligible && !Cell->bEternallyPure;
+
             // Шапка-невидимка (21_Journey_And_Artifacts.md §21.3, 2026-09-01)
             // — подавляет только НОВЫЕ проявления (bWasActive уже true
             // проходит как раньше), "не даёт проявиться", не снимает уже
-            // проявленное (это Гребень, UseCombOnCell).
-            if (bEligible && CanManifest(*Cell, Def.EntityID) && (bWasActive || !IsInvisibilityCapActive()))
+            // проявленное (это Гребень, UseCombOnCell). Перо Алконоста
+            // (§16.4, 2026-09-02) — та же подавляющая проверка, масштабированная
+            // на биом якорной клетки, не всю сетку.
+            if (bEligible && CanManifest(*Cell, Def.EntityID) &&
+                (bWasActive || (!IsInvisibilityCapActive() && !IsAlkonostSuppressionActiveForBiome(Cell->Biome))))
             {
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);

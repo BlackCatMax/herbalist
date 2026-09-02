@@ -20,21 +20,10 @@
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
+// InitGraph — вынесен в TestWorldHelpers.h (2026-09-02, тот же ODR-довод,
+// что уже переселил туда SpawnAndBeginPlay): ArtifactTest.cpp теперь тоже
+// использует его для тестов "Сцены обмана Болотного царя".
 #include "TestWorldHelpers.h"
-
-namespace
-{
-
-    UBiomeGraphSubsystem* InitGraph(UWorld* World)
-    {
-        UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
-        if (!Graph) return nullptr;
-        UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
-        if (!Asset) return nullptr;
-        Graph->InitializeFromAsset(Asset);
-        return Graph;
-    }
-}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLegendary_MalignPoleTriggersOnMorokSpike,
     "Herbalist.Legendary.MalignPoleTriggersOnMorokSpike",

@@ -33,6 +33,7 @@ TArray<FSavedCellState> AGridWorldManager::CaptureSaveCells() const
         Saved.HarvestStress = Cell.HarvestStress;
         Saved.Memory = Cell.Memory;
         Saved.ManifestedEntityID = Cell.ManifestedEntityID;
+        Saved.bEternallyPure = Cell.bEternallyPure;
 
         for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
         {
@@ -64,6 +65,7 @@ void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
         Cell->HarvestStress = Saved.HarvestStress;
         Cell->Memory = Saved.Memory;
         Cell->ManifestedEntityID = Saved.ManifestedEntityID;
+        Cell->bEternallyPure = Saved.bEternallyPure;
 
         // Re-mark: DirtyCellIndices живёт только в памяти этой сессии и не
         // сохраняется само по себе. Без этого следующий SaveGame сразу после

@@ -18,6 +18,8 @@
 
 #include "CoreMinimal.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "Core/BiomeGraph/BiomeGraphAsset.h"
 #include "Engine/World.h"
 
 namespace
@@ -36,5 +38,23 @@ namespace
             Manager->DispatchBeginPlay();
         }
         return Manager;
+    }
+
+    // Инициализирует UBiomeGraphSubsystem боевым DA_BiomeGraph -- тот же путь,
+    // что уже LegendaryEntityTest.cpp/BiomeGraphIntegrationTest.cpp использовали
+    // каждый в своей копии до этого рефакторинга (2026-09-02, тот же ODR-урок,
+    // что уже вынес SpawnAndBeginPlay сюда -- unity-сборка модуля склеивает все
+    // Tests/*.cpp в одну единицу трансляции, два одноимённых InitGraph в двух
+    // анонимных namespace разных файлов там же стали бы редефиницией). Вызывающая
+    // сторона отвечает за Graph->Deinitialize() в конце теста.
+    UBiomeGraphSubsystem* InitGraph(UWorld* World)
+    {
+        if (!World) return nullptr;
+        UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+        if (!Graph) return nullptr;
+        UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+        if (!Asset) return nullptr;
+        Graph->InitializeFromAsset(Asset);
+        return Graph;
     }
 }

@@ -53,6 +53,12 @@ struct PROJECTHERBALIST_API FSavedCellState
     // Пусто = ничего (собрано и ждёт восстановления, либо клетка без ресурсов).
     UPROPERTY()
     TArray<FName> ResourceIngredientIDs;
+
+    // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
+    // постоянная метка, обязана пережить сохранение, тот же класс поля,
+    // что ManifestedEntityID выше.
+    UPROPERTY()
+    bool bEternallyPure = false;
 };
 
 UCLASS()
@@ -130,6 +136,22 @@ public:
     // должен пережить сохранение, восстанавливается как есть, без пересчёта.
     UPROPERTY()
     float ClarityAnchor = 0.0f;
+
+    // Сглаженный отклик (§20.3, 2026-09-02) — переживает сохранение, тот же
+    // довод, что уже ClarityAnchor выше: без этого перезагрузка сбрасывала
+    // бы уже накопленную сходимость к нулю, мгновенно меняя видимую Clarity.
+    UPROPERTY()
+    float ClarityResponseSmoothed = 0.0f;
+
+    // Перья вещих птиц (16_Entity_Manifestation.md §16.4, 2026-09-02) — тот
+    // же класс поля, что AcquiredArtifacts выше.
+    UPROPERTY()
+    TArray<FName> AcquiredFeathers;
+
+    // Перо Гамаюна съедено — перманентный флаг, переживает потерю самого
+    // Пера (расходуется на поедание, AcquiredFeathers его больше не несёт).
+    UPROPERTY()
+    bool bGamayunPropheticGuaranteed = false;
 
     // Роса (19_Rosa_Signal.md §19.2, Слой 2) — разовая метка на партию,
     // персистится, чтобы "первое совпадение" не срабатывало заново после

@@ -111,21 +111,40 @@ bool FHerbalistZaryana_ClarityResponseClampedAndFlooredByAnchor::RunTest(const F
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     Manager->SetClarityAnchor(0.4f);
+    // Изолируем от сеянных тестовых "хозяев" (SeedTestLandmarks -- их
+    // Respect=0 по умолчанию тоже входит в среднее AvgRestorationRespect,
+    // иначе один капище на максимуме не поднимет среднее к 1.0 среди
+    // дюжины нулевых хозяев) -- то же изолирующее решение, что уже не раз
+    // применялось в этом файле для State-триггеров фрагментов.
+    Manager->SetEntityLandmarks({});
     Manager->RegisterShrine(FIntPoint(1, 1), EShrineType::Ancestral);
 
     // Капище на нуле — отклик уходит в минус, но пол (§20.3) не даёт
-    // Clarity упасть ниже уже заработанного якоря.
+    // Clarity упасть ниже уже заработанного якоря. Гарантия структурная
+    // (Max()), верна даже до всякого сглаживания — один вызов достаточен.
     if (FShrine* Shrine = Manager->FindShrineAt(FIntPoint(1, 1))) { Shrine->Restoration = 0.0f; }
     Manager->RecomputeGlobalPerceptionClarity();
     TestTrue(TEXT("Clarity never drops below the anchor even with a bad response"),
         Manager->GetGlobalPerceptionClarity() >= Manager->GetClarityAnchor() - KINDA_SMALL_NUMBER);
 
-    // Капище на максимуме — отклик положителен и не может увести Clarity
-    // выше Anchor + ClarityResponseRange (дефолт 0.2).
+    // Капище на максимуме — отклик положителен, но теперь СГЛАЖЕН
+    // (§20.3, 2026-09-02): один опрос не должен заметно сдвинуть Clarity.
     if (FShrine* Shrine = Manager->FindShrineAt(FIntPoint(1, 1))) { Shrine->Restoration = 1.0f; }
     Manager->RecomputeGlobalPerceptionClarity();
-    TestTrue(TEXT("Clarity rises above the anchor with a good response"),
+    TestTrue(TEXT("A single recompute after a swing barely moves Clarity (smoothed, not instant)"),
+        Manager->GetGlobalPerceptionClarity() < Manager->GetClarityAnchor() + 0.01f);
+    TestTrue(TEXT("...but it does move, even if slightly"),
         Manager->GetGlobalPerceptionClarity() > Manager->GetClarityAnchor());
+
+    // Много опросов подряд (тот же неизменный хороший мир) -- отклик
+    // сходится к полному Anchor + ClarityResponseRange (дефолт 0.2), не
+    // превышая его.
+    for (int32 i = 0; i < 5000; ++i)
+    {
+        Manager->RecomputeGlobalPerceptionClarity();
+    }
+    TestTrue(TEXT("Clarity converges close to Anchor + ClarityResponseRange after many recomputes"),
+        Manager->GetGlobalPerceptionClarity() > Manager->GetClarityAnchor() + 0.19f);
     TestTrue(TEXT("Clarity does not exceed Anchor + ClarityResponseRange"),
         Manager->GetGlobalPerceptionClarity() <= Manager->GetClarityAnchor() + 0.2f + KINDA_SMALL_NUMBER);
 
@@ -598,6 +617,51 @@ bool FHerbalistZaryana_NitMateriDeliveredOnYarnBallAcquisition::RunTest(const FS
     TestTrue(TEXT("Клубочек acquired"), bAcquired);
     TestTrue(TEXT("NIT_MATERI delivered directly on acquisition"),
         Manager->GetCollectedFragmentIDs().Contains(FName(TEXT("NIT_MATERI"))));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_FirstPlacementSeedsCorruptedCircleFallingOffWithDistance,
+    "Herbalist.Zaryana.FirstPlacementSeedsCorruptedCircleFallingOffWithDistance",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_FirstPlacementSeedsCorruptedCircleFallingOffWithDistance::RunTest(const FString& Parameters)
+{
+    // §19.4a: "трава полегла... кругом... облако Морока" -- первое
+    // размещение ZaryanaCell должно оставить видимый, спадающий к краям
+    // шрам (Distortion/Corruption), не мгновенно чистую клетку.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint Center(10, 10);
+    const float CenterDistortionBefore = Manager->GetCellConst(Center.X, Center.Y)->State.Meta.Distortion;
+    const float EdgeDistortionBefore = Manager->GetCellConst(Center.X + 3, Center.Y)->State.Meta.Distortion;
+    const float FarDistortionBefore = Manager->GetCellConst(Center.X + 4, Center.Y)->State.Meta.Distortion;
+
+    Manager->SetZaryanaCellIfUnset(Center);
+
+    const float CenterDistortionAfter = Manager->GetCellConst(Center.X, Center.Y)->State.Meta.Distortion;
+    const float EdgeDistortionAfter = Manager->GetCellConst(Center.X + 3, Center.Y)->State.Meta.Distortion;
+    const float FarDistortionAfter = Manager->GetCellConst(Center.X + 4, Center.Y)->State.Meta.Distortion;
+
+    TestTrue(TEXT("Center cell gains a large Distortion bump (default radius 3, peak 0.5)"),
+        CenterDistortionAfter - CenterDistortionBefore > 0.4f);
+    TestTrue(TEXT("Edge of the circle (radius 3) gains a much smaller bump than the center"),
+        (EdgeDistortionAfter - EdgeDistortionBefore) < (CenterDistortionAfter - CenterDistortionBefore));
+    TestEqual(TEXT("Cell just outside the radius is untouched"), FarDistortionAfter, FarDistortionBefore);
+
+    // Idempotent -- вторая расстановка (клетка уже занята первым вызовом)
+    // не переигрывает круг заново в другом месте.
+    const FIntPoint Other(0, 0);
+    const float OtherDistortionBefore = Manager->GetCellConst(Other.X, Other.Y)->State.Meta.Distortion;
+    Manager->SetZaryanaCellIfUnset(Other);
+    const float OtherDistortionAfter = Manager->GetCellConst(Other.X, Other.Y)->State.Meta.Distortion;
+    TestEqual(TEXT("Second SetZaryanaCellIfUnset call does not re-seed a circle elsewhere"),
+        OtherDistortionAfter, OtherDistortionBefore);
 
     Manager->Destroy();
     return true;
