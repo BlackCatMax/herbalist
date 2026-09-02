@@ -4182,3 +4182,75 @@ Unreal — открыть ассет в редакторе, как любую д
 **Итог:** тестов не прибавилось (261 → 261, та же преднамеренная цель
 "ноль изменений в тестах"). Два последовательных чистых прогона
 **261/261** — завершают всю трёхюнитную миграцию бестиария.
+
+### Data-driven контент, юниты 4-6: Артефакты/Диалоги/Фрагменты памяти (2026-09-02)
+
+Прямая реакция на вопрос пользователя "Берегинь почему не трогаем? все
+сущности должны быть равны... без исключений" — расширение той же
+миграции за пределы бестиария: три оставшихся хардкоженных C++-реестра
+того же типа (`inline`-функция + литеральный массив, `USTRUCT()` без
+`FTableRowBase`) переезжают на DataTable тем же, уже трижды проверенным
+конвейером.
+
+**Unit 4/6 — Артефакты.** `FArtifactDefinition` (`ArtifactTypes.h`) →
+`USTRUCT(BlueprintType)`, `PROJECTHERBALIST_API`, `: public FTableRowBase`,
+новое поле `SortOrder`. `GetArtifactDefinitions()` лениво грузит
+`/Game/Herbalist/Data/DT_Artifacts`. Новый `ArtifactsCreateCommandlet`
+(`-run=ArtifactsCreate`) создаёt ассет с нуля, 8 карточек (Зеркальце,
+Клубочек, Рог, Гребень, Молодильное яблоко, Шапка-невидимка,
+Камень-оберег, Фонарь) — построчная транскрипция прежнего массива, числа
+не менялись. `FAcquiredArtifact` (runtime-запись в `AGridWorldManager::
+AcquiredArtifacts`, не карточка-определение) НЕ мигрирует — тот же
+принцип, что уже `FActiveMemoryFragment`/`FGridCell` остаются вне
+миграции бестиария.
+
+**Unit 5/6 — Диалоги.** `FDialogueDefinition` (`HerbalistDialogueTypes.h`)
+→ тот же паттерн. `GetDialogueDefinitions()` лениво грузит
+`/Game/Herbalist/Data/DT_Dialogue`. Новый `DialogueCreateCommandlet`
+(`-run=DialogueCreate`) — 1 карточка (Домовой, три узла: Home/GoodStanding/
+BadStanding). Вложенные `TArray<FDialogueNode>`/`TArray<FDialogueBranch>`
+внутри строки DataTable работают штатно (оба — обычные reflected
+`USTRUCT()`, не требуют собственного `FTableRowBase`).
+
+**Unit 6/6 — Фрагменты памяти Заряны.** `FMemoryFragmentDefinition`
+(`MemoryFragmentTypes.h`) → тот же паттерн. `GetAllMemoryFragmentDefinitions()`
+(`MemoryFragmentDefinitions.h`, внутри `namespace HerbalistCore::Zaryana`
+— вызовы вне файла требуют полной квалификации, поймано на первой сборке:
+`GameModeBase.cpp` до фикса звал функцию без namespace, `C3861`) лениво
+грузит `/Game/Herbalist/Data/DT_MemoryFragments`. Новый
+`MemoryFragmentsCreateCommandlet` (`-run=MemoryFragmentsCreate`) — 12
+карточек (4 базовых + 3 исхода Буяна + 5 биомных из §17.7), не 10, как
+изначально предполагалось в шапке коммандлета до фактического прогона
+(поправлено по факту после первого запуска: `Existing->GetRowMap().Num()`
+= 12). `FActiveMemoryFragment` (runtime, заспавненный в мире фрагмент) не
+мигрирует — тот же принцип, что `FAcquiredArtifact`.
+
+Все три юнита: ни один продакшен вызывающий код и ни один тестовый файл
+не изменился. `ArtifactTest.cpp`/`ArtifactEffectsTest.cpp`/
+`ArtifactInventoryTest.cpp`/`DialogueTest.cpp`/`ZaryanaTest.cpp` уже
+читают конкретные ID карточек (например `ZaryanaTest.cpp` собирает
+`TIKHOE_MESTO`/`PODNOSHENIE` напрямую) — их прохождение без единой правки
+доказывает прозрачность смены источника данных, отдельных новых тестов
+не заводилось (тот же принцип, что юниты 1-3 бестиария). 261 → 261,
+**два последовательных чистых прогона 261/261**.
+
+### Cook-инклюзия ассетов — фикс (2026-09-02)
+
+Риск, объяснённый пользователю после вопроса "Cook-инклюзия ассетов —
+поясни, что это и почему?" (замечен ещё при миграции юнитов 1-3, но не
+исправлен тогда — вне скоупа той задачи). `DefaultGame.ini`: `bCookAll=False`,
+`MapsToCook` содержит только `/Game/Maps/L_TestDev`, `AssetManagerSettings`
+сканирует только типы `Map`/`PrimaryAssetLabel`/`GameFeatureData` — ни один
+из шести `DataTable`-ассетов (`DT_IngredientClass`/`DT_WaterTypes`/
+`DT_BiomeDefaults`/`DT_AmbientEntities`/`DT_Landmarks`/`DT_LegendaryEntities`,
+плюс новые `DT_Artifacts`/`DT_Dialogue`/`DT_MemoryFragments`) не упомянут
+явно, а все они грузятся строкой пути через `LoadObject`, не типизированной
+ссылкой (`UPROPERTY`/soft-reference) откуда-либо из графа, который кукер
+статически обходит от `MapsToCook`. В паковке (не редактор/PIE/-game,
+единственные реально опробованные в проекте режимы) это грозило тихо
+исключить их из билда целиком.
+
+Фикс — одна строка на каталог, без кода:
+`+DirectoriesToAlwaysCook=(Path="/Game/Herbalist/Data")` и
+`(Path="/Game/Data")` (последний покрывает `DT_BiomeDefaults`/`DA_BiomeGraph`,
+которые лежат отдельно от `/Game/Herbalist/Data`).

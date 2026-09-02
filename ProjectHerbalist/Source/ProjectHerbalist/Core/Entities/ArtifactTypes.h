@@ -19,18 +19,30 @@
 // OfferForArtifact) дополнительно выставляет bHasMirror/bHasYarnBall" —
 // оба предмета физически другой формы (не инвентарный слот), поэтому им
 // ещё и нужен этот второй, контроллерный флаг присутствия.
+//
+// 2026-09-02, Unit 4/6 миграции контента проекта на DataTable — тот же
+// паттерн, что уже AmbientEntityTypes.h/LandmarkTypes.h/LegendaryEntityTypes.h
+// (юниты 1-3, бестиарий): GetArtifactDefinitions() ниже лениво грузит
+// /Game/Herbalist/Data/DT_Artifacts. FAcquiredArtifact НЕ мигрирует — это
+// не карточка-определение, а runtime-запись (AGridWorldManager::
+// AcquiredArtifacts), тот же класс, что FGridCell — состояние, не контент.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Engine/DataTable.h"
 #include "ArtifactTypes.generated.h"
 
-USTRUCT()
-struct FArtifactDefinition
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FArtifactDefinition : public FTableRowBase
 {
     GENERATED_BODY()
 
     UPROPERTY() FName ArtifactID;
+
+    // Явный порядок регистрации — тот же приём, что у остальных пяти
+    // мигрированных реестров (см. FAmbientEntityDefinition::SortOrder).
+    UPROPERTY() int32 SortOrder = 0;
 
     // Пусто только для Гребня (Берегиня) — см. комментарий в шапке файла.
     UPROPERTY() FName LegendaryEntityID;
@@ -74,75 +86,34 @@ struct FAcquiredArtifact
     UPROPERTY() bool bBifurcationChargeSpent = false;
 };
 
+// Ленивая загрузка из /Game/Herbalist/Data/DT_Artifacts (2026-09-02) —
+// тот же паттерн, что GetLegendaryEntityDefinitions() и др., см. подробное
+// обоснование в AmbientEntityTypes.h. LogTemp, не HerbalistLogChannels.h
+// категория — та же причина (LNK2001): inline-функция компилируется и в
+// ProjectHerbalistTests через новый коммандлет.
 inline const TArray<FArtifactDefinition>& GetArtifactDefinitions()
 {
     static const TArray<FArtifactDefinition> Definitions = []()
     {
+        check(IsInGameThread());   // LoadObject не потокобезопасен
+
         TArray<FArtifactDefinition> Defs;
+        UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_Artifacts"));
+        if (!Table)
+        {
+            UE_LOG(LogTemp, Error, TEXT("GetArtifactDefinitions: не удалось загрузить DT_Artifacts -- реестр артефактов будет пуст"));
+            return Defs;
+        }
+        Table->AddToRoot();
 
+        TArray<FArtifactDefinition*> Rows;
+        Table->GetAllRows(TEXT("GetArtifactDefinitions"), Rows);
+        Defs.Reserve(Rows.Num());
+        for (const FArtifactDefinition* Row : Rows)
         {
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Зеркальце"));
-            D.LegendaryEntityID = FName(TEXT("Гамаюн"));
-            D.Biome = EBiomeType::ForestSteppe;
-            D.bWarmsCompanionItem = true;
-            Defs.Add(D);
+            if (Row) Defs.Add(*Row);
         }
-        {
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Клубочек"));
-            D.LegendaryEntityID = FName(TEXT("Мать-Сыра-Земля"));
-            D.Biome = EBiomeType::Steppe;
-            D.bWarmsCompanionItem = true;
-            Defs.Add(D);
-        }
-        {
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Рог"));
-            D.LegendaryEntityID = FName(TEXT("Индрик-зверь"));
-            D.Biome = EBiomeType::Taiga;
-            Defs.Add(D);
-        }
-        {
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Гребень"));
-            D.LegendaryEntityID = NAME_None;   // Берегиня — особый путь, см. шапку файла
-            D.Biome = EBiomeType::Floodplain;
-            Defs.Add(D);
-        }
-        {
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Молодильное яблоко"));
-            D.LegendaryEntityID = FName(TEXT("Дуб-старец"));
-            D.Biome = EBiomeType::BroadleafForest;
-            Defs.Add(D);
-        }
-        {
-            // Дубинка/Дубыня изъяты из дизайна этой ревизией (§21.3/§21.5,
-            // коммит "Ending and artifacts") — Смешанный лес теперь Баба-Яга.
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Шапка-невидимка"));
-            D.LegendaryEntityID = FName(TEXT("Баба-Яга"));
-            D.Biome = EBiomeType::MixedForest;
-            Defs.Add(D);
-        }
-        {
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Камень-оберег"));
-            D.LegendaryEntityID = FName(TEXT("Волот"));
-            D.Biome = EBiomeType::Tundra;
-            Defs.Add(D);
-        }
-        {
-            FArtifactDefinition D;
-            D.ArtifactID = FName(TEXT("Фонарь"));
-            D.LegendaryEntityID = FName(TEXT("Болотный царь"));
-            D.Biome = EBiomeType::Bog;
-            D.bDeceptionOnly = true;
-            D.bWarmsFromGlobalClarity = true;
-            Defs.Add(D);
-        }
-
+        Defs.Sort([](const FArtifactDefinition& A, const FArtifactDefinition& B) { return A.SortOrder < B.SortOrder; });
         return Defs;
     }();
     return Definitions;

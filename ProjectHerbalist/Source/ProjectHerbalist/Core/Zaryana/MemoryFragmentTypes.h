@@ -15,6 +15,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "MemoryFragmentTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -67,12 +68,24 @@ enum class EMemoryFragmentTrigger : uint8
     YarnBallAcquired
 };
 
-USTRUCT()
-struct FMemoryFragmentDefinition
+// 2026-09-02, Unit 6/6 миграции контента проекта на DataTable — тот же
+// паттерн, что уже FArtifactDefinition/FDialogueDefinition и весь
+// бестиарий: GetAllMemoryFragmentDefinitions() (MemoryFragmentDefinitions.h)
+// лениво грузит /Game/Herbalist/Data/DT_MemoryFragments. FActiveMemoryFragment
+// НЕ мигрирует — runtime-состояние заспавненного фрагмента, не карточка.
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FMemoryFragmentDefinition : public FTableRowBase
 {
     GENERATED_BODY()
 
     UPROPERTY() FName ID;
+
+    // Явный порядок регистрации — тот же приём, что у остальных пяти
+    // мигрированных реестров (см. FAmbientEntityDefinition::SortOrder).
+    // Порядок не задокументирован как значимый для этого реестра (нет
+    // тай-брейков между фрагментами), заведено для единообразия.
+    UPROPERTY() int32 SortOrder = 0;
+
     UPROPERTY() EMemoryFragmentTrigger Trigger = EMemoryFragmentTrigger::LowLocalDistortion;
 
     // Подлинное воспоминание — то, что Заряна на самом деле помнит.

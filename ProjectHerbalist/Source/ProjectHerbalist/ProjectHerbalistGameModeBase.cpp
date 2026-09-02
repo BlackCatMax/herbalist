@@ -10,6 +10,9 @@
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Entities/LandmarkTypes.h"
 #include "Core/Entities/LegendaryEntityTypes.h"
+#include "Core/Entities/ArtifactTypes.h"
+#include "Core/Dialogue/HerbalistDialogueTypes.h"
+#include "Core/Zaryana/MemoryFragmentDefinitions.h"
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -95,5 +98,20 @@ void AProjectHerbalistGameModeBase::BeginPlay()
     if (GetLegendaryEntityDefinitions().Num() == 0)
     {
         UE_LOG(LogHerbalist, Error, TEXT("GetLegendaryEntityDefinitions() вернул пустой реестр -- DT_LegendaryEntities не найден или пуст, Легендарный ранг бестиария (кроме Берегини) не будет проявляться."));
+    }
+
+    // Тот же прогрев кэша, Units 4-6 (2026-09-02): артефакты, диалоги,
+    // фрагменты памяти Зарянки -- тот же паттерн, что бестиарий выше.
+    if (GetArtifactDefinitions().Num() == 0)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("GetArtifactDefinitions() вернул пустой реестр -- DT_Artifacts не найден или пуст, артефакты Легендарных сущностей не будут доступны."));
+    }
+    if (GetDialogueDefinitions().Num() == 0)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("GetDialogueDefinitions() вернул пустой реестр -- DT_Dialogue не найден или пуст, диалоговые реплики не будут доступны."));
+    }
+    if (HerbalistCore::Zaryana::GetAllMemoryFragmentDefinitions().Num() == 0)
+    {
+        UE_LOG(LogHerbalist, Error, TEXT("GetAllMemoryFragmentDefinitions() вернул пустой реестр -- DT_MemoryFragments не найден или пуст, фрагменты памяти Зарянки не будут доступны."));
     }
 }

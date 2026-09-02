@@ -23,9 +23,14 @@
 // (только AHerbalistEntityActor/ALandmarkEntityActor для хозяев места) —
 // честно отложено, не забыто. Дерево ниже полностью готово принять человека
 // в реестр, как только появится сам актор, которому дать реплику.
+//
+// 2026-09-02, Unit 5/6 миграции контента проекта на DataTable — тот же
+// паттерн, что уже FArtifactDefinition и весь бестиарий:
+// GetDialogueDefinitions() ниже лениво грузит /Game/Herbalist/Data/DT_Dialogue.
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "HerbalistDialogueTypes.generated.h"
 
 USTRUCT()
@@ -59,8 +64,8 @@ struct FDialogueNode
     UPROPERTY() TArray<FDialogueBranch> Branches;
 };
 
-USTRUCT()
-struct FDialogueDefinition
+USTRUCT(BlueprintType)
+struct PROJECTHERBALIST_API FDialogueDefinition : public FTableRowBase
 {
     GENERATED_BODY()
 
@@ -68,6 +73,11 @@ struct FDialogueDefinition
     // — тот же ключ, каким Landmark уже идентифицируется, не новое
     // сопоставление.
     UPROPERTY() FName DialogueID;
+
+    // Явный порядок регистрации — тот же приём, что у остальных
+    // мигрированных реестров (см. FAmbientEntityDefinition::SortOrder).
+    UPROPERTY() int32 SortOrder = 0;
+
     UPROPERTY() FName StartNodeID;
     UPROPERTY() TArray<FDialogueNode> Nodes;
 };
@@ -97,67 +107,34 @@ inline TArray<const FDialogueBranch*> GetAvailableBranches(const FDialogueNode& 
     return Available;
 }
 
+// Ленивая загрузка из /Game/Herbalist/Data/DT_Dialogue (2026-09-02) — тот
+// же паттерн, что GetArtifactDefinitions() и др., см. подробное
+// обоснование в AmbientEntityTypes.h. LogTemp, не HerbalistLogChannels.h
+// категория — та же причина (LNK2001): inline-функция компилируется и в
+// ProjectHerbalistTests через новый коммандлет.
 inline const TArray<FDialogueDefinition>& GetDialogueDefinitions()
 {
     static const TArray<FDialogueDefinition> Definitions = []()
     {
+        check(IsInGameThread());   // LoadObject не потокобезопасен
+
         TArray<FDialogueDefinition> Defs;
-
-        // Домовой — первый и пока единственный пример (тот же принцип
-        // вертикального среза, что реестр ритуалов/бестиарий: один честный
-        // случай, не весь охват сразу). Три ветки узла "Home" ровно
-        // отражают три диапазона Respect, которые уже реально что-то меняют
-        // в мире (LandmarkTypes.h: bless >= 0.5, curse < -0.3, отягощённое
-        // проклятие < -0.6) — дерево читает те же числа, не изобретает свои.
+        UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_Dialogue"));
+        if (!Table)
         {
-            FDialogueDefinition D;
-            D.DialogueID = FName(TEXT("Домовой"));
-            D.StartNodeID = FName(TEXT("Home"));
-
-            FDialogueNode Home;
-            Home.NodeID = FName(TEXT("Home"));
-            Home.SpeakerLine = FText::FromString(TEXT("Домовой молчит, но чувствуется его взгляд из-за печи."));
-
-            FDialogueBranch Offer;
-            Offer.ActionText = FText::FromString(TEXT("Оставить у печи блюдце молока"));
-            Offer.MinGate = -1.0f; Offer.MaxGate = 1.0f;
-            Offer.NextNodeID = NAME_None;
-            Home.Branches.Add(Offer);
-
-            FDialogueBranch Good;
-            Good.ActionText = FText::FromString(TEXT("Прислушаться — как он расположен к дому?"));
-            Good.MinGate = 0.5f; Good.MaxGate = 1.0f;
-            Good.NextNodeID = FName(TEXT("GoodStanding"));
-            Home.Branches.Add(Good);
-
-            FDialogueBranch Bad;
-            Bad.ActionText = FText::FromString(TEXT("Заметить неладное в углу"));
-            Bad.MinGate = -1.0f; Bad.MaxGate = -0.3f;
-            Bad.NextNodeID = FName(TEXT("BadStanding"));
-            Home.Branches.Add(Bad);
-
-            D.Nodes.Add(Home);
-
-            FDialogueNode Good2;
-            Good2.NodeID = FName(TEXT("GoodStanding"));
-            Good2.SpeakerLine = FText::FromString(TEXT("Дом тих и ладен — Домовой оберегает его от порчи."));
-            D.Nodes.Add(Good2);
-
-            FDialogueNode Bad2;
-            Bad2.NodeID = FName(TEXT("BadStanding"));
-            Bad2.SpeakerLine = FText::FromString(TEXT("Пряжа спутана, миска молока опрокинута — Домовой недоволен домом."));
-            D.Nodes.Add(Bad2);
-
-            // Отягощённая ветка (Respect < -0.6) — совпадает с диапазоном
-            // BadStanding (-1..-0.3), намеренно: дерево не обязано различать
-            // curse/aggravated curse отдельным узлом, сама реплика BadStanding
-            // остаётся верной на всём диапазоне "недоволен". Более резкая,
-            // отдельная реплика для эскалации в домашнюю Кикимору — контент,
-            // который можно дописать позже, не архитектурное ограничение.
-
-            Defs.Add(D);
+            UE_LOG(LogTemp, Error, TEXT("GetDialogueDefinitions: не удалось загрузить DT_Dialogue -- реестр диалогов будет пуст"));
+            return Defs;
         }
+        Table->AddToRoot();
 
+        TArray<FDialogueDefinition*> Rows;
+        Table->GetAllRows(TEXT("GetDialogueDefinitions"), Rows);
+        Defs.Reserve(Rows.Num());
+        for (const FDialogueDefinition* Row : Rows)
+        {
+            if (Row) Defs.Add(*Row);
+        }
+        Defs.Sort([](const FDialogueDefinition& A, const FDialogueDefinition& B) { return A.SortOrder < B.SortOrder; });
         return Defs;
     }();
     return Definitions;

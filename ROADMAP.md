@@ -669,6 +669,30 @@ Distortion=0 повсеместно, не только на тестируемо
 контроллером через `WorldPositionToCell` в момент применения. 236 → 237
 тестов, **237/237, ноль регрессий.**
 
+### Data-driven контент, юниты 4-6: Артефакты/Диалоги/Фрагменты памяти + cook-фикс (2026-09-02)
+
+Продолжение той же миграции (пользователь: "все сущности должны быть
+равны... без исключений"), тот же конвейер, что бестиарий (юниты 1-3).
+`FArtifactDefinition`/`FDialogueDefinition`/`FMemoryFragmentDefinition` →
+`FTableRowBase` + `SortOrder`, ленивая `LoadObject` в `GetArtifactDefinitions()`/
+`GetDialogueDefinitions()`/`GetAllMemoryFragmentDefinitions()`, три новых
+идемпотентных коммандлета (`ArtifactsCreate`/`DialogueCreate`/
+`MemoryFragmentsCreate`) создают `DT_Artifacts` (8)/`DT_Dialogue` (1)/
+`DT_MemoryFragments` (12) с нуля. Ни один продакшен вызывающий код и ни
+один тестовый файл не изменился — `ArtifactTest.cpp`/`ArtifactEffectsTest.cpp`/
+`DialogueTest.cpp`/`ZaryanaTest.cpp` уже читают конкретные ID карточек,
+их прохождение без правок — доказательство прозрачности смены источника
+данных, новых тестов не заводилось (тот же принцип, что юниты 1-3).
+261/261, два чистых прогона.
+
+Отдельно закрыт cook-инклюзия риск (замечен при ревью юнитов 1-3, не
+исправлен тогда — вне скоупа): `DefaultGame.ini` получил
+`+DirectoriesToAlwaysCook=(Path="/Game/Herbalist/Data")` и
+`(Path="/Game/Data")` — без явной ссылки с уровня/Blueprint кукер не
+находил DataTable-ассеты через граф ссылок (все грузятся строкой пути
+через `LoadObject`), рискуя не включить их в паковку не-редакторского
+билда.
+
 ### Data-driven бестиарий: миграция завершена, 3/3 (2026-09-02)
 
 Последний юнит (Легендарный ранг, 16 карточек, `DT_LegendaryEntities`,
