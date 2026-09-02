@@ -364,6 +364,39 @@ protected:
     UInputAction* UsePotionAction;
 
 private:
+    // Артефакты/перья как настоящие предметы инвентаря (2026-09-02) —
+    // раньше существовали только как записи в AGridWorldManager::
+    // AcquiredArtifacts/AcquiredFeathers (внутренняя бухгалтерия, игрок не
+    // видел их в собственном инвентаре вовсе). AGridWorldManager остаётся
+    // единственным источником истины для Warmth/деталей эффекта — эти два
+    // хелпера добавляют/убирают только "квитанцию" в InventoryComponent
+    // для видимости в UI, не дублируют и не заменяют мировую бухгалтерию.
+    // ВНИМАНИЕ: если игрок вручную выбросит предмет из инвентаря через UI,
+    // сам эффект/владение НЕ исчезнет (гейты по-прежнему читают
+    // AcquiredArtifacts/AcquiredFeathers) — известный, принятый разрыв
+    // косметики и механики, не заводим отдельную систему синхронизации
+    // ради редкого ручного действия игрока.
+    void AddArtifactToInventory(FName ArtifactOrFeatherID);
+
+    // Возвращает true, если предмет был найден и убран (Count=1 -- все
+    // артефакты/перья не стекаются, каждый уникален).
+    bool RemoveArtifactFromInventory(FName ArtifactOrFeatherID);
+
+public:
+    // Инъекция для тестов (2026-09-02, тот же паттерн, что уже
+    // AGridWorldManager::SetAcquiredArtifacts/SetClarityAnchor и т.д.) —
+    // FindWorldManager() ищет первый AGridWorldManager в мире через
+    // TActorIterator; в автотестах, где несколько таких акторов
+    // спавнятся/уничтожаются подряд в одном и том же персистентном
+    // редакторском мире (Destroy() не гарантирует немедленное удаление из
+    // итератора в том же кадре), это может найти чужой, устаревший
+    // экземпляр вместо только что заспавненного тестом. Явная инъекция
+    // обходит эту гонку в тестовом окружении — в реальной игре
+    // FindWorldManager() по-прежнему единственный путь.
+    void SetWorldManagerForTests(AGridWorldManager* InManager) { CachedWorldManager = InManager; }
+
+private:
+
     UPROPERTY()
     UInventoryWidget* InventoryWidgetInstance = nullptr;
 

@@ -3545,3 +3545,80 @@ implementation-заметка про TISHINA_LESA/OJIDANIE_BURI).
 проверяет саму геометрию (внутри радиуса/на границе/за пределами).
 
 **Итог:** 236 → 237 тестов. Полный прогон: **237/237, ноль регрессий.**
+
+## Артефакты/перья как настоящие предметы инвентаря (2026-09-02)
+
+По прямому запросу — раньше существовали только как записи в
+`AGridWorldManager::AcquiredArtifacts`/`AcquiredFeathers` (внутренняя
+бухгалтерия): игрок не видел их в собственном инвентаре вовсе, без имени/
+описания/присутствия в UI.
+
+**Данные.** Новый `ArtifactIngredientAppendCommandlet`
+(`-run=ArtifactIngredientAppend`) добавил 12 рядов (8 артефактов §21.3 +
+4 пера §16.4) в живой `DT_IngredientClass` тем же `UDataTable::AddRow`-
+приёмом, что уже `IngredientAppendCommandlet.cpp` использует для трав, но
+строит `FIngredientTableRow` программно в C++, не из JSON (эти 12 строк —
+не растения, не про сбор, их нет в компендиуме). `AllowedBiomes` пуст у
+всех 12 (та же семантика, что уже устоялась — "пусто = нигде не растёт"):
+никогда не выпадают случайным сбором, только через собственный Exec-путь.
+`DecayRate=0` — не портятся. Идемпотентен (пропускает уже существующие
+ряды). Прогнан один раз, результат — **89 рядов (было 77, добавлено 12,
+пропущено 0)**, `DT_IngredientClass.uasset` закоммичен вместе с кодом.
+
+**Архитектура.** `AGridWorldManager::AcquiredArtifacts`/`AcquiredFeathers`
+остаются ЕДИНСТВЕННЫМ источником истины для самого эффекта/владения (Warmth,
+`bAcquiredViaDeception`, гейты всех Use*-функций) — ничего в мировой
+механике не тронуто. Два новых приватных хелпера на контроллере
+(`AddArtifactToInventory`/`RemoveArtifactFromInventory`, тот же
+"квитанция", что уже неявно подразумевает связка `OfferForArtifact`+
+`InventoryComponent`) добавляют/убирают предмет в `HerbalistInventoryComponent`
+только для видимости — вызываются на успехе в 6 местах получения
+(`OfferForArtifact`, `LureSwampTsar` при `bGranted`, `AcquireFeather`) и
+5 местах расходования (`UseComb`, `UseYouthApple`, `EatGamayunFeather`,
+`UseAlkonostFeather`, `UseSirinFeather`, `UseZharPtitsaFeather`) — Камень-
+оберег/Фонарь/Шапка НЕ трогаются на использовании (не расходуются
+механикой, квитанция тоже должна остаться).
+
+**Известный, принятый разрыв:** если игрок вручную выбросит "квитанцию"
+через инвентарный UI, сам эффект/владение не исчезнет (гейты по-прежнему
+читают `AcquiredArtifacts`/`AcquiredFeathers`, не инвентарь) — отдельная
+система двусторонней синхронизации не заведена ради редкого ручного
+действия, задокументировано в коде явно, не тихий пробел.
+
+**Разведка, попутно:** `GetItemDisplayName` (`HerbalistNameUtils.cpp`) уже
+умела резолвить `DisplayName` из реестра с честным фолбэком на голый
+`IngredientID.ToString()`, если ряда нет — то есть даже без DataTable-рядов
+предметы уже показывались бы под своими (осмысленными русскими) именами;
+ряды всё равно добавлены ради Description и корректной архитектуры, не
+только косметики. `Tags`/`Icon` на `FIngredientTableRow` оставлены пустыми —
+оба поля нигде не читаются в C++ ни для одного из 77 существующих рядов
+(проверено), заводить `Tags=["Artifact"]` без единого потребителя было бы
+спекулятивным хуком, который этот проект последовательно избегает.
+
+**Находка при тестировании — гонка TActorIterator в персистентном тестовом
+мире.** Первая версия тестов проваливалась: `AHerbalistPlayerController::
+FindWorldManager()` ищет первый `AGridWorldManager` через `TActorIterator`
+в мире редактора — том же персистентном мире, где десятки предыдущих
+тестов подряд спавнят и `Destroy()`-ят свои собственные экземпляры без
+гарантии немедленной уборки в том же кадре. Контроллер находил чужой,
+устаревший экземпляр вместо только что заспавненного тестом — раньше
+никем не замеченная гонка, потому что ни один существующий тест не
+спавнил одновременно и `AGridWorldManager`, и `AHerbalistPlayerController`.
+Починено ДО коммита: новый `AHerbalistPlayerController::
+SetWorldManagerForTests` (тот же паттерн test-only инъекции, что уже
+`AGridWorldManager::SetAcquiredArtifacts`/`SetClarityAnchor`) обходит
+`FindWorldManager()` явной инъекцией в тестах — production-путь
+(`FindWorldManager()`) не тронут, в реальной игре этой гонки нет (только
+один `AGridWorldManager` на уровень).
+
+Тесты (5, новый файл `ArtifactInventoryTest.cpp`):
+`HonestOfferingAddsArtifactToPlayerInventory`,
+`ConsumedArtifactIsRemovedFromInventory`,
+`ReusableArtifactStaysInInventoryAfterUse` (со спавном и `Possess()`
+настоящего `Pawn`, чтобы `UseInvisibilityCap()` реально дошёл до
+`WorldManager`, не просто рано вышел без Pawn),
+`FeatherAcquisitionAndConsumptionUpdateInventory`,
+`DataTableRowsResolveDisplayNames` (регрессия на сами 12 рядов —
+проверяет резолвинг через реальный `UIngredientRegistrySubsystem`).
+
+**Итог:** 237 → 242 теста. Полный прогон: **242/242, ноль регрессий.**

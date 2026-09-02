@@ -113,6 +113,36 @@ AGridWorldManager* AHerbalistPlayerController::FindWorldManager() const
     return nullptr;
 }
 
+void AHerbalistPlayerController::AddArtifactToInventory(FName ArtifactOrFeatherID)
+{
+    if (!InventoryComponent) return;
+
+    FInventoryItem Item;
+    Item.IngredientID = ArtifactOrFeatherID;
+    Item.Count = 1;
+    // Артефакты/перья не портятся, в отличие от собранных трав -- та же
+    // защита, что уже DecayRate=0 на стороне DT_IngredientClass (оба слоя,
+    // не один: DecayRate защищает саму формулу порчи, этот флаг защищает
+    // даже путь, который DecayRate не читает).
+    Item.bSubjectToDecay = false;
+    InventoryComponent->AddItem(Item);
+}
+
+bool AHerbalistPlayerController::RemoveArtifactFromInventory(FName ArtifactOrFeatherID)
+{
+    if (!InventoryComponent) return false;
+
+    const TArray<FInventoryItem> Items = InventoryComponent->GetItems();
+    for (int32 i = 0; i < Items.Num(); ++i)
+    {
+        if (Items[i].IngredientID == ArtifactOrFeatherID)
+        {
+            return InventoryComponent->RemoveItem(i, 1);
+        }
+    }
+    return false;
+}
+
 void AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const
 {
     OutX = -1;
@@ -821,6 +851,10 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         bHasYarnBall = true;
     }
 
+    // Настоящее инвентарное представление (2026-09-02) — см. комментарий
+    // у AddArtifactToInventory в шапке .h.
+    AddArtifactToInventory(ArtID);
+
     // Индексы по убыванию — RemoveItem(Index) не должен сдвинуть ещё не
     // обработанные позиции (тот же приём, что OfferToCommunity).
     Indices.Sort([](int32 A, int32 B) { return A > B; });
@@ -868,6 +902,11 @@ void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionI
     // приём индексов по убыванию не нужен, здесь ровно один предмет).
     InventoryComponent->RemoveItem(FoundIndex, 1);
 
+    if (bGranted)
+    {
+        AddArtifactToInventory(FName(TEXT("Фонарь")));
+    }
+
     ShowMemoryRevealText(bGranted
         ? FText::FromString(TEXT("Пока Болотный царь таращится на подделку, вы хватаете настоящий Фонарь и уходите в туман."))
         : FText::FromString(TEXT("Царь на миг замирает над ложным зельем -- и тут же снова смотрит на вас. Не в этот раз.")));
@@ -897,7 +936,9 @@ void AHerbalistPlayerController::UseComb(int32 X, int32 Y)
     if (!WorldManager->UseCombOnCell(FIntPoint(X, Y)))
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseComb: no Гребень, or (%d,%d) is outside the grid"), X, Y);
+        return;
     }
+    RemoveArtifactFromInventory(FName(TEXT("Гребень")));
 }
 
 void AHerbalistPlayerController::UseYouthApple()
@@ -908,7 +949,9 @@ void AHerbalistPlayerController::UseYouthApple()
     if (!WorldManager->UseYouthApple())
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseYouthApple: no Молодильное яблоко"));
+        return;
     }
+    RemoveArtifactFromInventory(FName(TEXT("Молодильное яблоко")));
 }
 
 void AHerbalistPlayerController::UseInvisibilityCap()
@@ -958,6 +1001,7 @@ void AHerbalistPlayerController::AcquireFeather(FString FeatherID)
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("AcquireFeather: %s not acquired (trigger not met, already held, or unknown feather)"), *FeatherID);
         return;
     }
+    AddArtifactToInventory(ID);
     UE_LOG(LogHerbalistPlayer, Log, TEXT("AcquireFeather: %s acquired"), *FeatherID);
 }
 
@@ -971,6 +1015,7 @@ void AHerbalistPlayerController::EatGamayunFeather()
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("EatGamayunFeather: no Перо Гамаюна"));
         return;
     }
+    RemoveArtifactFromInventory(FName(TEXT("Перо Гамаюна")));
     ShowMemoryRevealText(FText::FromString(TEXT("Съеденное перо оставляет во рту вкус ясности. Теперь Зеркальце больше не лжёт -- когда прогрето, оно всегда покажет правду.")));
 }
 
@@ -991,6 +1036,7 @@ void AHerbalistPlayerController::UseAlkonostFeather(int32 X, int32 Y)
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseAlkonostFeather: no Перо Алконоста"));
         return;
     }
+    RemoveArtifactFromInventory(FName(TEXT("Перо Алконоста")));
     ShowMemoryRevealText(FText::FromString(TEXT("Песнь Алконоста стелется над всем краем -- на время морок не смеет здесь проявиться.")));
 }
 
@@ -1005,6 +1051,7 @@ void AHerbalistPlayerController::UseSirinFeather(int32 X, int32 Y)
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseSirinFeather: no Перо Сирина, or no active Malign spike in that biome"));
         return;
     }
+    RemoveArtifactFromInventory(FName(TEXT("Перо Сирина")));
     ShowMemoryRevealText(Disclosure);
 }
 
@@ -1018,6 +1065,7 @@ void AHerbalistPlayerController::UseZharPtitsaFeather(int32 X, int32 Y)
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("UseZharPtitsaFeather: no Перо Жар-птицы, or (%d,%d) is outside the grid"), X, Y);
         return;
     }
+    RemoveArtifactFromInventory(FName(TEXT("Перо Жар-птицы")));
     ShowMemoryRevealText(FText::FromString(TEXT("Клетка вспыхивает ровным, негаснущим светом -- маленький, вечный отголосок Буяна на карте.")));
 }
 
