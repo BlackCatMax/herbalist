@@ -18,9 +18,12 @@
 
 #include "CoreMinimal.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/World/BiomeRegionVolume.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
+#include "Components/SplineComponent.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -29,9 +32,34 @@ namespace
     // BeginPlay) и валит ensure "ActorHasBegunPlay == BeginningPlay". Правильный
     // публичный API именно для этого случая — динамически заспавненный актор вне
     // обычного старта уровня/PIE — DispatchBeginPlay(), не голый BeginPlay().
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World)
+    //
+    // KeepRegions (2026-09-02, найдено при добавлении PCG-спавна) — тесты
+    // выполняются в персистентном editor-мире, который теперь грузит
+    // EditorStartupMap (L_TestDev) с настоящими, авторски расставленными
+    // ABiomeRegionVolume. Без явной изоляции InitializeCells каждого теста
+    // видел бы ИХ через TActorIterator наравне со своими собственными —
+    // 29 тестов, полагавшихся на "чистый" блочный фолбэк со всеми 8
+    // биомами гарантированно доступными (SeedLegendaryAnchors/
+    // SeedTestLandmarks ищут клетку КАЖДОГО биома), падали молча, как
+    // только уровень получил реальный контент. Уничтожаем в мире ВСЕ
+    // ABiomeRegionVolume, кроме явно переданных вызывающим тестом (его
+    // собственные, только что заспавненные) — тот же принцип, что и у
+    // остальных хелперов этого файла: тест получает предсказуемый мир,
+    // не то, что случайно лежит на уровне. Region->Destroy() — только в
+    // этом одноразовом headless-процессе, .umap на диске не трогается.
+    AGridWorldManager* SpawnAndBeginPlay(UWorld* World, const TArray<AActor*>& KeepRegions = {})
     {
         if (!World) return nullptr;
+
+        for (TActorIterator<ABiomeRegionVolume> It(World); It; ++It)
+        {
+            ABiomeRegionVolume* Region = *It;
+            if (Region && !KeepRegions.Contains(Region))
+            {
+                Region->Destroy();
+            }
+        }
+
         AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
         if (Manager)
         {
@@ -56,5 +84,40 @@ namespace
         if (!Asset) return nullptr;
         Graph->InitializeFromAsset(Asset);
         return Graph;
+    }
+
+    // Прямоугольный ABiomeRegionVolume, покрывающий заданный прямоугольник
+    // мировых координат -- вынесено сюда 2026-09-02 (тот же ODR-довод, что
+    // и у InitGraph выше): второй потребитель (GridWorldManagerSpawnPositionTest.cpp)
+    // появился следом за первым (GridWorldManagerBiomeRegionTest.cpp).
+    // Точки — Linear, не сглаженный Catmull-Rom по умолчанию: тестам нужна
+    // предсказуемая прямоугольная форма, не то, что выглядело бы органично
+    // при настоящем авторстве в редакторе. ВАЖНО: вызывающая сторона должна
+    // заспавнить регион(ы) ДО AGridWorldManager (InitializeCells читает
+    // TActorIterator<ABiomeRegionVolume> внутри BeginPlay, порядок важен).
+    ABiomeRegionVolume* SpawnRegionCoveringWorldRect(UWorld* World, EBiomeType Biome,
+        float MinX, float MinY, float MaxX, float MaxY)
+    {
+        if (!World) return nullptr;
+        ABiomeRegionVolume* Region = World->SpawnActor<ABiomeRegionVolume>();
+        if (!Region) return nullptr;
+        Region->Biome = Biome;
+
+        if (USplineComponent* Spline = Region->FindComponentByClass<USplineComponent>())
+        {
+            const TArray<FVector> Corners = {
+                FVector(MinX, MinY, 0.0f), FVector(MaxX, MinY, 0.0f),
+                FVector(MaxX, MaxY, 0.0f), FVector(MinX, MaxY, 0.0f),
+            };
+            Spline->SetSplinePoints(Corners, ESplineCoordinateSpace::World, false);
+            for (int32 i = 0; i < Corners.Num(); ++i)
+            {
+                Spline->SetSplinePointType(i, ESplinePointType::Linear, false);
+            }
+            Spline->SetClosedLoop(true, false);
+            Spline->UpdateSpline();
+        }
+        Region->UpdateCachedPoints();
+        return Region;
     }
 }

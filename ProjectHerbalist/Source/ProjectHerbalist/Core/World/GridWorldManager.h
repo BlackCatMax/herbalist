@@ -22,6 +22,7 @@ class AMemoryFragmentActor;
 class AHerbalistEntityActor;
 class AHerbalistPlayerController;
 class ALandscape;
+class ABiomeRegionVolume;
 struct FWorldSnapshot;
 struct FStateDelta;
 struct FSavedCellState;
@@ -125,6 +126,16 @@ public:
     // AHerbalistPlayerController::GetCellFromHit, теперь общий метод (тем же
     // используется AAlchemyTableActor::BeginPlay для привязки капища к клетке).
     bool WorldPositionToCell(const FVector& WorldPos, int32& OutX, int32& OutY) const;
+
+    // PCG-сплайны, спавн внутри формы (2026-09-02) — джиттерит позицию
+    // вокруг центра клетки (тот же приём, что уже был у ресурсов), затем,
+    // если клетка реально покрыта хотя бы одним ABiomeRegionVolume
+    // (CachedBiomeRegions заполнен), до 5 раз передобирает точку, пока та
+    // не пройдёт Region->IsPointInside — иначе позиция могла бы визуально
+    // уехать за границу формы региона у самого её края. Без регионов
+    // (блочный фолбэк, тестовое окружение без волюмов на уровне) — старое
+    // поведение, джиттер без проверки, ничего не меняется.
+    FVector GetSpawnPositionWithinBiome(int32 X, int32 Y, float JitterRadius, FRandomStream& Rng) const;
 
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
@@ -745,6 +756,15 @@ protected:
 
     void FindAndCacheLandscape();
     void CacheCellHeights();
+
+    // PCG-биомы (2026-08-31) / спавн внутри формы (2026-09-02) — тот же
+    // список, что InitializeCells уже строит через TActorIterator для
+    // раскраски клеток, сохранённый для повторного использования во время
+    // игры (GetSpawnPositionWithinBiome), не только на старте. Слабые
+    // указатели — уровневые акторы теоретически могут быть удалены в
+    // редакторе между сборкой этого кэша и следующим спавном ресурса.
+    UPROPERTY()
+    TArray<TWeakObjectPtr<ABiomeRegionVolume>> CachedBiomeRegions;
 
     // ---- Вспомогательные данные ----
     TSet<int32> RegrowingCells;

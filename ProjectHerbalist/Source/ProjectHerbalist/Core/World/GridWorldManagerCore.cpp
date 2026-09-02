@@ -114,6 +114,58 @@ bool AGridWorldManager::WorldPositionToCell(const FVector& WorldPos, int32& OutX
     return false;
 }
 
+FVector AGridWorldManager::GetSpawnPositionWithinBiome(int32 X, int32 Y, float JitterRadius, FRandomStream& Rng) const
+{
+    FVector BasePos = GetCellWorldPositionFlat(X, Y);
+    BasePos.Z = GetCellHeight(X, Y);
+
+    if (JitterRadius <= 0.0f) return BasePos;
+
+    // Реальные регионы есть только если клетку что-то покрыло (BiomeWeights
+    // непуст) — на блочном фолбэке (или в тестовом окружении без волюмов на
+    // уровне) CachedBiomeRegions либо пуст, либо не имеет смысла проверять:
+    // старое поведение (джиттер без проверки формы) не меняется.
+    const FGridCell* Cell = GetCellConst(X, Y);
+    const bool bHasRealRegions = Cell && Cell->BiomeWeights.Num() > 0 && CachedBiomeRegions.Num() > 0;
+
+    FVector Candidate = BasePos;
+    const int32 MaxAttempts = bHasRealRegions ? 5 : 1;
+    for (int32 Attempt = 0; Attempt < MaxAttempts; ++Attempt)
+    {
+        const FVector Offset(Rng.FRandRange(-JitterRadius, JitterRadius), Rng.FRandRange(-JitterRadius, JitterRadius), 0.0f);
+        Candidate = BasePos + Offset;
+        if (!bHasRealRegions) break;
+
+        // Проверяем только регионы биома(ов), которыми реально помечена эта
+        // клетка (Cell->BiomeWeights) — не все регионы уровня подряд: точка
+        // может технически лежать внутри чужого, соседнего сплайна и всё
+        // равно быть неправильным ответом для ЭТОЙ клетки.
+        bool bInsideMatchingRegion = false;
+        for (const TWeakObjectPtr<ABiomeRegionVolume>& RegionPtr : CachedBiomeRegions)
+        {
+            ABiomeRegionVolume* Region = RegionPtr.Get();
+            if (!Region) continue;
+
+            bool bBiomeMatches = false;
+            for (const FBiomeWeightEntry& Entry : Cell->BiomeWeights)
+            {
+                if (Entry.Biome == Region->Biome) { bBiomeMatches = true; break; }
+            }
+            if (bBiomeMatches && Region->IsPointInside(Candidate))
+            {
+                bInsideMatchingRegion = true;
+                break;
+            }
+        }
+        if (bInsideMatchingRegion) break;
+        // Иначе -- следующая попытка передобирает Offset заново; после
+        // MaxAttempts неудачных попыток возвращаем последний кандидат как
+        // есть (лучше видимый, но не идеально вписанный джиттер, чем
+        // отказ спавнить вовсе).
+    }
+    return Candidate;
+}
+
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
 {
     if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY)
@@ -306,6 +358,15 @@ void AGridWorldManager::InitializeCells()
     if (BiomeRegions.Num() == 0)
     {
         UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: ни одного ABiomeRegionVolume не найдено в уровне -- вся сетка идёт по блочному фолбэку (5x5)"));
+    }
+
+    // Сохраняем для GetSpawnPositionWithinBiome — тот же список пригодится
+    // во время игры (регенерация ресурсов, проявление сущностей), не
+    // только здесь при старте.
+    CachedBiomeRegions.Reset(BiomeRegions.Num());
+    for (ABiomeRegionVolume* Region : BiomeRegions)
+    {
+        CachedBiomeRegions.Add(Region);
     }
 
     // Блочная раскраска 5x5 остаётся ФОЛБЭКОМ для клеток вне всех
@@ -510,13 +571,10 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         }
         if (IngredientID.IsNone()) continue;
 
-        FVector Offset = FVector(WorldRNG.FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
-                                 WorldRNG.FRandRange(-CellSize * 0.3f, CellSize * 0.3f),
-                                 0);
-        // Плоская позиция (X,Y) плюс высота ландшафта + небольшой подъём (5 см)
-        FVector SpawnPos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
-        SpawnPos.Z = GetCellHeight(Cell.X, Cell.Y) + 5.0f;
-        SpawnPos += Offset;
+        // Позиция внутри формы биома (2026-09-02), не просто джиттер внутри
+        // абстрактной клетки -- см. GetSpawnPositionWithinBiome.
+        FVector SpawnPos = GetSpawnPositionWithinBiome(Cell.X, Cell.Y, CellSize * 0.3f, WorldRNG);
+        SpawnPos.Z += 5.0f;   // небольшой подъём над landscape, тот же, что и раньше
 
         const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
         if (!Row) continue;
@@ -541,9 +599,25 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
     if (!Row) return;
 
-    FVector SpawnPos = GetCellWorldPositionFlat(X, Y);
-    SpawnPos.Z = GetCellHeight(X, Y) + 5.0f;
-    SpawnPos += Offset;
+    // Offset по умолчанию (ZeroVector) -- единственный реальный вызывающий
+    // (ApplySaveCells, восстановление после загрузки) никогда не передаёт
+    // собственный сдвиг явно: раньше это молча означало "ровно в центре
+    // клетки" (та же "дебажная сетка", что и была у остальных ресурсов) --
+    // теперь дефолт использует ту же позицию внутри формы биома, что и
+    // SpawnResourcesInCell. Явный ненулевой Offset вызывающей стороны
+    // по-прежнему уважается как есть -- контракт параметра не сломан.
+    FVector SpawnPos;
+    if (Offset.IsNearlyZero())
+    {
+        SpawnPos = GetSpawnPositionWithinBiome(X, Y, CellSize * 0.3f, WorldRNG);
+        SpawnPos.Z += 5.0f;
+    }
+    else
+    {
+        SpawnPos = GetCellWorldPositionFlat(X, Y);
+        SpawnPos.Z = GetCellHeight(X, Y) + 5.0f;
+        SpawnPos += Offset;
+    }
 
     AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
     if (NewActor)

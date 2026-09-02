@@ -19,6 +19,8 @@
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
+// SpawnRegionCoveringWorldRect — вынесен в TestWorldHelpers.h (2026-09-02,
+// GridWorldManagerSpawnPositionTest.cpp стал вторым потребителем).
 #include "TestWorldHelpers.h"
 
 namespace
@@ -48,41 +50,6 @@ namespace
         const int32 BlocksX = GridSizeX / BlockSize;
         return AllBiomes[((Y / BlockSize) * BlocksX + (X / BlockSize)) % AllBiomes.Num()];
     }
-
-    // Grid spawns at world origin via SpawnAndBeginPlay -- CellSize=100,
-    // GridSizeX/Y=20 по умолчанию, значит вся сетка лежит в [0, 1900] по
-    // X/Y. Margin в 50 -- с запасом за пределы крайних клеток.
-    ABiomeRegionVolume* SpawnRegionCoveringWorldRect(UWorld* World, EBiomeType Biome,
-        float MinX, float MinY, float MaxX, float MaxY)
-    {
-        ABiomeRegionVolume* Region = World->SpawnActor<ABiomeRegionVolume>();
-        if (!Region) return nullptr;
-        Region->Biome = Biome;
-
-        if (USplineComponent* Spline = Region->FindComponentByClass<USplineComponent>())
-        {
-            const TArray<FVector> Corners = {
-                FVector(MinX, MinY, 0.0f), FVector(MaxX, MinY, 0.0f),
-                FVector(MaxX, MaxY, 0.0f), FVector(MinX, MaxY, 0.0f),
-            };
-            Spline->SetSplinePoints(Corners, ESplineCoordinateSpace::World, false);
-            // USplineComponent по умолчанию сглаживает точки (ESplinePointType
-            // ::Curve, Catmull-Rom) -- 4 угла без этого дают скруглённую
-            // форму, не прямоугольник, и тест не сможет предсказать точное
-            // покрытие. Для теста нужны точные прямые грани; в реальном
-            // авторстве биома сглаженные кривые, скорее всего, и есть
-            // желаемая органичная форма -- это правка только тестовой
-            // фикстуры, не продакшн-кода ABiomeRegionVolume.
-            for (int32 i = 0; i < Corners.Num(); ++i)
-            {
-                Spline->SetSplinePointType(i, ESplinePointType::Linear, false);
-            }
-            Spline->SetClosedLoop(true, false);
-            Spline->UpdateSpline();
-        }
-        Region->UpdateCachedPoints();
-        return Region;
-    }
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridBiomeRegion_SingleRegionCoversWholeGrid,
@@ -97,7 +64,7 @@ bool FHerbalistGridBiomeRegion_SingleRegionCoversWholeGrid::RunTest(const FStrin
     ABiomeRegionVolume* Region = SpawnRegionCoveringWorldRect(World, EBiomeType::Bog, -50.f, -50.f, 1950.f, 1950.f);
     if (!TestNotNull(TEXT("Region spawned"), Region)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, { Region });
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) { Region->Destroy(); return false; }
 
     bool bAllMatch = true;
@@ -135,7 +102,7 @@ bool FHerbalistGridBiomeRegion_TwoOverlappingRegionsSplitEqually::RunTest(const 
     ABiomeRegionVolume* RegionB = SpawnRegionCoveringWorldRect(World, EBiomeType::Taiga, -50.f, -50.f, 1950.f, 1950.f);
     if (!TestNotNull(TEXT("Region A spawned"), RegionA) || !TestNotNull(TEXT("Region B spawned"), RegionB)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, { RegionA, RegionB });
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) { RegionA->Destroy(); RegionB->Destroy(); return false; }
 
     bool bAllMatch = true;
@@ -194,7 +161,9 @@ bool FHerbalistGridBiomeRegion_ThreeOverlappingRegionsSplitInThirds::RunTest(con
         if (!TestNotNull(TEXT("Region spawned"), R)) return false;
     }
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    TArray<AActor*> RegionsAsActors;
+    for (ABiomeRegionVolume* R : Regions) { RegionsAsActors.Add(R); }
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, RegionsAsActors);
     if (!TestNotNull(TEXT("Manager spawned"), Manager))
     {
         for (ABiomeRegionVolume* R : Regions) R->Destroy();
@@ -238,7 +207,7 @@ bool FHerbalistGridBiomeRegion_PartialCoverageFallsBackForUncoveredCells::RunTes
     ABiomeRegionVolume* Region = SpawnRegionCoveringWorldRect(World, EBiomeType::Bog, -50.f, -50.f, 950.f, 1950.f);
     if (!TestNotNull(TEXT("Region spawned"), Region)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, { Region });
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) { Region->Destroy(); return false; }
 
     bool bAllMatch = true;

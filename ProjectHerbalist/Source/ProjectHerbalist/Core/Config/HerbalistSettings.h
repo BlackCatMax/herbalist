@@ -347,6 +347,16 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities", meta = (ClampMin = "0.0", ClampMax = "0.3"))
     float EntityManifestationHysteresis = 0.05f;
 
+    // Спавн внутри формы PCG-биома (2026-09-02) — раньше проявленные
+    // сущности (Низший/Основной/Легендарный) всегда стояли ровно в центре
+    // клетки (GetSpawnPositionWithinBiome, JitterRadius=0 по умолчанию) —
+    // с настоящими сплайн-регионами на уровне это читается как "решётка".
+    // Меньше, чем у ресурсов (CellSize*0.3 у SpawnResourcesInCell) —
+    // сущность семантически "якорь" региона/угрозы, не должна визуально
+    // плавать по всей клетке, только не стоять штырём ровно по центру.
+    UPROPERTY(config, EditAnywhere, Category = "Entities", meta = (ClampMin = "0.0"))
+    float EntityManifestationJitterRadius = 30.0f;
+
     // --- Заряна: фрагменты памяти и Буян (обсуждение в сессии 2026-08-24) ---
     // Числа — первая прикидка, "числа пока забей" (прямая цитата из сессии):
     // темп ещё не определён, менять свободно, не ломая структуру.
