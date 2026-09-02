@@ -10,6 +10,7 @@
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/World/BiomeRegionVolume.h"
+#include "Core/World/WaterRegionVolume.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
@@ -385,6 +386,34 @@ void AGridWorldManager::InitializeCells()
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
     UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
 
+    // Общая точка заливки клетки водой -- раньше было продублировано в двух
+    // местах блока случайной воды ниже, теперь ещё и в явных регионах воды
+    // (2026-09-02) -- один источник истины на все три случая. Читает уже
+    // выставленный Cell.Biome -- вода поверх болота получает болотный
+    // WaterTypeID, поверх тундры -- тундровый, автоматически.
+    auto ApplyWaterToCell = [WaterSubsystem, this](FGridCell& Cell)
+    {
+        Cell.bIsWater = true;
+        Cell.WaterTypeID = WaterSubsystem ? WaterSubsystem->GetRandomWaterType(Cell.Biome, WorldRNG) : NAME_None;
+
+        FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
+        if (WaterSubsystem)
+        {
+            if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
+            {
+                waterState.Meta.Purity      = WaterRow->BasePurity;
+                waterState.Meta.Distortion  = WaterRow->BaseDistortion;
+                waterState.Meta.Stability   = WaterRow->BaseStability;
+                waterState.Meta.Potency     = WaterRow->BasePotency;
+                waterState.Meta.Corruption  = WaterRow->BaseCorruption;
+            }
+        }
+        Cell.State = waterState;
+        Cell.TargetState = waterState;
+        Cell.HarvestStress = 0.0f;
+        Cell.ResourceActors.Empty();
+    };
+
     // Собираем все типы биомов
     TArray<EBiomeType> AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
     if (AllBiomes.Num() == 0)
@@ -406,12 +435,33 @@ void AGridWorldManager::InitializeCells()
     {
         ABiomeRegionVolume* Region = *It;
         if (!Region) continue;
+        // AWaterRegionVolume -- IS-A ABiomeRegionVolume в C++, но семантически
+        // не земляной биом (2026-09-02) -- собирается отдельным проходом ниже,
+        // не должен застолбить долю в Cell.BiomeWeights со своим унаследованным
+        // (неиспользуемым) дефолтным Biome.
+        if (Region->IsA<AWaterRegionVolume>()) continue;
         Region->UpdateCachedPoints();
         BiomeRegions.Add(Region);
     }
     if (BiomeRegions.Num() == 0)
     {
         UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: ни одного ABiomeRegionVolume не найдено в уровне -- вся сетка идёт по блочному фолбэку (5x5)"));
+    }
+
+    // Явные регионы воды (2026-09-02, прямой запрос пользователя) -- вода
+    // как отдельный, вручную нарисованный "биом", всегда побеждающий (вес 1,
+    // не размешивается с земляными регионами) для флага bIsWater конкретной
+    // клетки, но НЕ подменяющий собой Cell.Biome (тот резолвится обычным
+    // путём выше, из земляных регионов) -- WaterTypeID ниже берётся именно
+    // из уже определённого Cell.Biome, поэтому вода поверх болота
+    // автоматически получает болотный тип воды, поверх тундры -- тундровый.
+    TArray<AWaterRegionVolume*> WaterRegions;
+    for (TActorIterator<AWaterRegionVolume> It(GetWorld()); It; ++It)
+    {
+        AWaterRegionVolume* Region = *It;
+        if (!Region) continue;
+        Region->UpdateCachedPoints();
+        WaterRegions.Add(Region);
     }
 
     // Сохраняем для GetSpawnPositionWithinBiome — тот же список пригодится
@@ -513,6 +563,18 @@ void AGridWorldManager::InitializeCells()
             Cell.HarvestStress = 0.0f;
             Cell.bIsWater     = false;
             Cell.WaterTypeID  = NAME_None;
+
+            // Явный регион воды (2026-09-02) -- вес всегда 1, безусловно
+            // заливает клетку поверх уже определённого Cell.Biome, не
+            // участвует в вероятностной WaterDensity-раскладке ниже.
+            for (AWaterRegionVolume* WaterRegion : WaterRegions)
+            {
+                if (WaterRegion && WaterRegion->IsPointInside(CellWorldPos))
+                {
+                    ApplyWaterToCell(Cell);
+                    break;
+                }
+            }
         }
     }
 
@@ -550,8 +612,17 @@ void AGridWorldManager::InitializeCells()
     // держится на воде на клетке вне явно заданных, защищающей её от
     // ошибочной сухопутной сущности).
     // ------------------------------------------------------------------------
+    // Затравка из уже проставленного bIsWater -- явные регионы воды
+    // (2026-09-02) могли заранее залить часть клеток безусловно, до того,
+    // как этот блок вообще начал работать; без явных регионов на уровне
+    // (сегодняшний путь абсолютного большинства тестов) Cell.bIsWater
+    // сейчас false у всех, так что это ничем не отличается от Init(false, ...).
     TArray<bool> IsWaterAlready;
-    IsWaterAlready.Init(false, TotalCells);
+    IsWaterAlready.SetNumUninitialized(TotalCells);
+    for (int32 Idx = 0; Idx < TotalCells; ++Idx)
+    {
+        IsWaterAlready[Idx] = Cells[Idx].bIsWater;
+    }
 
     if (BiomeRegions.Num() == 0)
     {
@@ -578,26 +649,7 @@ void AGridWorldManager::InitializeCells()
                 for (int32 dx = 0; dx < W; ++dx)
                 {
                     int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    FGridCell& Cell = Cells[Idx];
-                    Cell.bIsWater = true;
-                    Cell.WaterTypeID = WaterSubsystem ? WaterSubsystem->GetRandomWaterType(Cell.Biome, WorldRNG) : NAME_None;
-
-                    FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
-                    if (WaterSubsystem)
-                    {
-                        if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
-                        {
-                            waterState.Meta.Purity      = WaterRow->BasePurity;
-                            waterState.Meta.Distortion  = WaterRow->BaseDistortion;
-                            waterState.Meta.Stability   = WaterRow->BaseStability;
-                            waterState.Meta.Potency     = WaterRow->BasePotency;
-                            waterState.Meta.Corruption  = WaterRow->BaseCorruption;
-                        }
-                    }
-                    Cell.State = waterState;
-                    Cell.TargetState = waterState;
-                    Cell.HarvestStress = 0.0f;
-                    Cell.ResourceActors.Empty();
+                    ApplyWaterToCell(Cells[Idx]);
                     IsWaterAlready[Idx] = true;
                     PlacedWater++;
                 }
@@ -656,26 +708,7 @@ void AGridWorldManager::InitializeCells()
                 for (int32 dx = 0; dx < W; ++dx)
                 {
                     const int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    FGridCell& Cell = Cells[Idx];
-                    Cell.bIsWater = true;
-                    Cell.WaterTypeID = WaterSubsystem ? WaterSubsystem->GetRandomWaterType(Cell.Biome, WorldRNG) : NAME_None;
-
-                    FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
-                    if (WaterSubsystem)
-                    {
-                        if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
-                        {
-                            waterState.Meta.Purity      = WaterRow->BasePurity;
-                            waterState.Meta.Distortion  = WaterRow->BaseDistortion;
-                            waterState.Meta.Stability   = WaterRow->BaseStability;
-                            waterState.Meta.Potency     = WaterRow->BasePotency;
-                            waterState.Meta.Corruption  = WaterRow->BaseCorruption;
-                        }
-                    }
-                    Cell.State = waterState;
-                    Cell.TargetState = waterState;
-                    Cell.HarvestStress = 0.0f;
-                    Cell.ResourceActors.Empty();
+                    ApplyWaterToCell(Cells[Idx]);
                     IsWaterAlready[Idx] = true;
                     ++PlacedInPool;
                 }
