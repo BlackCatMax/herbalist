@@ -4,11 +4,11 @@
 // 2026-09-01). Тот же паттерн статического реестра, что LegendaryEntityTypes.h/
 // LandmarkTypes.h/AmbientEntityTypes.h.
 //
-// Восемь строк ровно по таблице §21.3. Гребень (Берегиня) — LegendaryEntityID
-// пуст: Берегиня НЕ в LegendaryEntityTypes.h (см. комментарий в её шапке —
-// HistoryPurity per-клеточный аккумулятор, не сигнал уровня биом-графа), её
-// проявленность проверяется отдельным IsBereginyaManifested()
-// (GridWorldManagerArtifacts.cpp), не общим IsLegendaryManifested().
+// Восемь строк ровно по таблице §21.3. Гребень → LegendaryEntityID
+// "Берегиня" — 2026-09-02, унификация Берегини: она теперь обычная строка
+// LegendaryEntityTypes.h (bUsesCellHistoryPurity=true), больше не особый
+// случай без ID; IsLegendaryManifested сама умеет её проверить (fallback-
+// скан без якоря), отдельного IsBereginyaManifested() не осталось.
 //
 // Зеркальце/Гамаюн и Клубочек/Мать-Сыра-Земля (bWarmsCompanionItem) —
 // ревизия "Update docs" (2026-09-01, §21.2) сняла их особый статус:

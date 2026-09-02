@@ -6,12 +6,20 @@
 // единственный реализованный Легендарный (Берегиня) жил как захардкоженный
 // блок в GridWorldManagerEntities.cpp (два независимых пути: HistoryPurity
 // клетки ИЛИ Restoration капища) — тот же долг, что уже был у Низшего до
-// AmbientEntityTypes.h и у Основного до LandmarkTypes.h. Берегиня НЕ
-// перенесена сюда (её HistoryPurity — per-клеточный аккумулятор, заведённый
-// только для Речной поймы, не общий сигнал уровня биом-графа) — этот файл
-// обобщает остальные 16 карточек §16.4, используя сигнал уровня графа
-// (BiomeGraphSubsystem, MorokField узла), а не отдельный per-клеточный
-// накопитель на каждое существо.
+// AmbientEntityTypes.h и у Основного до LandmarkTypes.h.
+//
+// 2026-09-02 (унификация Берегини, ответ на "все сущности должны быть
+// равны... без исключений"): этот файл обобщает ВСЕ 17 карточек §16.4,
+// включая Берегиню. Механизм триггера — не один, а два, выбираемых полем
+// bUsesCellHistoryPurity: (а) сигнал уровня графа (BiomeGraphSubsystem,
+// MorokField узла) на ОДНОЙ фиксированной якорной клетке
+// (SeedLegendaryAnchors) — 16 исходных карточек; (б) per-клеточный
+// аккумулятор Cell.Memory.HistoryPurity, без якоря — ЛЮБАЯ подходящая
+// клетка биома независимо проверяется каждый тик (см. GridWorldManagerEntities.cpp,
+// цикл по Cells). Берегиня — первая карточка второго типа, но не
+// единственно возможная: bUsesCellHistoryPurity заведён так, чтобы
+// принять ещё одну такую сущность будущим редактированием DataTable,
+// без правки C++.
 //
 // §16.4 называет два полюса:
 //   - Опасный (Болотный царь, Лихо Одноглазое, Водяной царь, Суховей):
@@ -77,20 +85,50 @@ struct PROJECTHERBALIST_API FLegendaryEntityDefinition : public FTableRowBase
 
     // Malign: MorokField(узла) > MorokThreshold.
     // Benign: MorokField(узла) < MorokThreshold (потолок, "устойчиво низкий").
+    // Игнорируется, если bUsesCellHistoryPurity=true (см. поле ниже) —
+    // якорный MorokField-путь для таких карточек не используется вовсе.
     UPROPERTY() float MorokThreshold = 0.3f;
 
-    // Второй путь, только для Benign — тот же капищный сигнал, что у
-    // Берегини. bHasShrinePath=false отключает путь целиком (не 0 -- ноль
-    // Restoration формально мог бы пройти порог 0, отдельный флаг честнее).
+    // Второй путь, изначально заведённый только для Berign-полюса 16
+    // якорных карточек — тот же капищный сигнал, что и у per-клеточных
+    // (bUsesCellHistoryPurity=true) карточек ниже, поле общее для обоих
+    // механизмов. bHasShrinePath=false отключает путь целиком (не 0 --
+    // ноль Restoration формально мог бы пройти порог 0, отдельный флаг
+    // честнее).
     UPROPERTY() bool bHasShrinePath = false;
     UPROPERTY() float ShrineThreshold = 0.7f;
 
-    // До двух осей эффекта — тот же словарь ELandmarkAxis/ApplyLandmarkAxisNudge,
-    // что уже применяет Основной ранг (LandmarkTypes.h), не отдельный набор.
+    // 2026-09-02 (унификация Берегини) — переключает Def с якорного
+    // MorokField-триггера (16 исходных карточек, по умолчанию) на
+    // per-клеточный: клетка сама несёт Cell.Memory.HistoryPurity, якорь
+    // не заводится (SeedLegendaryAnchors пропускает такие Def), условие
+    // проверяется независимо на КАЖДОЙ подходящей клетке биома каждый
+    // тик, не на одной фиксированной. true=Берегиня и любая будущая
+    // карточка того же типа.
+    UPROPERTY() bool bUsesCellHistoryPurity = false;
+
+    // Порог для per-клеточного пути (см. bUsesCellHistoryPurity выше) --
+    // читается только когда bUsesCellHistoryPurity=true. Отдельное поле
+    // от MorokThreshold: тот -- порог графового узла, этот -- порог
+    // per-клеточного аккумулятора, разные величины по конструкции.
+    UPROPERTY() float HistoryPurityThreshold = 0.75f;
+
+    // До двух осей эффекта — тот же словарь ELandmarkAxis, что уже
+    // применяет Основной ранг (LandmarkTypes.h), не отдельный набор.
     UPROPERTY() ELandmarkAxis EffectAxis = ELandmarkAxis::None;
     UPROPERTY() float EffectRate = 0.0f;
     UPROPERTY() ELandmarkAxis EffectAxis2 = ELandmarkAxis::None;
     UPROPERTY() float EffectRate2 = 0.0f;
+
+    // 2026-09-02 (унификация Берегини) — переключает применение
+    // EffectAxis/EffectRate: false (16 исходных карточек) -- аддитивный
+    // нудж ApplyLandmarkAxisNudge (EffectRate -- скорость/сек). true --
+    // EffectRate читается как ЗНАЧЕНИЕ ПОЛА (floor), ApplyLandmarkAxisFloor
+    // (LandmarkTypes.h) не даёт оси опуститься ниже него, пока карточка
+    // проявлена -- мгновенное свойство, не скорость. Берегиня: floor
+    // Purity на 0.9. EffectAxis2/EffectRate2 всегда аддитивны (второй
+    // floor не заведён -- нет карточки, которой он нужен).
+    UPROPERTY() bool bFloorEffect = false;
 
     // Физическое представление (2026-08-30) — пусто = базовый
     // ALegendaryEntityActor. См. комментарий у одноимённого поля в

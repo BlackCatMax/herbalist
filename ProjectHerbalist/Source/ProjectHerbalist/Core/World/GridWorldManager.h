@@ -588,27 +588,23 @@ public:
 
     // Общий хелпер (21_Journey_And_Artifacts.md §21.3, 2026-09-01) — не
     // существовал вовсе, весь прежний код инлайнил проверку прямо в цикл
-    // тика (UpdateEntityManifestations). Только для 16 сущностей реестра
-    // LegendaryEntityTypes.h — Берегиня не входит туда (см. её собственный
-    // комментарий в шапке файла), для неё — IsBereginyaManifested() ниже.
+    // тика (UpdateEntityManifestations). Покрывает ВСЕ 17 сущностей реестра
+    // LegendaryEntityTypes.h, оба механизма триггера (2026-09-02, унификация
+    // Берегини): для 16 якорных — быстрый поиск по LegendaryAnchors; если
+    // якорь не найден (per-клеточные карточки, bUsesCellHistoryPurity=true,
+    // у них никогда нет фиксированного якоря) — fallback, сканирует все
+    // клетки (был отдельным методом IsBereginyaManifested(), поглощён сюда).
+    // Редкий вызов (по требованию игрока при попытке добыть артефакт), не
+    // тиковый путь, дороговизна fallback-сканирования не имеет значения.
     bool IsLegendaryManifested(FName EntityID) const;
-
-    // Берегиня — отдельная ветка (не через LegendaryAnchors, у неё нет
-    // фиксированного якоря: любая подходящая клетка Речной поймы может
-    // проявить её, GridWorldManagerEntities.cpp). Сканирует все клетки —
-    // редкий вызов (по требованию игрока при попытке добыть Гребень), не
-    // тиковый путь, дороговизна не имеет значения.
-    bool IsBereginyaManifested() const;
 
     // Артефакты Легендарных (§21.3-21.4, GridWorldManagerArtifacts.cpp) —
     // доступны только когда сущность уже проявлена; честный путь (высокий
     // РЕАЛЬНЫЙ средний Purity подношения) или обманный (высокий только
     // ВОСПРИНЯТЫЙ, через PerceiveRealState на текущей Clarity — та же
     // логика, что уже отличает S_real/S_Perceived в тултипе). Ключ по
-    // ArtifactID, не LegendaryID — Гребень не имеет отдельного
-    // LegendaryEntityID (пуст в реестре), см. ArtifactTypes.h. Зеркальце/
-    // Клубочек (bWarmsCompanionItem) добавляют запись в AcquiredArtifacts
-    // на общих основаниях (ревизия "Update docs", §21.2) — вызывающая
+    // ArtifactID. Зеркальце/Клубочек (bWarmsCompanionItem) добавляют запись
+    // в AcquiredArtifacts на общих основаниях (ревизия "Update docs", §21.2) — вызывающая
     // сторона (HerbalistPlayerController::OfferForArtifact) дополнительно
     // выставляет bHasMirror/bHasYarnBall по результату.
     bool TryAcquireArtifact(FName ArtifactID, const TArray<FInventoryItem>& Offered, bool& bOutViaDeception);

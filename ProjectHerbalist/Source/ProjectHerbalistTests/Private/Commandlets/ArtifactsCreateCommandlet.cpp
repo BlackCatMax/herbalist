@@ -47,7 +47,7 @@ namespace
             FArtifactDefinition D;
             D.ArtifactID = FName(TEXT("Гребень"));
             D.SortOrder = Order++;
-            D.LegendaryEntityID = NAME_None;   // Берегиня — особый путь
+            D.LegendaryEntityID = FName(TEXT("Берегиня"));   // 2026-09-02: унификация, больше не особый случай
             D.Biome = EBiomeType::Floodplain;
             Defs.Add(D);
         }

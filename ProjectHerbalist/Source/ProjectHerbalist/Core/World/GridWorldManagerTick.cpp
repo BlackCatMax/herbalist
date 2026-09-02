@@ -348,11 +348,11 @@ void AGridWorldManager::RunSimulationStep()
     // Прогрев артефактов, вариант C (21_Journey_And_Artifacts.md §21.4,
     // 2026-09-01, ревизия "Update docs"/"Update artifacts") — зелье нужного
     // типа, сваренное в родном регионе артефакта при уже проявленной
-    // сущности, поднимает Warmth. Тот же гейт (IsLegendaryManifested/
-    // IsBereginyaManifested), что уже определяет проявление сущности и
-    // доступность артефакта честным путём — переиспользован, не изобретён
-    // новый порог. Фонарь исключён (bWarmsFromGlobalClarity — свой путь
-    // через GlobalPerceptionClarity, IsArtifactWarmed).
+    // сущности, поднимает Warmth. Тот же гейт (IsLegendaryManifested), что
+    // уже определяет проявление сущности и доступность артефакта честным
+    // путём — переиспользован, не изобретён новый порог. Фонарь исключён
+    // (bWarmsFromGlobalClarity — свой путь через GlobalPerceptionClarity,
+    // IsArtifactWarmed).
     if (Delta.InventoryOps.Num() > 0 && AcquiredArtifacts.Num() > 0)
     {
         int32 WarmthOpIndex = 0;
@@ -380,10 +380,7 @@ void AGridWorldManager::RunSimulationStep()
                 const FArtifactDefinition* Def = FindArtifactDefinition(Artifact.ArtifactID);
                 if (!Def || Def->bWarmsFromGlobalClarity || Def->Biome != BrewCell->Biome) continue;
 
-                const bool bLegendaryManifested = Def->LegendaryEntityID.IsNone()
-                    ? IsBereginyaManifested()
-                    : IsLegendaryManifested(Def->LegendaryEntityID);
-                if (!bLegendaryManifested) continue;
+                if (!IsLegendaryManifested(Def->LegendaryEntityID)) continue;
 
                 bool bTypeMatches = false;
                 if (Artifact.ArtifactID == FName(TEXT("Клубочек")))

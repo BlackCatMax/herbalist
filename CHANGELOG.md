@@ -4254,3 +4254,78 @@ BadStanding). Вложенные `TArray<FDialogueNode>`/`TArray<FDialogueBranch
 `+DirectoriesToAlwaysCook=(Path="/Game/Herbalist/Data")` и
 `(Path="/Game/Data")` (последний покрывает `DT_BiomeDefaults`/`DA_BiomeGraph`,
 которые лежат отдельно от `/Game/Herbalist/Data`).
+
+### Берегиня — унификация с реестром Легендарного ранга (2026-09-02)
+
+Прямая реакция на "Берегинь почему не трогаем? все сущности должны быть
+равны... без исключений. иначе теряется весь смысл дата-драйвен
+архитектуры" + "возможно появятся подобные ей сущности". Разведка (Plan
+Mode, полное чтение `GridWorldManagerEntities.cpp`/`LegendaryEntityTypes.h`/
+`GridWorldManagerArtifacts.cpp`/`BereginyaTest.cpp`) нашла, что исходное
+исключение устранимо целиком, не только на уровне хранения данных: у
+Берегини не фиксированный якорь (как у остальных 16), а per-клеточный
+триггер (`Cell.Memory.HistoryPurity`, любая подходящая клетка Речной
+поймы независимо), но оба нужных поля для её второго пути
+(`bHasShrinePath`/`ShrineThreshold`) уже существовали в схеме — не
+хватало только явного переключателя механизма триггера и способа
+выразить её floor-эффект (Purity ≥0.9, не аддитивный rate/сек, как у
+остальных 16).
+
+**Схема (`LegendaryEntityTypes.h`):** `FLegendaryEntityDefinition` получил
+три новых поля, у существующих 16 карточек — на дефолте, нулевое влияние
+на их поведение: `bUsesCellHistoryPurity` (переключает Def с якорного
+MorokField-пути на per-клеточный HistoryPurity, `SeedLegendaryAnchors`
+пропускает такие Def), `HistoryPurityThreshold` (порог этого пути,
+отдельно от `MorokThreshold` — разные по смыслу величины), `bFloorEffect`
+(переключает `EffectAxis`/`EffectRate` с аддитивного нуджа на "не даёт
+оси упасть ниже этого значения", новый `ApplyLandmarkAxisFloor` в
+`LandmarkTypes.h`, та же ось-диспетчеризация, что `ApplyLandmarkAxisNudge`,
+но `FMath::Max` вместо `+=`).
+
+**Тик (`GridWorldManagerEntities.cpp`):** хардкод-блок "--- Берегиня ---"
+заменён циклом по `GetLegendaryEntityDefinitions()`, отфильтрованным
+`bUsesCellHistoryPurity` (тот же паттерн гейтов Biome/bWaterOnly/bLandOnly,
+что уже применяет Низший ранг в этом же per-клеточном проходе; актёр
+синхронизируется один раз после цикла, как у Низшего) — принимает
+произвольное число таких карточек, не одну. Lerp `Cell.Memory.HistoryPurity`
+больше не гейтится Речной поймой (был единственным читателем) — считается
+для всех клеток безусловно, любой будущий `bUsesCellHistoryPurity` Def на
+любом биоме уже может его прочитать. `GetEntityManifestationPriority` и
+`SeedLegendaryAnchors` лишились спецкейса Берегини — первая уже проверяла
+реестр по кругу, вторая получила один `continue` на такие Def.
+
+**API (`GridWorldManager.h`/`GridWorldManagerArtifacts.cpp`):**
+`IsBereginyaManifested()` удалён — `IsLegendaryManifested(EntityID)`
+теперь сам поглощает его логику как fallback (якорь не найден → скан
+всех клеток). `TryAcquireArtifact`/прогрев Warmth
+(`GridWorldManagerTick.cpp`) потеряли тернарник
+`LegendaryEntityID.IsNone() ? IsBereginyaManifested() : IsLegendaryManifested(...)`
+— безусловный вызов `IsLegendaryManifested`. Гребень (`ArtifactTypes.h`/
+`DT_Artifacts`) получил настоящий `LegendaryEntityID="Берегиня"` вместо
+`NAME_None` — больше не особый случай без ID.
+
+**Данные:** `DT_LegendaryEntities` — 17-я строка (Берегиня,
+`bUsesCellHistoryPurity=true`, пороги 0.75/0.7 — прежние значения
+`BereginyaHistoryPurityThreshold`/`BereginyaShrineRestorationThreshold` из
+`HerbalistSettings.h`, теперь удалённых оттуда как мёртвый код: пороги
+переехали в строку DataTable, как у остальных 16). Оба ассета
+(`DT_Artifacts`/`DT_LegendaryEntities`) регенерированы с нуля (`git rm` +
+`-run=...Create`) — созданы этой же сессией, ручных правок в редакторе не
+было, риска потери нет.
+
+**Тесты:** `BereginyaTest.cpp` (3 теста, оба пути триггера + негативный
+случай) прошли **без единой правки** — бьют по внешнему поведению
+(`Memory.HistoryPurity`/`SetShrines`/`ManifestedEntityID`), не по
+внутренней реализации, главная регрессионная защита рефактора.
+`SystemInteractionTest.cpp::LegendarySweepAcrossAllBiomes` уже
+толерантен к "нет якоря" (документированный skip-путь для биомов без
+подходящей клетки в тестовой сетке) — Берегиня просто попадает в этот
+путь, без изменений в тесте. **Единственная намеренная правка** (в
+отличие от "zero test changes" юнитов 1-6): `ArtifactTest.cpp`'s
+`FHerbalistArtifact_IsBereginyaManifestedScansAllCells` переименован в
+`FHerbalistArtifact_LegendaryManifestedFallsBackToFullScanWithoutAnchor`
+и репойнтнут на `Manager->IsLegendaryManifested(FName("Берегиня"))` —
+прямое следствие удаления публичного метода, не забытый юнит.
+
+**Итог:** 261 → 261 (один тест переименован на месте, не добавлен и не
+удалён). Два последовательных чистых прогона **261/261**.

@@ -74,11 +74,11 @@ bool FHerbalistArtifact_IsLegendaryManifestedReadsAnchorCell::RunTest(const FStr
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_IsBereginyaManifestedScansAllCells,
-    "Herbalist.Artifact.IsBereginyaManifestedScansAllCells",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_LegendaryManifestedFallsBackToFullScanWithoutAnchor,
+    "Herbalist.Artifact.LegendaryManifestedFallsBackToFullScanWithoutAnchor",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistArtifact_IsBereginyaManifestedScansAllCells::RunTest(const FString& Parameters)
+bool FHerbalistArtifact_LegendaryManifestedFallsBackToFullScanWithoutAnchor::RunTest(const FString& Parameters)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
@@ -86,15 +86,19 @@ bool FHerbalistArtifact_IsBereginyaManifestedScansAllCells::RunTest(const FStrin
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
-    // Берегиня отсутствует в LegendaryEntityTypes.h/LegendaryAnchors --
-    // никакой якорь не нужен, IsBereginyaManifested сканирует все клетки.
-    TestFalse(TEXT("Not manifested at start"), Manager->IsBereginyaManifested());
+    // Берегиня (bUsesCellHistoryPurity=true, LegendaryEntityTypes.h) не
+    // получает якорь в LegendaryAnchors (SeedLegendaryAnchors пропускает
+    // per-клеточные карточки) -- 2026-09-02, унификация: раньше отдельный
+    // метод IsBereginyaManifested(), теперь fallback внутри самого
+    // IsLegendaryManifested (нет якоря -> сканирует все клетки).
+    const FName BereginyaID(TEXT("Берегиня"));
+    TestFalse(TEXT("Not manifested at start"), Manager->IsLegendaryManifested(BereginyaID));
 
     if (FGridCell* Cell = Manager->GetCell(5, 5))
     {
-        Cell->ManifestedEntityID = FName(TEXT("Берегиня"));
+        Cell->ManifestedEntityID = BereginyaID;
     }
-    TestTrue(TEXT("Manifested once any cell carries her ID"), Manager->IsBereginyaManifested());
+    TestTrue(TEXT("Manifested once any cell carries her ID"), Manager->IsLegendaryManifested(BereginyaID));
 
     Manager->Destroy();
     return true;

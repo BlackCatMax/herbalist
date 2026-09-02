@@ -45,19 +45,18 @@ bool AGridWorldManager::IsArtifactWarmed(FName ArtifactID) const
 
 bool AGridWorldManager::IsLegendaryManifested(FName EntityID) const
 {
-    const FIntPoint* Anchor = LegendaryAnchors.Find(EntityID);
-    if (!Anchor) return false;
-
-    const FGridCell* Cell = GetCellConst(Anchor->X, Anchor->Y);
-    return Cell && Cell->ManifestedEntityID == EntityID;
-}
-
-bool AGridWorldManager::IsBereginyaManifested() const
-{
-    static const FName BereginyaID(TEXT("Берегиня"));
+    if (const FIntPoint* Anchor = LegendaryAnchors.Find(EntityID))
+    {
+        const FGridCell* Cell = GetCellConst(Anchor->X, Anchor->Y);
+        return Cell && Cell->ManifestedEntityID == EntityID;
+    }
+    // 2026-09-02 (унификация Берегини) -- нет якоря значит per-клеточная
+    // карточка (bUsesCellHistoryPurity=true), у неё никогда не было
+    // фиксированной клетки: сканируем все (было отдельным методом
+    // IsBereginyaManifested(), поглощено сюда).
     for (const FGridCell& Cell : Cells)
     {
-        if (Cell.ManifestedEntityID == BereginyaID) return true;
+        if (Cell.ManifestedEntityID == EntityID) return true;
     }
     return false;
 }
@@ -77,12 +76,12 @@ bool AGridWorldManager::TryAcquireArtifact(FName ArtifactID, const TArray<FInven
         if (Existing.ArtifactID == ArtifactID) return false;
     }
 
-    // Доступен только когда сущность уже проявлена (§21.3) — Гребень идёт
-    // через отдельную ветку (Берегиня не в LegendaryEntityTypes.h).
-    const bool bManifested = Def->LegendaryEntityID.IsNone()
-        ? IsBereginyaManifested()
-        : IsLegendaryManifested(Def->LegendaryEntityID);
-    if (!bManifested) return false;
+    // Доступен только когда сущность уже проявлена (§21.3). 2026-09-02
+    // (унификация Берегини): раньше Гребень шёл через отдельную ветку
+    // (Берегиня не в LegendaryEntityTypes.h) -- теперь она обычная строка
+    // реестра, IsLegendaryManifested сама умеет её (fallback-скан без
+    // якоря), развилка не нужна.
+    if (!IsLegendaryManifested(Def->LegendaryEntityID)) return false;
 
     // Честный/обманный путь — то же различие S_real/S_Perceived, что уже
     // отличает тултип (AlchemySlotWidget.cpp) от настоящего Cell.State.

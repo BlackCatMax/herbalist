@@ -1,12 +1,13 @@
 // LegendaryEntitiesCreateCommandlet.h
 //
-// Создаёт /Game/Herbalist/Data/DT_LegendaryEntities с нуля (2026-09-02,
-// юнит 3/3, последний, миграции бестиария на data-driven архитектуру) и
-// заполняет 16 карточками, построчно перенесёнными без изменения чисел
-// из прежнего литерального массива LegendaryEntityTypes.h::
-// GetLegendaryEntityDefinitions(). Берегиня НЕ входит (свой per-клеточный
-// путь, вне миграции). Тот же паттерн, что AmbientEntitiesCreateCommandlet.cpp
-// (юнит 1/3) и LandmarksCreateCommandlet.cpp (юнит 2/3).
+// Создаёт /Game/Herbalist/Data/DT_LegendaryEntities с нуля и заполняет 17
+// карточками. Изначально (2026-09-02, юнит 3/3 миграции бестиария) — 16
+// якорных карточек, Берегиня была вне миграции (свой per-клеточный путь,
+// хардкод в GridWorldManagerEntities.cpp). 2026-09-02, унификация Берегини
+// (отдельный юнит, ответ на "все сущности должны быть равны... без
+// исключений"): добавлена 17-й строкой, bUsesCellHistoryPurity=true (см.
+// LegendaryEntityTypes.h) — тот же реестр, второй механизм триггера, не
+// исключение. Тот же паттерн, что AmbientEntitiesCreateCommandlet.cpp.
 //
 // Идемпотентен: если ассет уже существует, ничего не делает, успех.
 //

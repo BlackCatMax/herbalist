@@ -37,8 +37,6 @@ using HerbalistCore::Math::PassesHysteresisThreshold;
 namespace
 {
     const FName EntityID_Gnilniki(TEXT("Гнильники"));
-    const FName EntityID_Bereginya(TEXT("Берегиня"));
-
     // Ранг бестиария (см. заголовок файла: Низший/Основной/Легендарный) решает,
     // кто вытесняет кого при совпадении условий в одной клетке (DESIGN_World_State.md
     // §14) — "вытеснение вместо миграции": никто не переезжает, просто более
@@ -46,10 +44,9 @@ namespace
     // одновременно. Выше число — выше приоритет.
     int32 GetEntityManifestationPriority(FName EntityID)
     {
-        if (EntityID == EntityID_Bereginya) return 2;  // Легендарный
-        // Легендарный ранг из реестра (LegendaryEntityTypes.h, 2026-08-29) —
-        // та же биома-независимая проверка, что уже есть у Основного/Низшего
-        // ниже. Берегиня выше (жёстко закодирована в этом файле) не тронута.
+        // Легендарный ранг из реестра (LegendaryEntityTypes.h) — 2026-09-02,
+        // унификация Берегини: она теперь тоже строка этого реестра
+        // (bUsesCellHistoryPurity=true), больше нет отдельного спецкейса.
         for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
         {
             if (EntityID == Def.EntityID) return 2;
@@ -459,6 +456,12 @@ void AGridWorldManager::SeedLegendaryAnchors()
     TSet<FIntPoint> CellsUsed;
     for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
     {
+        // 2026-09-02 (унификация Берегини) -- per-клеточные карточки не
+        // используют фиксированный якорь вовсе (см. bUsesCellHistoryPurity в
+        // LegendaryEntityTypes.h), каждая подходящая клетка проверяется
+        // независимо в UpdateEntityManifestations, не одна выделенная.
+        if (Def.bUsesCellHistoryPurity) continue;
+
         for (const FGridCell& Cell : Cells)
         {
             if (Cell.Biome != Def.Biome) continue;
@@ -525,8 +528,6 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float GnilnikiThreshold   = Settings ? Settings->GnilnikiCorruptionThreshold      : 0.6f;
     const float GnilnikiNudgeRate   = Settings ? Settings->GnilnikiNudgeRate                : 0.01f;
     const float HistoryPurityRate   = Settings ? Settings->HistoryPurityLerpRate            : 0.02f;
-    const float BereginyaThreshold  = Settings ? Settings->BereginyaHistoryPurityThreshold  : 0.75f;
-    const float BereginyaShrineThreshold = Settings ? Settings->BereginyaShrineRestorationThreshold : 0.7f;
     const int32 ShrineInfluenceRadius = Settings ? Settings->ShrineInfluenceRadius          : 3;
     const float NightHorrorDistortionRate = Settings ? Settings->NightHorrorDistortionRate  : 0.003f;
     const float NightHorrorCorruptionRate = Settings ? Settings->NightHorrorCorruptionRate  : 0.002f;
@@ -555,14 +556,16 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // Поле уже существовало в FMemoryState, но нигде не обновлялось (см.
         // 16_Entity_Manifestation §16.4, упрощённый аналог Restoration капищ).
         //
-        // Считается только для Речной поймы: это порог появления Берегини, и
-        // больше HistoryPurity никто не читает. Раньше гонялось по всем клеткам.
+        // 2026-09-02 (унификация Берегини) — раньше считалось только для
+        // Речной поймы (единственный на тот момент читатель). Теперь читает
+        // любая Legendary-карточка с bUsesCellHistoryPurity=true, на любом
+        // биоме — считаем безусловно для всех клеток (один FMath::Lerp на
+        // клетку, не измеримая нагрузка даже на 100x100).
         //
         // Сходимость через 1-exp(-rate*dt), а не rate*dt: линейная форма при
         // больших DeltaTime перелетает цель, а без DeltaTime вовсе (как было)
         // скорость сходимости зависела от FPS — порог Берегини достигался на
         // разных машинах за разное время.
-        if (Cell.Biome == EBiomeType::Floodplain)
         {
             const float PurityAlpha = 1.0f - FMath::Exp(-HistoryPurityRate * DeltaTime);
             Cell.Memory.HistoryPurity = FMath::Lerp(Cell.Memory.HistoryPurity, Cell.State.Meta.Purity, PurityAlpha);
@@ -752,51 +755,65 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         }
         SyncManifestedEntityActor(Cell, ManifestingAmbientDef ? ManifestingAmbientDef->ActorClass : nullptr, AAmbientEntityActor::StaticClass());
 
-        // --- Берегиня: Легендарный, порог мирового состояния, Речная пойма ---
-        if (Cell.Biome == EBiomeType::Floodplain && Cell.bIsWater && bBiomeContentAllowed)
+        // --- Легендарный, per-клеточный триггер (bUsesCellHistoryPurity) ---
+        // 2026-09-02, унификация Берегини: раньше единственный хардкод-блок
+        // именно под неё, теперь цикл по реестру LegendaryEntityTypes.h,
+        // отфильтрованный этим флагом -- принимает любое число таких карточек,
+        // не только одну. Тот же паттерн гейтов (Biome/bWaterOnly/bLandOnly),
+        // что уже применяет Низший ранг выше в этом же per-клеточном цикле.
+        if (bBiomeContentAllowed)
         {
-            const bool bWasActive = Cell.ManifestedEntityID == EntityID_Bereginya;
-
-            // Два независимых пути к тому же триггеру (16_Entity_Manifestation
-            // §16.4: "устойчиво низкий Distortion... ИЛИ высокая Restoration
-            // капища поблизости — как уже спроектировано для Берегини"). До
-            // аудита 2026-08-24 был только HistoryPurity — "упрощённая версия
-            // без капищ" (см. комментарий у BereginyaHistoryPurityThreshold в
-            // HerbalistSettings.h), написанная ДО того, как капища появились
-            // в проекте. Теперь появились — добавляем второй путь, не убирая
-            // первый: это разные, оба валидные, сигналы ("вода долго была
-            // чистой сама по себе" vs "рядом ухоженное капище"), не дубли.
-            const bool bHistoryEligible = PassesHysteresisThreshold(bWasActive, Cell.Memory.HistoryPurity, BereginyaThreshold, HysteresisMargin);
-            const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineInfluenceRadius);
-            const bool bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, BereginyaShrineThreshold, HysteresisMargin);
-            // Тот же гейт, что у Низшего ранга выше — Берегиня целиком
-            // "чистая" по конструкции (порог по HistoryPurity/Restoration),
-            // без злого аналога, поэтому исключений внутри неё нет.
-            const bool bEligible = (bHistoryEligible || bShrineEligible) && !Cell.Memory.bDegrading;
-
-            if (bEligible && CanManifest(Cell, EntityID_Bereginya))
+            // Тот же приём, что ManifestingAmbientDef у Низшего ранга выше --
+            // цикл проверяет ВСЕ подходящие Def (не прерывается на первом
+            // совпадении биома), актёр синхронизируется один раз после цикла
+            // тем, кто реально выиграл клетку в этот тик.
+            const FLegendaryEntityDefinition* ManifestingPerCellDef = nullptr;
+            for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
             {
-                Cell.ManifestedEntityID = EntityID_Bereginya;
-                // Благословлённая вода — Purity подтягивается к минимум 0.9, но
-                // не выше: только floor, без верхнего клампа. Раньше здесь стоял
-                // Clamp(..., 0.97) — если Purity УЖЕ была выше 0.97 (например, от
-                // самой Заряны при варке), формула её тихо понижала, хотя смысл
-                // был обратный — не мешать, а подтягивать вверх.
-                if (NewTarget.Meta.Purity < 0.9f)
+                if (!Def.bUsesCellHistoryPurity) continue;
+                if (Cell.Biome != Def.Biome) continue;
+                if (Def.bLandOnly && Cell.bIsWater) continue;
+                if (Def.bWaterOnly && !Cell.bIsWater) continue;
+
+                const bool bWasActive = Cell.ManifestedEntityID == Def.EntityID;
+
+                // Два независимых пути к тому же триггеру (16_Entity_Manifestation
+                // §16.4: "устойчиво низкий Distortion... ИЛИ высокая Restoration
+                // капища поблизости" -- как уже спроектировано для Берегини).
+                const bool bHistoryEligible = PassesHysteresisThreshold(bWasActive, Cell.Memory.HistoryPurity, Def.HistoryPurityThreshold, HysteresisMargin);
+                bool bShrineEligible = false;
+                if (Def.bHasShrinePath)
                 {
-                    NewTarget.Meta.Purity = 0.9f;
+                    const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineInfluenceRadius);
+                    bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, Def.ShrineThreshold, HysteresisMargin);
                 }
-                bChanged = true;
+                // Тот же гейт, что у Низшего ранга выше -- Берегиня и любая
+                // будущая карточка этого типа "чистая" по конструкции (порог
+                // по HistoryPurity/Restoration), без злого аналога, поэтому
+                // исключений внутри неё нет.
+                const bool bEligible = (bHistoryEligible || bShrineEligible) && !Cell.Memory.bDegrading;
+
+                if (bEligible && CanManifest(Cell, Def.EntityID))
+                {
+                    Cell.ManifestedEntityID = Def.EntityID;
+                    ManifestingPerCellDef = &Def;
+                    if (Def.bFloorEffect)
+                    {
+                        ApplyLandmarkAxisFloor(NewTarget, Def.EffectAxis, Def.EffectRate);
+                    }
+                    else
+                    {
+                        ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
+                        ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);
+                    }
+                    bChanged = true;
+                }
+                else if (bWasActive)
+                {
+                    Cell.ManifestedEntityID = NAME_None;
+                }
             }
-            else if (bWasActive)
-            {
-                Cell.ManifestedEntityID = NAME_None;
-            }
-            // Берегиня жёстко закодирована в этом файле (не через реестр
-            // LegendaryEntityTypes.h, см. GetEntityManifestationPriority выше),
-            // поэтому у неё нет своего FLegendaryEntityDefinition::ActorClass —
-            // всегда базовый класс ранга, без per-существо переопределения.
-            SyncManifestedEntityActor(Cell, nullptr, ALegendaryEntityActor::StaticClass());
+            SyncManifestedEntityActor(Cell, ManifestingPerCellDef ? ManifestingPerCellDef->ActorClass : nullptr, ALegendaryEntityActor::StaticClass());
         }
 
         // --- Опасная нечисть, §16.5: сквозная ночная фаза ---

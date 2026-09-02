@@ -203,19 +203,12 @@ public:
     // §16.3 больше не реагирует на HarvestStress клетки пассивно — только на
     // подношение (Apply-to-cell), см. LandmarkOfferingGain ниже.
 
-    // Берегиня (Легендарный, Речная пойма) — порог Memory.HistoryPurity водной
-    // клетки для проявления. Писалось до капищ как "упрощённая версия без
-    // полноценной системы" (15_Cycles_And_Shrines §15.5) — теперь один из
-    // двух независимых путей к триггеру, см. BereginyaShrineRestorationThreshold.
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float BereginyaHistoryPurityThreshold = 0.75f;
-
-    // Второй путь к тому же триггеру (16_Entity_Manifestation §16.4: "высокая
-    // Restoration капища поблизости — как уже спроектировано для Берегини"),
-    // добавлен 2026-08-24 после того, как капища перестали быть гипотетическими.
-    // Использует тот же радиус, что ShrineInfluenceRadius ниже.
-    UPROPERTY(config, EditAnywhere, Category = "Entities|Bereginya", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float BereginyaShrineRestorationThreshold = 0.7f;
+    // BereginyaHistoryPurityThreshold/BereginyaShrineRestorationThreshold
+    // удалены 2026-09-02 (унификация Берегини) — она теперь обычная строка
+    // DT_LegendaryEntities (bUsesCellHistoryPurity=true), пороги переехали
+    // в HistoryPurityThreshold/ShrineThreshold её строки, как у остальных
+    // 16 карточек Легендарного ранга (ни одна другая не хранит порог в
+    // Settings отдельно от своего Def).
 
     // §16.5 "Опасная нечисть — сквозная ночная фаза" (Вурдалаки/Навьи/
     // Оборотни/Лихоманки/Черти — единственная категория бестиария без

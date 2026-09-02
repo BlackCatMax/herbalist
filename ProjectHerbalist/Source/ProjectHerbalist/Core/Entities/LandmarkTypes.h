@@ -132,6 +132,29 @@ inline void ApplyLandmarkAxisNudge(FRealState& Target, ELandmarkAxis Axis, float
     }
 }
 
+// 2026-09-02 (унификация Берегини, LegendaryEntityTypes.h::bFloorEffect) --
+// та же ось-диспетчеризация, что ApplyLandmarkAxisNudge выше, но не
+// добавляет Delta/сек, а гарантирует, что ось не ниже FloorValue -- пока
+// условие карточки выполнено, мгновенное свойство, не скорость. Берегиня:
+// floor Purity на 0.9 (была захардкожена в GridWorldManagerEntities.cpp).
+inline void ApplyLandmarkAxisFloor(FRealState& Target, ELandmarkAxis Axis, float FloorValue)
+{
+    switch (Axis)
+    {
+    case ELandmarkAxis::Body:       Target.Direction.Body   = FMath::Max(Target.Direction.Body,   FloorValue); break;
+    case ELandmarkAxis::Mind:       Target.Direction.Mind   = FMath::Max(Target.Direction.Mind,   FloorValue); break;
+    case ELandmarkAxis::Spirit:     Target.Direction.Spirit = FMath::Max(Target.Direction.Spirit, FloorValue); break;
+    case ELandmarkAxis::Nature:     Target.Direction.Nature = FMath::Max(Target.Direction.Nature, FloorValue); break;
+    case ELandmarkAxis::Corruption: Target.Meta.Corruption  = FMath::Clamp(FMath::Max(Target.Meta.Corruption, FloorValue), 0.0f, 1.0f); break;
+    case ELandmarkAxis::Purity:     Target.Meta.Purity      = FMath::Clamp(FMath::Max(Target.Meta.Purity,     FloorValue), 0.0f, 1.0f); break;
+    case ELandmarkAxis::Distortion: Target.Meta.Distortion  = FMath::Clamp(FMath::Max(Target.Meta.Distortion, FloorValue), 0.0f, 1.0f); break;
+    case ELandmarkAxis::Stability:  Target.Meta.Stability   = FMath::Clamp(FMath::Max(Target.Meta.Stability,  FloorValue), 0.0f, 1.0f); break;
+    case ELandmarkAxis::Potency:    Target.Meta.Potency     = FMath::Clamp(FMath::Max(Target.Meta.Potency,    FloorValue), 0.0f, 1.0f); break;
+    case ELandmarkAxis::Resonance:  Target.Meta.Resonance   = FMath::Clamp(FMath::Max(Target.Meta.Resonance,  FloorValue), 0.0f, 1.0f); break;
+    default: break;
+    }
+}
+
 // Ленивая загрузка из /Game/Herbalist/Data/DT_Landmarks (2026-09-02, см.
 // комментарий у файла выше и у GetAmbientEntityDefinitions() в
 // AmbientEntityTypes.h -- тот же паттерн). LogTemp, не HerbalistLogChannels.h

@@ -229,6 +229,29 @@ namespace
             Defs.Add(D);
         }
 
+        // --- Per-клеточный триггер (не якорный) ---
+        // Берегиня (Речная пойма, ВОДА) -- 2026-09-02, унификация: раньше
+        // жёстко закодирована в GridWorldManagerEntities.cpp, 17-я карточка
+        // этого реестра, bUsesCellHistoryPurity=true. Значения -- прежние
+        // BereginyaHistoryPurityThreshold/BereginyaShrineRestorationThreshold
+        // из HerbalistSettings.h (0.75/0.7, теперь удалены оттуда как
+        // мёртвый код) и floor-эффект (Purity >= 0.9), прежде хардкоженный
+        // в самом тик-коде.
+        {
+            FLegendaryEntityDefinition D;
+            D.EntityID = FName(TEXT("Берегиня"));
+            D.SortOrder = Order++;
+            D.Biome = EBiomeType::Floodplain;
+            D.bWaterOnly = true;
+            D.Pole = ELegendaryPole::Benign;
+            D.bUsesCellHistoryPurity = true;
+            D.HistoryPurityThreshold = 0.75f;
+            D.bHasShrinePath = true; D.ShrineThreshold = 0.7f;
+            D.bFloorEffect = true;
+            D.EffectAxis = ELandmarkAxis::Purity; D.EffectRate = 0.9f;
+            Defs.Add(D);
+        }
+
         return Defs;
     }
 }
