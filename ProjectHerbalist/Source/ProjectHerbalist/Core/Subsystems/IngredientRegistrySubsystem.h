@@ -36,6 +36,13 @@ public:
     // целиком, не Biome+State по отдельности — ради HarvestStress.
     FName GetRandomResourceForBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
 
+    // Водные растения (2026-09-02, прямой запрос пользователя) — тот же
+    // поиск по Cell.BiomeWeights, что и GetRandomResourceForBiome выше, но
+    // кандидаты берутся из отдельного кэша (только строки с bGrowsOnWater),
+    // не смешиваются с обычным земляным пулом. Вызывается только для
+    // Cell.bIsWater == true (см. AGridWorldManager::SpawnResourcesInCell).
+    FName GetRandomResourceForAquaticBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
+
     // Пристройка сада (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) —
     // тот же вопрос "сколько шансов у кого" (близость State/сезон/окна), но
     // кандидаты берутся из EGardenNiche ингредиента, не из AllowedBiomes
@@ -53,10 +60,25 @@ private:
     TMap<EBiomeType, TArray<FName>> CachedResourcesByBiome;
     TMap<EBiomeType, TArray<int32>> CachedWeightsByBiome;
 
+    // Тот же смысл, что пара выше, но только строки с bGrowsOnWater == true
+    // (2026-09-02) — отдельный, не смешиваемый с земляным пул кандидатов
+    // для клеток, которые сейчас вода.
+    TMap<EBiomeType, TArray<FName>> CachedAquaticResourcesByBiome;
+    TMap<EBiomeType, TArray<int32>> CachedAquaticWeightsByBiome;
+
     TMap<EGardenNiche, TArray<FName>> CachedResourcesByNiche;
     TMap<EGardenNiche, TArray<int32>> CachedWeightsByNiche;
 
     void BuildCache();
+
+    // Слияние по Cell.BiomeWeights + взвешенный ролл (DESIGN_World_State.md
+    // §15/§16, звенья 3 и 8) — вынесено из GetRandomResourceForBiome, чтобы
+    // GetRandomResourceForAquaticBiome не дублировал ту же логику merge над
+    // другой парой кэшей (ResourceCache/WeightCache — обычная земляная пара
+    // или аквакэш, вызывающая сторона решает какая).
+    FName PickFromBiomeWeightedCache(const TMap<EBiomeType, TArray<FName>>& ResourceCache,
+        const TMap<EBiomeType, TArray<int32>>& WeightCache,
+        const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
 
     // Общая взвешенная выборка (DESIGN_World_State.md §15/§16, звенья 3 и 8)
     // — вынесена из GetRandomResourceForBiome, чтобы GetRandomResourceForNiche

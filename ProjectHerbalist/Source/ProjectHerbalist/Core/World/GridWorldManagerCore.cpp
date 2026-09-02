@@ -722,13 +722,15 @@ void AGridWorldManager::InitializeCells()
     // ========================================================================
     CacheCellHeights();
 
-    // Спавним ресурсы во всех не-водных клетках
+    // Спавним ресурсы во всех клетках -- в т.ч. водных (2026-09-02, водные
+    // растения): SpawnResourcesInCell сама решает, из какого пула брать
+    // кандидата (аквапул для bIsWater, обычный земляной иначе), водная
+    // клетка без ни единого зарегистрированного bGrowsOnWater-растения
+    // просто не получит ничего (GetRandomResourceForAquaticBiome вернёт
+    // NAME_None), как и раньше.
     for (FGridCell& Cell : Cells)
     {
-        if (!Cell.bIsWater)
-        {
-            SpawnResourcesInCell(Cell);
-        }
+        SpawnResourcesInCell(Cell);
     }
 
     // Вертикальный срез проявления сущностей (16_Entity_Manifestation) —
@@ -769,8 +771,10 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
 
     // Сад (§2.4): клетка с пристройкой — кандидаты из EGardenNiche, не из
     // AllowedBiomes. Пусто (None) для подавляющего большинства клеток мира
-    // — обычный путь ниже не меняется вовсе для них.
-    const EGardenNiche* PlotNiche = GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
+    // — обычный путь ниже не меняется вовсе для них. Не применяется на воде
+    // (2026-09-02) -- пристройка сада не подделывает нишу для водных клеток,
+    // это отдельный, пока не заведённый случай.
+    const EGardenNiche* PlotNiche = Cell.bIsWater ? nullptr : GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
 
     // Диапазон количества ресурсов -- пер-региональная настройка
     // (ABiomeRegionVolume::MinResourcesPerCell/MaxResourcesPerCell,
@@ -786,9 +790,22 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         FName IngredientID = NAME_None;
         if (IngredientSubsystem)
         {
-            IngredientID = (PlotNiche && *PlotNiche != EGardenNiche::None)
-                ? IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, WorldRNG)
-                : IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, WorldRNG);
+            // Водные растения (2026-09-02, прямой запрос пользователя):
+            // "если у биома есть водные растения, то они разрешены к
+            // размещению на поверхности воды, и вода одновременно доступна" --
+            // отдельный, не смешанный с земляным пул (bGrowsOnWater),
+            // тот же принцип отбора по Cell.BiomeWeights земляного биома
+            // под водой, что и обычный GetRandomResourceForBiome.
+            if (Cell.bIsWater)
+            {
+                IngredientID = IngredientSubsystem->GetRandomResourceForAquaticBiome(Cell, Context, WorldRNG);
+            }
+            else
+            {
+                IngredientID = (PlotNiche && *PlotNiche != EGardenNiche::None)
+                    ? IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, WorldRNG)
+                    : IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, WorldRNG);
+            }
         }
         if (IngredientID.IsNone()) continue;
 
@@ -875,14 +892,14 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     FTimerHandle TimerHandle;
     GetWorldTimerManager().SetTimer(TimerHandle, [this, &Cell]()
     {
-        if (!Cell.bIsWater)
-        {
-            SpawnResourcesInCell(Cell);
-            // В отличие от исходного броска в InitializeCells (тот безопасно
-            // переигрывается заново из RngBaseSeed), это отросшее — не то же
-            // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
-            MarkCellDirty(Cell.X, Cell.Y);
-        }
+        // Водные растения (2026-09-02) возрождаются тем же путём, что и
+        // земляные -- SpawnResourcesInCell сама решает пул (аквапул для
+        // bIsWater), раньше вода была исключена целиком.
+        SpawnResourcesInCell(Cell);
+        // В отличие от исходного броска в InitializeCells (тот безопасно
+        // переигрывается заново из RngBaseSeed), это отросшее — не то же
+        // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
+        MarkCellDirty(Cell.X, Cell.Y);
     }, RegrowthTime, false);
 }
 
@@ -920,7 +937,9 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.Tool          = PC ? PC->CurrentGatheringTool : EGatheringTool::BareHands;
     QueueCommand(Cmd);
 
-    if (Cell->ResourceActors.Num() == 0 && !Cell->bIsWater)
+    // Водные растения (2026-09-02) возрождаются тем же путём -- вода
+    // раньше была исключена из этого гейта целиком.
+    if (Cell->ResourceActors.Num() == 0)
     {
         StartRegeneration(*Cell);
     }

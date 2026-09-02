@@ -62,6 +62,19 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning")
     TArray<EBiomeType> AllowedBiomes;
 
+    // Водное растение (2026-09-02, прямой запрос пользователя: "если у
+    // биома есть водные растения, то они разрешены к размещению на
+    // поверхности воды, и вода одновременно доступна"). AllowedBiomes
+    // выше остаётся тем же списком (какой земляной биом характерен для
+    // этого растения — кувшинки и Речная пойма, например), этот флаг лишь
+    // разрешает спавн НА клетках, которые сейчас вода (Cell.bIsWater),
+    // вместо обычного запрета "на воде ресурсы не растут". Сбор воды
+    // (CollectWater) и сбор этого растения (AHerbalistResourceActor) —
+    // независимые механизмы, что заденет трейс игрока при клике, то и
+    // сработает.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning")
+    bool bGrowsOnWater = false;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning", meta = (ClampMin = "1"))
     int32 RarityWeight = 1;
 

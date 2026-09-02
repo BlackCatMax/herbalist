@@ -46,6 +46,8 @@ void UIngredientRegistrySubsystem::BuildCache()
 {
     CachedResourcesByBiome.Empty();
     CachedWeightsByBiome.Empty();
+    CachedAquaticResourcesByBiome.Empty();
+    CachedAquaticWeightsByBiome.Empty();
     CachedResourcesByNiche.Empty();
     CachedWeightsByNiche.Empty();
 
@@ -55,6 +57,14 @@ void UIngredientRegistrySubsystem::BuildCache()
         {
             CachedResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
             CachedWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
+
+            // Водные растения (2026-09-02) -- та же принадлежность биому
+            // (AllowedBiomes), отдельный пул, не смешанный с земляным.
+            if (Pair.Value.bGrowsOnWater)
+            {
+                CachedAquaticResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
+                CachedAquaticWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
+            }
         }
 
         // Пристройка сада (§2.4) -- отдельный, параллельный ключ, не подмешан
@@ -137,6 +147,18 @@ namespace
 
 FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
 {
+    return PickFromBiomeWeightedCache(CachedResourcesByBiome, CachedWeightsByBiome, Cell, Context, Rng);
+}
+
+FName UIngredientRegistrySubsystem::GetRandomResourceForAquaticBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
+{
+    return PickFromBiomeWeightedCache(CachedAquaticResourcesByBiome, CachedAquaticWeightsByBiome, Cell, Context, Rng);
+}
+
+FName UIngredientRegistrySubsystem::PickFromBiomeWeightedCache(const TMap<EBiomeType, TArray<FName>>& ResourceCache,
+    const TMap<EBiomeType, TArray<int32>>& WeightCache,
+    const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
+{
     // PCG-биомы (2026-08-31): Cell.BiomeWeights пуст для клетки вне всех
     // ABiomeRegionVolume (см. AGridWorldManager::InitializeCells) --
     // обязательный откат на {Cell.Biome: 1.0}, не опция. Сохраняет
@@ -160,10 +182,10 @@ FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& C
     TArray<float> MergedWeights;
     for (const FBiomeWeightEntry& Entry : Weights)
     {
-        const TArray<FName>* Candidates = CachedResourcesByBiome.Find(Entry.Biome);
+        const TArray<FName>* Candidates = ResourceCache.Find(Entry.Biome);
         if (!Candidates || Candidates->Num() == 0) continue;
 
-        const TArray<int32>* BaseWeights = CachedWeightsByBiome.Find(Entry.Biome);
+        const TArray<int32>* BaseWeights = WeightCache.Find(Entry.Biome);
         // Кэши строятся в одном проходе BuildCache() и всегда одной длины
         // -- на практике недостижимо, защитный пропуск этой доли, не крах.
         if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) continue;
@@ -277,5 +299,9 @@ void UIngredientRegistrySubsystem::Reset()
     Rows.Empty();
     CachedResourcesByBiome.Empty();
     CachedWeightsByBiome.Empty();
+    CachedAquaticResourcesByBiome.Empty();
+    CachedAquaticWeightsByBiome.Empty();
+    CachedResourcesByNiche.Empty();
+    CachedWeightsByNiche.Empty();
     bInitialized = false;
 }
