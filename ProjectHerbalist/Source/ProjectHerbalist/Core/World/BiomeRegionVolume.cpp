@@ -20,6 +20,8 @@ void ABiomeRegionVolume::BeginPlay()
 void ABiomeRegionVolume::UpdateCachedPoints()
 {
     CachedPoints2D.Empty();
+    CachedCentroid = FVector2D::ZeroVector;
+    CachedMaxRadiusFromCentroid = 0.0f;
 
     if (!SplineComponent || SplineComponent->GetSplineLength() <= 0.0f)
         return;
@@ -33,6 +35,20 @@ void ABiomeRegionVolume::UpdateCachedPoints()
         const float Distance = Step * i;
         const FVector Location = SplineComponent->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
         CachedPoints2D.Add(FVector2D(Location.X, Location.Y));
+    }
+
+    // Центроид + макс. радиус для GetNormalizedDistanceFromCenter (2026-09-03)
+    // -- посчитаны один раз здесь, не на каждый запрос затухания (по разу на
+    // клетку/актора при заселении региона, а не дороже).
+    for (const FVector2D& Point : CachedPoints2D)
+    {
+        CachedCentroid += Point;
+    }
+    CachedCentroid /= CachedPoints2D.Num();
+
+    for (const FVector2D& Point : CachedPoints2D)
+    {
+        CachedMaxRadiusFromCentroid = FMath::Max(CachedMaxRadiusFromCentroid, FVector2D::Distance(CachedCentroid, Point));
     }
 }
 
@@ -79,4 +95,42 @@ bool ABiomeRegionVolume::IsPointInside(const FVector& Point) const
     }
 
     return bInside;
+}
+
+float ABiomeRegionVolume::GetNormalizedDistanceFromCenter(const FVector& Point) const
+{
+    EnsureCachedPoints();
+
+    if (CachedMaxRadiusFromCentroid <= KINDA_SMALL_NUMBER)
+        return 0.0f;   // вырожденный/ещё не построенный регион -- нейтрально, не делить на ~0
+
+    const float Dist = FVector2D::Distance(CachedCentroid, FVector2D(Point.X, Point.Y));
+    return FMath::Clamp(Dist / CachedMaxRadiusFromCentroid, 0.0f, 1.0f);
+}
+
+FRandomPlacementTransform ABiomeRegionVolume::RollPlacementTransform(const FVector& BasePosition, FRandomStream& Rng) const
+{
+    FRandomPlacementTransform Result;
+
+    Result.UniformScale = Rng.FRandRange(FMath::Min(MinUniformScale, MaxUniformScale), FMath::Max(MinUniformScale, MaxUniformScale));
+
+    const float Yaw = Rng.FRandRange(FMath::Min(MinYawDegrees, MaxYawDegrees), FMath::Max(MinYawDegrees, MaxYawDegrees));
+    const float Pitch = Rng.FRandRange(FMath::Min(MinTiltDegrees, MaxTiltDegrees), FMath::Max(MinTiltDegrees, MaxTiltDegrees));
+    const float Roll = Rng.FRandRange(FMath::Min(MinTiltDegrees, MaxTiltDegrees), FMath::Max(MinTiltDegrees, MaxTiltDegrees));
+    Result.Rotation = FRotator(Pitch, Yaw, Roll);
+
+    Result.PositionOffset = FVector(
+        Rng.FRandRange(FMath::Min(MinPositionOffset.X, MaxPositionOffset.X), FMath::Max(MinPositionOffset.X, MaxPositionOffset.X)),
+        Rng.FRandRange(FMath::Min(MinPositionOffset.Y, MaxPositionOffset.Y), FMath::Max(MinPositionOffset.Y, MaxPositionOffset.Y)),
+        Rng.FRandRange(FMath::Min(MinPositionOffset.Z, MaxPositionOffset.Z), FMath::Max(MinPositionOffset.Z, MaxPositionOffset.Z)));
+
+    // Затухание скейла к границе -- см. довод у ScaleFalloffStrength в .h.
+    // 0 (дефолт) -- множитель всегда 1, поведение не меняется.
+    if (ScaleFalloffStrength > 0.0f)
+    {
+        const float T = GetNormalizedDistanceFromCenter(BasePosition);
+        Result.UniformScale *= FMath::Lerp(1.0f, 1.0f - T, ScaleFalloffStrength);
+    }
+
+    return Result;
 }

@@ -22,9 +22,20 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Math/RandomStream.h"
 #include "BiomeRegionVolume.generated.h"
 
 class USplineComponent;
+
+// Результат RollPlacementTransform (2026-09-03) — обычный C++-агрегат, не
+// USTRUCT: живёт только между двумя C++-вызовами внутри одного кадра
+// (GridWorldManagerCore.cpp), рефлексия/Blueprint-доступ не нужны.
+struct FRandomPlacementTransform
+{
+    FVector PositionOffset = FVector::ZeroVector;
+    FRotator Rotation = FRotator::ZeroRotator;
+    float UniformScale = 1.0f;
+};
 
 UCLASS(Blueprintable, BlueprintType)
 class PROJECTHERBALIST_API ABiomeRegionVolume : public AActor
@@ -88,6 +99,75 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float WaterDensity = 0.2f;
 
+    // ---- Случайная трансформация ресурсов этого региона (2026-09-03,
+    // прямой запрос: "как у PCG в ноде Transform") ----
+    // До этой правки каждый ресурсный актор ставился с FRotator::ZeroRotator
+    // и скейлом 1,1,1 без исключений -- ряды одинаково повёрнутых, одинаково
+    // крупных кустов читались как искусственный узор поверх и без того
+    // заметного тайлинга джиттера (см. GetResourceJitterRadius). Все поля
+    // ниже -- диапазоны Min/Max, из которых на каждый актор берётся своё
+    // случайное число.
+    //
+    // Дефолты Yaw/Tilt -- ровно те числа, что запрошены прямо (0..360 / ±5°),
+    // применяются сразу на всех регионах, не требуют ручной настройки.
+    // Дефолт скейла (0.85..1.15) -- конкретное число не называлось, скромный
+    // разброс ±15% выбран как безопасная отправная точка, не потерявшая
+    // читаемость силуэта; смещение/затухание, наоборот, дефолтятся
+    // выключенными (0) -- запрошены как "возможность", не как всегда
+    // применяемый эффект, включаются вручную на конкретном регионе.
+
+    // Скейл ОДНИМ случайным числом на все три оси (не по X/Y/Z независимо)
+    // -- независимый скейл визуально "плющит" меш, растения так не растут.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "0.01"))
+    float MinUniformScale = 0.85f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "0.01"))
+    float MaxUniformScale = 1.15f;
+
+    // Поворот вокруг вертикали (Yaw) -- у растения нет "правильной" стороны,
+    // полный круг по умолчанию.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "-360.0", ClampMax = "360.0"))
+    float MinYawDegrees = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "-360.0", ClampMax = "360.0"))
+    float MaxYawDegrees = 360.0f;
+
+    // Лёгкий "завал" по горизонтали (Pitch/Roll, независимо друг от друга)
+    // -- пара градусов делает посадку органичнее, не полный поворот набок.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "-45.0", ClampMax = "45.0"))
+    float MinTiltDegrees = -5.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "-45.0", ClampMax = "45.0"))
+    float MaxTiltDegrees = 5.0f;
+
+    // Дополнительное смещение позиции поверх джиттера внутри клетки -- та
+    // же идея, что Offset у PCG Transform-ноды, диапазон по каждой оси
+    // отдельно.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement")
+    FVector MinPositionOffset = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement")
+    FVector MaxPositionOffset = FVector::ZeroVector;
+
+    // Затухание плотности/скейла от центра региона к границе (0 -- выключено,
+    // поведение не меняется; 1 -- у самой границы плотность/скейл падают
+    // до нуля). Единый множитель на весь регион, не отдельная кривая --
+    // одна ручка проще в редакторе, чем произвольная кривая для v1.
+    //
+    // "Центр" региона -- не точное расстояние до ближайшего края
+    // произвольного многоугольника (отдельная, более дорогая геометрическая
+    // задача), а дешёвое приближение: центроид вершин сплайна + расстояние
+    // до самой дальней из них (см. GetNormalizedDistanceFromCenter). Для
+    // выпуклых/почти выпуклых регионов (обычный случай авторства сплайнов
+    // биомов) даёт разумный радиальный градиент; для сильно вытянутых форм
+    // градиент у краёв не идеально точен -- приемлемая цена за то, что не
+    // нужен отдельный геометрический солвер.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float DensityFalloffStrength = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ScaleFalloffStrength = 0.0f;
+
     // Принудительно пересчитать кэш точек сплайна. GridWorldManager вызывает
     // это явно на каждом найденном регионе перед проверкой клеток — не
     // полагается на то, что BeginPlay() региона уже отработал (UE не
@@ -101,6 +181,21 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Biome")
     bool IsPointInside(const FVector& Point) const;
 
+    // 0 в центроиде региона, 1 у самой дальней вершины сплайна (приближение
+    // "границы", см. довод у DensityFalloffStrength выше). Публична ради
+    // GetClaimingRegion-based вызовов из AGridWorldManager и прямого
+    // юнит-теста геометрии без завязки на весь спавн.
+    UFUNCTION(BlueprintCallable, Category = "Biome")
+    float GetNormalizedDistanceFromCenter(const FVector& Point) const;
+
+    // Бросает случайную трансформацию для одного актора этого региона --
+    // скейл/поворот/доп.смещение из диапазонов выше, со скейлом, домноженным
+    // на затухание к границе, если оно включено. BasePosition -- уже
+    // найденная (свободная, внутри формы биома) точка посадки; функция
+    // только решает "как повернуть/масштабировать/сместить", не ищет место
+    // заново.
+    FRandomPlacementTransform RollPlacementTransform(const FVector& BasePosition, FRandomStream& Rng) const;
+
 protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USplineComponent> SplineComponent;
@@ -111,4 +206,11 @@ private:
     void EnsureCachedPoints() const;
 
     mutable TArray<FVector2D> CachedPoints2D;
+
+    // Центроид вершин + расстояние до самой дальней из них -- пересчитаны
+    // вместе с CachedPoints2D в UpdateCachedPoints() (не на каждый вызов
+    // GetNormalizedDistanceFromCenter, который зовётся по разу на клетку/
+    // актора при заселении региона).
+    mutable FVector2D CachedCentroid = FVector2D::ZeroVector;
+    mutable float CachedMaxRadiusFromCentroid = 0.0f;
 };

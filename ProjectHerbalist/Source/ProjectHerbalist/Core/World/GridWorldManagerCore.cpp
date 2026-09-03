@@ -1337,6 +1337,18 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     const int32 MinRes = ClaimingRegion ? FMath::Min(ClaimingRegion->MinResourcesPerCell, ClaimingRegion->MaxResourcesPerCell) : 1;
     const int32 MaxRes = ClaimingRegion ? FMath::Max(ClaimingRegion->MinResourcesPerCell, ClaimingRegion->MaxResourcesPerCell) : 3;
     int32 NumResources = WorldRNG.RandRange(MinRes, MaxRes);
+
+    // Затухание плотности к границе региона (2026-09-03, "как у PCG в ноде
+    // Transform"). 0 (дефолт) -- множитель всегда 1, поведение не меняется.
+    // Клетка целиком, не каждый её ресурс отдельно -- плотность решается
+    // один раз "сколько кустов в этой клетке", не "где именно они встанут".
+    if (ClaimingRegion && ClaimingRegion->DensityFalloffStrength > 0.0f)
+    {
+        const float T = ClaimingRegion->GetNormalizedDistanceFromCenter(GetCellWorldPositionFlat(Cell.X, Cell.Y));
+        const float DensityMultiplier = FMath::Lerp(1.0f, 1.0f - T, ClaimingRegion->DensityFalloffStrength);
+        NumResources = FMath::RoundToInt(NumResources * DensityMultiplier);
+    }
+
     for (int32 i = 0; i < NumResources; ++i)
     {
         FName IngredientID = NAME_None;
@@ -1372,6 +1384,17 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         }
         SpawnPos.Z += 5.0f;   // небольшой подъём над поверхностью, тот же, что и раньше
 
+        // Случайная трансформация (2026-09-03, "как у PCG в ноде Transform")
+        // -- скейл/поворот/доп.смещение из настроек региона. Без региона
+        // (блочный фолбэк, тесты) -- нейтральный дефолт FRandomPlacementTransform,
+        // поведение не меняется. Доп.смещение применяется к SpawnPos ДО
+        // Init() -- Init() получает Location параметром отдельно от
+        // фактического Transform актора, оба должны совпадать.
+        const FRandomPlacementTransform PlacementXform = ClaimingRegion
+            ? ClaimingRegion->RollPlacementTransform(SpawnPos, WorldRNG)
+            : FRandomPlacementTransform();
+        SpawnPos += PlacementXform.PositionOffset;
+
         const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
         if (!Row) continue;
 
@@ -1380,9 +1403,10 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         TSubclassOf<AHerbalistResourceActor> ClassToSpawn = Row->ResourceActorClass;
         if (!ClassToSpawn) ClassToSpawn = AHerbalistResourceActor::StaticClass();
 
-        AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
+        AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, PlacementXform.Rotation);
         if (NewActor)
         {
+            NewActor->SetActorScale3D(FVector(PlacementXform.UniformScale));
             // Регистрация в Cell.ResourceActors теперь делает сам Init()
             // (2026-09-02) -- единая точка входа для любого источника спавна,
             // не только этого C++-пути.
@@ -1410,6 +1434,11 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     // SpawnResourcesInCell. Явный ненулевой Offset вызывающей стороны
     // по-прежнему уважается как есть -- контракт параметра не сломан.
     FVector SpawnPos;
+    // Случайная трансформация (2026-09-03, см. довод у SpawnResourcesInCell)
+    // -- только на пути автопоиска места, не когда вызывающая сторона
+    // передала свой Offset явно: тот контракт про ТОЧНУЮ позицию, добавлять
+    // туда случайность значило бы его нарушить.
+    FRandomPlacementTransform PlacementXform;
     if (Offset.IsNearlyZero())
     {
         // Тот же поиск свободной точки, что и при первичном заселении
@@ -1421,6 +1450,12 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
             return;
         }
         SpawnPos.Z += 5.0f;
+
+        if (ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(*Cell))
+        {
+            PlacementXform = ClaimingRegion->RollPlacementTransform(SpawnPos, WorldRNG);
+            SpawnPos += PlacementXform.PositionOffset;
+        }
     }
     else
     {
@@ -1432,9 +1467,10 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     TSubclassOf<AHerbalistResourceActor> ClassToSpawn = Row->ResourceActorClass;
     if (!ClassToSpawn) ClassToSpawn = AHerbalistResourceActor::StaticClass();
 
-    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
+    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, PlacementXform.Rotation);
     if (NewActor)
     {
+        NewActor->SetActorScale3D(FVector(PlacementXform.UniformScale));
         // Регистрация в Cell.ResourceActors теперь делает сам Init() (2026-09-02).
         NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y, Row->Resilience, Row->bIronAverse, Row->bDelicate);
         UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
