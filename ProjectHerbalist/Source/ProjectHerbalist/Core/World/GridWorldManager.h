@@ -281,6 +281,22 @@ public:
     // в DormantResourceIDs; акторы PCG-графа не трогаются.
     void SetChunkResourcesActive(const FIntPoint& Chunk, bool bActive);
 
+    // Уничтожить акторов проявленных сущностей (капище-заглушки-деревья и
+    // т.п.) в деактивированном чанке -- найдено пользователем 2026-09-03
+    // ("отлично режется чанками растительность, но не деревья-заглушки для
+    // entities"). У ресурсов есть симметричная пара
+    // SetChunkResourcesActive(true/false); у сущностей активная сторона не
+    // нужна отдельной функцией -- UpdateEntityManifestations (через
+    // ForEachActiveCell) сама переспавнит актора на следующем проходе по
+    // только что активированной клетке, увидев Cell.ManifestedEntityID без
+    // актора. Только деактивация требует явного шага: SyncManifestedEntityActor
+    // вызывается ИЗНУТРИ UpdateEntityManifestations, а чанк, выпавший из
+    // активного множества, эту функцию для своих клеток больше не проходит
+    // вовсе -- без этого метода актор оставался бы висеть в мире вечно,
+    // сколько бы игрок ни удалялся. Cell.ManifestedEntityID НЕ трогается --
+    // это данные "что должно проявиться", переживают деактивацию.
+    void DespawnChunkEntities(const FIntPoint& Chunk);
+
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);

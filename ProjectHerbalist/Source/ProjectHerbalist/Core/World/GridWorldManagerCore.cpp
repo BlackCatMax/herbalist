@@ -622,6 +622,24 @@ void AGridWorldManager::SetChunkResourcesActive(const FIntPoint& Chunk, bool bAc
     }
 }
 
+void AGridWorldManager::DespawnChunkEntities(const FIntPoint& Chunk)
+{
+    // Не мутирует сами клетки (не FGridCell& в лямбде понадобился бы, будь
+    // тут запись Cell.ManifestedEntityID) -- только уничтожает актора и
+    // отпускает слабую ссылку. ManifestedEntityID остаётся как был: это
+    // "что должно проявиться", не физическое присутствие.
+    ForEachCellInChunk(Chunk, [](FGridCell& Cell)
+    {
+        if (AHerbalistEntityActor* Actor = Cell.ManifestedEntityActor.Get())
+        {
+            Actor->Destroy();
+        }
+        // TWeakObjectPtr сам обнулится после Destroy() -- явный Reset() не
+        // нужен, но не вредит и снимает вопрос "а точно ли обнулился".
+        Cell.ManifestedEntityActor.Reset();
+    });
+}
+
 TSet<FIntPoint> AGridWorldManager::ComputeChunksWithinRadius(const TArray<FIntPoint>& Centers, int32 Radius) const
 {
     TSet<FIntPoint> Result;
@@ -690,6 +708,13 @@ void AGridWorldManager::CatchUpActivatedChunks()
         if (!ActiveChunks.Contains(Chunk))
         {
             SetChunkResourcesActive(Chunk, false);
+
+            // Найдено пользователем 2026-09-03: ресурсы резались чанками
+            // корректно, проявленные сущности (капище-заглушки-деревья и
+            // т.п.) -- нет, оставались висеть в мире независимо от
+            // дистанции. Активная сторона отдельной функции не нужна --
+            // см. довод у объявления DespawnChunkEntities в .h.
+            DespawnChunkEntities(Chunk);
         }
     }
 

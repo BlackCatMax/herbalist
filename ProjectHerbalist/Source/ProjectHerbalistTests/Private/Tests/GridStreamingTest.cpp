@@ -13,6 +13,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
+#include "Core/Entities/HerbalistEntityActor.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
@@ -450,6 +451,53 @@ bool FHerbalistGridStreaming_ForEachActiveCellDoesNotDependOnTick::RunTest(const
         }
         TestTrue(TEXT("ForEachActiveCell visits exactly the cells IsCellActive agrees with"), bAllMatch);
     }
+
+    Manager->Destroy();
+    return true;
+}
+
+// Найдено пользователем 2026-09-03 при ручной проверке 0.8: "отлично
+// режется чанками растительность, но не деревья-заглушки для entities и
+// прочих". Ресурсы усыпляются SetChunkResourcesActive (уже покрыт тестами
+// выше), у проявленных сущностей (капище-заглушки, бестиарий) такой
+// деактивации не было вовсе -- SyncManifestedEntityActor вызывается
+// ТОЛЬКО изнутри UpdateEntityManifestations, а деактивированный чанк
+// просто перестаёт через него проходить. Актор оставался в мире
+// бессрочно, сколько бы игрок ни отходил.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_DespawnChunkEntitiesDestroysActorButKeepsID,
+    "Herbalist.GridStreaming.DespawnChunkEntitiesDestroysActorButKeepsID",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_DespawnChunkEntitiesDestroysActorButKeepsID::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell exists"), Cell)) { Manager->Destroy(); return false; }
+
+    // Симулируем то, что обычно делает SyncManifestedEntityActor (она
+    // protected, тестируем через публичный DespawnChunkEntities и прямую
+    // подготовку клетки -- тот же приём, что уже у RadiusGatesCellsByChunkDistance
+    // выше, которая тоже готовит клетку напрямую, не гоняя весь пайплайн триггеров).
+    AHerbalistEntityActor* Placeholder = World->SpawnActor<AHerbalistEntityActor>();
+    if (!TestNotNull(TEXT("Placeholder actor spawned"), Placeholder)) { Manager->Destroy(); return false; }
+
+    Cell->ManifestedEntityID = FName(TEXT("TestSpirit"));
+    Cell->ManifestedEntityActor = Placeholder;
+
+    // Чанк 4 клетки -- клетка (0,0) в чанке (0,0), тот же расклад, что
+    // ChunkCoordMathAndDefaultAllActive выше.
+    FScopedChunkSettings Scoped(/*RadiusMeters=*/4.0f, /*ChunkSize=*/4);
+    Manager->DespawnChunkEntities(FIntPoint(0, 0));
+
+    TestFalse(TEXT("Placeholder actor was destroyed"), IsValid(Placeholder));
+    TestFalse(TEXT("Cell no longer references the destroyed actor"), Cell->ManifestedEntityActor.IsValid());
+    TestEqual(TEXT("ManifestedEntityID survives despawn -- it's data, not presence"),
+        Cell->ManifestedEntityID, FName(TEXT("TestSpirit")));
 
     Manager->Destroy();
     return true;
