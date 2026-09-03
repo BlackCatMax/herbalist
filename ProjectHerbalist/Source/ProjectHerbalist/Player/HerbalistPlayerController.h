@@ -91,6 +91,14 @@ public:
     void ApplyTest(int32 X, int32 Y);
     UFUNCTION(Exec)
     void ShowInventory();
+
+    // Сбор без участия ввода (2026-09-03). Делает ровно то же, что Harvest()
+    // по клавише: тот же трейс от камеры, та же проверка дистанции, тот же
+    // путь в пайплайн. Нужен, чтобы отделить «сломан ввод» от «сломан сбор»
+    // одной командой в консоли -- при незаданном UInputAction клавиша молчит
+    // так же, как молчал бы неработающий сбор.
+    UFUNCTION(Exec)
+    void HarvestHere();
 	
 	UFUNCTION(Exec)
 	void TestNewHarvest(int32 X, int32 Y, FName IngredientID);

@@ -55,22 +55,53 @@ void AHerbalistPlayerController::SetupInputComponent()
 
     if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
     {
-        EnhancedInputComponent->BindAction(MoveAction,           ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Move);
-        EnhancedInputComponent->BindAction(LookAction,           ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Look);
-        EnhancedInputComponent->BindAction(HarvestAction,        ETriggerEvent::Started,   this, &AHerbalistPlayerController::Harvest);
-        EnhancedInputComponent->BindAction(InfoAction,           ETriggerEvent::Started,   this, &AHerbalistPlayerController::Info);
-        EnhancedInputComponent->BindAction(InventoryAction,      ETriggerEvent::Started,   this, &AHerbalistPlayerController::Inventory);
-        // JournalAction — Input Action asset ещё не создан в редакторе (см.
-        // комментарий у JournalWidgetClass), проверка на null нужна, пока
-        // остальные BindAction её не делают, потому что их actions уже
-        // назначены в BP и никогда не бывают nullptr на практике.
-        if (JournalAction)
+        // Незаданный UInputAction -- САМАЯ ТИХАЯ из возможных поломок ввода
+        // (2026-09-03, разбор «сбор не работает»). UEnhancedInputComponent::
+        // BindAction принимает nullptr без единой жалобы и создаёт привязку,
+        // которая просто никогда не сработает: клавиша нажимается, функция
+        // не вызывается, в логе пусто. Раньше проверялся только
+        // JournalAction, с комментарием «остальные назначены в BP и никогда
+        // не бывают nullptr на практике» -- ровно то допущение, которое
+        // нечем проверить, когда что-то не работает.
+        //
+        // Теперь каждая привязка проходит через один хелпер: null называется
+        // по имени и Warning'ом, живая -- пишет, к какому ассету привязана.
+        // Одного запуска PIE хватает, чтобы отличить «действие не назначено»
+        // от «назначено, но клавишу перехватывает другой Mapping Context».
+        int32 Bound = 0, Missing = 0;
+        auto Bind = [&](UInputAction* Action, const TCHAR* Name, ETriggerEvent Event, void (AHerbalistPlayerController::*Func)())
         {
-            EnhancedInputComponent->BindAction(JournalAction, ETriggerEvent::Started, this, &AHerbalistPlayerController::Journal);
-        }
-        EnhancedInputComponent->BindAction(ApplyAlchemyAction,   ETriggerEvent::Started,   this, &AHerbalistPlayerController::ApplyAlchemy);
-        EnhancedInputComponent->BindAction(InteractAction,       ETriggerEvent::Started,   this, &AHerbalistPlayerController::Interact);
-        EnhancedInputComponent->BindAction(UsePotionAction,      ETriggerEvent::Started,   this, &AHerbalistPlayerController::OnUsePotion);
+            if (!Action)
+            {
+                UE_LOG(LogHerbalistPlayer, Warning, TEXT("Ввод: %s не назначен в Blueprint'е контроллера -- клавиша не будет работать"), Name);
+                ++Missing;
+                return;
+            }
+            EnhancedInputComponent->BindAction(Action, Event, this, Func);
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("Ввод: %s -> %s"), Name, *Action->GetName());
+            ++Bound;
+        };
+
+        // Move/Look принимают FInputActionValue, под общий хелпер не идут --
+        // у них другая сигнатура обработчика.
+        if (MoveAction) { EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Move); ++Bound; }
+        else { UE_LOG(LogHerbalistPlayer, Warning, TEXT("Ввод: MoveAction не назначен")); ++Missing; }
+        if (LookAction) { EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Look); ++Bound; }
+        else { UE_LOG(LogHerbalistPlayer, Warning, TEXT("Ввод: LookAction не назначен")); ++Missing; }
+
+        Bind(HarvestAction,      TEXT("HarvestAction (сбор)"),      ETriggerEvent::Started, &AHerbalistPlayerController::Harvest);
+        Bind(InfoAction,         TEXT("InfoAction"),                ETriggerEvent::Started, &AHerbalistPlayerController::Info);
+        Bind(InventoryAction,    TEXT("InventoryAction"),           ETriggerEvent::Started, &AHerbalistPlayerController::Inventory);
+        Bind(JournalAction,      TEXT("JournalAction"),             ETriggerEvent::Started, &AHerbalistPlayerController::Journal);
+        Bind(ApplyAlchemyAction, TEXT("ApplyAlchemyAction"),        ETriggerEvent::Started, &AHerbalistPlayerController::ApplyAlchemy);
+        Bind(InteractAction,     TEXT("InteractAction"),            ETriggerEvent::Started, &AHerbalistPlayerController::Interact);
+        Bind(UsePotionAction,    TEXT("UsePotionAction"),           ETriggerEvent::Started, &AHerbalistPlayerController::OnUsePotion);
+
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Ввод: привязано %d действий, не назначено %d"), Bound, Missing);
+    }
+    else
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Ввод: InputComponent не UEnhancedInputComponent -- ни одно действие не привязано"));
     }
 }
 
@@ -197,6 +228,12 @@ bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
 // ============================================================================
 // СБОР УРОЖАЯ
 // ============================================================================
+
+void AHerbalistPlayerController::HarvestHere()
+{
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("HarvestHere: вызов сбора из консоли, ввод не участвует"));
+    Harvest();
+}
 
 void AHerbalistPlayerController::Harvest()
 {
