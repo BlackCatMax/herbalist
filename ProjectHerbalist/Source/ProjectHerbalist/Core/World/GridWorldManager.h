@@ -135,6 +135,15 @@ public:
     // читалось как решётка кустов с пустыми швами по границам клеток.
     float GetResourceJitterRadius() const { return CellSize * 0.5f; }
 
+    // Тот же принцип, что у GetResourceJitterRadius() выше, но для
+    // проявленных сущностей (капище-заглушки, бестиарий) -- доля
+    // (UHerbalistSettings::EntityManifestationJitterFraction) от CellSize,
+    // не абсолютное число сантиметров (была тем же тайлингом, что и у
+    // ресурсов -- см. довод у поля настройки). Меньше, чем у ресурсов:
+    // сущность семантически "якорь", не должна плавать по всей клетке.
+    // Не inline -- нужен UHerbalistSettings, чей заголовок сюда не тянем.
+    float GetEntityManifestationJitterRadius() const;
+
     // Обратное к GetCellWorldPosition — было продублировано в
     // AHerbalistPlayerController::GetCellFromHit, теперь общий метод (тем же
     // используется AAlchemyTableActor::BeginPlay для привязки капища к клетке).

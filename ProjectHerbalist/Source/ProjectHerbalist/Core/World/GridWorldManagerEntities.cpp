@@ -506,9 +506,7 @@ void AGridWorldManager::SyncManifestedEntityActor(FGridCell& Cell, TSubclassOf<A
     const TSubclassOf<AHerbalistEntityActor> ClassToSpawn = RequestedClass ? RequestedClass : DefaultClass;
     // Позиция внутри формы биома (2026-09-02), не мёртвый центр клетки --
     // тот же приём, что уже SpawnResourcesInCell, см. GetSpawnPositionWithinBiome.
-    const UHerbalistSettings* JitterSettings = GetHerbalistSettings();
-    const float JitterRadius = JitterSettings ? JitterSettings->EntityManifestationJitterRadius : 30.0f;
-    const FVector SpawnPos = GetSpawnPositionWithinBiome(Cell.X, Cell.Y, JitterRadius, WorldRNG);
+    const FVector SpawnPos = GetSpawnPositionWithinBiome(Cell.X, Cell.Y, GetEntityManifestationJitterRadius(), WorldRNG);
     AHerbalistEntityActor* NewActor = GetWorld()->SpawnActor<AHerbalistEntityActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
     if (NewActor)
     {

@@ -71,6 +71,41 @@ bool FHerbalistSpawnPosition_JitterRadiusCoversTheWholeCellNotJustItsCenter::Run
     return true;
 }
 
+// Тот же баг, найденный пользователем отдельно ("то же касается существ"):
+// EntityManifestationJitterRadius был абсолютным числом в сантиметрах
+// (30.0f), настроенным на дев-масштабе (CellSize=100). После перехода на
+// 5x5 км (CellSize=1000) те же 30 см стали 3% клетки -- сущности стояли
+// практически ровно в центре, решётка даже заметнее, чем была у ресурсов.
+// Переведено в долю от CellSize (EntityManifestationJitterFraction).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawnPosition_EntityJitterScalesWithCellSizeNotFixedCentimeters,
+    "Herbalist.SpawnPosition.EntityJitterScalesWithCellSizeNotFixedCentimeters",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSpawnPosition_EntityJitterScalesWithCellSizeNotFixedCentimeters::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    // Меньше, чем у ресурсов (0.5) -- сущность семантически "якорь", не
+    // должна плавать по всей клетке, только не стоять штырём по центру.
+    TestTrue(TEXT("Entity jitter is smaller than resource jitter (anchor semantics)"),
+        Manager->GetEntityManifestationJitterRadius() < Manager->GetResourceJitterRadius());
+
+    // Главная регрессия: радиус растёт вместе с CellSize, не остаётся
+    // прибитым к абсолютному числу сантиметров.
+    const float JitterAtOriginalScale = Manager->GetEntityManifestationJitterRadius();
+    Manager->CellSize *= 10.0f;
+    const float JitterAtTenXScale = Manager->GetEntityManifestationJitterRadius();
+    TestEqual(TEXT("Jitter radius scales linearly with CellSize"),
+        JitterAtTenXScale, JitterAtOriginalScale * 10.0f);
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawnPosition_NoRegionsStillJittersWithoutCrashing,
     "Herbalist.SpawnPosition.NoRegionsStillJittersWithoutCrashing",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

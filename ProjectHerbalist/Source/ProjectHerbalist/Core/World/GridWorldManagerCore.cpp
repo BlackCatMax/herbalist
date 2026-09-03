@@ -449,6 +449,13 @@ int32 AGridWorldManager::GetActiveRadiusInChunks() const
     return FMath::FloorToInt((RadiusMeters * 100.0f) / ChunkSpanCm);
 }
 
+float AGridWorldManager::GetEntityManifestationJitterRadius() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Fraction = Settings ? Settings->EntityManifestationJitterFraction : 0.3f;
+    return CellSize * Fraction;
+}
+
 bool AGridWorldManager::IsCellActive(const FGridCell& Cell) const
 {
     const int32 Radius = GetActiveRadiusInChunks();
