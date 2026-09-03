@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Types/HerbalistActorLabel.h"
 #include "Engine/StaticMesh.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -39,6 +40,14 @@ void AMemoryFragmentActor::Init(FName InDefinitionID, bool bInIsFalse, float InL
     WorldManager = InWorldManager;
     GridX = InGridX;
     GridY = InGridY;
+
+    // Подпись для аутлайнера/выделения в PIE -- см. HerbalistActorLabel.h.
+    // У фрагментов та же беда, что у бестиария: заглушка-куб одна на все
+    // 12 определений. Ложный фрагмент помечается отдельно -- в игре он
+    // неотличим от настоящего намеренно (§19.2), но в аутлайнере автору
+    // различать их необходимо.
+    SetHerbalistDebugLabel(this, FString::Printf(TEXT("Фрагмент %s%s (%d,%d)"),
+        *DefinitionID.ToString(), bIsFalse ? TEXT(" [ложный]") : TEXT(""), GridX, GridY));
 
     // Меш-заглушка (2026-09-02) — та же логика и та же оговорка, что у
     // AHerbalistEntityActor::Init: применяется, только если у класса,

@@ -2,6 +2,7 @@
 #include "Core/Entities/HerbalistEntityActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Types/HerbalistActorLabel.h"
 #include "Engine/StaticMesh.h"
 
 AHerbalistEntityActor::AHerbalistEntityActor()
@@ -23,6 +24,13 @@ void AHerbalistEntityActor::Init(FName InEntityID, const FIntPoint& InCell, AGri
     EntityID = InEntityID;
     GridCell = InCell;
     WorldManagerRef = InWorldManager;
+
+    // Подпись для аутлайнера/выделения в PIE -- см. HerbalistActorLabel.h.
+    // Здесь она нужнее всего: меш-заглушка у всего бестиария ОДИН, и до
+    // этой правки Гнильники, Леший и Болотный царь были в аутлайнере
+    // неразличимы вообще ничем.
+    SetHerbalistDebugLabel(this, FString::Printf(TEXT("%s (%d,%d)"),
+        *EntityID.ToString(), GridCell.X, GridCell.Y));
 
     // Меш-заглушка (2026-09-02) — только если у класса, которым нас
     // заспавнили, меша нет вовсе. Blueprint карточки (ActorClass в таблице

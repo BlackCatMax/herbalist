@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Types/HerbalistActorLabel.h"
 #include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -104,6 +105,13 @@ void AHerbalistResourceActor::ResolveFromIngredientRegistry(UIngredientRegistryS
         MeshComponent->SetVisibility(true);
     }
 
+    // Тот же довод, что в Init() -- но этот путь проходят акторы, которые
+    // Init() не звали вовсе (PCG-граф, ручная расстановка на уровне), и без
+    // подписи здесь они остались бы безымянными именно в том сценарии,
+    // ради которого PCG-путь и заводился.
+    SetHerbalistDebugLabel(this, FString::Printf(TEXT("%s (%d,%d)"),
+        *IngredientID.ToString(), GridX, GridY));
+
     bInitializedFromCode = true;
 }
 
@@ -167,6 +175,12 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
         UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: No mesh provided for ingredient %s"),
             *GetName(), *IngredientID.ToString());
     }
+
+    // Подпись для аутлайнера/выделения в PIE -- см. HerbalistActorLabel.h.
+    // Клетка в имени не косметика: одинаковых "ste_06" в мире тысячи, и
+    // без координат выделенный актор всё равно неотличим от соседнего.
+    SetHerbalistDebugLabel(this, FString::Printf(TEXT("%s (%d,%d)"),
+        *IngredientID.ToString(), GridX, GridY));
 
     UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: Initialized at cell (%d,%d) with ingredient %s"),
         *GetName(), GridX, GridY, *IngredientID.ToString());
