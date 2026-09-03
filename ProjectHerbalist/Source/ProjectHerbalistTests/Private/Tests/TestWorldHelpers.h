@@ -60,6 +60,25 @@ namespace
             }
         }
 
+        // Ровно тот же довод, что и у KeepRegions выше, но про сам менеджер
+        // (2026-09-03, найдено на ShrineActorTest): в персистентном
+        // editor-мире живёт настоящий, расставленный на L_TestDev
+        // BP_GridWorldManager, плюс менеджеры предыдущих тестов, чей
+        // Destroy() отложен движком. Пока тест дёргал только свой указатель,
+        // это было безобидно. Как только в тестах появились АКТОРЫ, которые
+        // сами ищут менеджер через TActorIterator (AShrineActor,
+        // AAlchemyTableActor, AHerbalistResourceActor), они стали находить
+        // чужой менеджер вместо только что заспавненного — и регистрировать
+        // капище/Домового в нём, из-за чего тест не видел у себя ничего.
+        // Чистим мир от прежних менеджеров ПЕРЕД спавном своего.
+        for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+        {
+            if (AGridWorldManager* Stale = *It)
+            {
+                Stale->Destroy();
+            }
+        }
+
         AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
         if (Manager)
         {

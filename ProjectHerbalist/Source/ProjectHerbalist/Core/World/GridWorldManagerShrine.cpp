@@ -15,10 +15,13 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
-void AGridWorldManager::RegisterShrine(const FIntPoint& Cell, EShrineType Type)
+void AGridWorldManager::RegisterShrine(const FIntPoint& Cell, EShrineType Type, float InitialRestoration)
 {
     if (FShrine* Existing = FindShrineAt(Cell))
     {
+        // Накопленное Restoration намеренно НЕ трогаем: повторная регистрация
+        // (второй актор на той же клетке, перезапуск BeginPlay) не должна
+        // откатывать ухоженность капища к стартовому значению.
         Existing->Type = Type;
         return;
     }
@@ -26,8 +29,10 @@ void AGridWorldManager::RegisterShrine(const FIntPoint& Cell, EShrineType Type)
     FShrine NewShrine;
     NewShrine.Cell = Cell;
     NewShrine.Type = Type;
+    NewShrine.Restoration = FMath::Clamp(InitialRestoration, -1.0f, 1.0f);
     Shrines.Add(NewShrine);
-    UE_LOG(LogHerbalistWorld, Log, TEXT("[Shrine] Registered at (%d,%d), type=%d"), Cell.X, Cell.Y, (int32)Type);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Shrine] Registered at (%d,%d), type=%d, Restoration=%.3f"),
+        Cell.X, Cell.Y, (int32)Type, NewShrine.Restoration);
 }
 
 EShrineType AGridWorldManager::ResolveShrineTypeForCell(const FIntPoint& Cell) const

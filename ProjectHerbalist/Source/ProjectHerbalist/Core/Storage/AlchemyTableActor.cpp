@@ -25,11 +25,16 @@ void AAlchemyTableActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Капище v1 (02_GDD/15_Cycles_And_Shrines.md §15.5) — не отдельная сущность,
-    // ищущаяся в мире: "особая аура" привязана к самому месту варки. Каждый
-    // стол автоматически регистрирует капище на своей клетке. GridCoords тоже
-    // раньше была объявлена (SetGridCoords), но никогда никем не вызывалась —
-    // закрываем это заодно, не отдельной задачей.
+    // Капище стол больше НЕ регистрирует (2026-09-02, прямой запрос
+    // пользователя: "хочу, чтобы капища были отдельными местами, которые не
+    // зависят от местоположения котла"). До этого §15.5 читалось как "особая
+    // аура привязана к самому месту варки", и капище существовало только на
+    // клетке котла. Теперь капища расставляются отдельно (AShrineActor), а
+    // близость котла к капищу — выбор игрока: надбавка к Coherence работает
+    // в ShrineInfluenceRadius, а не даётся варке безусловно.
+    //
+    // Домовой и Роса Заряны остаются здесь — они про очаг/жилище, а не про
+    // капище, и от этой развязки не зависят.
     for (TActorIterator<AGridWorldManager> It(GetWorld()); It; ++It)
     {
         AGridWorldManager* WorldManager = *It;
@@ -37,11 +42,10 @@ void AAlchemyTableActor::BeginPlay()
         if (WorldManager->WorldPositionToCell(GetActorLocation(), X, Y))
         {
             GridCoords = FIntPoint(X, Y);
-            WorldManager->RegisterShrine(GridCoords, WorldManager->ResolveShrineTypeForCell(GridCoords));
 
             // Домовой (DESIGN_Community_And_Homestead.md §2.1, 2026-08-31) —
             // хозяин очага, не место на карте: там же, где котёл, не через
-            // биом-сопоставление, тот же принцип, что и у капища выше.
+            // биом-сопоставление.
             WorldManager->RegisterDomovoi(GridCoords);
 
             // Роса Заряны (19_Rosa_Signal.md §19.2) — дефолт "рядом с домом",
@@ -50,7 +54,7 @@ void AAlchemyTableActor::BeginPlay()
         }
         else
         {
-            UE_LOG(LogHerbalistAlchemy, Warning, TEXT("AlchemyTableActor at %s is outside the grid — no shrine registered"), *GetActorLocation().ToString());
+            UE_LOG(LogHerbalistAlchemy, Warning, TEXT("AlchemyTableActor at %s is outside the grid — Домовой/Роса не зарегистрированы"), *GetActorLocation().ToString());
         }
         break;
     }
