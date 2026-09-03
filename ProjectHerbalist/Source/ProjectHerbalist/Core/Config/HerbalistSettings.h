@@ -53,6 +53,25 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Performance", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float EntityManifestationIntervalSeconds = 0.1f;
 
+    // --- Активное множество клеток (2026-09-03, стриминг сетки) ---
+    // Сетка делится на чанки этого размера, и дорогие полные обходы
+    // (релаксация, проявление сущностей, влияние биом-графа) считаются
+    // только в чанках вокруг источников стриминга. Данные всех клеток при
+    // этом остаются в памяти всегда — стримится СТОИМОСТЬ, а не данные,
+    // поэтому мировые сканы (посев якорей, условие Буяна, проверка
+    // проявленности Легендарного) продолжают видеть весь мир и не требуют
+    // никаких правок.
+    UPROPERTY(config, EditAnywhere, Category = "Performance", meta = (ClampMin = "1"))
+    int32 ChunkSizeInCells = 32;
+
+    // Радиус активных чанков (Чебышёв) вокруг каждого источника стриминга.
+    // -1 — активны ВСЕ чанки, то есть поведение ровно как до появления
+    // этой настройки; таково и значение по умолчанию, чтобы включение
+    // механизма было осознанным шагом, а не тихим изменением симуляции.
+    // 2 при чанке 32 и клетке 10 м — окно 1600×1600 м вокруг игрока.
+    UPROPERTY(config, EditAnywhere, Category = "Performance", meta = (ClampMin = "-1"))
+    int32 ActiveChunkRadius = -1;
+
     // --- Pipeline coefficients ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeZaryanaInfluence = 0.3f;

@@ -23,6 +23,11 @@
 #include "Core/Simulation/Public/PerceptionComponent.h"
 #include "Templates/TypeHash.h"
 #include "Core/Types/HerbalistCoreMath.h"
+#include "WorldPartition/WorldPartitionSubsystem.h"
+#include "WorldPartition/WorldPartitionStreamingSource.h"
+#include "WorldPartition/WorldPartition.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 
 // ============================================================================
 // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (ЛАНДШАФТ)
@@ -227,6 +232,84 @@ FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
     return nullptr;
 }
 
+FIntPoint AGridWorldManager::GetChunkCoordForCell(int32 CellX, int32 CellY) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    // FloorDiv, не целочисленное деление: у отрицательных координат (их не
+    // бывает в текущей сетке, но GetCell честно принимает любые) обычное
+    // деление тянет к нулю и склеивает чанк -1 с чанком 0.
+    return FIntPoint(FMath::FloorToInt(static_cast<float>(CellX) / ChunkSize),
+                     FMath::FloorToInt(static_cast<float>(CellY) / ChunkSize));
+}
+
+bool AGridWorldManager::IsCellActive(const FGridCell& Cell) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 Radius = Settings ? Settings->ActiveChunkRadius : -1;
+
+    // -1 -- механизм выключен, активно всё (поведение до 2026-09-03).
+    if (Radius < 0) return true;
+
+    // Радиус задан, но источников нет вовсе (нет игрока, headless-тест без
+    // явной установки центров) -- считаем всё активным, а не всё мёртвым:
+    // тихо остановившаяся симуляция хуже, чем не включившаяся оптимизация.
+    if (ActiveChunkCenters.Num() == 0) return true;
+
+    const FIntPoint CellChunk = GetChunkCoordForCell(Cell.X, Cell.Y);
+    for (const FIntPoint& Center : ActiveChunkCenters)
+    {
+        // Чебышёв -- тот же принцип соседства, что уже у радиуса капища.
+        if (FMath::Max(FMath::Abs(CellChunk.X - Center.X), FMath::Abs(CellChunk.Y - Center.Y)) <= Radius)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void AGridWorldManager::UpdateActiveChunkCenters()
+{
+    ActiveChunkCenters.Reset();
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    auto AddCenterFromWorldLocation = [this](const FVector& WorldLocation)
+    {
+        int32 X, Y;
+        if (WorldPositionToCell(WorldLocation, X, Y))
+        {
+            ActiveChunkCenters.AddUnique(GetChunkCoordForCell(X, Y));
+        }
+    };
+
+    // Основной путь: спрашиваем сам World Partition, вокруг чего он сейчас
+    // стримит уровень. Так сетка «подчиняется партишену» буквально — она
+    // следует тем же источникам, что и загрузка мира, включая любые
+    // будущие (второй игрок, камера, транспорт), без правок здесь.
+    // UWorldPartition::GetStreamingSources() -- публичный аксессор уже
+    // посчитанного партишеном списка (одноимённый метод у
+    // UWorldPartitionSubsystem закрыт, это не он).
+    if (const UWorldPartition* WorldPartition = World->GetWorldPartition())
+    {
+        for (const FWorldPartitionStreamingSource& Source : WorldPartition->GetStreamingSources())
+        {
+            AddCenterFromWorldLocation(Source.Location);
+        }
+    }
+
+    // Фолбэк для уровней без партишена (и для PIE до того, как источники
+    // зарегистрируются): позиция пешки игрока.
+    if (ActiveChunkCenters.Num() == 0)
+    {
+        if (const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(World, 0))
+        {
+            AddCenterFromWorldLocation(PlayerPawn->GetActorLocation());
+        }
+    }
+}
+
 const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
 {
     const int32 Index = Y * GridSizeX + X;
@@ -284,6 +367,13 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
 
     for (const FGridCell& Cell : Cells)
     {
+        // Стриминг сетки (2026-09-03): поля биом-графа применяются только к
+        // активным клеткам. Сам граф считается всегда и целиком — он живёт
+        // на уровне узлов, а не клеток, поэтому дальний мир продолжает
+        // меняться; неактивные клетки просто не получают его вклад, пока не
+        // станут активными (догон — юнит 2).
+        if (!IsCellActive(Cell)) continue;
+
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
         FRealState NewTarget = Cell.TargetState;
         bool bChanged = false;
@@ -1160,6 +1250,13 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
 
     for (FGridCell& Cell : Cells)
     {
+        // Стриминг сетки (2026-09-03): релаксация считается только в
+        // активных чанках. Неактивная клетка не «портится» и не «чинится»,
+        // пока до неё никому нет дела; при активации получит догон за всё
+        // пропущенное время (юнит 2) — экспоненциальная форма сходимости
+        // делает такой единичный шаг точным, а не приближённым.
+        if (!IsCellActive(Cell)) continue;
+
         // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
         // клетка, помеченная навечно чистой, полностью исключена из этой
         // функции: ни бистабильная релаксация, ни заражение соседей, ни

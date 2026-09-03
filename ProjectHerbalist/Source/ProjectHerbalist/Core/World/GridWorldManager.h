@@ -164,6 +164,33 @@ public:
     // уже определяет доминирующий биом в InitializeCells.
     ABiomeRegionVolume* GetClaimingRegion(const FGridCell& Cell) const;
 
+    // ---- Активное множество клеток (2026-09-03, стриминг сетки) ----
+    // Данные ВСЕХ клеток всегда в памяти; активность решает лишь, считаются
+    // ли на клетке дорогие проходы (релаксация, проявление сущностей,
+    // влияние биом-графа). Мировые сканы намеренно НЕ спрашивают активность
+    // — им нужен весь мир, и он у них есть.
+    //
+    // Центры активности берутся у самого World Partition
+    // (UWorldPartitionSubsystem::GetStreamingSources) — сетка следует ровно
+    // тем же источникам, что и стриминг уровня, включая те, что появятся
+    // позже (второй игрок, камера, транспорт). Без партишена — позиция
+    // пешки игрока; без неё (headless-тест) центров нет вовсе.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Streaming")
+    bool IsCellActive(const FGridCell& Cell) const;
+
+    // Координата чанка, которой принадлежит клетка.
+    FIntPoint GetChunkCoordForCell(int32 CellX, int32 CellY) const;
+
+    // Пересчитать центры активности. Вызывается из Tick; публична, чтобы
+    // тест мог задать состояние детерминированно, не гоняя настоящий Tick.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Streaming")
+    void UpdateActiveChunkCenters();
+
+    // Явно задать центры (тесты и отладка) — обходит поиск источников.
+    void SetActiveChunkCentersForTests(const TArray<FIntPoint>& InCenters) { ActiveChunkCenters = InCenters; }
+
+    const TArray<FIntPoint>& GetActiveChunkCenters() const { return ActiveChunkCenters; }
+
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
@@ -960,6 +987,12 @@ private:
     // UpdateEntityManifestations передаётся именно накопленное время, не
     // время кадра — ставки эффектов (rate/сек) остаются точными.
     float EntityManifestationAccumulator = 0.0f;
+
+    // Чанки-центры активного множества (2026-09-03, стриминг сетки) —
+    // координаты чанков, в которых сейчас находятся источники стриминга
+    // World Partition (или игрок, если партишена нет). Пересчитывается в
+    // Tick, читается IsCellActive.
+    TArray<FIntPoint> ActiveChunkCenters;
     void RunSimulationStep();
 
     // ---- Очередь команд нового пайплайна ----

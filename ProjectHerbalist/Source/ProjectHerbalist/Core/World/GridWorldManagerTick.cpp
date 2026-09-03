@@ -92,6 +92,11 @@ void AGridWorldManager::Tick(float DeltaTime)
     // Model в архитектурном документе). При просадке FPS ниже шага может пройти
     // несколько шагов симуляции за один Tick() — цикл ниже их все отработает.
     // ========================================================================
+    // Активное множество (2026-09-03, стриминг сетки) — где сейчас стримит
+    // мир World Partition, там и считается симуляция клеток. Дёшево:
+    // опрос источников и перевод их в координаты чанков, без обхода сетки.
+    UpdateActiveChunkCenters();
+
     SimulationTimeAccumulator += DeltaTime;
     while (SimulationTimeAccumulator >= SimulationFixedTimeStep)
     {
