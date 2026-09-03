@@ -224,7 +224,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLandmark_SeedTestLandmarksGivesEachDe
 bool FHerbalistLandmark_SeedTestLandmarksGivesEachDefinitionADistinctCell::RunTest(const FString& Parameters)
 {
     // Регрессия: несколько "хозяев" теперь делят один биом (Тайга: Аука +
-    // Дух Медведя; Широколиств. лес: Гуменник + Овинник + Жердяи; и т.д.) --
+    // Дух Медведя; Широколиств. лес: Гуменник + Овинник; и т.д.) --
     // до правки SeedTestLandmarks второй на том же биоме занял бы ту же
     // первую попавшуюся клетку, что и первый (или, что честнее для старого
     // однопроходного кода, вообще не нашёл бы себе клетки, если бы искал

@@ -380,6 +380,62 @@ namespace
             Defs.Add(D);
         }
 
+        // ------------------------------------------------------------------
+        // Переехали из Основного ранга 2026-09-03 (см. BestiaryRankMove).
+        // Объявлены ПОСЛЕ всех прежних Низших намеренно: SortOrder решает
+        // тай-брейк за клетку, и перенос не должен отбирать её у существа,
+        // которое уже работало на том же биоме.
+        //
+        // Гейт по Distortion = morok_affinity карточки -- та же честная
+        // заглушка, что у BestiaryStubsAppend: настоящих триггеров карточек
+        // («рядом с курганом», «межа/изгородь») в проекте нет как механик.
+        // Ставки эффекта нулевые: прежние Bless/Curse были выдуманы
+        // генератором Основного ранга, переносить их значило бы закрепить
+        // выдумку.
+        // ------------------------------------------------------------------
+
+        // Курганники (Лесостепь, земля): morok 0.50. §16.2 обещает Spirit↑
+        // и «подношения» -- ни того, ни другого Низший ранг не умеет
+        // (эффект бьёт только по Meta/Nature/Magnitude), поэтому пусто.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Курганники"));
+            D.SortOrder = Order++;
+            D.Biome = EBiomeType::ForestSteppe;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Distortion;
+            D.bTriggerAbove = true;
+            D.TriggerThreshold = 0.5f;
+            Defs.Add(D);
+        }
+        // Жердяи (Широколиственный лес, земля): morok 0.20.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Жердяи"));
+            D.SortOrder = Order++;
+            D.Biome = EBiomeType::BroadleafForest;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Distortion;
+            D.bTriggerAbove = true;
+            D.TriggerThreshold = 0.2f;
+            Defs.Add(D);
+        }
+        // Курганные огни (Степь, земля): morok 0.60 + «сумерки» -- второй
+        // гейт настоящий, прямо из §16.2 («курган, сумерки»), тот же
+        // bRequiresDusk, что уже у Шишиг.
+        {
+            FAmbientEntityDefinition D;
+            D.EntityID = FName(TEXT("Курганные огни"));
+            D.SortOrder = Order++;
+            D.Biome = EBiomeType::Steppe;
+            D.bLandOnly = true;
+            D.TriggerAxis = EAmbientTriggerAxis::Distortion;
+            D.bTriggerAbove = true;
+            D.TriggerThreshold = 0.6f;
+            D.bRequiresDusk = true;
+            Defs.Add(D);
+        }
+
         return Defs;
     }
 }

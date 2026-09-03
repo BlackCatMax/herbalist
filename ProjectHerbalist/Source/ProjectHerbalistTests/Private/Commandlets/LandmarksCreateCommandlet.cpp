@@ -129,36 +129,15 @@ namespace
             D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.015f;
             Defs.Add(D);
         }
-        // Курганники (Лесостепь)
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Курганники"));
-            D.SortOrder = Order++;
-            D.Biome = EBiomeType::ForestSteppe;
-            D.BlessAxis = ELandmarkAxis::Spirit; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Corruption; D.CurseRate = 0.025f;
-            Defs.Add(D);
-        }
-        // Жердяи (Широколиств. лес)
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Жердяи"));
-            D.SortOrder = Order++;
-            D.Biome = EBiomeType::BroadleafForest;
-            D.BlessAxis = ELandmarkAxis::Stability; D.BlessRate = 0.008f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.012f;
-            Defs.Add(D);
-        }
-        // Курганные огни (Степь)
-        {
-            FLandmarkDefinition D;
-            D.EntityID = FName(TEXT("Курганные огни"));
-            D.SortOrder = Order++;
-            D.Biome = EBiomeType::Steppe;
-            D.BlessAxis = ELandmarkAxis::Resonance; D.BlessRate = 0.01f;
-            D.CurseAxis = ELandmarkAxis::Distortion; D.CurseRate = 0.02f;
-            Defs.Add(D);
-        }
+        // Курганники / Жердяи / Курганные огни СТОЯЛИ ЗДЕСЬ и убраны
+        // 2026-09-03: сверка -run=CompendiumAudit показала расхождение
+        // ранга, и документация говорит «Низший» четырьмя независимыми
+        // местами (карточки бестиария с id *_low_*, карточки биомов,
+        // таблица §16.2, отсутствие в списке §16.3) против одной фразы
+        // прозы §16.2. Их определения теперь в AmbientEntitiesCreate,
+        // перенос уже сделанных ассетов -- -run=BestiaryRankMove.
+        // Ставки Bless/Curse, стоявшие тут, были выдуманы этим генератором,
+        // а не взяты из документа, поэтому в Низший они не переехали.
         // Домовой (жилище игрока, bManualRegistrationOnly -- не сеется по биому)
         {
             FLandmarkDefinition D;

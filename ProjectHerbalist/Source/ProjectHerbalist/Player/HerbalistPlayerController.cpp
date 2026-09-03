@@ -208,11 +208,18 @@ void AHerbalistPlayerController::Harvest()
     // Второй канал (ECC_GameTraceChannel1) сохранён как и был -- отдельный
     // trace channel специально для собираемых ресурсов, не блокирующих
     // обычную видимость.
+    // Сбор — главный глагол игры, и до 2026-09-03 он был единственным
+    // действием, которое при неудаче не говорило НИЧЕГО: ни луч мимо, ни
+    // «под прицелом камень», ни «в клетке пусто» не попадали в лог. Разбор
+    // PIE-сессии пользователя упёрся ровно в это молчание. Теперь у каждого
+    // выхода есть своя причина в логе (Log, не Warning: промах по цели —
+    // нормальная часть игры, а не ошибка).
     FHitResult Hit;
     if (!GetHitResultFromCamera(Hit, ECC_Visibility))
     {
         if (!GetHitResultFromCamera(Hit, ECC_GameTraceChannel1))
         {
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: луч не встретил ничего (ни ECC_Visibility, ни канал ресурсов) на 1000 см вперёд"));
             return;
         }
     }
@@ -231,15 +238,35 @@ void AHerbalistPlayerController::Harvest()
     if (GetPawn())
     {
         const float Dist = FVector::Dist(GetPawn()->GetActorLocation(), Hit.Location);
-        if (Dist > MaxHarvestDistance) return;
+        if (Dist > MaxHarvestDistance)
+        {
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: до точки %.0f см, предел %.0f см -- подойди ближе"), Dist, MaxHarvestDistance);
+            return;
+        }
     }
 
     int32 X, Y;
     GetCellFromHit(Hit, X, Y);
-    if (X < 0) return;
+    if (X < 0)
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: точка попадания вне сетки"));
+        return;
+    }
 
     FGridCell* Cell = WorldManager->GetCell(X, Y);
-    if (!Cell || !Cell->bIsWater) return;
+    if (!Cell || !Cell->bIsWater)
+    {
+        // Самый частый и самый непонятный случай: игрок целится в землю, на
+        // которой ничего не выросло. Причин ровно две, и обе стоит назвать,
+        // иначе отличить «не туда смотрю» от «мир пуст» невозможно.
+        const int32 Here = Cell ? Cell->ResourceActors.Num() : 0;
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: под прицелом %s -- не ресурс и не вода. Клетка (%d,%d): ресурсов %d%s"),
+            *GetNameSafe(Hit.GetActor()), X, Y, Here,
+            (Cell && Here == 0 && !WorldManager->IsCellClaimedByBiomeRegion(*Cell))
+                ? TEXT(" (клетка вне всех ABiomeRegionVolume -- контент тут не спавнится вовсе)")
+                : TEXT(""));
+        return;
+    }
 
     WorldManager->CollectWater(X, Y);
     UE_LOG(LogHerbalistPlayer, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
@@ -305,7 +332,13 @@ void AHerbalistPlayerController::Inventory()
         return;
     }
 
-    if (bIsAnyWidgetOpen) return;
+    if (bIsAnyWidgetOpen)
+    {
+        // Открыт ДРУГОЙ виджет (варка, диалог). Снаружи это неотличимо от
+        // «инвентарь сломался»: клавиша нажата, не происходит ничего.
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Инвентарь: уже открыт другой виджет -- закрой его сначала"));
+        return;
+    }
 
     if (InventoryWidgetInstance)
     {
@@ -313,10 +346,26 @@ void AHerbalistPlayerController::Inventory()
         InventoryWidgetInstance = nullptr;
     }
 
-    if (!InventoryWidgetClass || !InventoryComponent) return;
+    // Обе ссылки назначаются в Blueprint'е контроллера; незаполненная
+    // InventoryWidgetClass -- ровно тот случай, когда клавиша молчит, и
+    // единственный способ это увидеть был раньше — читать код.
+    if (!InventoryWidgetClass)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Инвентарь: InventoryWidgetClass не задан в Blueprint'е контроллера -- открывать нечего"));
+        return;
+    }
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Инвентарь: InventoryComponent отсутствует на контроллере"));
+        return;
+    }
 
     InventoryWidgetInstance = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
-    if (!InventoryWidgetInstance) return;
+    if (!InventoryWidgetInstance)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Инвентарь: CreateWidget вернул null для класса %s"), *GetNameSafe(InventoryWidgetClass));
+        return;
+    }
 
     InventoryWidgetInstance->BindInventory(InventoryComponent);
     InventoryWidgetInstance->AddToViewport();

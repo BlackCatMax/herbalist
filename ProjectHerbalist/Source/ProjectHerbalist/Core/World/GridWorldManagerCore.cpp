@@ -1007,7 +1007,12 @@ void AGridWorldManager::InitializeCells()
 
     if (BiomeRegions.Num() > 0 && FallbackCellCount > 0)
     {
-        UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: %d/%d клеток (%.0f%%) вне всех ABiomeRegionVolume -- для них взят блочный фолбэк"),
+        // Формулировка «взят блочный фолбэк» читалась как безобидная
+        // информация, хотя следствие тяжёлое: SpawnResourcesInCell и
+        // SeedTestLandmarks выходят на таких клетках сразу
+        // (IsCellClaimedByBiomeRegion), то есть там НЕЧЕГО СОБИРАТЬ и
+        // сбор молча ничего не делает. Пишем следствие прямо.
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: %d/%d клеток (%.0f%%) вне всех ABiomeRegionVolume -- блочный фолбэк даёт им биом для математики, но НЕ контент: ресурсы и хозяева мест там не появятся, собирать нечего. Расширь регионы или добавь новые."),
             FallbackCellCount, TotalCells, TotalCells > 0 ? 100.0f * FallbackCellCount / TotalCells : 0.0f);
     }
 
