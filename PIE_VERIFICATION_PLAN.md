@@ -36,25 +36,18 @@
 но НИ РАЗУ не запускалось глазами. Этот блок идёт первым: часть пунктов --
 не проверка, а настройка, без которой остальное просто нечего смотреть.
 
-### 0.1 Блокеры запуска — сделать до всего остального
+### 0.1 Проверка окружения — до всего остального
 
-- [ ] **Пешка игрока.** `AProjectHerbalistGameModeBase` задаёт только
-  `PlayerControllerClass`, а `DefaultPawnClass` не трогает -- PIE выдаёт
-  движковый `ADefaultPawn` (летающий, без тела). Прицеливание через
-  `GetPlayerViewPoint` при этом работает, так что собирать можно и так, но
-  ходьбы, коллизии и первого лица не будет. Решение: либо задать
-  `DefaultPawnClass` в Blueprint-наследнике GameMode и переключить на него
-  `GlobalDefaultGameMode` в Project Settings (сейчас там C++-класс, а
-  `BP_ProjectHerbalistGameModeBase` лежит неиспользуемым), либо оставить
-  летающую пешку осознанно -- для отладки она даже удобнее.
-- [ ] **Меши ингредиентов.** В `DT_IngredientClass` колонка `ResourceMesh`
-  пуста у ВСЕХ строк -- поэтому мир выглядит пустым, даже когда ресурсы
-  реально заспавнены. Проставить хотя бы 5-10 строкам (заглушки есть в
-  `Stylized_Forest/Meshes/plants` и `/stones`).
 - [ ] **Плейсхолдеры сущностей.** Project Settings -> Herbalist ->
   `Content | Placeholders`: `PlaceholderEntityMesh` и
   `PlaceholderMemoryFragmentMesh`. Без них весь бестиарий (60 карточек) и
-  фрагменты памяти невидимы, хотя проявляются.
+  фрагменты памяти невидимы, хотя проявляются: `ActorClass` у карточек по
+  умолчанию пуст, а базовые классы ранга меш не ставят.
+- [ ] **GameMode.** В `DefaultEngine.ini` `GlobalDefaultGameMode` указывает
+  на C++-класс `AProjectHerbalistGameModeBase`, который задаёт только
+  `PlayerControllerClass`. Пешка приходит из GameMode Override в World
+  Settings уровня -- проверить, что он там стоит, иначе на НОВОМ уровне
+  игрок окажется движковым `ADefaultPawn` вместо `BP_FirstPersonCharacter`.
 
 ### 0.2 Масштаб мира
 
