@@ -28,5 +28,9 @@
   {"Name": "riv_02", "GardenNiche": "Pond"},
   {"Name": "riv_03", "GardenNiche": "Pond"},
   {"Name": "riv_05", "GardenNiche": "Pond"},
-  {"Name": "riv_10", "GardenNiche": "Pond"}
+  {"Name": "riv_10", "GardenNiche": "Pond"},
+
+  {"Name": "mix_02", "GardenNiche": "ShadeBed"},
+  {"Name": "mix_08", "GardenNiche": "ShadeBed"},
+  {"Name": "mix_09", "GardenNiche": "Mycelium"}
 ]
