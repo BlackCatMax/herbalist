@@ -34,9 +34,9 @@ namespace
         FIngredientTableRow Lowland;
         Lowland.AllowedBiomes.Add(EBiomeType::Taiga);
         Lowland.bUseAltitudeRange = true;
-        Lowland.MinAltitudeMeters = 0.0f;
-        Lowland.MaxAltitudeMeters = 100.0f;
-        Lowland.AltitudeFalloffMeters = 0.0f;   // резкая граница, чтобы тест был однозначным
+        Lowland.MinAltitudeCentimeters = 0.0f;
+        Lowland.MaxAltitudeCentimeters = 10000.0f;   // 100 м
+        Lowland.AltitudeFalloffCentimeters = 0.0f;   // резкая граница, чтобы тест был однозначным
         Table->AddRow(LowlandHerb, Lowland);
 
         FIngredientTableRow Anywhere;
@@ -56,10 +56,14 @@ namespace
         return Cell;
     }
 
+    // Параметр в метрах -- для читаемости чисел в тестах ниже (2026-09-03,
+    // после переименования полей в сантиметры: см. довод у
+    // FIngredientTableRow::MinAltitudeCentimeters). Context.AltitudeCentimeters
+    // сама переводит, как и настоящий GetCellHeight() в игре.
     FHarvestContext MakeContextAt(float AltitudeMeters, bool bKnown = true)
     {
         FHarvestContext Context;
-        Context.AltitudeMeters = AltitudeMeters;
+        Context.AltitudeCentimeters = AltitudeMeters * 100.0f;
         Context.bAltitudeKnown = bKnown;
         return Context;
     }
@@ -141,9 +145,9 @@ bool FHerbalistAltitude_FalloffMakesTheEdgeGradual::RunTest(const FString& Param
     FIngredientTableRow Banded;
     Banded.AllowedBiomes.Add(EBiomeType::Taiga);
     Banded.bUseAltitudeRange = true;
-    Banded.MinAltitudeMeters = 0.0f;
-    Banded.MaxAltitudeMeters = 100.0f;
-    Banded.AltitudeFalloffMeters = 100.0f;   // широкий мягкий край
+    Banded.MinAltitudeCentimeters = 0.0f;
+    Banded.MaxAltitudeCentimeters = 10000.0f;    // 100 м
+    Banded.AltitudeFalloffCentimeters = 10000.0f;   // 100 м, широкий мягкий край
     Table->AddRow(LowlandHerb, Banded);
 
     FIngredientTableRow Anywhere;
@@ -194,9 +198,9 @@ bool FHerbalistAltitude_SoleCandidateOutsideItsBandYieldsNothing::RunTest(const 
     FIngredientTableRow Lowland;
     Lowland.AllowedBiomes.Add(EBiomeType::Taiga);
     Lowland.bUseAltitudeRange = true;
-    Lowland.MinAltitudeMeters = 0.0f;
-    Lowland.MaxAltitudeMeters = 100.0f;
-    Lowland.AltitudeFalloffMeters = 0.0f;
+    Lowland.MinAltitudeCentimeters = 0.0f;
+    Lowland.MaxAltitudeCentimeters = 10000.0f;   // 100 м
+    Lowland.AltitudeFalloffCentimeters = 0.0f;
     Table->AddRow(LowlandHerb, Lowland);
 
     Registry->LoadFromDataTable(Table);

@@ -67,22 +67,33 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     // можно»), высота же — свойство места, а не момента. Выше границы леса
     // трава не растёт реже — она не растёт.
     //
+    // В САНТИМЕТРАХ, не в метрах (переименовано 2026-09-03) — стандартная
+    // единица расстояния UE (та же, что у Location.Z в Details), а не
+    // отдельное правило только для этих трёх полей. Раньше называлось
+    // "...Meters", и это привело к реальной путанице при заполнении
+    // таблицы: значение ввели в сантиметрах по привычке (как для любого
+    // другого расстояния в редакторе), а код делил высоту ландшафта на 100
+    // и сравнивал её с "метрами" — пояс проверялся, но с числом в 100 раз
+    // меньше нужного, и потому никогда не совпадал с реальной высотой
+    // ландшафта. Имя поля теперь врёт в другую сторону было бы хуже, чем
+    // отсутствие имени вовсе — так что оно называется тем, чем является.
+    //
     // false (по умолчанию) — карточка растёт на любой высоте, поведение как
     // до появления полей.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude")
     bool bUseAltitudeRange = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude", meta = (EditCondition = "bUseAltitudeRange"))
-    float MinAltitudeMeters = 0.0f;
+    float MinAltitudeCentimeters = 0.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude", meta = (EditCondition = "bUseAltitudeRange"))
-    float MaxAltitudeMeters = 1000.0f;
+    float MaxAltitudeCentimeters = 100000.0f;   // 1000 м, тот же потолок, что был
 
     // Ширина полосы затухания у границ пояса: внутри пояса вес полный, за
     // его краем спадает линейно до нуля на этом расстоянии. 0 — резкая
     // граница. Нужна, чтобы пояс не выглядел вырезанным по линейке.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude", meta = (EditCondition = "bUseAltitudeRange", ClampMin = "0.0"))
-    float AltitudeFalloffMeters = 25.0f;
+    float AltitudeFalloffCentimeters = 2500.0f;   // 25 м, тот же запас, что был
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
     FRealState BaseState;
@@ -214,10 +225,13 @@ struct FHarvestContext
     EMoonPhase MoonPhase = EMoonPhase::NewMoon;
     bool bDryWeather = true;
 
-    // Высота клетки над нулём мира, В МЕТРАХ (2026-09-03). Заполняется
-    // менеджером из закэшированной высоты ландшафта; 0 = «высота неизвестна
-    // или неважна», и тогда высотный гейт карточки не применяется вовсе
-    // (см. FIngredientTableRow::bUseAltitudeRange).
-    float AltitudeMeters = 0.0f;
+    // Высота клетки над нулём мира, В САНТИМЕТРАХ (2026-09-03, переименовано
+    // из AltitudeMeters -- см. подробный довод у FIngredientTableRow::
+    // MinAltitudeCentimeters). Заполняется менеджером НАПРЯМУЮ из
+    // закэшированной высоты ландшафта (GetCellHeight уже в см, конвертация
+    // не нужна вовсе); 0 = «высота неизвестна или неважна», и тогда
+    // высотный гейт карточки не применяется вовсе (см.
+    // FIngredientTableRow::bUseAltitudeRange).
+    float AltitudeCentimeters = 0.0f;
     bool bAltitudeKnown = false;
 };

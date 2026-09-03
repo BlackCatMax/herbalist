@@ -332,15 +332,19 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
         // выбирается вовсе. Окна намеренно не обнуляются ("не в сезон найти
         // труднее, но можно"), а высота — свойство места, не момента: выше
         // границы леса трава не растёт реже, она не растёт. Мягкий край
-        // (AltitudeFalloffMeters) нужен, чтобы пояс не выглядел вырезанным
-        // по линейке.
+        // (AltitudeFalloffCentimeters) нужен, чтобы пояс не выглядел
+        // вырезанным по линейке. Все три поля -- в сантиметрах, том же
+        // стандарте UE, что и высота ландшафта; переименовано из "...Meters"
+        // тем же днём (см. довод у объявления полей в IngredientTableRow.h)
+        // после того, как значения вводили в сантиметрах по редакторской
+        // привычке, а сравнивали как метры -- пояс не совпадал никогда.
         float AltitudeFactor = 1.0f;
         if (Row->bUseAltitudeRange && Context.bAltitudeKnown)
         {
-            const float Lo = FMath::Min(Row->MinAltitudeMeters, Row->MaxAltitudeMeters);
-            const float Hi = FMath::Max(Row->MinAltitudeMeters, Row->MaxAltitudeMeters);
-            const float Fade = FMath::Max(0.0f, Row->AltitudeFalloffMeters);
-            const float A = Context.AltitudeMeters;
+            const float Lo = FMath::Min(Row->MinAltitudeCentimeters, Row->MaxAltitudeCentimeters);
+            const float Hi = FMath::Max(Row->MinAltitudeCentimeters, Row->MaxAltitudeCentimeters);
+            const float Fade = FMath::Max(0.0f, Row->AltitudeFalloffCentimeters);
+            const float A = Context.AltitudeCentimeters;
 
             if (A < Lo)
             {
