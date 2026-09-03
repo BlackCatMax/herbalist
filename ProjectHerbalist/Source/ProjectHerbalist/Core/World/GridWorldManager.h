@@ -181,6 +181,11 @@ public:
     // Координата чанка, которой принадлежит клетка.
     FIntPoint GetChunkCoordForCell(int32 CellX, int32 CellY) const;
 
+    // Радиус активности в чанках, посчитанный из метров
+    // (UHerbalistSettings::ActiveSimulationRadiusMeters) и текущих CellSize/
+    // ChunkSizeInCells. -1 = механизм выключен, активно всё.
+    int32 GetActiveRadiusInChunks() const;
+
     // Пересчитать центры активности. Вызывается из Tick; публична, чтобы
     // тест мог задать состояние детерминированно, не гоняя настоящий Tick.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Streaming")

@@ -29,21 +29,25 @@ namespace
     // чужой радиус (тот же класс ловушки, что уже ловили с изоляцией мира).
     struct FScopedChunkSettings
     {
-        int32 SavedRadius;
+        float SavedRadiusMeters;
         int32 SavedChunkSize;
         UHerbalistSettings* Settings;
 
-        FScopedChunkSettings(int32 Radius, int32 ChunkSize)
+        // Радиус задаётся в МЕТРАХ (см. ActiveSimulationRadiusMeters). В
+        // тестах CellSize=100 (1 м на клетку), поэтому при ChunkSize=4 один
+        // чанк -- это 4 метра: RadiusMeters=0 даёт «только свой чанк»,
+        // RadiusMeters=4 -- «свой и соседние».
+        FScopedChunkSettings(float RadiusMeters, int32 ChunkSize)
             : Settings(GetMutableDefault<UHerbalistSettings>())
         {
-            SavedRadius = Settings->ActiveChunkRadius;
+            SavedRadiusMeters = Settings->ActiveSimulationRadiusMeters;
             SavedChunkSize = Settings->ChunkSizeInCells;
-            Settings->ActiveChunkRadius = Radius;
+            Settings->ActiveSimulationRadiusMeters = RadiusMeters;
             Settings->ChunkSizeInCells = ChunkSize;
         }
         ~FScopedChunkSettings()
         {
-            Settings->ActiveChunkRadius = SavedRadius;
+            Settings->ActiveSimulationRadiusMeters = SavedRadiusMeters;
             Settings->ChunkSizeInCells = SavedChunkSize;
         }
     };
@@ -62,7 +66,7 @@ bool FHerbalistGridStreaming_ChunkCoordMathAndDefaultAllActive::RunTest(const FS
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     {
-        FScopedChunkSettings Scoped(/*Radius=*/-1, /*ChunkSize=*/8);
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/-1.0f, /*ChunkSize=*/8);
 
         TestEqual(TEXT("Cell (0,0) belongs to chunk (0,0)"), Manager->GetChunkCoordForCell(0, 0), FIntPoint(0, 0));
         TestEqual(TEXT("Cell (7,7) is still chunk (0,0) at chunk size 8"), Manager->GetChunkCoordForCell(7, 7), FIntPoint(0, 0));
@@ -82,7 +86,7 @@ bool FHerbalistGridStreaming_ChunkCoordMathAndDefaultAllActive::RunTest(const FS
                 if (Cell && !Manager->IsCellActive(*Cell)) { bAllActive = false; break; }
             }
         }
-        TestTrue(TEXT("Radius -1 keeps every cell active"), bAllActive);
+        TestTrue(TEXT("Negative radius keeps every cell active"), bAllActive);
     }
 
     Manager->Destroy();
@@ -102,9 +106,9 @@ bool FHerbalistGridStreaming_RadiusGatesCellsByChunkDistance::RunTest(const FStr
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     {
-        // Чанк 4 клетки, радиус 1 -> активны чанки 0..1 по обеим осям,
+        // Чанк 4 клетки, радиус 4 м = 1 чанк -> активны чанки 0..1 по обеим осям,
         // то есть клетки 0..7. Клетка (0,0) активна, (19,19) -- нет.
-        FScopedChunkSettings Scoped(/*Radius=*/1, /*ChunkSize=*/4);
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/4.0f, /*ChunkSize=*/4);
         Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
 
         const FGridCell* Near = Manager->GetCell(0, 0);
@@ -155,7 +159,7 @@ bool FHerbalistGridStreaming_NoCentresMeansEverythingActive::RunTest(const FStri
         // партишена -- ровно ситуация headless-теста). Сознательный выбор:
         // считать всё активным, а не всё мёртвым. Тихо остановившаяся
         // симуляция -- худший из отказов, её никто не заметит.
-        FScopedChunkSettings Scoped(/*Radius=*/1, /*ChunkSize=*/4);
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/4.0f, /*ChunkSize=*/4);
         Manager->SetActiveChunkCentersForTests({});
 
         const FGridCell* Far = Manager->GetCell(19, 19);
@@ -180,7 +184,7 @@ bool FHerbalistGridStreaming_CatchUpMatchesContinuousSimulation::RunTest(const F
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     {
-        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
 
         // Две одинаково испорченные клетки в РАЗНЫХ чанках: (1,1) в чанке
         // (0,0), (17,17) в чанке (4,4). Первая будет активна всё время,
@@ -242,7 +246,7 @@ bool FHerbalistGridStreaming_CatchUpDoesNotDoubleCountWhileChunkStaysActive::Run
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     {
-        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
         Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
 
         FGridCell* Cell = Manager->GetCell(1, 1);
@@ -276,7 +280,7 @@ bool FHerbalistGridStreaming_DormantChunkKeepsWhatGrewThere::RunTest(const FStri
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     {
-        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
 
         FGridCell* Cell = Manager->GetCell(1, 1);
         if (!Cell) { Manager->Destroy(); return false; }
@@ -344,7 +348,7 @@ bool FHerbalistGridStreaming_SleepingChunkNeverTouchesPcgActors::RunTest(const F
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     {
-        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
 
         FGridCell* Cell = Manager->GetCell(2, 2);
         if (!Cell) { Manager->Destroy(); return false; }

@@ -243,10 +243,22 @@ FIntPoint AGridWorldManager::GetChunkCoordForCell(int32 CellX, int32 CellY) cons
                      FMath::FloorToInt(static_cast<float>(CellY) / ChunkSize));
 }
 
-bool AGridWorldManager::IsCellActive(const FGridCell& Cell) const
+int32 AGridWorldManager::GetActiveRadiusInChunks() const
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->ActiveChunkRadius : -1;
+    const float RadiusMeters = Settings ? Settings->ActiveSimulationRadiusMeters : -1.0f;
+    if (RadiusMeters < 0.0f) return -1;   // механизм выключен
+
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const float ChunkSpanCm = FMath::Max(KINDA_SMALL_NUMBER, CellSize * ChunkSize);
+    // Floor, не ceil: радиус меньше одного чанка честно означает "только свой
+    // чанк" (0), а не "и соседние тоже".
+    return FMath::FloorToInt((RadiusMeters * 100.0f) / ChunkSpanCm);
+}
+
+bool AGridWorldManager::IsCellActive(const FGridCell& Cell) const
+{
+    const int32 Radius = GetActiveRadiusInChunks();
 
     // -1 -- механизм выключен, активно всё (поведение до 2026-09-03).
     if (Radius < 0) return true;
@@ -369,8 +381,7 @@ void AGridWorldManager::SetChunkResourcesActive(const FIntPoint& Chunk, bool bAc
 
 void AGridWorldManager::CatchUpActivatedChunks()
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->ActiveChunkRadius : -1;
+    const int32 Radius = GetActiveRadiusInChunks();
 
     // Механизм выключен (или источников нет) — активно всё, простаивать
     // нечему, догонять нечего.
@@ -957,8 +968,7 @@ void AGridWorldManager::InitializeCells()
     // старт означал бы десятки тысяч акторов разом. При выключенном
     // стриминге -- прежнее поведение, побайтово тот же порядок WorldRNG.
     {
-        const UHerbalistSettings* StreamSettings = GetHerbalistSettings();
-        const bool bStreamingEnabled = StreamSettings && StreamSettings->ActiveChunkRadius >= 0;
+        const bool bStreamingEnabled = GetActiveRadiusInChunks() >= 0;
         if (!bStreamingEnabled)
         {
             for (FGridCell& Cell : Cells)
