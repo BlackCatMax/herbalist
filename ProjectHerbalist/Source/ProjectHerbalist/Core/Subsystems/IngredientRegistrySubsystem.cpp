@@ -216,8 +216,17 @@ FName UIngredientRegistrySubsystem::PickFromBiomeWeightedCache(const TMap<EBiome
     }
 
     if (MergedCandidates.Num() == 0) return NAME_None;
-    if (MergedCandidates.Num() == 1) return MergedCandidates[0];
 
+    // Раньше здесь был короткий путь "один кандидат -- отдать его сразу, не
+    // считая веса" (2026-09-03, разбор жалобы "пояс не работает"). Он
+    // обходил PickWeightedResource ЦЕЛИКОМ -- вместе с ним пропускались
+    // ВСЕ гейты: высотный пояс, сезон, время суток, луна, сухая погода,
+    // Suitability по State клетки. Для биома с одной зарегистрированной
+    // карточкой (обычное дело при точечном контенте/тестировании -- ровно
+    // сценарий пользователя) это означало, что растение появлялось
+    // ВСЕГДА, что бы ни стояло в его собственных условиях. PickWeightedResource
+    // корректно обрабатывает N=1 сам (см. bAnyCandidateAltitudeEligible
+    // там же) -- короткий путь был чистой (и вредной) оптимизацией.
     return PickWeightedResource(MergedCandidates, MergedWeights, Cell, Context, Rng);
 }
 
@@ -228,10 +237,17 @@ FName UIngredientRegistrySubsystem::GetRandomResourceForNiche(const FGridCell& C
 
     const TArray<FName>* Candidates = CachedResourcesByNiche.Find(Niche);
     if (!Candidates || Candidates->Num() == 0) return NAME_None;
-    if (Candidates->Num() == 1) return (*Candidates)[0];
+    // Короткого пути "один кандидат -- отдать сразу" здесь больше нет --
+    // тот же баг и то же лечение, что у PickFromBiomeWeightedCache выше
+    // (2026-09-03): обходил высотный/сезонный/лунный/погодный гейты
+    // целиком для ниши сада с единственным растением.
 
     const TArray<int32>* BaseWeights = CachedWeightsByNiche.Find(Niche);
-    if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return (*Candidates)[0];
+    // Кэши рассинхронизированы -- на практике недостижимо (строятся в одном
+    // проходе BuildCache()), но раньше это молча отдавало первого
+    // кандидата в обход всех гейтов. NAME_None честнее: "не могу посчитать
+    // пригодность" не то же самое, что "точно растёт".
+    if (!BaseWeights || BaseWeights->Num() != Candidates->Num()) return NAME_None;
 
     // Ниша сада не пересекается (один Niche на клетку, не список) --
     // просто перевод int32->float перед вызовом общей функции, без merge.
@@ -265,11 +281,30 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
     TArray<float> EffectiveWeights;
     EffectiveWeights.Reserve(Candidates.Num());
     float TotalWeight = 0.0f;
+
+    // "Хоть кто-то в принципе растёт на этой высоте" — отдельно от
+    // TotalWeight (2026-09-03, разбор жалобы "пояс не работает"). Ниже есть
+    // фолбэк "TotalWeight ~ 0 -> вернуть Candidates[0] всё равно, лишь бы не
+    // NAME_None" — придуман для мягких гейтов (сезон/время/луна/погода
+    // никогда не гасят вес до истинного нуля, только Suitability теоретически
+    // может обнулиться на очень большом Dist). Высотный пояс — ЕДИНСТВЕННЫЙ
+    // по-настоящему жёсткий множитель в этой функции (AltitudeFactor = 0.0f
+    // буквально, не "очень маленький"), и старый фолбэк это отменял: если в
+    // реестре для биома одна карточка и она гейтится по высоте, TotalWeight
+    // уходил в 0 по ПРАВИЛЬНОЙ причине, а функция как ни в чём не бывало
+    // отдавала именно её. Флаг ниже не даёт фолбэку сработать, когда причина
+    // нулевого веса — что растению здесь буквально нельзя расти, а не то,
+    // что оно просто маловероятно.
+    bool bAnyCandidateAltitudeEligible = false;
+
     for (int32 i = 0; i < Candidates.Num(); ++i)
     {
         const FIngredientTableRow* Row = Rows.Find(Candidates[i]);
         if (!Row)
         {
+            // Строки нет -- значит и bUseAltitudeRange проверить нечем;
+            // не запрещаем фолбэк из-за данных, которых здесь просто нет.
+            bAnyCandidateAltitudeEligible = true;
             EffectiveWeights.Add(BaseWeights[i]);
             TotalWeight += EffectiveWeights.Last();
             continue;
@@ -316,13 +351,22 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
                 AltitudeFactor = (Fade <= 0.0f) ? 0.0f : FMath::Clamp(((Hi + Fade) - A) / Fade, 0.0f, 1.0f);
             }
         }
+        if (AltitudeFactor > 0.0f) bAnyCandidateAltitudeEligible = true;
 
         const float Weight = BaseWeights[i] * Suitability * StressFactor
             * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow * AltitudeFactor;
         EffectiveWeights.Add(Weight);
         TotalWeight += Weight;
     }
-    if (TotalWeight <= KINDA_SMALL_NUMBER) return Candidates[0];
+    if (TotalWeight <= KINDA_SMALL_NUMBER)
+    {
+        // Раньше здесь безусловно возвращался Candidates[0] -- см. довод у
+        // объявления bAnyCandidateAltitudeEligible выше. Если ни один
+        // кандидат не прошёл высотный пояс, честный ответ "здесь ничего не
+        // растёт" (NAME_None), а не первый попавшийся, которого высота как
+        // раз и исключила.
+        return bAnyCandidateAltitudeEligible ? Candidates[0] : NAME_None;
+    }
 
     const float Roll = Rng.FRandRange(0.0f, TotalWeight);
     float Accum = 0.0f;

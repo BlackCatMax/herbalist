@@ -166,4 +166,55 @@ bool FHerbalistAltitude_FalloffMakesTheEdgeGradual::RunTest(const FString& Param
     return true;
 }
 
+// Регрессия 2026-09-03: пользователь настроил "пояс, как в плане проверки"
+// -- одна строка в DT_IngredientClass, Use Altitude Range=true -- и вне
+// пояса растение всё равно появлялось. Причина не в самом гейте (тесты
+// выше его и держат), а в фолбэке PickWeightedResource: "TotalWeight ~ 0
+// -> вернуть Candidates[0] всё равно". Фолбэк придуман для МЯГКИХ гейтов
+// (сезон/время/луна/погода никогда не гасят вес до истинного нуля), но
+// высота -- единственный по-настоящему жёсткий множитель, и когда в биоме
+// РОВНО ОДИН кандидат и он же гейтится по высоте, TotalWeight честно уходит
+// в 0, а старый код как ни в чём не бывало отдавал именно его же.
+// Существующие тесты выше это не ловили -- у них всегда рядом стоит
+// AnyHeightHerb, и TotalWeight никогда не достигает нуля.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAltitude_SoleCandidateOutsideItsBandYieldsNothing,
+    "Herbalist.Altitude.SoleCandidateOutsideItsBandYieldsNothing",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAltitude_SoleCandidateOutsideItsBandYieldsNothing::RunTest(const FString& Parameters)
+{
+    UGameInstance* Owner = NewObject<UGameInstance>(GEngine);
+    UIngredientRegistrySubsystem* Registry = NewObject<UIngredientRegistrySubsystem>(Owner);
+
+    UDataTable* Table = NewObject<UDataTable>();
+    Table->RowStruct = FIngredientTableRow::StaticStruct();
+
+    // Единственная строка в таблице -- ровно то, что настраивал пользователь
+    // по инструкции плана проверки ("в DT_IngredientClass одной строке...").
+    FIngredientTableRow Lowland;
+    Lowland.AllowedBiomes.Add(EBiomeType::Taiga);
+    Lowland.bUseAltitudeRange = true;
+    Lowland.MinAltitudeMeters = 0.0f;
+    Lowland.MaxAltitudeMeters = 100.0f;
+    Lowland.AltitudeFalloffMeters = 0.0f;
+    Table->AddRow(LowlandHerb, Lowland);
+
+    Registry->LoadFromDataTable(Table);
+    const FGridCell Cell = MakeTaigaCell();
+
+    // Внутри пояса -- растёт, единственный кандидат всегда выигрывает ролл.
+    TestEqual(TEXT("Inside its band, the sole candidate always wins the roll"),
+        CountRolls(Registry, Cell, MakeContextAt(50.0f), LowlandHerb, 20), 20);
+
+    // Вне пояса -- НИЧЕГО, не сам этот кандидат по фолбэку. Проверяем
+    // напрямую результат GetRandomResourceForBiome, не просто "не совпало":
+    // NAME_None -- единственный честный ответ, когда буквально нечему расти.
+    FRandomStream Rng(20260903);
+    const FName Result = Registry->GetRandomResourceForBiome(Cell, MakeContextAt(400.0f), Rng);
+    TestTrue(TEXT("Outside its band with no other candidate, the result is NAME_None, not the excluded herb itself"),
+        Result.IsNone());
+
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS
