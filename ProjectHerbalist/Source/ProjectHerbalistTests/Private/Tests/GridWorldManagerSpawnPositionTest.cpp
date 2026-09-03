@@ -40,6 +40,37 @@ bool FHerbalistSpawnPosition_ZeroRadiusReturnsExactCellCenter::RunTest(const FSt
     return true;
 }
 
+// Регрессия 2026-09-03: пользователь пожаловался на "отвратительный
+// тайлинг" в расстановке ресурсов -- причиной был джиттер CellSize*0.3f,
+// покрывавший только 36% площади клетки вокруг центра (квадрат джиттера
+// внутри квадрата клетки), с пустым необитаемым кольцом по краям. На
+// масштабе всего мира это читалось как решётка кустов с видимыми швами по
+// границам клеток. GetResourceJitterRadius() -- единственный источник
+// истины теперь для всех трёх мест, что раньше дублировали формулу
+// (SpawnResourcesInCell/SpawnResourceActor/PreviewResourceSpawnPoints);
+// этот тест не даёт кому-нибудь молча вернуть маленькую долю обратно.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawnPosition_JitterRadiusCoversTheWholeCellNotJustItsCenter,
+    "Herbalist.SpawnPosition.JitterRadiusCoversTheWholeCellNotJustItsCenter",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSpawnPosition_JitterRadiusCoversTheWholeCellNotJustItsCenter::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    // Половина CellSize -- квадрат джиттера ровно совпадает по размеру с
+    // самой клеткой (классический "jittered grid", Cook 1986), не узкая
+    // доля вокруг центра.
+    TestEqual(TEXT("Jitter radius is exactly half the cell size"),
+        Manager->GetResourceJitterRadius(), Manager->CellSize * 0.5f);
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawnPosition_NoRegionsStillJittersWithoutCrashing,
     "Herbalist.SpawnPosition.NoRegionsStillJittersWithoutCrashing",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

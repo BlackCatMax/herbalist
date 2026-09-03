@@ -374,7 +374,7 @@ void AGridWorldManager::PreviewResourceSpawnPoints()
     }
 
     FRandomStream PreviewRng(RngBaseSeed);
-    const float Jitter = CellSize * 0.3f;
+    const float Jitter = GetResourceJitterRadius();
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float TraceHalf = Settings ? FMath::Max(0.0f, Settings->SpawnTraceHalfHeight) : 5000.0f;
 
@@ -1358,7 +1358,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         // отбраковка занятых точек (2026-09-03). Свободного места нет --
         // клетка остаётся пустой: лучше так, чем трава внутри валуна.
         FVector SpawnPos;
-        if (!FindFreeSpawnPositionInCell(Cell.X, Cell.Y, CellSize * 0.3f, WorldRNG, SpawnPos))
+        if (!FindFreeSpawnPositionInCell(Cell.X, Cell.Y, GetResourceJitterRadius(), WorldRNG, SpawnPos))
         {
             UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourcesInCell: клетка (%d,%d) занята, ресурс пропущен"), Cell.X, Cell.Y);
             continue;
@@ -1408,7 +1408,7 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
         // Тот же поиск свободной точки, что и при первичном заселении
         // (2026-09-03). Отросшее/восстановленное из сейва растение не должно
         // оказаться внутри камня, поставленного там, где оно раньше росло.
-        if (!FindFreeSpawnPositionInCell(X, Y, CellSize * 0.3f, WorldRNG, SpawnPos))
+        if (!FindFreeSpawnPositionInCell(X, Y, GetResourceJitterRadius(), WorldRNG, SpawnPos))
         {
             UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: клетка (%d,%d) занята, %s не поставлен"), X, Y, *IngredientID.ToString());
             return;

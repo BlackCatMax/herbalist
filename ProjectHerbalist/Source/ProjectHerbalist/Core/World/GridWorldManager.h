@@ -122,6 +122,19 @@ public:
     FVector GetCellWorldPositionFlat(int32 X, int32 Y) const;
     float GetCellHeight(int32 X, int32 Y) const;
 
+    // Радиус джиттера ресурсов вокруг центра клетки -- единственный
+    // источник истины для трёх мест, которые раньше дублировали одну и ту
+    // же формулу (`CellSize * 0.3f`): SpawnResourcesInCell,
+    // SpawnResourceActor, PreviewResourceSpawnPoints. Половина CellSize --
+    // классический "jittered grid" (Cook 1986): offset — независимая
+    // равномерная выборка по X и по Y в [-Half, +Half], значит квадрат
+    // джиттера ровно совпадает по размеру с самой клеткой и покрывает её
+    // целиком, без пустого кольца по краям. 0.3f (найдено 2026-09-03,
+    // прямая жалоба пользователя "отвратительный тайлинг") покрывал только
+    // 36% площади клетки вокруг центра -- на масштабе всего мира это
+    // читалось как решётка кустов с пустыми швами по границам клеток.
+    float GetResourceJitterRadius() const { return CellSize * 0.5f; }
+
     // Обратное к GetCellWorldPosition — было продублировано в
     // AHerbalistPlayerController::GetCellFromHit, теперь общий метод (тем же
     // используется AAlchemyTableActor::BeginPlay для привязки капища к клетке).
