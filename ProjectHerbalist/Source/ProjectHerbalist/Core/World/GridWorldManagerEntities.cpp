@@ -307,6 +307,10 @@ bool AGridWorldManager::IsKupalaNight() const
 
 float AGridWorldManager::GetWindIntensity() const
 {
+    // Мост активен -- он и есть источник истины, чистый passthrough (2026-09-04,
+    // см. комментарий у SetWeatherBridgeIntensities в GridWorldManager.h).
+    if (bWeatherBridgeActive) return CachedWindIntensity;
+
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float FrontDuration = Settings ? Settings->WeatherFrontDurationSeconds : 480.0f;
     return SampleWeatherNoise(GameClockSeconds, RngBaseSeed, FrontDuration, /*Channel=*/0);
@@ -314,6 +318,8 @@ float AGridWorldManager::GetWindIntensity() const
 
 float AGridWorldManager::GetSnowIntensity() const
 {
+    if (bWeatherBridgeActive) return CachedSnowIntensity;
+
     if (GetSeason() != ESeason::Winter) return 0.0f;   // снегу неоткуда взяться вне Зимы
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float FrontDuration = Settings ? Settings->WeatherFrontDurationSeconds : 480.0f;
@@ -336,6 +342,8 @@ bool AGridWorldManager::IsBlizzard() const
 
 float AGridWorldManager::GetRainIntensity() const
 {
+    if (bWeatherBridgeActive) return CachedRainIntensity;
+
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float FrontDuration = Settings ? Settings->WeatherFrontDurationSeconds : 480.0f;
     return SampleWeatherNoise(GameClockSeconds, RngBaseSeed, FrontDuration, /*Channel=*/2);
@@ -345,6 +353,15 @@ bool AGridWorldManager::IsRainy() const
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     return GetRainIntensity() >= (Settings ? Settings->RainyThreshold : 0.6f);
+}
+
+void AGridWorldManager::SetWeatherBridgeIntensities(float RainIntensity01, float SnowIntensity01, float WindIntensity01, float FogIntensity01)
+{
+    CachedRainIntensity = FMath::Clamp(RainIntensity01, 0.0f, 1.0f);
+    CachedSnowIntensity = FMath::Clamp(SnowIntensity01, 0.0f, 1.0f);
+    CachedWindIntensity = FMath::Clamp(WindIntensity01, 0.0f, 1.0f);
+    CachedFogIntensity  = FMath::Clamp(FogIntensity01, 0.0f, 1.0f);
+    bWeatherBridgeActive = true;
 }
 
 float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const

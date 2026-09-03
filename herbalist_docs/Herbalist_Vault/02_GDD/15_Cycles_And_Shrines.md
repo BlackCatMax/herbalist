@@ -312,6 +312,71 @@ Blueprint-моста (см. "Мост в C++" ниже, без изменени�
 ВЫПОЛНЕНЫ". 75/75 тестов зелёные (5 новых —
 `Herbalist.Weather.*`/`Herbalist.AmbientEntity.*Weather/Listoviki/Kupalskye*`).
 
+### Мост реализован (2026-09-04) — плагин физически в проекте
+
+Пользователь залил `Content/UltraDynamicSky` (783 файла, оба актора —
+`Ultra_Dynamic_Sky.uasset` и `Ultra_Dynamic_Weather.uasset`, полный
+Content-only пакет, не C++-плагин). Swap-точка, обещанная разделом с
+2026-08-29, сработала ровно по плану ниже ("Мост в C++"), без
+переписывания сигнатур:
+
+- `AGridWorldManager` получил `CachedRainIntensity`/`CachedSnowIntensity`/
+  `CachedWindIntensity`/`CachedFogIntensity` (п.1 плана) и
+  `SetWeatherBridgeIntensities(Rain, Snow, Wind, Fog=0)` (п.2, точка входа
+  для будущего Blueprint-моста) — `GridWorldManagerEntities.cpp`.
+- `GetWindIntensity/GetSnowIntensity/GetRainIntensity` (п.3) читают кэш,
+  если мост хоть раз позвал `SetWeatherBridgeIntensities` (`bWeatherBridgeActive`) —
+  иначе прежний шум `SampleWeatherNoise`, БЕЗ ИЗМЕНЕНИЙ. Уровни без моста в
+  сцене (все автотесты) ведут себя ровно как раньше — регрессии ноль,
+  311/311, два чистых прогона (`Herbalist.Weather.BridgeActiveOverridesNoisePlaceholder`).
+- При активном мосте `GetSnowIntensity` больше НЕ форсирует 0 вне
+  `ESeason::Winter` — это было правило-заплатка для шумового плейсхолдера,
+  у реального моста Cached-поля — чистый passthrough, C++ ему не перечит
+  (собственный календарь UDW может не совпадать с трёхпольным сезоном
+  проекта один-в-один, и не должен).
+
+**Единственное, что физически не может сделать C++-агент — сам Blueprint-мост
+(п.2 плана) и визуальный push времени суток/сезона/луны в UDS.** Требуется
+редактор:
+
+1. Поставить `BP_Ultra_Dynamic_Sky` и `BP_Ultra_Dynamic_Weather` (или как
+   называются акторы пакета в контент-браузере — `Content/UltraDynamicSky/
+   Blueprints/Ultra_Dynamic_Sky.uasset`/`Ultra_Dynamic_Weather.uasset`) на
+   `L_TestDev` (сейчас в уровне нет ни одного — проверено).
+2. **Push времени суток/луны/сезона (C++ → UDS, визуал, направление уже
+   утверждено ниже в "Что такое UDS и UDW") — Blueprint-код НЕ нужен на
+   стороне C++ вовсе**, `GetTimeOfDay01()`/`GetMoonPhase()`/`GetSeason()`
+   уже `BlueprintCallable`. На Event Tick любого Blueprint-актора в сцене
+   (годится сам UDS-актор через Event Graph, или отдельный маленький
+   мост): найти `AGridWorldManager` (`Get All Actors Of Class` или
+   каст `Get Player Pawn`-владельца), взять `GetTimeOfDay01() * 24`
+   (UDS ждёт часы 0..24, не долю 0..1 — уточнить по факту нод `Time of
+   Day`/`Set New Time`, найденных строковым поиском в
+   `Ultra_Dynamic_Sky.uasset`) и вызвать сеттер времени UDS.
+3. **Pull погоды (UDW → C++)** — на Event Tick того же моста читать у
+   найденного в сцене UDW его `Wind Intensity`/`Rain Intensity` (оба имени
+   подтверждены строковым поиском по `Ultra_Dynamic_Weather.uasset` —
+   реальные свойства актора, не выдумка) и звать
+   `WorldManager->SetWeatherBridgeIntensities(Rain, Snow, Wind)`. **Снег —
+   под вопросом**: явного `Snow Intensity`/`Snow Amount` строковый поиск
+   не нашёл (найдены только `Snow Melt Speed Above/Below Freezing` и
+   похожие — похоже на то, что UDW сам решает "дождь или снег" по
+   температуре, без отдельного паблик-значения снега). Проверить в
+   редакторе через список нод `Get...` на найденном в сцене UDW-акторе —
+   если отдельного значения нет, третий параметр можно временно не
+   передавать (дефолт функции — не трогать, если 0 не тот случай) или
+   получать через `Get Weather Info`/`Get Local Weather State` (снапшот
+   найден тем же поиском).
+4. Точные имена нод — **перепроверить по факту установленной версии**,
+   как и предупреждал раздел с самого начала: строковый поиск по бинарнику
+   `.uasset` подтверждает, что свойства/функции существуют и называются
+   примерно так, но не форму пинов/типов — этого без открытия графа в
+   редакторе не увидеть никаким инструментом C++-агента.
+
+Дальше — снова чистый C++, без изменений: `IsWindy/IsBlizzard/IsRainy`
+вызывают уже подключенные `Get*Intensity`, `bRequiresWeather`-гейт
+бестиария (`EWeatherCondition::Wind/Blizzard`) не тронут вовсе.
+
 ### Что такое UDS и UDW на самом деле — важное уточнение
 
 Это два разных актора, не один:

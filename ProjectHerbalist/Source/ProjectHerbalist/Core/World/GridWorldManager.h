@@ -513,15 +513,20 @@ public:
     // (интерполяция value-noise между "погодными фронтами", тот же принцип,
     // что уже даёт CurrentTickID-хэш детерминизм пайплайну) — значения
     // 0..1, тот же формат, что и задокументированные Cached*Intensity §15.7.
-    // Когда придёт реальный UDW: заменить тела этих функций на чтение
-    // Blueprint-моста, сигнатуры и вызывающий код (bRequiresWeather в
-    // AmbientEntityTypes.h) не меняются — ровно то swap-место, которое и
-    // обещал §15.7.
+    //
+    // 2026-09-04: UDW физически в проекте (Content/UltraDynamicSky) --
+    // swap-точка сработала ровно так, как и была обещана §15.7. Если
+    // Blueprint-мост хоть раз позвал SetWeatherBridgeIntensities() ниже
+    // (bWeatherBridgeActive==true), эти функции читают Cached*Intensity, а
+    // не шум. Без моста в сцене (все автотесты, старые уровни без UDW) --
+    // ровно прежнее поведение, шум от GameClockSeconds+RngBaseSeed, ноль
+    // регрессии. Сигнатуры и вызывающий код (bRequiresWeather в
+    // AmbientEntityTypes.h) не поменялись вовсе, как и было обещано.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
     float GetWindIntensity() const;
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
-    float GetSnowIntensity() const;   // 0 вне Зимы -- снегу неоткуда взяться
+    float GetSnowIntensity() const;   // 0 вне Зимы -- снегу неоткуда взяться (только пока мост не активен)
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
     bool IsWindy() const;
@@ -537,6 +542,45 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
     bool IsRainy() const;
+
+    // ---- Мост в C++ от Ultra Dynamic Weather (02_GDD/15_Cycles_And_Shrines.md
+    // §15.7, "Мост в C++: тот же паттерн, что уже применён к GameClockSeconds") ----
+    // Ровно план из GDD, п.1+3: обычные ячейки-кэш + единственная точка
+    // входа для Blueprint-моста (п.2 -- "четыре присваивания, не игровая
+    // логика"). Cached*Intensity -- ВХОД в симуляцию, не то, что симуляция
+    // меняет: игровой код никогда не пишет сюда и не должен звать
+    // ChangeWeather() плагина в обход FStateDelta (тот же принцип, что уже
+    // утверждён для Morok/Zaryana-полей).
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Weather")
+    float CachedRainIntensity = 0.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Weather")
+    float CachedSnowIntensity = 0.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Weather")
+    float CachedWindIntensity = 0.0f;
+
+    // Пока не подключён ни к одному гейту (нет карточки, которой нужен
+    // именно туман) -- ровно "просто ячейка" из плана GDD, заводить порог
+    // для несуществующего потребителя значило бы выдумывать геймдизайн.
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Weather")
+    float CachedFogIntensity = 0.0f;
+
+    // Различает "моста в сцене нет" (Cached*Intensity==0 по умолчанию, но
+    // это НЕ значит "штиль/ясно" -- значит "некому было написать") от "мост
+    // есть, и сейчас действительно 0". Без этого флага Get*Intensity не
+    // смогли бы решить, читать кэш или всё ещё считать по шуму.
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Weather")
+    bool bWeatherBridgeActive = false;
+
+    // Единственный Blueprint-код во всей интеграции (GDD §15.7, п.2) --
+    // маленький Blueprint-мост (подкласс AGridWorldManager или отдельный
+    // актор в сцене с UDW) на Tick или по событию UDW "State Change - *"
+    // читает у найденного в сцене Ultra Dynamic Weather его Wind
+    // Intensity/Rain Intensity/... и зовёт это. Клампится на входе -- сами
+    // Get*Intensity ниже везде подряд предполагают строго [0,1].
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
+    void SetWeatherBridgeIntensities(float RainIntensity01, float SnowIntensity01, float WindIntensity01, float FogIntensity01 = 0.0f);
 
     // Игровые часы, независимые от GetWorld()->GetTimeSeconds() (движковое,
     // level-relative, обнуляется при перезапуске сессии) — нужны, чтобы фаза

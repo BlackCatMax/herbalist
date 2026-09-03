@@ -89,6 +89,60 @@ bool FHerbalistWeather_SnowOnlyPossibleInWinter::RunTest(const FString& Paramete
     return true;
 }
 
+// Мост от Ultra Dynamic Weather (02_GDD/15_Cycles_And_Shrines.md §15.7,
+// "Мост в C++") -- 2026-09-04, плагин физически появился в проекте
+// (Content/UltraDynamicSky). SetWeatherBridgeIntensities -- единственная
+// точка входа для будущего Blueprint-моста; сам мост (Tick/событие UDW,
+// читающее реальные Get Wind Intensity()/... и зовущее эту функцию) --
+// Blueprint-код, недостижимый из C++-автотеста, поэтому тест звонит сюда
+// напрямую с теми же числами, что позвал бы мост -- ровно то, что и
+// требуется проверить со стороны C++: активный мост НЕ пересчитывает шум и
+// возвращает точно то, что в него положили.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWeather_BridgeActiveOverridesNoisePlaceholder,
+    "Herbalist.Weather.BridgeActiveOverridesNoisePlaceholder",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWeather_BridgeActiveOverridesNoisePlaceholder::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    TestFalse(TEXT("Мост неактивен по умолчанию (уровень без UDW, как у всех автотестов)"),
+        Manager->bWeatherBridgeActive);
+
+    // День 10 (Spring) -- вне моста снег был бы жёстко 0 (см.
+    // SnowOnlyPossibleInWinter выше). Мост -- источник истины без такой
+    // подмены: реальный UDW может решить иначе (своя дата/полушарие), и
+    // C++ ему не перечит.
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    TestEqual(TEXT("Season is Spring"), Manager->GetSeason(), ESeason::Spring);
+
+    Manager->SetWeatherBridgeIntensities(/*Rain=*/0.7f, /*Snow=*/0.9f, /*Wind=*/0.8f, /*Fog=*/0.3f);
+
+    TestTrue(TEXT("Мост теперь активен"), Manager->bWeatherBridgeActive);
+    TestEqual(TEXT("GetRainIntensity читает кэш, не шум"), Manager->GetRainIntensity(), 0.7f);
+    TestEqual(TEXT("GetSnowIntensity читает кэш даже Весной -- мост, не сезонное правило шума"),
+        Manager->GetSnowIntensity(), 0.9f);
+    TestEqual(TEXT("GetWindIntensity читает кэш"), Manager->GetWindIntensity(), 0.8f);
+    TestEqual(TEXT("CachedFogIntensity сохранён как есть (пока без гейта-потребителя)"),
+        Manager->CachedFogIntensity, 0.3f);
+
+    TestTrue(TEXT("IsRainy реагирует на кэш через тот же порог RainyThreshold"), Manager->IsRainy());
+    TestTrue(TEXT("IsWindy реагирует на кэш через тот же порог WindyThreshold"), Manager->IsWindy());
+    TestTrue(TEXT("IsBlizzard реагирует на кэш (ветер И снег выше порогов)"), Manager->IsBlizzard());
+
+    // Клампинг на входе -- Get*Intensity везде подряд предполагают [0,1].
+    Manager->SetWeatherBridgeIntensities(/*Rain=*/1.5f, /*Snow=*/-0.2f, /*Wind=*/0.5f);
+    TestEqual(TEXT("Значение выше 1 клампится"), Manager->GetRainIntensity(), 1.0f);
+    TestEqual(TEXT("Отрицательное значение клампится к 0"), Manager->GetSnowIntensity(), 0.0f);
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_WeatherGatedEntitiesManifestWhenWindyOrBlizzard,
     "Herbalist.AmbientEntity.WeatherGatedEntitiesManifestWhenWindyOrBlizzard",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
