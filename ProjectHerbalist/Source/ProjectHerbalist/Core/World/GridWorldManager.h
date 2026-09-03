@@ -144,6 +144,20 @@ public:
     // Не inline -- нужен UHerbalistSettings, чей заголовок сюда не тянем.
     float GetEntityManifestationJitterRadius() const;
 
+    // Есть ли уже проявление ЭТОГО ЖЕ вида в радиусе Def.MinSpacingMeters
+    // (2026-09-03, жалоба "слишком много существ"). Подавляет только НОВЫЕ
+    // проявления -- уже стоящий экземпляр себя не вытесняет, иначе мигал бы
+    // каждый такт (тот же приём, что уже у Шапки-невидимки/Пера Алконоста
+    // в том же условии). Полное обоснование механизма и почему дистанция в
+    // метрах -- у FAmbientEntityDefinition::MinSpacingMeters.
+    //
+    // Публична ради прямого теста: определения приходят из боевой
+    // DT_AmbientEntities через function-local static кэш
+    // (GetAmbientEntityDefinitions), подменить их в тесте нечем, а вот
+    // передать сюда свой FAmbientEntityDefinition с нужной дистанцией --
+    // можно.
+    bool IsCrowdedBySameEntity(const FGridCell& Cell, const struct FAmbientEntityDefinition& Def) const;
+
     // Обратное к GetCellWorldPosition — было продублировано в
     // AHerbalistPlayerController::GetCellFromHit, теперь общий метод (тем же
     // используется AAlchemyTableActor::BeginPlay для привязки капища к клетке).

@@ -487,6 +487,35 @@ void AGridWorldManager::SeedLegendaryAnchors()
 // EntityID актора с EntityID клетки, а не просто "актор есть/нет" — если
 // клетку тем же тиком отобрал другой EntityID того же ранга (CanManifest
 // пропускает более приоритетного), старый актор должен уступить место новому.
+bool AGridWorldManager::IsCrowdedBySameEntity(const FGridCell& Cell, const FAmbientEntityDefinition& Def) const
+{
+    if (Def.MinSpacingMeters <= 0.0f) return false;   // выключено для этого вида
+
+    const float SpacingCm = Def.MinSpacingMeters * 100.0f;
+    const float SafeCellSize = FMath::Max(CellSize, KINDA_SMALL_NUMBER);
+    const int32 RadiusInCells = FMath::CeilToInt(SpacingCm / SafeCellSize);
+    if (RadiusInCells <= 0) return false;   // дистанция меньше клетки -- соседей и быть не может
+
+    const float SpacingCmSq = SpacingCm * SpacingCm;
+    for (int32 dy = -RadiusInCells; dy <= RadiusInCells; ++dy)
+    {
+        for (int32 dx = -RadiusInCells; dx <= RadiusInCells; ++dx)
+        {
+            if (dx == 0 && dy == 0) continue;   // сама клетка себе не сосед
+
+            const FGridCell* Neighbor = GetCellConst(Cell.X + dx, Cell.Y + dy);
+            if (!Neighbor || Neighbor->ManifestedEntityID != Def.EntityID) continue;
+
+            // Круг, а не квадрат: у квадратной проверки дистанция по
+            // диагонали в 1.41 раза больше, чем по осям -- на глаз это
+            // читается как сетка, ровно то, от чего уходим.
+            const float DistCmSq = FVector2D(dx * SafeCellSize, dy * SafeCellSize).SizeSquared();
+            if (DistCmSq <= SpacingCmSq) return true;
+        }
+    }
+    return false;
+}
+
 void AGridWorldManager::SyncManifestedEntityActor(FGridCell& Cell, TSubclassOf<AHerbalistEntityActor> RequestedClass, TSubclassOf<AHerbalistEntityActor> DefaultClass)
 {
     AHerbalistEntityActor* Existing = Cell.ManifestedEntityActor.Get();
@@ -711,8 +740,14 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // снимает уже проявленное, это другой предмет). Перо Алконоста
             // (§16.4, 2026-09-02) — та же подавляющая проверка, но
             // масштабированная на конкретный биом клетки, не всю сетку.
+            // IsCrowdedBySameEntity -- последним в цепочке намеренно: это
+            // единственная проверка с обходом соседей (радиус в клетках), и
+            // короткое замыкание && не даёт ей выполниться, пока клетка не
+            // прошла все дешёвые гейты (биом, ось, время, погода).
             if (bEligible && CanManifest(Cell, Def.EntityID) &&
-                (bWasActive || (!IsInvisibilityCapActive(FIntPoint(Cell.X, Cell.Y)) && !IsAlkonostSuppressionActiveForBiome(Cell.Biome))))
+                (bWasActive || (!IsInvisibilityCapActive(FIntPoint(Cell.X, Cell.Y))
+                    && !IsAlkonostSuppressionActiveForBiome(Cell.Biome)
+                    && !IsCrowdedBySameEntity(Cell, Def))))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
                 ManifestingAmbientDef = &Def;
