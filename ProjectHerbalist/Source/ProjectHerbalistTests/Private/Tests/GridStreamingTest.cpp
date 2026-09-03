@@ -12,6 +12,8 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Resources/AHerbalistResourceActor.h"
+#include "Core/Save/HerbalistSaveTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -255,6 +257,119 @@ bool FHerbalistGridStreaming_CatchUpDoesNotDoubleCountWhileChunkStaysActive::Run
         Manager->CatchUpActivatedChunks();
 
         TestEqual(TEXT("Staying active never triggers a catch-up step"), Cell->State.Meta.Purity, 0.0f);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_DormantChunkKeepsWhatGrewThere,
+    "Herbalist.GridStreaming.DormantChunkKeepsWhatGrewThere",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_DormantChunkKeepsWhatGrewThere::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+
+        FGridCell* Cell = Manager->GetCell(1, 1);
+        if (!Cell) { Manager->Destroy(); return false; }
+
+        // Помечаем клетку тронутой публичным путём (ApplySaveCells делает это
+        // сам) -- CaptureSaveCells пишет только тронутые, а нетронутый мир
+        // намеренно переигрывается из RngBaseSeed и в сейв не идёт.
+        {
+            FSavedCellState Seed;
+            Seed.X = 1;
+            Seed.Y = 1;
+            Manager->ApplySaveCells({ Seed });
+        }
+
+        // Ставим в клетку актор руками (реестра ингредиентов в тестовом мире
+        // нет, поэтому обычный спавн ничего бы не дал) и помечаем клетку
+        // заселённой -- иначе активация приняла бы её за нетронутую.
+        const FVector Pos = Manager->GetCellWorldPosition(1, 1);
+        AHerbalistResourceActor* Grown = World->SpawnActor<AHerbalistResourceActor>(
+            AHerbalistResourceActor::StaticClass(), Pos, FRotator::ZeroRotator);
+        if (!TestNotNull(TEXT("Resource actor spawned"), Grown)) { Manager->Destroy(); return false; }
+        FRealState Dummy;
+        Grown->Init(FName(TEXT("StreamTestHerb")), FText::GetEmpty(), nullptr, Dummy, Pos, Manager, 1, 1);
+        Cell->bResourcesSeeded = true;
+
+        TestEqual(TEXT("Cell starts with one live actor"), Cell->ResourceActors.Num(), 1);
+
+        // Игрок ушёл: чанк усыпляется.
+        Manager->SetChunkResourcesActive(FIntPoint(0, 0), false);
+
+        TestEqual(TEXT("Live actors are gone once the chunk sleeps"), Cell->ResourceActors.Num(), 0);
+        TestEqual(TEXT("What grew there is remembered"), Cell->DormantResourceIDs.Num(), 1);
+        if (Cell->DormantResourceIDs.Num() == 1)
+        {
+            TestEqual(TEXT("Remembered by its ingredient ID"), Cell->DormantResourceIDs[0], FName(TEXT("StreamTestHerb")));
+        }
+
+        // Сохранение в этот момент обязано помнить спящее растение, иначе
+        // сейв, сделанный вдали от дома, стирал бы дальний мир начисто.
+        bool bFoundInSave = false;
+        for (const FSavedCellState& Saved : Manager->CaptureSaveCells())
+        {
+            if (Saved.X == 1 && Saved.Y == 1 && Saved.ResourceIngredientIDs.Contains(FName(TEXT("StreamTestHerb"))))
+            {
+                bFoundInSave = true;
+            }
+        }
+        TestTrue(TEXT("Dormant resource is written into the save"), bFoundInSave);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_SleepingChunkNeverTouchesPcgActors,
+    "Herbalist.GridStreaming.SleepingChunkNeverTouchesPcgActors",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_SleepingChunkNeverTouchesPcgActors::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+
+        FGridCell* Cell = Manager->GetCell(2, 2);
+        if (!Cell) { Manager->Destroy(); return false; }
+
+        // Актор «из PCG-графа»: Init() не вызывался, значит сетка его не
+        // спавнила. Регистрируется на клетке сам, через BeginPlay.
+        const FVector Pos = Manager->GetCellWorldPosition(2, 2);
+        AHerbalistResourceActor* FromPcg = World->SpawnActor<AHerbalistResourceActor>(
+            AHerbalistResourceActor::StaticClass(), Pos, FRotator::ZeroRotator);
+        if (!TestNotNull(TEXT("PCG-like actor spawned"), FromPcg)) { Manager->Destroy(); return false; }
+        FromPcg->SetWorldManager(Manager);
+        FromPcg->DispatchBeginPlay();
+
+        TestFalse(TEXT("Sanity: this actor is not owned by the grid"), FromPcg->WasSpawnedByGrid());
+        TestTrue(TEXT("Sanity: but it did register on its cell"), Cell->ResourceActors.Contains(FromPcg));
+
+        Manager->SetChunkResourcesActive(FIntPoint(0, 0), false);
+
+        // Главное: чужой актор пережил усыпление чанка и не уехал в
+        // DormantResourceIDs -- иначе сетка «украла» бы его у PCG и при
+        // следующей активации создала дубль.
+        TestTrue(TEXT("PCG actor survives the chunk going to sleep"), IsValid(FromPcg));
+        TestEqual(TEXT("PCG actor is not recorded as dormant"), Cell->DormantResourceIDs.Num(), 0);
+
+        FromPcg->Destroy();
     }
 
     Manager->Destroy();

@@ -145,6 +145,7 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
     bIronAverse = InIronAverse;
     bDelicate = InDelicate;
     bInitializedFromCode = true;
+    bSpawnedByGrid = true;   // C++-путь спавна -- см. WasSpawnedByGrid()
     WorldManager = InWorldManager;
     GridX = InGridX;
     GridY = InGridY;

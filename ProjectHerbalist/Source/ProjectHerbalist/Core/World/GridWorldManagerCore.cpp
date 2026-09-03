@@ -310,6 +310,63 @@ void AGridWorldManager::UpdateActiveChunkCenters()
     }
 }
 
+void AGridWorldManager::SetChunkResourcesActive(const FIntPoint& Chunk, bool bActive)
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+
+    const int32 MinX = Chunk.X * ChunkSize;
+    const int32 MinY = Chunk.Y * ChunkSize;
+
+    for (int32 Y = MinY; Y < MinY + ChunkSize; ++Y)
+    {
+        for (int32 X = MinX; X < MinX + ChunkSize; ++X)
+        {
+            FGridCell* Cell = GetCell(X, Y);
+            if (!Cell) continue;
+
+            if (bActive)
+            {
+                if (!Cell->bResourcesSeeded)
+                {
+                    // Первая активация клетки за сессию -- обычный бросок
+                    // кубика, тот же, что раньше делала InitializeCells.
+                    SpawnResourcesInCell(*Cell);
+                    Cell->bResourcesSeeded = true;
+                }
+                else
+                {
+                    // Возврат игрока: поднимаем ровно то, что стояло.
+                    for (FName IngredientID : Cell->DormantResourceIDs)
+                    {
+                        SpawnResourceActor(IngredientID, X, Y);
+                    }
+                    Cell->DormantResourceIDs.Reset();
+                }
+            }
+            else
+            {
+                for (const TWeakObjectPtr<AHerbalistResourceActor>& Ptr : Cell->ResourceActors)
+                {
+                    AHerbalistResourceActor* Actor = Ptr.Get();
+                    if (!Actor) continue;
+
+                    // Чужие акторы (PCG-граф) сетке не принадлежат -- их
+                    // стримит сам World Partition, трогать нельзя.
+                    if (!Actor->WasSpawnedByGrid()) continue;
+
+                    Cell->DormantResourceIDs.Add(Actor->GetIngredientID());
+                    Actor->Destroy();
+                }
+                Cell->ResourceActors.RemoveAll([](const TWeakObjectPtr<AHerbalistResourceActor>& Ptr)
+                {
+                    return !Ptr.IsValid();
+                });
+            }
+        }
+    }
+}
+
 void AGridWorldManager::CatchUpActivatedChunks()
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();
@@ -358,6 +415,22 @@ void AGridWorldManager::CatchUpActivatedChunks()
             }
         }
         *Last = Now;
+    }
+
+    // Материализация/усыпление ресурсов по смене активности (юнит 3).
+    for (const FIntPoint& Chunk : ActiveChunks)
+    {
+        if (!PreviousActiveChunks.Contains(Chunk))
+        {
+            SetChunkResourcesActive(Chunk, true);
+        }
+    }
+    for (const FIntPoint& Chunk : PreviousActiveChunks)
+    {
+        if (!ActiveChunks.Contains(Chunk))
+        {
+            SetChunkResourcesActive(Chunk, false);
+        }
     }
 
     PreviousActiveChunks = ActiveChunks;
@@ -878,9 +951,22 @@ void AGridWorldManager::InitializeCells()
     // клетка без ни единого зарегистрированного bGrowsOnWater-растения
     // просто не получит ничего (GetRandomResourceForAquaticBiome вернёт
     // NAME_None), как и раньше.
-    for (FGridCell& Cell : Cells)
+    // Со включённым стримингом (ActiveChunkRadius >= 0) массового заселения
+    // при старте НЕ происходит: клетка получает ресурсы при первой
+    // активации своего чанка (SetChunkResourcesActive). Иначе на мире 5x5 км
+    // старт означал бы десятки тысяч акторов разом. При выключенном
+    // стриминге -- прежнее поведение, побайтово тот же порядок WorldRNG.
     {
-        SpawnResourcesInCell(Cell);
+        const UHerbalistSettings* StreamSettings = GetHerbalistSettings();
+        const bool bStreamingEnabled = StreamSettings && StreamSettings->ActiveChunkRadius >= 0;
+        if (!bStreamingEnabled)
+        {
+            for (FGridCell& Cell : Cells)
+            {
+                SpawnResourcesInCell(Cell);
+                Cell.bResourcesSeeded = true;
+            }
+        }
     }
 
     // Вертикальный срез проявления сущностей (16_Entity_Manifestation) —

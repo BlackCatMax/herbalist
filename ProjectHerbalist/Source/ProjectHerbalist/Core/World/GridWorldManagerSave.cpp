@@ -43,6 +43,11 @@ TArray<FSavedCellState> AGridWorldManager::CaptureSaveCells() const
             }
         }
 
+        // Спящие ресурсы неактивного чанка (2026-09-03, стриминг): актора нет,
+        // но растение есть -- без этой строки сохранение в момент, когда
+        // игрок далеко, стирало бы весь дальний мир начисто.
+        Saved.ResourceIngredientIDs.Append(Cell.DormantResourceIDs);
+
         Result.Add(MoveTemp(Saved));
     }
 

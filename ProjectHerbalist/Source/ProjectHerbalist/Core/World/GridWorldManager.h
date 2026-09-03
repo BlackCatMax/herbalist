@@ -200,6 +200,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Streaming")
     void CatchUpActivatedChunks();
 
+    // Материализовать/усыпить ресурсы чанка (2026-09-03, стриминг). При
+    // активации: первичное заселение, если клетка его ещё не проходила,
+    // иначе — восстановление ровно того, что стояло (DormantResourceIDs).
+    // При деактивации: акторы СЕТКИ уничтожаются, их IngredientID уезжают
+    // в DormantResourceIDs; акторы PCG-графа не трогаются.
+    void SetChunkResourcesActive(const FIntPoint& Chunk, bool bActive);
+
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
