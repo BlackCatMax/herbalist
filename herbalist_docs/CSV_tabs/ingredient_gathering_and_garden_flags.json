@@ -16,5 +16,12 @@
   {"Name": "ste_02", "GardenNiche": "RootCellar"},
   {"Name": "ste_05", "GardenNiche": "SunnyBed"},
   {"Name": "ste_06", "GardenNiche": "SunnyBed"},
-  {"Name": "ste_07", "GardenNiche": "SunnyBed"}
+  {"Name": "ste_07", "GardenNiche": "SunnyBed"},
+
+  {"Name": "les_01", "GardenNiche": "SunnyBed"},
+  {"Name": "les_02", "GardenNiche": "SunnyBed"},
+  {"Name": "les_03", "GardenNiche": "SunnyBed"},
+  {"Name": "les_04", "GardenNiche": "SunnyBed"},
+  {"Name": "les_06", "GardenNiche": "SunnyBed"},
+  {"Name": "les_08", "GardenNiche": "SunnyBed"}
 ]
