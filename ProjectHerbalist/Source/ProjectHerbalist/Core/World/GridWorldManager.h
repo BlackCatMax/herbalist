@@ -191,6 +191,15 @@ public:
 
     const TArray<FIntPoint>& GetActiveChunkCenters() const { return ActiveChunkCenters; }
 
+    // Догон только что активированных чанков: релаксация за всё время, что
+    // чанк простоял неактивным, одним шагом. Точно, а не приближённо —
+    // релаксация идёт через MoveToward (линейный шаг с остановкой у цели),
+    // поэтому один шаг на N*dt даёт ровно то же, что N шагов по dt.
+    // Публична ради теста, который сравнивает догон с эталоном непрерывного
+    // прогона. Вызывается из Tick после пересчёта активного множества.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Streaming")
+    void CatchUpActivatedChunks();
+
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
@@ -271,7 +280,10 @@ public:
     const FPerceivedInventory* GetPerceivedInventory() const;
 
     // ---- Экология: восстановление клеток ----
-    void RegenerateCellParameters(float DeltaTime);
+    // OnlyChunk != nullptr — считать только клетки этого чанка (догон при
+    // активации, CatchUpActivatedChunks). Обычный вызов из Tick оставляет
+    // nullptr и идёт по всем активным клеткам, как раньше.
+    void RegenerateCellParameters(float DeltaTime, const FIntPoint* OnlyChunk = nullptr);
 
     // ---- Проявление сущностей (02_GDD/16_Entity_Manifestation.md, вертикальный срез) ----
     // Внепайплайновый канал, как и RegenerateCellParameters/ApplyBiomeInfluences —
@@ -993,6 +1005,22 @@ private:
     // World Partition (или игрок, если партишена нет). Пересчитывается в
     // Tick, читается IsCellActive.
     TArray<FIntPoint> ActiveChunkCenters;
+
+    // Чанки, активные в этом кадре, и в предыдущем — разница между ними даёт
+    // «только что активированные», которым нужен догон.
+    TSet<FIntPoint> ActiveChunks;
+    TSet<FIntPoint> PreviousActiveChunks;
+
+    // Игровое время последнего прогона чанка. У неактивного чанка тут
+    // остаётся момент, когда он перестал считаться, — разница с текущим
+    // временем и есть пропущенный интервал.
+    TMap<FIntPoint, float> ChunkLastSimulatedGameTime;
+
+    // Игровое время инициализации сетки. Чанк, который игрок не посещал ни
+    // разу, «простаивал» именно с этого момента — иначе клетка, испорченная
+    // до ухода игрока, никогда бы не восстановилась: при первой встрече
+    // догонять было бы «нечего», и дальний мир стоял бы замороженным.
+    float GridInitGameClock = 0.0f;
     void RunSimulationStep();
 
     // ---- Очередь команд нового пайплайна ----

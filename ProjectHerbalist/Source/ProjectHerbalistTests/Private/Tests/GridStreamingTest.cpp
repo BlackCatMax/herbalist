@@ -165,4 +165,100 @@ bool FHerbalistGridStreaming_NoCentresMeansEverythingActive::RunTest(const FStri
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_CatchUpMatchesContinuousSimulation,
+    "Herbalist.GridStreaming.CatchUpMatchesContinuousSimulation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_CatchUpMatchesContinuousSimulation::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+
+        // Две одинаково испорченные клетки в РАЗНЫХ чанках: (1,1) в чанке
+        // (0,0), (17,17) в чанке (4,4). Первая будет активна всё время,
+        // вторая -- только в конце, и должна догнать первую.
+        FGridCell* Continuous = Manager->GetCell(1, 1);
+        FGridCell* Streamed   = Manager->GetCell(17, 17);
+        if (!Continuous || !Streamed) { Manager->Destroy(); return false; }
+
+        for (FGridCell* C : { Continuous, Streamed })
+        {
+            C->State.Meta.Purity = 0.0f;
+            C->TargetState.Meta.Purity = 1.0f;
+            C->State.Meta.Distortion = 1.0f;
+            C->TargetState.Meta.Distortion = 0.0f;
+        }
+
+        // 30 шагов по 1 секунде. Активен только чанк первой клетки.
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+        Manager->CatchUpActivatedChunks();   // зафиксировать стартовое время чанка
+        for (int32 i = 0; i < 30; ++i)
+        {
+            Manager->SetGameClockSeconds(Manager->GetGameClockSeconds() + 1.0f);
+            Manager->RegenerateCellParameters(1.0f);
+        }
+
+        TestTrue(TEXT("Sanity: the continuously simulated cell moved"), Continuous->State.Meta.Purity > 0.0f);
+        TestEqual(TEXT("Sanity: the streamed-out cell did not move at all"), Streamed->State.Meta.Purity, 0.0f);
+
+        // Теперь игрок «пришёл» в дальний чанк -- он активируется и догоняет.
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });
+        Manager->CatchUpActivatedChunks();
+
+        // Догон должен дать ровно то же, что непрерывный прогон: релаксация
+        // идёт через MoveToward (линейный шаг с остановкой у цели), поэтому
+        // один шаг на 30 секунд равен тридцати шагам по секунде. Эпсилон --
+        // только на накопление ошибки float в длинной цепочке шагов.
+        TestTrue(FString::Printf(TEXT("Caught-up Purity %.5f matches continuous %.5f"),
+                Streamed->State.Meta.Purity, Continuous->State.Meta.Purity),
+            FMath::IsNearlyEqual(Streamed->State.Meta.Purity, Continuous->State.Meta.Purity, 1e-3f));
+        TestTrue(FString::Printf(TEXT("Caught-up Distortion %.5f matches continuous %.5f"),
+                Streamed->State.Meta.Distortion, Continuous->State.Meta.Distortion),
+            FMath::IsNearlyEqual(Streamed->State.Meta.Distortion, Continuous->State.Meta.Distortion, 1e-3f));
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_CatchUpDoesNotDoubleCountWhileChunkStaysActive,
+    "Herbalist.GridStreaming.CatchUpDoesNotDoubleCountWhileChunkStaysActive",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_CatchUpDoesNotDoubleCountWhileChunkStaysActive::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*Radius=*/0, /*ChunkSize=*/4);
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+
+        FGridCell* Cell = Manager->GetCell(1, 1);
+        if (!Cell) { Manager->Destroy(); return false; }
+        Cell->State.Meta.Purity = 0.0f;
+        Cell->TargetState.Meta.Purity = 1.0f;
+
+        // Чанк не менял активности -- повторный CatchUp не должен добавить
+        // ни одного лишнего шага релаксации поверх обычного прохода.
+        Manager->CatchUpActivatedChunks();
+        Manager->SetGameClockSeconds(Manager->GetGameClockSeconds() + 10.0f);
+        Manager->CatchUpActivatedChunks();
+
+        TestEqual(TEXT("Staying active never triggers a catch-up step"), Cell->State.Meta.Purity, 0.0f);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

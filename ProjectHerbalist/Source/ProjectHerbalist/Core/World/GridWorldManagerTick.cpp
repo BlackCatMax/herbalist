@@ -97,6 +97,10 @@ void AGridWorldManager::Tick(float DeltaTime)
     // опрос источников и перевод их в координаты чанков, без обхода сетки.
     UpdateActiveChunkCenters();
 
+    // Догон чанков, только что попавших в активное множество: релаксация за
+    // всё время простоя одним шагом (точно, см. CatchUpActivatedChunks).
+    CatchUpActivatedChunks();
+
     SimulationTimeAccumulator += DeltaTime;
     while (SimulationTimeAccumulator >= SimulationFixedTimeStep)
     {

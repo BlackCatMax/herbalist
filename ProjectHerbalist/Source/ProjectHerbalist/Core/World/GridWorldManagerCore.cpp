@@ -310,6 +310,59 @@ void AGridWorldManager::UpdateActiveChunkCenters()
     }
 }
 
+void AGridWorldManager::CatchUpActivatedChunks()
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 Radius = Settings ? Settings->ActiveChunkRadius : -1;
+
+    // Механизм выключен (или источников нет) — активно всё, простаивать
+    // нечему, догонять нечего.
+    if (Radius < 0 || ActiveChunkCenters.Num() == 0)
+    {
+        ActiveChunks.Reset();
+        PreviousActiveChunks.Reset();
+        return;
+    }
+
+    ActiveChunks.Reset();
+    for (const FIntPoint& Center : ActiveChunkCenters)
+    {
+        for (int32 dy = -Radius; dy <= Radius; ++dy)
+        {
+            for (int32 dx = -Radius; dx <= Radius; ++dx)
+            {
+                ActiveChunks.Add(FIntPoint(Center.X + dx, Center.Y + dy));
+            }
+        }
+    }
+
+    const float Now = GameClockSeconds;
+    for (const FIntPoint& Chunk : ActiveChunks)
+    {
+        // Чанк, не встречавшийся ни разу, простаивал с момента инициализации
+        // сетки — не «с этой секунды». Иначе дальний мир стоял бы
+        // замороженным до первого визита, и клетка, испорченная до ухода
+        // игрока, не восстановилась бы никогда.
+        float* Last = &ChunkLastSimulatedGameTime.FindOrAdd(Chunk, GridInitGameClock);
+
+        // Догон только для тех, кто ТОЛЬКО ЧТО стал активным. Для уже
+        // активных этот же интервал считает обычный проход в Tick — иначе
+        // релаксация шла бы дважды за кадр.
+        if (!PreviousActiveChunks.Contains(Chunk))
+        {
+            const float Elapsed = Now - *Last;
+            if (Elapsed > KINDA_SMALL_NUMBER)
+            {
+                RegenerateCellParameters(Elapsed, &Chunk);
+                UE_LOG(LogHerbalistWorld, Verbose, TEXT("[Streaming] Chunk (%d,%d) caught up %.1f s"), Chunk.X, Chunk.Y, Elapsed);
+            }
+        }
+        *Last = Now;
+    }
+
+    PreviousActiveChunks = ActiveChunks;
+}
+
 const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
 {
     const int32 Index = Y * GridSizeX + X;
@@ -471,6 +524,13 @@ void AGridWorldManager::InitializeCells()
 {
     const int32 TotalCells = GridSizeX * GridSizeY;
     Cells.SetNum(TotalCells);
+
+    // Точка отсчёта простоя чанков (2026-09-03, стриминг): чанк, который
+    // игрок не посещал ни разу, простаивал именно с этого момента.
+    GridInitGameClock = GameClockSeconds;
+    ChunkLastSimulatedGameTime.Reset();
+    ActiveChunks.Reset();
+    PreviousActiveChunks.Reset();
 
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
@@ -1177,7 +1237,7 @@ void AGridWorldManager::DrawGridDebug()
 // ЭКОЛОГИЯ: ВОССТАНОВЛЕНИЕ ПАРАМЕТРОВ КЛЕТОК
 // ============================================================================
 
-void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
+void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoint* OnlyChunk)
 {
     const float RegenerationRate = 0.0005f;   // 0.05% в секунду
     const float DeltaRegen = RegenerationRate * DeltaTime;
@@ -1256,6 +1316,10 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime)
         // пропущенное время (юнит 2) — экспоненциальная форма сходимости
         // делает такой единичный шаг точным, а не приближённым.
         if (!IsCellActive(Cell)) continue;
+
+        // Догон одного конкретного чанка (CatchUpActivatedChunks) — остальные
+        // клетки в этом вызове не трогаем, у них своё время.
+        if (OnlyChunk && GetChunkCoordForCell(Cell.X, Cell.Y) != *OnlyChunk) continue;
 
         // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
         // клетка, помеченная навечно чистой, полностью исключена из этой
