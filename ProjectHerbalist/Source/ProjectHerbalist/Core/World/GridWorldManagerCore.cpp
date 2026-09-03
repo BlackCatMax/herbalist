@@ -320,10 +320,23 @@ bool AGridWorldManager::FindFreeSpawnPositionInCell(int32 X, int32 Y, float Jitt
             FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(HerbalistSpawnGround), /*bTraceComplex=*/false);
             TraceParams.AddIgnoredActor(this);
 
-            FHitResult Hit;
-            if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, TraceParams))
+            // Ищем именно ЗЕМЛЮ, а не первое попадание сверху (2026-09-03,
+            // найдено в PIE: одна травинка висела в воздухе). Одиночный
+            // трейс возвращал крону дерева или верх валуна -- растение
+            // садилось на них, а проверка занятости этого не ловила: сфера
+            // над кроной действительно пуста. Берём первый хит, который
+            // принадлежит ландшафту; если ландшафта под точкой нет вовсе --
+            // оставляем высоту клетки из кэша, она тоже с ландшафта.
+            TArray<FHitResult> Hits;
+            World->LineTraceMultiByChannel(Hits, Start, End, ECC_WorldStatic, TraceParams);
+            for (const FHitResult& Hit : Hits)
             {
-                Candidate.Z = Hit.ImpactPoint.Z;
+                const AActor* HitActor = Hit.GetActor();
+                if (HitActor && HitActor->IsA<ALandscapeProxy>())
+                {
+                    Candidate.Z = Hit.ImpactPoint.Z;
+                    break;
+                }
             }
         }
 
@@ -387,12 +400,20 @@ void AGridWorldManager::PreviewResourceSpawnPoints()
 
             FVector Candidate = Base + FVector(PreviewRng.FRandRange(-Jitter, Jitter), PreviewRng.FRandRange(-Jitter, Jitter), 0.0f);
 
-            FHitResult Hit;
+            // Тот же поиск именно земли, что и в FindFreeSpawnPositionInCell:
+            // превью обязано показывать ровно то, что сделает спавн.
             FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(HerbalistPreviewGround), false);
             TraceParams.AddIgnoredActor(this);
-            if (World->LineTraceSingleByChannel(Hit, Candidate + FVector(0, 0, TraceHalf), Candidate - FVector(0, 0, TraceHalf), ECC_WorldStatic, TraceParams))
+            TArray<FHitResult> Hits;
+            World->LineTraceMultiByChannel(Hits, Candidate + FVector(0, 0, TraceHalf), Candidate - FVector(0, 0, TraceHalf), ECC_WorldStatic, TraceParams);
+            for (const FHitResult& Hit : Hits)
             {
-                Candidate.Z = Hit.ImpactPoint.Z;
+                const AActor* HitActor = Hit.GetActor();
+                if (HitActor && HitActor->IsA<ALandscapeProxy>())
+                {
+                    Candidate.Z = Hit.ImpactPoint.Z;
+                    break;
+                }
             }
 
             const bool bBlocked = IsSpawnPointBlocked(Candidate);

@@ -396,17 +396,40 @@ int32 UCompendiumAuditCommandlet::Main(const FString& Params)
 
         if (!Target) continue;
 
-        bool bFound = false;
-        for (const FString& Key : Card.Keys)
+        auto FindIn = [&Card](UDataTable* Table) -> bool
         {
-            if (Target->GetRowMap().Contains(FName(*Key))) { bFound = true; break; }
+            if (!Table) return false;
+            for (const FString& Key : Card.Keys)
+            {
+                if (Table->GetRowMap().Contains(FName(*Key))) return true;
+            }
+            return false;
+        };
+
+        if (FindIn(Target)) continue;   // всё на месте
+
+        // Прежде чем объявлять карточку потерянной -- ищем её в ДРУГИХ
+        // таблицах рангов. Первый прогон этого не делал и сообщал «нет
+        // строки» про Жердяев, Курганников и Курганные огни, тогда как они
+        // давно реализованы Основным рангом, а Низшим их называет карточка.
+        // Это расхождение РАНГА, а не пропажа: сгенерировать по такому
+        // отчёту заготовки значило бы наделать дублей.
+        const TCHAR* FoundInOther = nullptr;
+        if (Target != AmbientTable && FindIn(AmbientTable))        FoundInOther = TEXT("Низший");
+        else if (Target != LandmarkTable && FindIn(LandmarkTable)) FoundInOther = TEXT("Основной");
+        else if (Target != LegendaryTable && FindIn(LegendaryTable)) FoundInOther = TEXT("Легендарный");
+
+        if (FoundInOther)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("  РАНГ РАСХОДИТСЯ: %s -- карточка '%s', реализован как '%s'"),
+                *FPaths::GetBaseFilename(Card.FilePath), *Card.Level, FoundInOther);
         }
-        if (!bFound)
+        else
         {
             UE_LOG(LogTemp, Warning, TEXT("  НЕТ СТРОКИ [%s]: %s"), *Card.Level, *FPaths::GetBaseFilename(Card.FilePath));
             if (MissingCounter) ++(*MissingCounter);
-            ++Problems;
         }
+        ++Problems;
     }
 
     UE_LOG(LogTemp, Display, TEXT("--- ИТОГ ---"));
