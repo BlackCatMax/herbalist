@@ -14,8 +14,20 @@ void UWaterTypeRegistrySubsystem::Deinitialize()
     Super::Deinitialize();
 }
 
+void UWaterTypeRegistrySubsystem::EnsureLoaded() const
+{
+    if (bLoadAttempted) return;
+    bLoadAttempted = true;
+    if (bInitialized) return;
+
+    UDataTable* Table = LoadObject<UDataTable>(nullptr, DefaultTablePath);
+    const_cast<UWaterTypeRegistrySubsystem*>(this)->LoadFromDataTable(Table);
+}
+
 void UWaterTypeRegistrySubsystem::LoadFromDataTable(UDataTable* WaterTypeTable)
 {
+    // Явная подача тоже считается попыткой -- см. bLoadAttempted.
+    bLoadAttempted = true;
     if (bInitialized) return;
     if (!WaterTypeTable)
     {
@@ -63,12 +75,14 @@ void UWaterTypeRegistrySubsystem::BuildCache()
 
 const FWaterTypeRow* UWaterTypeRegistrySubsystem::GetWaterType(FName WaterTypeID) const
 {
+    EnsureLoaded();
     if (!bInitialized) return nullptr;
     return WaterTypeMap.Find(WaterTypeID);
 }
 
 FName UWaterTypeRegistrySubsystem::GetRandomWaterType(EBiomeType Biome, FRandomStream& Rng) const
 {
+    EnsureLoaded();
     const TArray<FName>* Candidates = CachedWaterTypesByBiome.Find(Biome);
     if (!Candidates || Candidates->Num() == 0) return NAME_None;
 
@@ -91,11 +105,13 @@ FName UWaterTypeRegistrySubsystem::GetRandomWaterType(EBiomeType Biome, FRandomS
 
 bool UWaterTypeRegistrySubsystem::IsValidWaterType(FName WaterTypeID) const
 {
+    EnsureLoaded();
     return bInitialized && WaterTypeMap.Contains(WaterTypeID);
 }
 
 TArray<FName> UWaterTypeRegistrySubsystem::GetWaterTypesForBiome(EBiomeType Biome) const
 {
+    EnsureLoaded();
     if (!bInitialized) return TArray<FName>();
     const TArray<FName>* Found = CachedWaterTypesByBiome.Find(Biome);
     return Found ? *Found : TArray<FName>();
@@ -103,6 +119,7 @@ TArray<FName> UWaterTypeRegistrySubsystem::GetWaterTypesForBiome(EBiomeType Biom
 
 int32 UWaterTypeRegistrySubsystem::GetWaterTypeCount() const
 {
+    EnsureLoaded();
     return WaterTypeMap.Num();
 }
 

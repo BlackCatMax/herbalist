@@ -18,7 +18,16 @@ public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 
+    // Явная загрузка. Вызывающих двое (AProjectHerbalistGameModeBase::
+    // BeginPlay и UAlchemySubsystem::Initialize) плюс тесты, которые
+    // подсовывают собственную таблицу. Первый победивший фиксирует
+    // содержимое: повторный вызов -- no-op (см. bInitialized).
     void LoadFromDataTable(UDataTable* IngredientTable);
+
+    // Путь боевой таблицы. Публичен ради EnsureLoaded ниже и ради
+    // единственности литерала -- до 2026-09-03 он был написан трижды
+    // (здесь, в GameMode и в AlchemySubsystem) в двух разных формах.
+    static constexpr const TCHAR* DefaultTablePath = TEXT("/Game/Herbalist/Data/DT_IngredientClass.DT_IngredientClass");
 
     const FIngredientTableRow* GetRow(FName IngredientID) const;
     EIngredientClass Classify(FName IngredientID) const;
@@ -52,8 +61,38 @@ public:
     void Reset();
 
 private:
+    // Ленивая самозагрузка (2026-09-03) -- ЗАКРЫВАЕТ РЕАЛЬНЫЙ БАГ, не
+    // украшение. Initialize() подсистемы ничего не грузил, а
+    // AProjectHerbalistGameModeBase::BeginPlay -- грузил. Но GameMode
+    // спавнится динамически и попадает в конец списка акторов, поэтому
+    // BeginPlay РАЗМЕЩЁННОГО на уровне BP_GridWorldManager идёт РАНЬШЕ.
+    // AGridWorldManager::InitializeCells -> SpawnResourcesInCell брала
+    // подсистему (не null -- объект есть) с ПУСТОЙ картой Rows,
+    // GetRandomResourceForBiome возвращала NAME_None на каждый бросок, и
+    // мир молча оставался без единого ресурсного актора. В PIE-логе это
+    // видно прямо: "IngredientRegistrySubsystem loaded 89 ingredients"
+    // стоит ПОСЛЕ "InitializeCells" и "Cached 10000 cell heights".
+    //
+    // Тот же приём, которым проект уже решил ровно эту задачу для реестров
+    // сущностей (GetAmbientEntityDefinitions и соседи сами делают
+    // LoadObject): читатель не обязан знать, кто и когда обязан был
+    // позвать загрузчик. Явный LoadFromDataTable по-прежнему выигрывает,
+    // если позван до первого чтения -- на этом стоят все тесты, которые
+    // создают свежую подсистему и сразу подсовывают свою таблицу.
+    void EnsureLoaded() const;
+
     TMap<FName, FIngredientTableRow> Rows;
     bool bInitialized = false;
+
+    // Таблицу этому объекту уже подавали -- явно (LoadFromDataTable) или
+    // самозагрузкой. Ровно ОДНА попытка на время жизни объекта, и Reset()
+    // её не отменяет: иначе Reset(), который значит «опустошить», был бы
+    // тут же отменён следующим же чтением, и Herbalist.WaterRegistry.
+    // ResetClearsEverything падал бы (он и упал, когда самозагрузка была
+    // написана без этого флага). Новая PIE-сессия получает новый
+    // GameInstance и новый объект подсистемы, поэтому «один раз за жизнь»
+    // не мешает второму и третьему запуску загрузиться заново.
+    mutable bool bLoadAttempted = false;
 
     TMap<EBiomeType, TArray<FName>> CachedResourcesByBiome;
     TMap<EBiomeType, TArray<int32>> CachedWeightsByBiome;

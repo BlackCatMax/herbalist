@@ -22,7 +22,13 @@ void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>();
     if (!IngredientSubsystem)
     {
-        UE_LOG(LogHerbalistAlchemy, Error, TEXT("[Herbalist] UIngredientRegistrySubsystem not found"));
+        // Не ошибка, а нормальный порядок инициализации: UAlchemySubsystem --
+        // подсистема МИРА, она стартует раньше, чем подсистемы GameInstance
+        // становятся доступны. До 2026-09-03 это писалось как Error и
+        // выглядело причиной поломок, которых тут нет: реестр всё равно
+        // загрузится сам при первом чтении (EnsureLoaded), а раньше --
+        // AProjectHerbalistGameModeBase::BeginPlay.
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("[Herbalist] UIngredientRegistrySubsystem ещё недоступен (мировая подсистема стартует раньше GameInstance) -- реестр загрузится сам при первом чтении"));
     }
     else
     {
@@ -41,7 +47,7 @@ void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
     UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>();
     if (!WaterSubsystem)
     {
-        UE_LOG(LogHerbalistAlchemy, Error, TEXT("[Herbalist] UWaterTypeRegistrySubsystem not found"));
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("[Herbalist] UWaterTypeRegistrySubsystem ещё недоступен -- см. довод выше, реестр самозагрузится"));
     }
     else
     {

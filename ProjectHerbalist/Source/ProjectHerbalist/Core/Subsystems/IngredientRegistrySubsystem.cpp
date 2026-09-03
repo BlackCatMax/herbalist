@@ -17,8 +17,25 @@ void UIngredientRegistrySubsystem::Deinitialize()
     Super::Deinitialize();
 }
 
+void UIngredientRegistrySubsystem::EnsureLoaded() const
+{
+    if (bLoadAttempted) return;
+    bLoadAttempted = true;
+    if (bInitialized) return;
+
+    // const_cast -- обычная форма ленивого кэша: снаружи чтение остаётся
+    // логически константным, меняется только момент заполнения.
+    UDataTable* Table = LoadObject<UDataTable>(nullptr, DefaultTablePath);
+    const_cast<UIngredientRegistrySubsystem*>(this)->LoadFromDataTable(Table);
+
+    // Таблицы нет -- LoadFromDataTable уже отчиталась Error и выставила
+    // bInitialized, так что повторных попыток на каждом чтении не будет.
+}
+
 void UIngredientRegistrySubsystem::LoadFromDataTable(UDataTable* IngredientTable)
 {
+    // Явная подача тоже считается попыткой -- см. bLoadAttempted.
+    bLoadAttempted = true;
     if (bInitialized) return;
     if (!IngredientTable)
     {
@@ -79,6 +96,7 @@ void UIngredientRegistrySubsystem::BuildCache()
 
 const FIngredientTableRow* UIngredientRegistrySubsystem::GetRow(FName IngredientID) const
 {
+    EnsureLoaded();
     if (!bInitialized) return nullptr;
     return Rows.Find(IngredientID);
 }
@@ -112,6 +130,7 @@ bool UIngredientRegistrySubsystem::IsWater(FName IngredientID) const
 
 bool UIngredientRegistrySubsystem::IsKnown(FName IngredientID) const
 {
+    EnsureLoaded();
     if (bInitialized && Rows.Contains(IngredientID))
         return true;
 
@@ -140,11 +159,13 @@ namespace
 
 FName UIngredientRegistrySubsystem::GetRandomResourceForBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
 {
+    EnsureLoaded();
     return PickFromBiomeWeightedCache(CachedResourcesByBiome, CachedWeightsByBiome, Cell, Context, Rng);
 }
 
 FName UIngredientRegistrySubsystem::GetRandomResourceForAquaticBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
 {
+    EnsureLoaded();
     return PickFromBiomeWeightedCache(CachedAquaticResourcesByBiome, CachedAquaticWeightsByBiome, Cell, Context, Rng);
 }
 
@@ -202,6 +223,7 @@ FName UIngredientRegistrySubsystem::PickFromBiomeWeightedCache(const TMap<EBiome
 
 FName UIngredientRegistrySubsystem::GetRandomResourceForNiche(const FGridCell& Cell, EGardenNiche Niche, const FHarvestContext& Context, FRandomStream& Rng) const
 {
+    EnsureLoaded();
     if (Niche == EGardenNiche::None) return NAME_None;
 
     const TArray<FName>* Candidates = CachedResourcesByNiche.Find(Niche);
