@@ -1,16 +1,33 @@
 // IngredientHarvestWindowPatchCommandlet.cpp
 #include "Commandlets/IngredientHarvestWindowPatchCommandlet.h"
+#include "Core/Data/IngredientTableRow.h"
+#include "Core/Types/HerbalistCoreTypes.h"
 #include "Engine/DataTable.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
-#include "Serialization/JsonWriter.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+
+namespace
+{
+    // Общий разбор enum-строки из патча в любой UENUM (Season/HarvestTimeWindow/
+    // MoonPhase здесь) -- StaticEnum<T>()->GetValueByNameString возвращает
+    // INDEX_NONE на опечатку, что и даёт громкую ошибку вместо тихого 0.
+    template<typename TEnum>
+    bool StringToEnum(const FString& Value, TEnum& OutValue)
+    {
+        const UEnum* Enum = StaticEnum<TEnum>();
+        const int64 Index = Enum->GetValueByNameString(Value);
+        if (Index == INDEX_NONE) return false;
+        OutValue = static_cast<TEnum>(Index);
+        return true;
+    }
+}
 
 int32 UIngredientHarvestWindowPatchCommandlet::Main(const FString& Params)
 {
@@ -32,14 +49,6 @@ int32 UIngredientHarvestWindowPatchCommandlet::Main(const FString& Params)
         return 1;
     }
 
-    TMap<FString, TSharedPtr<FJsonObject>> PatchByName;
-    for (const TSharedPtr<FJsonValue>& Value : PatchRows)
-    {
-        const TSharedPtr<FJsonObject> Obj = Value->AsObject();
-        if (!Obj.IsValid()) continue;
-        PatchByName.Add(Obj->GetStringField(TEXT("Name")), Obj);
-    }
-
     const TCHAR* AssetPath = TEXT("/Game/Herbalist/Data/DT_IngredientClass");
     UDataTable* Table = LoadObject<UDataTable>(nullptr, AssetPath);
     if (!Table)
@@ -47,64 +56,75 @@ int32 UIngredientHarvestWindowPatchCommandlet::Main(const FString& Params)
         UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: не удалось загрузить %s"), AssetPath);
         return 1;
     }
-    const int32 OriginalRowCount = Table->GetRowMap().Num();
 
-    const FString LiveJsonText = Table->GetTableAsJSON();
-    TArray<TSharedPtr<FJsonValue>> LiveRows;
-    TSharedRef<TJsonReader<TCHAR>> LiveReader = TJsonReaderFactory<TCHAR>::Create(LiveJsonText);
-    if (!FJsonSerializer::Deserialize(LiveReader, LiveRows))
-    {
-        UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: не удалось разобрать текущий JSON таблицы"));
-        return 1;
-    }
-
+    // Точечная правка через FindRow, БЕЗ прохода Table->GetTableAsJSON()/
+    // CreateTableFromJSONString() по всей таблице (2026-09-04, тот же
+    // реальный баг, что и в IngredientGatheringAndGardenPatchCommandlet:
+    // полный JSON-роундтрип молча терял ряды с пробелом в имени --
+    // "Молодильное яблоко" и все 4 "Перо *" -- ни разу не упомянутые в
+    // патче, ломались просто ФАКТОМ прогона командлета по таблице, где они
+    // уже есть. FindRow трогает РОВНО ряды, названные в патче).
     int32 PatchedCount = 0;
-    TSet<FString> AppliedNames;
-    for (const TSharedPtr<FJsonValue>& Value : LiveRows)
+    for (const TSharedPtr<FJsonValue>& Value : PatchRows)
     {
-        const TSharedPtr<FJsonObject> LiveObj = Value->AsObject();
-        if (!LiveObj.IsValid()) continue;
+        const TSharedPtr<FJsonObject> Obj = Value->AsObject();
+        if (!Obj.IsValid()) continue;
 
-        const FString RowName = LiveObj->GetStringField(TEXT("Name"));
-        const TSharedPtr<FJsonObject>* PatchObj = PatchByName.Find(RowName);
-        if (!PatchObj) continue;
-
-        // Только 5 новых ключей окна сбора -- всё остальное на живом ряду
-        // (BaseState/Icon/ResourceMesh/AllowedBiomes/...) не трогаем.
-        for (const auto& Field : (*PatchObj)->Values)
+        const FString RowName = Obj->GetStringField(TEXT("Name"));
+        FIngredientTableRow* Row = Table->FindRow<FIngredientTableRow>(
+            FName(*RowName), TEXT("IngredientHarvestWindowPatch"), /*bWarnIfRowMissing=*/false);
+        if (!Row)
         {
-            if (Field.Key == TEXT("Name")) continue;
-            LiveObj->SetField(Field.Key, Field.Value);
-        }
-        ++PatchedCount;
-        AppliedNames.Add(RowName);
-    }
-
-    for (const auto& Pair : PatchByName)
-    {
-        if (!AppliedNames.Contains(Pair.Key))
-        {
-            UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' из патча не найден в живой таблице"), *Pair.Key);
+            UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' из патча не найден в живой таблице"), *RowName);
             return 1;
         }
-    }
 
-    FString MergedJsonText;
-    TSharedRef<TJsonWriter<TCHAR>> Writer = TJsonWriterFactory<TCHAR>::Create(&MergedJsonText);
-    FJsonSerializer::Serialize(LiveRows, Writer);
+        bool bBoolValue = false;
+        if (Obj->TryGetBoolField(TEXT("bAutumnOnly"), bBoolValue)) Row->bAutumnOnly = bBoolValue;
+        if (Obj->TryGetBoolField(TEXT("bRequiresMoonPhase"), bBoolValue)) Row->bRequiresMoonPhase = bBoolValue;
+        if (Obj->TryGetBoolField(TEXT("bRequiresDryWeather"), bBoolValue)) Row->bRequiresDryWeather = bBoolValue;
 
-    const TArray<FString> Problems = Table->CreateTableFromJSONString(MergedJsonText);
-    for (const FString& Problem : Problems)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("IngredientHarvestWindowPatch: %s"), *Problem);
-    }
+        FString EnumStr;
+        if (Obj->TryGetStringField(TEXT("HarvestTimeWindow"), EnumStr))
+        {
+            EHarvestTimeWindow Window;
+            if (!StringToEnum(EnumStr, Window))
+            {
+                UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' -- неизвестное значение HarvestTimeWindow '%s'"), *RowName, *EnumStr);
+                return 1;
+            }
+            Row->HarvestTimeWindow = Window;
+        }
+        if (Obj->TryGetStringField(TEXT("RequiredMoonPhase"), EnumStr))
+        {
+            EMoonPhase Phase;
+            if (!StringToEnum(EnumStr, Phase))
+            {
+                UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' -- неизвестное значение RequiredMoonPhase '%s'"), *RowName, *EnumStr);
+                return 1;
+            }
+            Row->RequiredMoonPhase = Phase;
+        }
 
-    const int32 FinalRowCount = Table->GetRowMap().Num();
-    if (FinalRowCount != OriginalRowCount)
-    {
-        UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ожидалось %d рядов (не добавляем/не удаляем), получилось %d — не сохраняю"),
-            OriginalRowCount, FinalRowCount);
-        return 1;
+        const TArray<TSharedPtr<FJsonValue>>* SeasonsArray = nullptr;
+        if (Obj->TryGetArrayField(TEXT("AllowedSeasons"), SeasonsArray))
+        {
+            TArray<ESeason> Seasons;
+            for (const TSharedPtr<FJsonValue>& SeasonValue : *SeasonsArray)
+            {
+                ESeason Season;
+                const FString SeasonStr = SeasonValue->AsString();
+                if (!StringToEnum(SeasonStr, Season))
+                {
+                    UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' -- неизвестное значение AllowedSeasons '%s'"), *RowName, *SeasonStr);
+                    return 1;
+                }
+                Seasons.Add(Season);
+            }
+            Row->AllowedSeasons = Seasons;
+        }
+
+        ++PatchedCount;
     }
 
     Table->MarkPackageDirty();
@@ -124,7 +144,7 @@ int32 UIngredientHarvestWindowPatchCommandlet::Main(const FString& Params)
         return 1;
     }
 
-    UE_LOG(LogTemp, Display, TEXT("IngredientHarvestWindowPatch: %s -- пропатчено %d из %d рядов (патч содержал %d записей)"),
-        AssetPath, PatchedCount, FinalRowCount, PatchByName.Num());
+    UE_LOG(LogTemp, Display, TEXT("IngredientHarvestWindowPatch: %s -- пропатчено %d рядов, остальные %d не тронуты байтово"),
+        AssetPath, PatchedCount, Table->GetRowMap().Num() - PatchedCount);
     return 0;
 }

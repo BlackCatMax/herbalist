@@ -10,5 +10,11 @@
   {"Name": "riv_08", "GardenNiche": "Pond"},
   {"Name": "ste_04", "GardenNiche": "SunnyBed"},
   {"Name": "les_05", "GardenNiche": "SunnyBed"},
-  {"Name": "mix_04", "GardenNiche": "ShadeBed"}
+  {"Name": "mix_04", "GardenNiche": "ShadeBed"},
+
+  {"Name": "ste_01", "GardenNiche": "SunnyBed"},
+  {"Name": "ste_02", "GardenNiche": "RootCellar"},
+  {"Name": "ste_05", "GardenNiche": "SunnyBed"},
+  {"Name": "ste_06", "GardenNiche": "SunnyBed"},
+  {"Name": "ste_07", "GardenNiche": "SunnyBed"}
 ]
