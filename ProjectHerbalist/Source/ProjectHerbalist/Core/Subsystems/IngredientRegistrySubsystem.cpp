@@ -270,8 +270,33 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
         const float WeatherWindow = WindowMultiplier(Row->bRequiresDryWeather,
             Context.bDryWeather, WindowMismatch);
 
+        // Высотный пояс (2026-09-03) — в отличие от окон выше, это ЖЁСТКАЯ
+        // маска: вне пояса множитель уходит ровно в 0, и карточка не
+        // выбирается вовсе. Окна намеренно не обнуляются ("не в сезон найти
+        // труднее, но можно"), а высота — свойство места, не момента: выше
+        // границы леса трава не растёт реже, она не растёт. Мягкий край
+        // (AltitudeFalloffMeters) нужен, чтобы пояс не выглядел вырезанным
+        // по линейке.
+        float AltitudeFactor = 1.0f;
+        if (Row->bUseAltitudeRange && Context.bAltitudeKnown)
+        {
+            const float Lo = FMath::Min(Row->MinAltitudeMeters, Row->MaxAltitudeMeters);
+            const float Hi = FMath::Max(Row->MinAltitudeMeters, Row->MaxAltitudeMeters);
+            const float Fade = FMath::Max(0.0f, Row->AltitudeFalloffMeters);
+            const float A = Context.AltitudeMeters;
+
+            if (A < Lo)
+            {
+                AltitudeFactor = (Fade <= 0.0f) ? 0.0f : FMath::Clamp((A - (Lo - Fade)) / Fade, 0.0f, 1.0f);
+            }
+            else if (A > Hi)
+            {
+                AltitudeFactor = (Fade <= 0.0f) ? 0.0f : FMath::Clamp(((Hi + Fade) - A) / Fade, 0.0f, 1.0f);
+            }
+        }
+
         const float Weight = BaseWeights[i] * Suitability * StressFactor
-            * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow;
+            * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow * AltitudeFactor;
         EffectiveWeights.Add(Weight);
         TotalWeight += Weight;
     }

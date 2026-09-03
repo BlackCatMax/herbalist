@@ -60,6 +60,30 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
     TSubclassOf<class AHerbalistResourceActor> ResourceActorClass;
 
+    // ---- Высотный пояс произрастания (2026-09-03) ----
+    // Прямой запрос: «нужна регулировка по высоте произрастания». Работает
+    // как жёсткая маска с мягким краем, а НЕ как окна сезона/луны выше: те
+    // намеренно никогда не обнуляют вес («не в сезон найти труднее, но
+    // можно»), высота же — свойство места, а не момента. Выше границы леса
+    // трава не растёт реже — она не растёт.
+    //
+    // false (по умолчанию) — карточка растёт на любой высоте, поведение как
+    // до появления полей.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude")
+    bool bUseAltitudeRange = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude", meta = (EditCondition = "bUseAltitudeRange"))
+    float MinAltitudeMeters = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude", meta = (EditCondition = "bUseAltitudeRange"))
+    float MaxAltitudeMeters = 1000.0f;
+
+    // Ширина полосы затухания у границ пояса: внутри пояса вес полный, за
+    // его краем спадает линейно до нуля на этом расстоянии. 0 — резкая
+    // граница. Нужна, чтобы пояс не выглядел вырезанным по линейке.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth|Altitude", meta = (EditCondition = "bUseAltitudeRange", ClampMin = "0.0"))
+    float AltitudeFalloffMeters = 25.0f;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
     FRealState BaseState;
 
@@ -189,4 +213,11 @@ struct FHarvestContext
     EHarvestTimeWindow TimeOfDay = EHarvestTimeWindow::Day;
     EMoonPhase MoonPhase = EMoonPhase::NewMoon;
     bool bDryWeather = true;
+
+    // Высота клетки над нулём мира, В МЕТРАХ (2026-09-03). Заполняется
+    // менеджером из закэшированной высоты ландшафта; 0 = «высота неизвестна
+    // или неважна», и тогда высотный гейт карточки не применяется вовсе
+    // (см. FIngredientTableRow::bUseAltitudeRange).
+    float AltitudeMeters = 0.0f;
+    bool bAltitudeKnown = false;
 };

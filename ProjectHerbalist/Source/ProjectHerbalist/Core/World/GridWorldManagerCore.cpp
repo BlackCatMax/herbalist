@@ -1187,6 +1187,13 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     Context.MoonPhase = GetMoonPhase();
     Context.bDryWeather = !IsRainy() && !IsBlizzard();
 
+    // Высота клетки для высотного пояса карточек (2026-09-03). Известна
+    // только когда высоты реально закэшированы с ландшафта: без ландшафта
+    // GetCellHeight отдаёт 0 для всей сетки, и гейт по такой "высоте" был бы
+    // вымыслом -- в этом случае он просто не применяется.
+    Context.bAltitudeKnown = CachedLandscape != nullptr && CachedCellHeights.Num() > 0;
+    Context.AltitudeMeters = Context.bAltitudeKnown ? GetCellHeight(Cell.X, Cell.Y) / 100.0f : 0.0f;
+
     // Сад (§2.4): клетка с пристройкой — кандидаты из EGardenNiche, не из
     // AllowedBiomes. Пусто (None) для подавляющего большинства клеток мира
     // — обычный путь ниже не меняется вовсе для них. Не применяется на воде
