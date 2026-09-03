@@ -278,7 +278,14 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
 
     if (!CanHarvestActor(Resource))
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Too far to harvest %s"), *Resource->GetName());
+        // Числа, а не просто "далеко": предел меряется от ЦЕНТРА КАПСУЛЫ
+        // пешки (примерно на уровне пояса) до НАЧАЛА КООРДИНАТ растения (на
+        // земле), поэтому даже стоя вплотную набегает почти метр по
+        // вертикали. Без цифр в логе понять, что упираешься именно в
+        // MaxHarvestDistance, а не в промах прицела, невозможно.
+        const float Dist = GetPawn() ? FVector::Dist(GetPawn()->GetActorLocation(), Resource->GetActorLocation()) : -1.0f;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: %s далеко -- %.0f см при пределе MaxHarvestDistance=%.0f см"),
+            *Resource->GetName(), Dist, MaxHarvestDistance);
         return false;
     }
 
@@ -288,7 +295,14 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
         return false;
     }
 
+    // Успех тоже обязан быть слышен. Иначе "не смог собрать" неотличимо от
+    // "собрал, но в инвентарь не доехало": сбор не кладёт предмет напрямую,
+    // он ставит команду Harvest в пайплайн, и до инвентаря та доберётся
+    // только следующим тиком через SnapshotService -> ApplyStateDelta.
+    // Разрыв в этой цепочке выглядел бы снаружи точно так же, как промах.
     Resource->Harvest();
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: %s -- команда отправлена в пайплайн, предмет придёт в инвентарь следующим тиком"),
+        *Resource->GetIngredientID().ToString());
     return true;
 }
 
