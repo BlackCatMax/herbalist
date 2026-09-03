@@ -186,6 +186,34 @@ public:
     // ChunkSizeInCells. -1 = механизм выключен, активно всё.
     int32 GetActiveRadiusInChunks() const;
 
+    // ---- Размещение ресурсов в мире (2026-09-03) ----
+    // Ищет свободную точку в клетке: джиттер внутри формы биома (как
+    // раньше) + посадка на поверхность трейсом + проверка, что там ещё
+    // никто не стоит. Возвращает false, если за MaxSpawnPlacementAttempts
+    // попыток свободного места не нашлось — вызывающая сторона тогда просто
+    // не спавнит, и это правильный исход: лучше пустая клетка, чем трава
+    // внутри валуна.
+    bool FindFreeSpawnPositionInCell(int32 X, int32 Y, float JitterRadius, FRandomStream& Rng, FVector& OutPosition) const;
+
+    // Занята ли точка статической геометрией (ландшафт не в счёт).
+    bool IsSpawnPointBlocked(const FVector& Point) const;
+
+    // ---- Превью размещения прямо в редакторе, без запуска игры ----
+    // Кнопка в панели Details у размещённого менеджера. Считает те же
+    // точки, что посчитал бы спавн, и рисует их: зелёная сфера — место
+    // свободно, красная — забраковано занятостью. Так видно ДО рантайма,
+    // что трава не полезет в камень.
+    UFUNCTION(CallInEditor, Category = "Herbalist|Debug")
+    void PreviewResourceSpawnPoints();
+
+    UFUNCTION(CallInEditor, Category = "Herbalist|Debug")
+    void ClearResourceSpawnPreview();
+
+    // Сколько клеток максимум обсчитывать в превью — полный проход по
+    // 100x100 с трейсами подвесил бы редактор без предупреждения.
+    UPROPERTY(EditAnywhere, Category = "Herbalist|Debug", meta = (ClampMin = "1"))
+    int32 PreviewMaxCells = 2000;
+
     // Пересчитать центры активности. Вызывается из Tick; публична, чтобы
     // тест мог задать состояние детерминированно, не гоняя настоящий Tick.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Streaming")

@@ -1,6 +1,9 @@
 // Core/World/GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
 #include "Landscape.h"
+#include "LandscapeProxy.h"
+#include "Engine/OverlapResult.h"
+#include "Core/Entities/HerbalistEntityActor.h"
 #include "EngineUtils.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
@@ -241,6 +244,175 @@ FIntPoint AGridWorldManager::GetChunkCoordForCell(int32 CellX, int32 CellY) cons
     // деление тянет к нулю и склеивает чанк -1 с чанком 0.
     return FIntPoint(FMath::FloorToInt(static_cast<float>(CellX) / ChunkSize),
                      FMath::FloorToInt(static_cast<float>(CellY) / ChunkSize));
+}
+
+bool AGridWorldManager::IsSpawnPointBlocked(const FVector& Point) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    if (!Settings || !Settings->bRejectOccupiedSpawnPoints) return false;
+
+    UWorld* World = GetWorld();
+    if (!World) return false;
+
+    const float Clearance = FMath::Max(0.0f, Settings->SpawnClearanceRadius);
+    if (Clearance <= 0.0f) return false;
+
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(HerbalistSpawnClearance), /*bTraceComplex=*/false);
+    Params.AddIgnoredActor(this);
+
+    FCollisionObjectQueryParams ObjectParams;
+    ObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+    ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+    // Центр сферы приподнят на её радиус: иначе сфера, стоящая ровно на
+    // поверхности, наполовину утоплена в неё и цепляет любую статику пола.
+    const FVector Centre = Point + FVector(0.0f, 0.0f, Clearance);
+
+    TArray<FOverlapResult> Overlaps;
+    World->OverlapMultiByObjectType(Overlaps, Centre, FQuat::Identity, ObjectParams,
+        FCollisionShape::MakeSphere(Clearance), Params);
+
+    for (const FOverlapResult& Overlap : Overlaps)
+    {
+        const AActor* Other = Overlap.GetActor();
+        if (!Other) continue;
+
+        // Ландшафт занятостью не считается -- он под КАЖДОЙ точкой мира.
+        // Проверка именно по ALandscapeProxy, а не по одному закэшированному
+        // ALandscape: в World Partition ландшафт разбит на десятки
+        // ALandscapeStreamingProxy, и игнорирование только «главного» делало
+        // занятой всю сетку целиком (поймано тестом до коммита).
+        if (Other->IsA<ALandscapeProxy>()) continue;
+
+        // Свои же игровые акторы -- не преграда: у ресурса есть широкая
+        // сфера взаимодействия для сбора, и считать её «занятым местом»
+        // значило бы запретить двум травам расти рядом.
+        if (Other->IsA<AHerbalistResourceActor>()) continue;
+        if (Other->IsA<AHerbalistEntityActor>()) continue;
+
+        return true;
+    }
+    return false;
+}
+
+bool AGridWorldManager::FindFreeSpawnPositionInCell(int32 X, int32 Y, float JitterRadius, FRandomStream& Rng, FVector& OutPosition) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 MaxAttempts = Settings ? FMath::Max(1, Settings->MaxSpawnPlacementAttempts) : 8;
+    const bool bTrace = Settings ? Settings->bTraceSpawnToGround : true;
+    const float TraceHalf = Settings ? FMath::Max(0.0f, Settings->SpawnTraceHalfHeight) : 5000.0f;
+
+    UWorld* World = GetWorld();
+
+    for (int32 Attempt = 0; Attempt < MaxAttempts; ++Attempt)
+    {
+        // Джиттер внутри формы биома — прежняя логика, не тронута.
+        FVector Candidate = GetSpawnPositionWithinBiome(X, Y, JitterRadius, Rng);
+
+        // Посадка на поверхность. Высота клетки — приближение по её ЦЕНТРУ;
+        // при крупной клетке сдвинутая точка может быть заметно выше или
+        // ниже, поэтому ищем поверхность именно под кандидатом.
+        if (bTrace && World && TraceHalf > 0.0f)
+        {
+            const FVector Start = Candidate + FVector(0.0f, 0.0f, TraceHalf);
+            const FVector End   = Candidate - FVector(0.0f, 0.0f, TraceHalf);
+
+            FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(HerbalistSpawnGround), /*bTraceComplex=*/false);
+            TraceParams.AddIgnoredActor(this);
+
+            FHitResult Hit;
+            if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, TraceParams))
+            {
+                Candidate.Z = Hit.ImpactPoint.Z;
+            }
+        }
+
+        if (!IsSpawnPointBlocked(Candidate))
+        {
+            OutPosition = Candidate;
+            return true;
+        }
+    }
+
+    // Свободного места в клетке не нашлось. Честный отказ: пустая клетка
+    // лучше, чем трава внутри валуна.
+    return false;
+}
+
+void AGridWorldManager::PreviewResourceSpawnPoints()
+{
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    ClearResourceSpawnPreview();
+    FindAndCacheLandscape();
+
+    // Превью работает и без InitializeCells (в редакторе, до запуска игры),
+    // поэтому не читает Cells: позиция клетки считается из GridSizeX/Y и
+    // CellSize, а форма биома проверяется прямо у волюмов на уровне.
+    TArray<ABiomeRegionVolume*> Regions;
+    for (TActorIterator<ABiomeRegionVolume> It(World); It; ++It)
+    {
+        if (ABiomeRegionVolume* Region = *It)
+        {
+            Region->UpdateCachedPoints();
+            Regions.Add(Region);
+        }
+    }
+
+    FRandomStream PreviewRng(RngBaseSeed);
+    const float Jitter = CellSize * 0.3f;
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float TraceHalf = Settings ? FMath::Max(0.0f, Settings->SpawnTraceHalfHeight) : 5000.0f;
+
+    int32 Considered = 0, Free = 0, Blocked = 0;
+    for (int32 Y = 0; Y < GridSizeY && Considered < PreviewMaxCells; ++Y)
+    {
+        for (int32 X = 0; X < GridSizeX && Considered < PreviewMaxCells; ++X)
+        {
+            FVector Base = GetCellWorldPositionFlat(X, Y);
+
+            // Только клетки внутри нарисованных регионов — остальной мир
+            // ресурсов биома и не получит (см. IsCellClaimedByBiomeRegion).
+            if (Regions.Num() > 0)
+            {
+                bool bInside = false;
+                for (ABiomeRegionVolume* Region : Regions)
+                {
+                    if (Region && Region->IsPointInside(Base)) { bInside = true; break; }
+                }
+                if (!bInside) continue;
+            }
+            ++Considered;
+
+            FVector Candidate = Base + FVector(PreviewRng.FRandRange(-Jitter, Jitter), PreviewRng.FRandRange(-Jitter, Jitter), 0.0f);
+
+            FHitResult Hit;
+            FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(HerbalistPreviewGround), false);
+            TraceParams.AddIgnoredActor(this);
+            if (World->LineTraceSingleByChannel(Hit, Candidate + FVector(0, 0, TraceHalf), Candidate - FVector(0, 0, TraceHalf), ECC_WorldStatic, TraceParams))
+            {
+                Candidate.Z = Hit.ImpactPoint.Z;
+            }
+
+            const bool bBlocked = IsSpawnPointBlocked(Candidate);
+            bBlocked ? ++Blocked : ++Free;
+
+            DrawDebugSphere(World, Candidate, FMath::Max(8.0f, CellSize * 0.06f), 8,
+                bBlocked ? FColor::Red : FColor::Green, /*bPersistent=*/true, -1.0f, 0, 2.0f);
+        }
+    }
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Preview] Точек показано: %d (свободно %d, занято %d). Красные -- туда ресурс не встанет."),
+        Considered, Free, Blocked);
+}
+
+void AGridWorldManager::ClearResourceSpawnPreview()
+{
+    if (UWorld* World = GetWorld())
+    {
+        FlushPersistentDebugLines(World);
+    }
 }
 
 int32 AGridWorldManager::GetActiveRadiusInChunks() const
@@ -1060,10 +1232,16 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         }
         if (IngredientID.IsNone()) continue;
 
-        // Позиция внутри формы биома (2026-09-02), не просто джиттер внутри
-        // абстрактной клетки -- см. GetSpawnPositionWithinBiome.
-        FVector SpawnPos = GetSpawnPositionWithinBiome(Cell.X, Cell.Y, CellSize * 0.3f, WorldRNG);
-        SpawnPos.Z += 5.0f;   // небольшой подъём над landscape, тот же, что и раньше
+        // Позиция внутри формы биома (2026-09-02) + посадка на поверхность и
+        // отбраковка занятых точек (2026-09-03). Свободного места нет --
+        // клетка остаётся пустой: лучше так, чем трава внутри валуна.
+        FVector SpawnPos;
+        if (!FindFreeSpawnPositionInCell(Cell.X, Cell.Y, CellSize * 0.3f, WorldRNG, SpawnPos))
+        {
+            UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourcesInCell: клетка (%d,%d) занята, ресурс пропущен"), Cell.X, Cell.Y);
+            continue;
+        }
+        SpawnPos.Z += 5.0f;   // небольшой подъём над поверхностью, тот же, что и раньше
 
         const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
         if (!Row) continue;
@@ -1105,7 +1283,14 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
     FVector SpawnPos;
     if (Offset.IsNearlyZero())
     {
-        SpawnPos = GetSpawnPositionWithinBiome(X, Y, CellSize * 0.3f, WorldRNG);
+        // Тот же поиск свободной точки, что и при первичном заселении
+        // (2026-09-03). Отросшее/восстановленное из сейва растение не должно
+        // оказаться внутри камня, поставленного там, где оно раньше росло.
+        if (!FindFreeSpawnPositionInCell(X, Y, CellSize * 0.3f, WorldRNG, SpawnPos))
+        {
+            UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: клетка (%d,%d) занята, %s не поставлен"), X, Y, *IngredientID.ToString());
+            return;
+        }
         SpawnPos.Z += 5.0f;
     }
     else

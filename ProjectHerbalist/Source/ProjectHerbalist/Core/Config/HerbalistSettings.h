@@ -87,6 +87,39 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Performance", meta = (ClampMin = "-1.0"))
     float ActiveSimulationRadiusMeters = -1.0f;
 
+    // --- Размещение ресурсов в мире (2026-09-03) ---
+    // До этого точка спавна бралась как «центр клетки + случайный сдвиг», а
+    // высота — из кэша по ЦЕНТРУ клетки. При метровой клетке разница была
+    // незаметна; при клетке 10–25 м растение, сдвинутое на треть клетки,
+    // повисало в воздухе или тонуло в склоне. Трейс вниз ставит его на ту
+    // поверхность, которая под ним реально есть.
+    UPROPERTY(config, EditAnywhere, Category = "World|Placement")
+    bool bTraceSpawnToGround = true;
+
+    // Насколько высоко над предполагаемой высотой клетки начинать трейс и
+    // насколько глубоко под ней заканчивать.
+    UPROPERTY(config, EditAnywhere, Category = "World|Placement", meta = (ClampMin = "0.0"))
+    float SpawnTraceHalfHeight = 5000.0f;
+
+    // Отбраковка занятых точек: если в радиусе SpawnClearanceRadius от
+    // кандидата уже стоит статическая геометрия (камень, дерево, постройка),
+    // точка перевыбирается. Ландшафт из проверки исключён — иначе занятой
+    // была бы каждая точка мира.
+    //
+    // ВАЖНОЕ ОГРАНИЧЕНИЕ: проверка видит только то, у чего есть коллизия.
+    // Фолиаж, разбросанный PCG как инстансы без коллизии, для неё
+    // невидим — такие пересечения надо исключать внутри самого PCG-графа
+    // (нодами разности/исключения), а не здесь.
+    UPROPERTY(config, EditAnywhere, Category = "World|Placement")
+    bool bRejectOccupiedSpawnPoints = true;
+
+    UPROPERTY(config, EditAnywhere, Category = "World|Placement", meta = (ClampMin = "0.0"))
+    float SpawnClearanceRadius = 40.0f;
+
+    // Сколько раз перевыбирать точку, прежде чем отказаться от спавна.
+    UPROPERTY(config, EditAnywhere, Category = "World|Placement", meta = (ClampMin = "1", ClampMax = "32"))
+    int32 MaxSpawnPlacementAttempts = 8;
+
     // --- Pipeline coefficients ---
     UPROPERTY(config, EditAnywhere, Category = "Pipeline|Biome Context", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float BiomeZaryanaInfluence = 0.3f;
