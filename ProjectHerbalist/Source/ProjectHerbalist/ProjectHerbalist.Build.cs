@@ -22,7 +22,8 @@ public class ProjectHerbalist : ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[]
         {
             "AssetRegistry",
-            "Landscape"      // <--- добавлено для работы с ландшафтом
+            "Landscape",     // <--- добавлено для работы с ландшафтом
+            "PCG"            // <--- узел «состояние сетки -> PCG-граф» (2026-09-03)
         });
 
         PublicIncludePaths.AddRange(new string[]
