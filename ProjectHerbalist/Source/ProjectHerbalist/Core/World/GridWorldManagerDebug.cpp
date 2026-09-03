@@ -27,8 +27,19 @@ FString AGridWorldManager::GetSelectedCellInfo() const
 {
     const FGridCell* Cell = GetCellConst(SelectedX, SelectedY);
     if (!Cell) return TEXT("No cell selected");
+    // Вода не даёт ResourceActor -- клетка с bIsWater=true раньше печаталась
+    // как "Resource=None", неотличимо от обычной пустой суши (2026-09-03,
+    // найдено при проверке 0.5 плана: SelectCell/Info -- единственный
+    // консольный способ проверить размещение Water Region Volume, и он был
+    // слеп именно к воде). GetSelectedCellInfoBP (BP-путь) уже отличал воду
+    // литералом "Вода" -- здесь печатаем настоящий WaterTypeID, эта строка
+    // для отладки в консоли, не для игрока.
     FString ResourceStr = TEXT("None");
-    if (Cell->ResourceActors.Num() > 0 && Cell->ResourceActors[0].IsValid())
+    if (Cell->bIsWater)
+    {
+        ResourceStr = FString::Printf(TEXT("Water(%s)"), *Cell->WaterTypeID.ToString());
+    }
+    else if (Cell->ResourceActors.Num() > 0 && Cell->ResourceActors[0].IsValid())
     {
         ResourceStr = Cell->ResourceActors[0]->GetIngredientID().ToString();
     }
