@@ -380,4 +380,79 @@ bool FHerbalistGridStreaming_SleepingChunkNeverTouchesPcgActors::RunTest(const F
     return true;
 }
 
+// Регрессия 2026-09-03: разбор жалобы на низкую производительность на
+// масштабе 500x500 показал, что RegenerateCellParameters/ApplyBiomeInfluences/
+// UpdateEntityManifestations честно проверяли IsCellActive перед дорогой
+// работой, но САМ обход по-прежнему шёл `for (Cell : Cells) { if (!Active)
+// continue; ... }` -- то есть трогал ВСЕ 250 000 клеток каждый тик, просто
+// чтобы отбраковать почти все. ForEachActiveCell идёт прямо по активным
+// чанкам, не касаясь остальной сетки.
+//
+// Первая версия ForEachActiveCell переиспользовала TSet ActiveChunks --
+// кэш, который заполняет только CatchUpActivatedChunks() (обычно вызывается
+// из Tick перед этими тремя функциями). Это сломало
+// RadiusGatesCellsByChunkDistance выше: тот тест задаёт ActiveChunkCenters
+// напрямую и сразу зовёт RegenerateCellParameters, БЕЗ Tick -- легитимный
+// сценарий (изолированное юнит-тестирование релаксации), и ActiveChunks в
+// нём оставался пустым. ForEachActiveCell молча обрабатывал ноль клеток.
+// Правка: своя геометрия (ComputeChunksWithinRadius), не зависящая от
+// того, прогонялся ли в этом кадре Tick. Этот тест — прямая регрессия на
+// тот же сценарий, но уже для самого ForEachActiveCell, а не только для
+// функции, которая его использует.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_ForEachActiveCellDoesNotDependOnTick,
+    "Herbalist.GridStreaming.ForEachActiveCellDoesNotDependOnTick",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_ForEachActiveCellDoesNotDependOnTick::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        // Те же параметры, что и в RadiusGatesCellsByChunkDistance выше:
+        // чанк 4 клетки, радиус 4 м = 1 чанк -> активны чанки (0,0)/(0,1)/
+        // (1,0)/(1,1) = блок 8x8 = 64 клетки из 400 в сетке 20x20.
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/4.0f, /*ChunkSize=*/4);
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+
+        // НЕ вызываем Tick()/CatchUpActivatedChunks() -- намеренно, это и
+        // есть проверяемый сценарий (см. комментарий выше).
+        int32 VisitedCount = 0;
+        TSet<FIntPoint> VisitedCells;
+        Manager->ForEachActiveCell([&](FGridCell& Cell)
+        {
+            ++VisitedCount;
+            VisitedCells.Add(FIntPoint(Cell.X, Cell.Y));
+        });
+
+        TestEqual(TEXT("Exactly the 8x8 block of active chunks was visited, not all 400 cells of the grid"), VisitedCount, 64);
+
+        // Перекрёстная проверка с IsCellActive -- независимо давно
+        // работающим методом, той же клетка-за-клеткой семантикой.
+        bool bAllMatch = true;
+        for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
+        {
+            for (int32 X = 0; X < Manager->GridSizeX; ++X)
+            {
+                const FGridCell* Cell = Manager->GetCell(X, Y);
+                const bool bShouldBeActive = Cell && Manager->IsCellActive(*Cell);
+                const bool bWasVisited = VisitedCells.Contains(FIntPoint(X, Y));
+                if (bShouldBeActive != bWasVisited)
+                {
+                    bAllMatch = false;
+                    AddError(FString::Printf(TEXT("Cell (%d,%d): IsCellActive=%s, visited=%s"),
+                        X, Y, bShouldBeActive ? TEXT("true") : TEXT("false"), bWasVisited ? TEXT("true") : TEXT("false")));
+                }
+            }
+        }
+        TestTrue(TEXT("ForEachActiveCell visits exactly the cells IsCellActive agrees with"), bAllMatch);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

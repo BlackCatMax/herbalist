@@ -473,6 +473,56 @@ bool AGridWorldManager::IsCellActive(const FGridCell& Cell) const
     return false;
 }
 
+void AGridWorldManager::ForEachCellInChunk(const FIntPoint& Chunk, TFunctionRef<void(FGridCell&)> Func)
+{
+    // Те же границы чанка, что уже считает SetChunkResourcesActive --
+    // GetCell() сам отбрасывает координаты вне сетки (IsValidIndex), так
+    // что клэмпить MaxX/MaxY здесь не нужно: последний чанк ряда, не
+    // кратного ChunkSizeInCells, просто получит меньше валидных клеток.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+
+    const int32 MinX = Chunk.X * ChunkSize;
+    const int32 MinY = Chunk.Y * ChunkSize;
+
+    for (int32 Y = MinY; Y < MinY + ChunkSize; ++Y)
+    {
+        for (int32 X = MinX; X < MinX + ChunkSize; ++X)
+        {
+            if (FGridCell* Cell = GetCell(X, Y))
+            {
+                Func(*Cell);
+            }
+        }
+    }
+}
+
+void AGridWorldManager::ForEachActiveCell(TFunctionRef<void(FGridCell&)> Func)
+{
+    const int32 Radius = GetActiveRadiusInChunks();
+
+    // Те же две ветки "активно всё", что и у IsCellActive выше -- решаются
+    // ОДИН раз для всего вызова, а не 250 000 раз внутри цикла.
+    if (Radius < 0 || ActiveChunkCenters.Num() == 0)
+    {
+        for (FGridCell& Cell : Cells)
+        {
+            Func(Cell);
+        }
+        return;
+    }
+
+    // НЕ переиспользуем member ActiveChunks -- тот кэш актуален только
+    // после CatchUpActivatedChunks() этого кадра (обычный путь Tick), а эта
+    // функция вызывается и напрямую, без прогона Tick (см. предупреждение
+    // у объявления в .h). Считаем ту же геометрию заново тем же общим
+    // хелпером -- дёшево: центров и радиус в чанках всегда мало.
+    for (const FIntPoint& Chunk : ComputeChunksWithinRadius(ActiveChunkCenters, Radius))
+    {
+        ForEachCellInChunk(Chunk, Func);
+    }
+}
+
 void AGridWorldManager::UpdateActiveChunkCenters()
 {
     ActiveChunkCenters.Reset();
@@ -572,6 +622,22 @@ void AGridWorldManager::SetChunkResourcesActive(const FIntPoint& Chunk, bool bAc
     }
 }
 
+TSet<FIntPoint> AGridWorldManager::ComputeChunksWithinRadius(const TArray<FIntPoint>& Centers, int32 Radius) const
+{
+    TSet<FIntPoint> Result;
+    for (const FIntPoint& Center : Centers)
+    {
+        for (int32 dy = -Radius; dy <= Radius; ++dy)
+        {
+            for (int32 dx = -Radius; dx <= Radius; ++dx)
+            {
+                Result.Add(FIntPoint(Center.X + dx, Center.Y + dy));
+            }
+        }
+    }
+    return Result;
+}
+
 void AGridWorldManager::CatchUpActivatedChunks()
 {
     const int32 Radius = GetActiveRadiusInChunks();
@@ -585,17 +651,7 @@ void AGridWorldManager::CatchUpActivatedChunks()
         return;
     }
 
-    ActiveChunks.Reset();
-    for (const FIntPoint& Center : ActiveChunkCenters)
-    {
-        for (int32 dy = -Radius; dy <= Radius; ++dy)
-        {
-            for (int32 dx = -Radius; dx <= Radius; ++dx)
-            {
-                ActiveChunks.Add(FIntPoint(Center.X + dx, Center.Y + dy));
-            }
-        }
-    }
+    ActiveChunks = ComputeChunksWithinRadius(ActiveChunkCenters, Radius);
 
     const float Now = GameClockSeconds;
     for (const FIntPoint& Chunk : ActiveChunks)
@@ -695,15 +751,16 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
     // источник изменений мира (Single Writer, Causal Execution Spec).
     FStateDelta Delta;
 
-    for (const FGridCell& Cell : Cells)
+    // Стриминг сетки (2026-09-03): поля биом-графа применяются только к
+    // активным клеткам. Сам граф считается всегда и целиком — он живёт на
+    // уровне узлов, а не клеток, поэтому дальний мир продолжает меняться;
+    // неактивные клетки просто не получают его вклад, пока не станут
+    // активными (догон — юнит 2). ForEachActiveCell (не полный проход +
+    // IsCellActive-фильтр внутри) — правка того же дня: при активном
+    // радиусе в несколько чанков полный skip-scan 250 000 клеток каждый
+    // тик обходился на два порядка дороже, чем реальная работа под ним.
+    ForEachActiveCell([&](FGridCell& Cell)
     {
-        // Стриминг сетки (2026-09-03): поля биом-графа применяются только к
-        // активным клеткам. Сам граф считается всегда и целиком — он живёт
-        // на уровне узлов, а не клеток, поэтому дальний мир продолжает
-        // меняться; неактивные клетки просто не получают его вклад, пока не
-        // станут активными (догон — юнит 2).
-        if (!IsCellActive(Cell)) continue;
-
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
         FRealState NewTarget = Cell.TargetState;
         bool bChanged = false;
@@ -765,7 +822,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         {
             Delta.TargetStateNudges.Add(FIntPoint(Cell.X, Cell.Y), NewTarget);
         }
-    }
+    });
 
     ApplyStateDelta(Delta);
 }
@@ -1622,19 +1679,21 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
     const float DegradeCenter = Settings ? Settings->BiomeDegradeCenterCorruption : 0.75f;
     const float DegradeMargin = Settings ? Settings->BiomeDegradeMargin : 0.10f;
 
-    for (FGridCell& Cell : Cells)
+    // Стриминг сетки (2026-09-03): релаксация считается только в активных
+    // чанках. Неактивная клетка не «портится» и не «чинится», пока до неё
+    // никому нет дела; при активации получит догон за всё пропущенное
+    // время (CatchUpActivatedChunks) — экспоненциальная форма сходимости
+    // делает такой единичный шаг точным, а не приближённым.
+    //
+    // Тело вынесено в лямбду, а выбор ОБХОДА — наружу: раньше оба режима
+    // (обычный тик и догон одного чанка) шли одним и тем же полным
+    // `for (Cell : Cells) { if (!Active) continue; if (chunk mismatch)
+    // continue; ... }` — при 250 000 клеток это стократная переплата что
+    // при обычном тике (активны сотни-тысячи), что при догоне ОДНОГО чанка
+    // (активны десятки-сотни). ForEachActiveCell/ForEachCellInChunk идут
+    // прямо по нужному диапазону, не касаясь остальной сетки вовсе.
+    auto ProcessCell = [&](FGridCell& Cell)
     {
-        // Стриминг сетки (2026-09-03): релаксация считается только в
-        // активных чанках. Неактивная клетка не «портится» и не «чинится»,
-        // пока до неё никому нет дела; при активации получит догон за всё
-        // пропущенное время (юнит 2) — экспоненциальная форма сходимости
-        // делает такой единичный шаг точным, а не приближённым.
-        if (!IsCellActive(Cell)) continue;
-
-        // Догон одного конкретного чанка (CatchUpActivatedChunks) — остальные
-        // клетки в этом вызове не трогаем, у них своё время.
-        if (OnlyChunk && GetChunkCoordForCell(Cell.X, Cell.Y) != *OnlyChunk) continue;
-
         // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
         // клетка, помеченная навечно чистой, полностью исключена из этой
         // функции: ни бистабильная релаксация, ни заражение соседей, ни
@@ -1642,7 +1701,11 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         // текущем значении, как и просит §16.4 ("заморозь TargetState/
         // State на текущем значении"). Заражение соседей всё ещё может
         // толкать её TargetState ИЗВНЕ (см. guard у Neighbor ниже, отдельно).
-        if (Cell.bEternallyPure) continue;
+        // return, не continue -- тело функции стало лямбдой (ForEachActiveCell/
+        // ForEachCellInChunk, 2026-09-03), continue вне реального цикла не
+        // компилируется (C2044); return из void-лямбды даёт тот же эффект
+        // "пропустить эту клетку и перейти к следующей".
+        if (Cell.bEternallyPure) return;
 
         // Бистабильная релаксация (обсуждение в сессии 2026-08-24) — общий
         // случай того, что раньше делали только Гнильники для Болота. Гистерезис
@@ -1829,6 +1892,15 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         {
             MarkCellDirty(Cell.X, Cell.Y);
         }
+    };
+
+    if (OnlyChunk)
+    {
+        ForEachCellInChunk(*OnlyChunk, ProcessCell);
+    }
+    else
+    {
+        ForEachActiveCell(ProcessCell);
     }
 }
 

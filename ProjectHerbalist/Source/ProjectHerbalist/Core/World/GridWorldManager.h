@@ -186,6 +186,47 @@ public:
     // ChunkSizeInCells. -1 = механизм выключен, активно всё.
     int32 GetActiveRadiusInChunks() const;
 
+    // Итерирует только клетки активных чанков — реализация обещания
+    // "стримим стоимость, а не данные" (2026-09-03, найдено при разборе
+    // жалобы на низкую производительность на масштабе 500x500). До этой
+    // правки RegenerateCellParameters/ApplyBiomeInfluences/
+    // UpdateEntityManifestations честно ПРОВЕРЯЛИ IsCellActive перед
+    // дорогой работой, но сам паттерн `for (FGridCell& Cell : Cells) { if
+    // (!IsCellActive(Cell)) continue; ... }` всё равно проходит ВЕСЬ
+    // массив — 250 000 клеток на 500x500 — чтобы решить, какие из них
+    // пропустить. При активном радиусе в несколько чанков (тысячи клеток)
+    // это стократная переплата: сотни тысяч холостых итераций каждый тик
+    // ради работы над долями процента массива. ForEachActiveCell вместо
+    // "пройти всё и отфильтровать" сразу идёт по ActiveChunks (уже посчитан
+    // в CatchUpActivatedChunks на этот кадр) и внутри каждого — по
+    // диапазону клеток чанка напрямую, без обращения к остальным.
+    //
+    // Поведение при выключенном стриминге ИЛИ отсутствии источников
+    // активности совпадает с прежним 1:1 (полный проход) -- та же
+    // трёхветочная логика, что уже была внутри IsCellActive, просто
+    // решается один раз для всего вызова, а не 250 000 раз внутри цикла.
+    // ВАЖНО: не переиспользует TSet ActiveChunks (кэш CatchUpActivatedChunks)
+    // -- тот валиден только после Tick() этого кадра, а RegenerateCellParameters/
+    // ApplyBiomeInfluences/UpdateEntityManifestations вызываются и напрямую,
+    // без прогона Tick (тесты вроде GridStreamingTest.cpp, которые задают
+    // ActiveChunkCenters через SetActiveChunkCentersForTests и сразу зовут
+    // RegenerateCellParameters). Первая версия этой правки полагалась на
+    // ActiveChunks и молча обрабатывала ноль клеток в такой сценарий --
+    // поймано тестом Herbalist.GridStreaming.RadiusGatesCellsByChunkDistance
+    // ("Active cell relaxes towards its target" ожидал Purity > 0, получил
+    // нетронутое 0.0). Геометрия теперь считается заново из
+    // ActiveChunkCenters/Radius, тем же кодом, что и CatchUpActivatedChunks
+    // (общий приватный ComputeChunksWithinRadius ниже) — независимо от того,
+    // прогонялся ли в этом кадре Tick.
+    void ForEachActiveCell(TFunctionRef<void(FGridCell&)> Func);
+
+    // Клетки одного конкретного чанка напрямую, без обхода остальных --
+    // используется и внутри ForEachActiveCell (по одному вызову на каждый
+    // активный чанк), и догоном (RegenerateCellParameters с OnlyChunk),
+    // который раньше делал тот же полный skip-scan ради одного чанка из
+    // тысяч клеток.
+    void ForEachCellInChunk(const FIntPoint& Chunk, TFunctionRef<void(FGridCell&)> Func);
+
     // ---- Размещение ресурсов в мире (2026-09-03) ----
     // Ищет свободную точку в клетке: джиттер внутри формы биома (как
     // раньше) + посадка на поверхность трейсом + проверка, что там ещё
@@ -1045,6 +1086,13 @@ private:
     // World Partition (или игрок, если партишена нет). Пересчитывается в
     // Tick, читается IsCellActive.
     TArray<FIntPoint> ActiveChunkCenters;
+
+    // Общая геометрия для CatchUpActivatedChunks и ForEachActiveCell: какие
+    // координаты чанков попадают в Radius вокруг заданных центров. Вынесено
+    // 2026-09-03, чтобы у обоих был один источник истины, а не два похожих
+    // тройных цикла, которые легко рассинхронизировать правкой одного и
+    // забытым вторым.
+    TSet<FIntPoint> ComputeChunksWithinRadius(const TArray<FIntPoint>& Centers, int32 Radius) const;
 
     // Чанки, активные в этом кадре, и в предыдущем — разница между ними даёт
     // «только что активированные», которым нужен догон.
