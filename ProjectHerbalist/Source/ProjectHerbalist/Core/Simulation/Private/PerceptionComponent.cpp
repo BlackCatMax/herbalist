@@ -16,23 +16,49 @@ void UPerceptionComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    // Захватываем реальный снапшот мира и инвентаря — один Rng на оба, чтобы
-    // искажение было согласовано в рамках одного тика восприятия (0.5с).
-    FWorldSnapshot WorldSnap = Simulation::FSnapshotService::CaptureWorld();
-    if (WorldSnap.GridState.Num() == 0) return;
+    // Мир (GetPerceivedWorld) больше НЕ считается здесь -- 2026-09-03, см.
+    // подробный комментарий в .h. Тут остался только инвентарь: маленький,
+    // реально используется (InventorySlotWidget/ItemTooltipWidget), дёшев
+    // даже безусловно каждые 0.5с.
 
     // GlobalPerceptionClarity (обсуждение в сессии 2026-08-24, "Прогрессия
     // через Заряну") — компонент живёт прямо на AGridWorldManager (см.
     // AGridWorldManager::PerceptionComponent), не нужен отдельный поиск.
-    float Clarity = 0.0f;
-    if (const AGridWorldManager* Owner = Cast<AGridWorldManager>(GetOwner()))
-    {
-        Clarity = Owner->GetGlobalPerceptionClarity();
-    }
+    const AGridWorldManager* Owner = Cast<AGridWorldManager>(GetOwner());
+    const float Clarity = Owner ? Owner->GetGlobalPerceptionClarity() : 0.0f;
 
-    FRandomStream Rng(WorldSnap.WorldSeed);
-    CachedPerceivedWorld = Simulation::FPerceptionService::ComputePerceivedWorld(WorldSnap, Rng, Clarity);
+    // Сид -- тот же источник (GetCurrentWorldSeed), что раньше давал
+    // WorldSnap.WorldSeed из полного захвата мира, но без самого захвата:
+    // детерминизм инвентарного шума (важен для трейса/реплея) сохранён,
+    // цена 250 000-клеточного снапшота — нет.
+    FRandomStream Rng(Owner ? Owner->GetCurrentWorldSeed() : 0);
 
     FInventorySnapshot InvSnap = Simulation::FSnapshotService::CaptureInventory();
     CachedPerceivedInventory = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, Rng, Clarity);
+}
+
+const FPerceivedWorld& UPerceptionComponent::GetPerceivedWorld() const
+{
+    // Тяжёлый путь (весь грид) — считается по требованию, не в тике. См.
+    // подробный комментарий в .h: до 2026-09-03 это безусловно платилось
+    // каждые 0.5с, хотя ни один вызывающий в проекте сюда не заходил.
+    // const_cast — тот же приём, что уже у UIngredientRegistrySubsystem::
+    // EnsureLoaded: снаружи чтение остаётся логически константным, меняется
+    // только момент заполнения кэша.
+    FWorldSnapshot WorldSnap = Simulation::FSnapshotService::CaptureWorld();
+    if (WorldSnap.GridState.Num() == 0)
+    {
+        // Мир ещё не инициализирован -- отдаём то, что уже было в кэше
+        // (пусто при самом первом вызове), не перетираем валидный кэш
+        // пустышкой посреди сессии.
+        return CachedPerceivedWorld;
+    }
+
+    const AGridWorldManager* Owner = Cast<AGridWorldManager>(GetOwner());
+    const float Clarity = Owner ? Owner->GetGlobalPerceptionClarity() : 0.0f;
+
+    FRandomStream Rng(WorldSnap.WorldSeed);
+    const_cast<UPerceptionComponent*>(this)->CachedPerceivedWorld =
+        Simulation::FPerceptionService::ComputePerceivedWorld(WorldSnap, Rng, Clarity);
+    return CachedPerceivedWorld;
 }

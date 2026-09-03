@@ -875,6 +875,12 @@ public:
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
+    // Тот же сид, что CaptureState() кладёт в FWorldSnapshot::WorldSeed --
+    // вынесено отдельно (2026-09-03), чтобы получить его можно было БЕЗ
+    // дорогого полного захвата клеток (см. UPerceptionComponent, которому
+    // для сида инвентарного восприятия нужен только сид, не сама сетка).
+    int32 GetCurrentWorldSeed() const { return static_cast<int32>(HashCombine(static_cast<uint32>(RngBaseSeed), static_cast<uint32>(CurrentTickID))); }
+
     // ---- Итерация по клеткам ----
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)
