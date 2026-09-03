@@ -50,6 +50,16 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
     UStaticMesh* ResourceMesh = nullptr;
 
+    // Класс актора этого растения (2026-09-03, PCG-расстановка) — пусто =
+    // базовый AHerbalistResourceActor с мешем из ResourceMesh выше. Тот же
+    // приём, что ActorClass у карточек бестиария. Нужен ровно затем, чтобы
+    // отрастание собранного (StartRegeneration -> SpawnResourceActor)
+    // воспроизводило ТО ЖЕ, что стояло: если растение поставил PCG-граф
+    // своим Blueprint'ом, а отрастал бы жёстко базовый класс, куст после
+    // первого сбора терял бы всё, что было в блюпринте.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
+    TSubclassOf<class AHerbalistResourceActor> ResourceActorClass;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
     FRealState BaseState;
 

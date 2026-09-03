@@ -34,6 +34,21 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     void Harvest();
 
+    // Дотянуть данные из строки DT_IngredientClass по уже выставленному
+    // IngredientID (2026-09-03, PCG-расстановка). Init() выше получает всё
+    // параметрами от C++-спавна; актор, поставленный PCG-графом или руками
+    // на уровне, Init() не проходит — до этой правки он регистрировался на
+    // клетке, но с нулевым BaseState/Resilience, и сбор давал пустышку
+    // вместо травы. Теперь достаточно выставить один IngredientID (в BP или
+    // прямо в PCG), остальное актор добирает сам в BeginPlay. Идемпотентна:
+    // после Init() ничего не перетирает.
+    // Registry=nullptr (обычный путь) — берётся из GameInstance мира.
+    // Явный аргумент нужен тестам: в голом editor-мире GameInstance нет
+    // вовсе, и реестр там строится отдельным объектом (тот же приём
+    // инъекции, что уже у SetWorldManager выше).
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
+    void ResolveFromIngredientRegistry(class UIngredientRegistrySubsystem* Registry = nullptr);
+
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Resource")
     FName GetIngredientID() const { return IngredientID; }
 
@@ -133,4 +148,9 @@ protected:
 private:
     bool bIsBeingHarvested = false;
     FTimerHandle DisappearTimerHandle;
+
+    // Прошёл ли актор через Init() (C++-спавн). false — его поставили
+    // напрямую (PCG-граф, рука левел-дизайнера), и BeginPlay сам добирает
+    // данные строки через ResolveFromIngredientRegistry().
+    bool bInitializedFromCode = false;
 };

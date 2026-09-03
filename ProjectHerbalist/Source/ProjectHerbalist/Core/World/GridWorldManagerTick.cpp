@@ -112,7 +112,27 @@ void AGridWorldManager::Tick(float DeltaTime)
     // Суточная фаза для Морочников берётся из GetWorld()->GetTimeSeconds()
     // напрямую (GetTimeOfDay01), отдельных часов больше нет.
     // ========================================================================
-    UpdateEntityManifestations(DeltaTime);
+    // Такт, а не каждый кадр (2026-09-03) — самый дорогой полный обход сетки
+    // в проекте, а проявление сущности пороговое и не требует частоты кадра.
+    // Передаём накопленное время, поэтому rate*dt в сумме не меняется.
+    // Интервал 0 возвращает прежнее поведение "каждый кадр".
+    {
+        const UHerbalistSettings* PerfSettings = GetHerbalistSettings();
+        const float ManifestInterval = PerfSettings ? PerfSettings->EntityManifestationIntervalSeconds : 0.1f;
+        if (ManifestInterval <= 0.0f)
+        {
+            UpdateEntityManifestations(DeltaTime);
+        }
+        else
+        {
+            EntityManifestationAccumulator += DeltaTime;
+            if (EntityManifestationAccumulator >= ManifestInterval)
+            {
+                UpdateEntityManifestations(EntityManifestationAccumulator);
+                EntityManifestationAccumulator = 0.0f;
+            }
+        }
+    }
 
     // ========================================================================
     // КАПИЩА (15_Cycles_And_Shrines §15.5) — спад Restoration при небрежении.

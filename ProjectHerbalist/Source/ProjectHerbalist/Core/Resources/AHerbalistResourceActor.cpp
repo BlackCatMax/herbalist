@@ -63,8 +63,48 @@ void AHerbalistResourceActor::BeginPlay()
 
     // Актор, поставленный в мир напрямую (уровень/PCG-граф) без вызова
     // Init() -- WorldManager/GridX/GridY выше уже определены автоматически,
-    // регистрация та же, что Init() делает для C++-пути.
+    // данные строки добираем из реестра (2026-09-03), регистрация та же,
+    // что Init() делает для C++-пути.
+    if (!bInitializedFromCode)
+    {
+        ResolveFromIngredientRegistry();
+    }
     RegisterOnCell();
+}
+
+void AHerbalistResourceActor::ResolveFromIngredientRegistry(UIngredientRegistrySubsystem* Registry)
+{
+    if (bInitializedFromCode || IngredientID.IsNone()) return;
+
+    if (!Registry)
+    {
+        UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+        Registry = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    }
+    const FIngredientTableRow* Row = Registry ? Registry->GetRow(IngredientID) : nullptr;
+    if (!Row)
+    {
+        UE_LOG(LogHerbalistHarvest, Warning, TEXT("%s: ингредиент '%s' не найден в DT_IngredientClass -- актор останется с пустыми данными"),
+            *GetName(), *IngredientID.ToString());
+        return;
+    }
+
+    DisplayName  = Row->DisplayName;
+    BaseState    = Row->BaseState;
+    Resilience   = Row->Resilience;
+    bIronAverse  = Row->bIronAverse;
+    bDelicate    = Row->bDelicate;
+
+    // Меш из строки — только если своего нет: Blueprint-наследник, у которого
+    // меш выставлен в дефолтах компонента, всегда главнее (тот же принцип,
+    // что у меша-заглушки сущностей, HerbalistEntityActor.cpp).
+    if (MeshComponent && !MeshComponent->GetStaticMesh() && Row->ResourceMesh)
+    {
+        MeshComponent->SetStaticMesh(Row->ResourceMesh);
+        MeshComponent->SetVisibility(true);
+    }
+
+    bInitializedFromCode = true;
 }
 
 void AHerbalistResourceActor::RegisterOnCell()
@@ -104,6 +144,7 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
     Resilience = InResilience;
     bIronAverse = InIronAverse;
     bDelicate = InDelicate;
+    bInitializedFromCode = true;
     WorldManager = InWorldManager;
     GridX = InGridX;
     GridY = InGridY;

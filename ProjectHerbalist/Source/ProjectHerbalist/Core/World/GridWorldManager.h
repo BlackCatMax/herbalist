@@ -954,6 +954,12 @@ private:
 
     // ---- Фиксированный шаг симуляции ----
     float SimulationTimeAccumulator = 0.0f;
+
+    // Накопитель такта проявлений (2026-09-03, см.
+    // UHerbalistSettings::EntityManifestationIntervalSeconds). В
+    // UpdateEntityManifestations передаётся именно накопленное время, не
+    // время кадра — ставки эффектов (rate/сек) остаются точными.
+    float EntityManifestationAccumulator = 0.0f;
     void RunSimulationStep();
 
     // ---- Очередь команд нового пайплайна ----

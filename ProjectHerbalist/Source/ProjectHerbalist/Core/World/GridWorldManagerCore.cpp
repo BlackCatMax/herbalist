@@ -782,6 +782,11 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     // уровне (тесты, сцены без PCG) -- GetClaimingRegion возвращает
     // nullptr, дефолт 1-3 не меняется.
     ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(Cell);
+
+    // Регион, отданный PCG-графу (2026-09-03), C++ не заселяет вовсе --
+    // иначе к разбросу графа добавился бы второй, клеточный набор внахлёст.
+    if (ClaimingRegion && !ClaimingRegion->bSpawnResourcesFromGrid) return;
+
     const int32 MinRes = ClaimingRegion ? FMath::Min(ClaimingRegion->MinResourcesPerCell, ClaimingRegion->MaxResourcesPerCell) : 1;
     const int32 MaxRes = ClaimingRegion ? FMath::Max(ClaimingRegion->MinResourcesPerCell, ClaimingRegion->MaxResourcesPerCell) : 3;
     int32 NumResources = WorldRNG.RandRange(MinRes, MaxRes);
@@ -817,7 +822,12 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
         const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
         if (!Row) continue;
 
-        AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
+        // Класс из строки (2026-09-03) -- пусто = базовый, см.
+        // FIngredientTableRow::ResourceActorClass.
+        TSubclassOf<AHerbalistResourceActor> ClassToSpawn = Row->ResourceActorClass;
+        if (!ClassToSpawn) ClassToSpawn = AHerbalistResourceActor::StaticClass();
+
+        AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
         if (NewActor)
         {
             // Регистрация в Cell.ResourceActors теперь делает сам Init()
@@ -859,7 +869,10 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
         SpawnPos += Offset;
     }
 
-    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), SpawnPos, FRotator::ZeroRotator);
+    TSubclassOf<AHerbalistResourceActor> ClassToSpawn = Row->ResourceActorClass;
+    if (!ClassToSpawn) ClassToSpawn = AHerbalistResourceActor::StaticClass();
+
+    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
     if (NewActor)
     {
         // Регистрация в Cell.ResourceActors теперь делает сам Init() (2026-09-02).
