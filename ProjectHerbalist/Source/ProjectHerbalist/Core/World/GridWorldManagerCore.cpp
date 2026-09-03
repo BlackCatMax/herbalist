@@ -1278,20 +1278,14 @@ void AGridWorldManager::InitializeCells()
 // РЕСУРСЫ
 // ============================================================================
 
-void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
+FHarvestContext AGridWorldManager::BuildHarvestContextForCell(const FGridCell& Cell) const
 {
-    // PCG-биомы (2026-09-02, прямое требование пользователя) -- клетка вне
-    // всех размещённых на уровне ABiomeRegionVolume не спавнит ресурсы,
-    // даже если блочный фолбэк формально приписал ей какой-то биом. Без
-    // регионов на уровне вовсе (тесты, сцены без PCG-авторства) -- проверка
-    // всегда true, ничего не меняется.
-    if (!IsCellClaimedByBiomeRegion(Cell)) return;
-
-    UGameInstance* GameInstance = GetGameInstance();
-    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
-
-    // Одно и то же окно условий для всех 1-3 ресурсов этого вызова (та же
+    // Одно и то же окно условий для всех ресурсов одного вызова (та же
     // клетка, тот же момент) — читается один раз, не на каждой итерации.
+    // Вынесено из SpawnResourcesInCell (2026-09-04): StartRegeneration
+    // теперь тоже считает это окно -- на момент отрастания время могло уже
+    // уйти вперёд (сезон/луна/погода), и это правильно, не баг: отросшее
+    // растение подчиняется условиям МОМЕНТА отрастания, не момента сбора.
     FHarvestContext Context;
     Context.Season = GetSeason();
     Context.bLateSummer = IsLateSummer();
@@ -1315,6 +1309,90 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     // раз меньше настоящей высоты и никогда не совпадал.
     Context.bAltitudeKnown = CachedLandscape != nullptr && CachedCellHeights.Num() > 0;
     Context.AltitudeCentimeters = Context.bAltitudeKnown ? GetCellHeight(Cell.X, Cell.Y) : 0.0f;
+
+    return Context;
+}
+
+bool AGridWorldManager::SpawnOneResourceInCell(FGridCell& Cell, const FHarvestContext& Context,
+    const EGardenNiche* PlotNiche, ABiomeRegionVolume* ClaimingRegion, UIngredientRegistrySubsystem* IngredientSubsystem)
+{
+    FName IngredientID = NAME_None;
+    if (IngredientSubsystem)
+    {
+        // Водные растения (2026-09-02, прямой запрос пользователя):
+        // "если у биома есть водные растения, то они разрешены к
+        // размещению на поверхности воды, и вода одновременно доступна" --
+        // отдельный, не смешанный с земляным пул (bGrowsOnWater),
+        // тот же принцип отбора по Cell.BiomeWeights земляного биома
+        // под водой, что и обычный GetRandomResourceForBiome.
+        if (Cell.bIsWater)
+        {
+            IngredientID = IngredientSubsystem->GetRandomResourceForAquaticBiome(Cell, Context, WorldRNG);
+        }
+        else
+        {
+            IngredientID = (PlotNiche && *PlotNiche != EGardenNiche::None)
+                ? IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, WorldRNG)
+                : IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, WorldRNG);
+        }
+    }
+    if (IngredientID.IsNone()) return false;
+
+    // Позиция внутри формы биома (2026-09-02) + посадка на поверхность и
+    // отбраковка занятых точек (2026-09-03). Свободного места нет --
+    // клетка остаётся пустой: лучше так, чем трава внутри валуна.
+    FVector SpawnPos;
+    if (!FindFreeSpawnPositionInCell(Cell.X, Cell.Y, GetResourceJitterRadius(), WorldRNG, SpawnPos))
+    {
+        UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnOneResourceInCell: клетка (%d,%d) занята, ресурс пропущен"), Cell.X, Cell.Y);
+        return false;
+    }
+    SpawnPos.Z += 5.0f;   // небольшой подъём над поверхностью, тот же, что и раньше
+
+    // Случайная трансформация (2026-09-03, "как у PCG в ноде Transform")
+    // -- скейл/поворот/доп.смещение из настроек региона. Без региона
+    // (блочный фолбэк, тесты) -- нейтральный дефолт FRandomPlacementTransform,
+    // поведение не меняется. Доп.смещение применяется к SpawnPos ДО
+    // Init() -- Init() получает Location параметром отдельно от
+    // фактического Transform актора, оба должны совпадать.
+    const FRandomPlacementTransform PlacementXform = ClaimingRegion
+        ? ClaimingRegion->RollPlacementTransform(SpawnPos, WorldRNG)
+        : FRandomPlacementTransform();
+    SpawnPos += PlacementXform.PositionOffset;
+
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
+    if (!Row) return false;
+
+    // Класс из строки (2026-09-03) -- пусто = базовый, см.
+    // FIngredientTableRow::ResourceActorClass.
+    TSubclassOf<AHerbalistResourceActor> ClassToSpawn = Row->ResourceActorClass;
+    if (!ClassToSpawn) ClassToSpawn = AHerbalistResourceActor::StaticClass();
+
+    AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, PlacementXform.Rotation);
+    if (!NewActor) return false;
+
+    NewActor->SetActorScale3D(FVector(PlacementXform.UniformScale));
+    // Регистрация в Cell.ResourceActors теперь делает сам Init()
+    // (2026-09-02) -- единая точка входа для любого источника спавна,
+    // не только этого C++-пути.
+    NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y, Row->Resilience, Row->bIronAverse, Row->bDelicate);
+    UE_LOG(LogHerbalistWorld, Verbose, TEXT("Spawned %s at cell (%d,%d) with Z=%.1f"), *IngredientID.ToString(), Cell.X, Cell.Y, SpawnPos.Z);
+    return true;
+}
+
+void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
+{
+    // PCG-биомы (2026-09-02, прямое требование пользователя) -- клетка вне
+    // всех размещённых на уровне ABiomeRegionVolume не спавнит ресурсы,
+    // даже если блочный фолбэк формально приписал ей какой-то биом. Без
+    // регионов на уровне вовсе (тесты, сцены без PCG-авторства) -- проверка
+    // всегда true, ничего не меняется.
+    if (!IsCellClaimedByBiomeRegion(Cell)) return;
+
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
+    const FHarvestContext Context = BuildHarvestContextForCell(Cell);
 
     // Сад (§2.4): клетка с пристройкой — кандидаты из EGardenNiche, не из
     // AllowedBiomes. Пусто (None) для подавляющего большинства клеток мира
@@ -1351,68 +1429,7 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
 
     for (int32 i = 0; i < NumResources; ++i)
     {
-        FName IngredientID = NAME_None;
-        if (IngredientSubsystem)
-        {
-            // Водные растения (2026-09-02, прямой запрос пользователя):
-            // "если у биома есть водные растения, то они разрешены к
-            // размещению на поверхности воды, и вода одновременно доступна" --
-            // отдельный, не смешанный с земляным пул (bGrowsOnWater),
-            // тот же принцип отбора по Cell.BiomeWeights земляного биома
-            // под водой, что и обычный GetRandomResourceForBiome.
-            if (Cell.bIsWater)
-            {
-                IngredientID = IngredientSubsystem->GetRandomResourceForAquaticBiome(Cell, Context, WorldRNG);
-            }
-            else
-            {
-                IngredientID = (PlotNiche && *PlotNiche != EGardenNiche::None)
-                    ? IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, WorldRNG)
-                    : IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, WorldRNG);
-            }
-        }
-        if (IngredientID.IsNone()) continue;
-
-        // Позиция внутри формы биома (2026-09-02) + посадка на поверхность и
-        // отбраковка занятых точек (2026-09-03). Свободного места нет --
-        // клетка остаётся пустой: лучше так, чем трава внутри валуна.
-        FVector SpawnPos;
-        if (!FindFreeSpawnPositionInCell(Cell.X, Cell.Y, GetResourceJitterRadius(), WorldRNG, SpawnPos))
-        {
-            UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourcesInCell: клетка (%d,%d) занята, ресурс пропущен"), Cell.X, Cell.Y);
-            continue;
-        }
-        SpawnPos.Z += 5.0f;   // небольшой подъём над поверхностью, тот же, что и раньше
-
-        // Случайная трансформация (2026-09-03, "как у PCG в ноде Transform")
-        // -- скейл/поворот/доп.смещение из настроек региона. Без региона
-        // (блочный фолбэк, тесты) -- нейтральный дефолт FRandomPlacementTransform,
-        // поведение не меняется. Доп.смещение применяется к SpawnPos ДО
-        // Init() -- Init() получает Location параметром отдельно от
-        // фактического Transform актора, оба должны совпадать.
-        const FRandomPlacementTransform PlacementXform = ClaimingRegion
-            ? ClaimingRegion->RollPlacementTransform(SpawnPos, WorldRNG)
-            : FRandomPlacementTransform();
-        SpawnPos += PlacementXform.PositionOffset;
-
-        const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
-        if (!Row) continue;
-
-        // Класс из строки (2026-09-03) -- пусто = базовый, см.
-        // FIngredientTableRow::ResourceActorClass.
-        TSubclassOf<AHerbalistResourceActor> ClassToSpawn = Row->ResourceActorClass;
-        if (!ClassToSpawn) ClassToSpawn = AHerbalistResourceActor::StaticClass();
-
-        AHerbalistResourceActor* NewActor = GetWorld()->SpawnActor<AHerbalistResourceActor>(ClassToSpawn, SpawnPos, PlacementXform.Rotation);
-        if (NewActor)
-        {
-            NewActor->SetActorScale3D(FVector(PlacementXform.UniformScale));
-            // Регистрация в Cell.ResourceActors теперь делает сам Init()
-            // (2026-09-02) -- единая точка входа для любого источника спавна,
-            // не только этого C++-пути.
-            NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, Cell.X, Cell.Y, Row->Resilience, Row->bIronAverse, Row->bDelicate);
-            UE_LOG(LogHerbalistWorld, Verbose, TEXT("Spawned %s at cell (%d,%d) with Z=%.1f"), *IngredientID.ToString(), Cell.X, Cell.Y, SpawnPos.Z);
-        }
+        SpawnOneResourceInCell(Cell, Context, PlotNiche, ClaimingRegion, IngredientSubsystem);
     }
 }
 
@@ -1491,6 +1508,15 @@ void AGridWorldManager::RegisterGardenPlot(const FIntPoint& Cell, EGardenNiche N
 
 void AGridWorldManager::StartRegeneration(FGridCell& Cell)
 {
+    // Поресурсно, не по клетке (2026-09-04, "а можно отрастание сделать
+    // поресурсно, а не по клеткам?"). Раньше OnResourceCollected звал эту
+    // функцию только когда Cell.ResourceActors пустел ДО НУЛЯ, и тогда она
+    // отращивала целую новую пачку (WorldRNG.RandRange(Min,Max) заново) --
+    // клетка с 3 ресурсами, из которой собрали один, не отращивала ничего,
+    // пока не соберут оставшиеся два. Теперь один вызов = один собранный
+    // слот = один таймер на один новый ресурс: собрали один из трёх --
+    // отрастает именно один, остальные два не тронуты.
+    //
     // Время возрождения -- пер-региональная настройка
     // (ABiomeRegionVolume::ResourceRegrowthTimeSeconds, 2026-09-02), если
     // клетка реально заявлена регионом; без регионов на уровне -- глобальный
@@ -1498,17 +1524,43 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(Cell);
     const float RegrowthTime = ClaimingRegion ? ClaimingRegion->ResourceRegrowthTimeSeconds : ResourceRegrowthTime;
 
+    // Наблюдаемый счётчик (2026-09-04) -- см. комментарий у поля в
+    // HerbalistCoreTypes.h. Растёт здесь, падает в лямбде ниже независимо
+    // от исхода попытки (собрано ли что-то реально -- отдельный вопрос,
+    // сама попытка отрастания в любом случае завершена).
+    ++Cell.PendingRegrowthCount;
+
     FTimerHandle TimerHandle;
     GetWorldTimerManager().SetTimer(TimerHandle, [this, &Cell]()
     {
-        // Водные растения (2026-09-02) возрождаются тем же путём, что и
-        // земляные -- SpawnResourcesInCell сама решает пул (аквапул для
-        // bIsWater), раньше вода была исключена целиком.
-        SpawnResourcesInCell(Cell);
-        // В отличие от исходного броска в InitializeCells (тот безопасно
-        // переигрывается заново из RngBaseSeed), это отросшее — не то же
-        // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
-        MarkCellDirty(Cell.X, Cell.Y);
+        --Cell.PendingRegrowthCount;
+
+        // Регион мог перестать заявлять клетку или переключиться на PCG-граф
+        // за время ожидания (минуты, не тики) -- та же проверка, что
+        // SpawnResourcesInCell делает для первичного заселения, здесь нужна
+        // явно: SpawnOneResourceInCell её не делает вовсе (её вызывающая
+        // сторона решает, применимо ли расти тут в принципе).
+        if (!IsCellClaimedByBiomeRegion(Cell)) return;
+
+        ABiomeRegionVolume* Region = GetClaimingRegion(Cell);
+        if (Region && !Region->bSpawnResourcesFromGrid) return;
+
+        UGameInstance* GameInstance = GetGameInstance();
+        UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
+        // Окно условий на МОМЕНТ отрастания, не на момент сбора (см.
+        // комментарий у BuildHarvestContextForCell) -- за 5-10 минут
+        // ожидания сезон/луна/погода могли уже смениться.
+        const FHarvestContext Context = BuildHarvestContextForCell(Cell);
+        const EGardenNiche* PlotNiche = Cell.bIsWater ? nullptr : GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
+
+        if (SpawnOneResourceInCell(Cell, Context, PlotNiche, Region, IngredientSubsystem))
+        {
+            // В отличие от исходного броска в InitializeCells (тот безопасно
+            // переигрывается заново из RngBaseSeed), это отросшее — не то же
+            // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
+            MarkCellDirty(Cell.X, Cell.Y);
+        }
     }, RegrowthTime, false);
 }
 
@@ -1546,12 +1598,13 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.Tool          = PC ? PC->CurrentGatheringTool : EGatheringTool::BareHands;
     QueueCommand(Cmd);
 
-    // Водные растения (2026-09-02) возрождаются тем же путём -- вода
-    // раньше была исключена из этого гейта целиком.
-    if (Cell->ResourceActors.Num() == 0)
-    {
-        StartRegeneration(*Cell);
-    }
+    // Поресурсно (2026-09-04) -- каждый собранный ресурс запускает СВОЙ
+    // таймер отрастания сразу, не дожидаясь, пока опустеет вся клетка.
+    // Раньше гейт "Num() == 0" означал, что клетка с несколькими ресурсами
+    // (MinResourcesPerCell региона поднят выше дефолтных 1-3) вообще не
+    // отращивала ничего, пока не соберут буквально всё до последнего --
+    // на практике, с широким Min/Max, это почти никогда не наступало.
+    StartRegeneration(*Cell);
 }
 
 FRealState AGridWorldManager::CollectWater(int32 X, int32 Y)

@@ -55,6 +55,21 @@ public:
 
     // ---- Инициализация ----
     void SpawnResourcesInCell(FGridCell& Cell);
+    // Один ресурс, не вся клетка (2026-09-04) -- вынесено из
+    // SpawnResourcesInCell как общий шаг между первичным заселением (цикл
+    // по NumResources) и поресурсным отрастанием (StartRegeneration, один
+    // вызов на один собранный слот). Context/PlotNiche/ClaimingRegion --
+    // общие для всех ресурсов одного вызова, считаются один раз вызывающей
+    // стороной, не на каждый ресурс. Публичный ради того же принципа, что
+    // и у IsCrowdedBySameEntity -- прямая юнит-проверка без обхода через
+    // приватный API.
+    bool SpawnOneResourceInCell(FGridCell& Cell, const struct FHarvestContext& Context,
+        const EGardenNiche* PlotNiche, ABiomeRegionVolume* ClaimingRegion,
+        class UIngredientRegistrySubsystem* IngredientSubsystem);
+    // Общее окно условий (сезон/время суток/луна/погода/высота) для всех
+    // ресурсов одного момента -- было продублировано между
+    // SpawnResourcesInCell и StartRegeneration, вынесено сюда (2026-09-04).
+    struct FHarvestContext BuildHarvestContextForCell(const FGridCell& Cell) const;
     void StartRegeneration(FGridCell& Cell);
 
     // ---- Command Algebra ----
@@ -88,8 +103,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     float SimulationFixedTimeStep = 0.05f;
 
+    // 420 с = 7 минут -- середина запрошенного диапазона "минут 5-10"
+    // (2026-09-04). Старый дефолт 10 СЕКУНД был откровенно отладочным
+    // значением, из-за которого отрастание в PIE выглядело почти
+    // мгновенным. Игровое число не для меня выдумывать -- если 7 минут не
+    // то, правится один параметр здесь (и одноимённый
+    // ABiomeRegionVolume::ResourceRegrowthTimeSeconds для региона).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
-    float ResourceRegrowthTime = 10.0f;
+    float ResourceRegrowthTime = 420.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
     bool bHarvestAffectsBiome = true;

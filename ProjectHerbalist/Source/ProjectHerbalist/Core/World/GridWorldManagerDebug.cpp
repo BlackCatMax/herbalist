@@ -43,6 +43,17 @@ FString AGridWorldManager::GetSelectedCellInfo() const
     {
         ResourceStr = Cell->ResourceActors[0]->GetIngredientID().ToString();
     }
+    // Счётчик (2026-09-04, "почему некоторые квадраты полностью пустые...").
+    // Раньше строка показывала только ПЕРВЫЙ ресурс клетки -- "x123" от "x1"
+    // было неотличимо без открытия аутлайнера. Только у непустых (Num()==0
+    // не добавляет суффикс -- "None"/"Water(...)" остаются как есть, ровно
+    // тем текстом, что уже проверяет SelectedCellInfoTest.cpp). Ресурсы на
+    // воде (аквапул, тоже лежат в ResourceActors) считаются тем же полем --
+    // "Water(bol_wt) x2" читается однозначно.
+    if (Cell->ResourceActors.Num() > 0)
+    {
+        ResourceStr += FString::Printf(TEXT(" x%d"), Cell->ResourceActors.Num());
+    }
     // Distance(S_real, S0) — раньше был написан и не подключён ни к чему
     // (META_AUDIT §1.4). Первый живой потребитель: отладочная строка
     // выделенной клетки. Не нормализовано в [0,1] — см. HerbalistCoreMath.h.

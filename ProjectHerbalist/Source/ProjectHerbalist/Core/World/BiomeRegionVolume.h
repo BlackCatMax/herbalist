@@ -91,8 +91,12 @@ public:
 
     // Было: AGridWorldManager::ResourceRegrowthTime, одно число на менеджере
     // для всего мира сразу.
+    // 420 с = 7 минут, тот же дефолт и тот же довод, что у
+    // AGridWorldManager::ResourceRegrowthTime (2026-09-04) -- региональная
+    // настройка не должна расходиться с глобальным фолбэком, пока автор
+    // региона её не поменял осознанно.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.1"))
-    float ResourceRegrowthTimeSeconds = 10.0f;
+    float ResourceRegrowthTimeSeconds = 420.0f;
 
     // Было: TargetWaterCount = TotalCells / 5 в InitializeCells -- 20% воды
     // без учёта биома вообще (степь и болото заливались одинаково).
