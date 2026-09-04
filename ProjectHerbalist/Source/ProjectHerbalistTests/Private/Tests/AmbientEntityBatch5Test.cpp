@@ -31,6 +31,28 @@ bool FHerbalistAmbientEntity_MezhevyeOnlyManifestOnBiomeBorder::RunTest(const FS
 
     Manager->SetGameClockSeconds(10.0f * 60.0f);   // День
 
+    // Сначала выравниваем ВСЮ сетку в один биом (2026-09-04, найдено при
+    // включении реальных MinSpacingMeters -- см. CHANGELOG.md). Блочный
+    // фолбэк (5x5 биомов на 20x20 клеток, InitializeCells без
+    // ABiomeRegionVolume в тестовом уровне) сам по себе создаёт десятки
+    // случайных границ биомов по всей сетке -- раньше это было безобидно
+    // (проявления разных клеток никак не взаимодействовали), но с боевым
+    // MinSpacingMeters у Межевых любая случайная граница, обработанная
+    // раньше нашей BorderCell по порядку итерации, вытесняет её как "тот
+    // же вид уже проявлен рядом". Однородная сетка убирает случайные
+    // границы, оставляя ровно две, которые расставляет сам тест ниже.
+    for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
+    {
+        for (int32 X = 0; X < Manager->GridSizeX; ++X)
+        {
+            if (FGridCell* Cell = Manager->GetCell(X, Y))
+            {
+                Cell->Biome = EBiomeType::ForestSteppe;
+                Cell->bIsWater = false;
+            }
+        }
+    }
+
     // Клетка (5,5) окружена тем же биомом со всех сторон -- НЕ граница.
     FGridCell* InteriorCell = Manager->GetCell(5, 5);
     InteriorCell->Biome = EBiomeType::ForestSteppe;
@@ -48,6 +70,19 @@ bool FHerbalistAmbientEntity_MezhevyeOnlyManifestOnBiomeBorder::RunTest(const FS
     Manager->GetCell(9, 5)->Biome  = EBiomeType::ForestSteppe;
     Manager->GetCell(10, 6)->Biome = EBiomeType::ForestSteppe;
     Manager->GetCell(10, 4)->Biome = EBiomeType::ForestSteppe;
+
+    // У "чужой" клетки (11,5) не один сухопутный сосед, а четыре -- (10,5),
+    // (12,5), (11,4), (11,6) -- и с боевым MinSpacingMeters у Межевых ВСЕ
+    // четыре реально становятся кандидатами на проявление (каждый честно
+    // граничит со Степью), а не только тот единственный, что проверяет этот
+    // тест (2026-09-04, найдено диагностикой -- порядок обхода клеток решал,
+    // кто из четырёх успеет первым и вытеснит остальных как "тот же вид уже
+    // рядом"). Топим три лишних кандидата -- Межевые bLandOnly, вода их
+    // отсеивает на гейте раньше, чем дело дойдёт до дистанции, и остаётся
+    // ровно один сухопутный сосед (10,5), которого и проверяет тест.
+    Manager->GetCell(12, 5)->bIsWater = true;
+    Manager->GetCell(11, 4)->bIsWater = true;
+    Manager->GetCell(11, 6)->bIsWater = true;
 
     const float InteriorNatureBefore = InteriorCell->TargetState.Direction.Nature;
     const float BorderNatureBefore = BorderCell->TargetState.Direction.Nature;
