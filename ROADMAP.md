@@ -256,6 +256,32 @@ ResolveShrineTypeForCell` резолвит Пограничное (капище 
   argmax-логике, новый прогон статистики не запускался (не входило в
   задачу). Подробности — `CHANGELOG.md` за 2026-09-04. 325 → 328 тестов,
   **328/328, два чистых прогона, ноль регрессий.**
+- **✅ Межбиомная варка — бонус к Coherence закрыто 2026-09-04 (автономная
+  задача, прямой запрос пользователя).** Раньше формула варки
+  (`ComputeApplyResult`) вообще не знала, ГДЕ собран ингредиент —
+  `FInventoryItem` не хранил биом сбора. Новое поле `FInventoryItem::
+  SourceBiome` (`HerbalistCoreTypes.h`, дефолт `MixedForest` — нейтральный
+  биом для предметов без честного источника: сваренные зелья, старые сейвы
+  без поля) проставляется в `PipelineV2::GenerateHarvestResult`/
+  `ProcessHarvestCommand` из уже известного там `FGridCell::Biome`, без
+  новых полей на `FHarvestCommand`. Бонус — тот же паттерн Single-Writer,
+  что уже `bWardBrewBoostActive`: `AGridWorldManager::ApplyAlchemyResult`
+  (`GridWorldManagerAlchemy.cpp`) считает число РАЗНЫХ `SourceBiome` среди
+  не-водных ингредиентов (максимум 3 физически — `AlchemyTransferWidget.cpp`,
+  три слота) и кладёт готовое число в `FApplyCommand::
+  DistinctIngredientBiomeCount`, `ProcessApplyCommand` (`PipelineV2.cpp`)
+  только читает. Две ступени: ≥2 разных биома — `CrossBiomeCoherenceBonus=
+  0.03` (новая настройка, `HerbalistSettings.h`, категория Alchemy) к
+  Coherence, тем же путём, что и `ShrineCoherenceBonus`/
+  `WardBrewBoostCoherenceBonus`; все 3 из 3 разных — вдвое, `0.06`. Число
+  намеренно ниже `WardBrewBoostCoherenceBonus=0.05` — оберег требует
+  инвестиции (найти/активировать кристалл), межбиомный набор не стоит
+  игроку ничего сверх обычного сбора, только маршрута. Три новых теста
+  (`PipelineV2ApplyTest.cpp`, `ProjectHerbalist.PipelineV2.
+  ApplyCrossBiome*`): гейт `>=2` не срабатывает на 0/1 биоме (бит-в-бит
+  одинаковый Coherence), 2 биома поднимают Coherence/Stability, 3 биома —
+  ещё выше, чем 2. 328 → 331 тест, **331/331, два чистых прогона, ноль
+  регрессий.**
 - **Реестр ритуальных рецептов (`Core/Alchemy/RitualTypes.h`,
   `GetRitualRecipeDefinitions()`) содержит ровно ОДИН рецепт** — "Заревая
   вода" (рабочее имя), прямой пример из запроса пользователя (2 травы в

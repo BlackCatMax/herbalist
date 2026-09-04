@@ -28,6 +28,23 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     // Оберег BrewBoost (Громовая стрела, §2.4, 2026-09-04) -- тот же приём,
     // что и bBifurcationCharmActive выше: резолвится здесь, не в Pipeline.
     Cmd.Apply.bWardBrewBoostActive = IsWardBrewBoostActive();
+    // Межбиомная варка (§2.4, прямой запрос пользователя, 2026-09-04) -- тот
+    // же принцип "резолвится здесь, не в Pipeline", что и остальные модификаторы
+    // выше: считаем число РАЗНЫХ FInventoryItem::SourceBiome среди не-водных
+    // ингредиентов (вода не имеет "места сбора" в смысле этого бонуса --
+    // разбавитель, не трава) и кладём готовое число в команду, Pipeline
+    // (ProcessApplyCommand) только читает.
+    {
+        TSet<EBiomeType> DistinctBiomes;
+        for (const FInventoryItem& Ing : Ingredients)
+        {
+            if (!Ing.bIsWater)
+            {
+                DistinctBiomes.Add(Ing.SourceBiome);
+            }
+        }
+        Cmd.Apply.DistinctIngredientBiomeCount = FMath::Max(1, DistinctBiomes.Num());
+    }
     QueueCommand(Cmd);
 
     UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());

@@ -6670,3 +6670,90 @@ TieBreak.*`): `SameStateAlwaysProducesSameName` — идентичный `State`
 `NounTieBreakGapThreshold`, `GetDominantAxis` — переписан на
 сортировку+хэш-бросок), Source/ProjectHerbalistTests/Private/Tests/
 HerbalistNameUtilsTest.cpp (три новых теста).
+
+### Межбиомная варка: бонус к Coherence за сбор из разных биомов (2026-09-04, автономная задача)
+
+Прямой запрос пользователя: поощрить "межбиомную варку" — сбор ингредиентов
+из разных биомов для одной варки. До этой правки формула варки
+(`ComputeApplyResult`, `PipelineV2.cpp`) вообще не знала происхождения
+ингредиента, а `FInventoryItem` не хранил, в каком биоме предмет был
+собран — понятия "межбиомности" физически не существовало в данных.
+
+**Новое поле.** `FInventoryItem::SourceBiome` (`EBiomeType`,
+`HerbalistCoreTypes.h`) — дефолт `EBiomeType::MixedForest`, не первый по
+счёту `Tundra`: нейтральный "срединный" биом для предметов без честного
+источника (сваренные зелья, старые сейвы без этого поля — тегированная
+сериализация `USaveGame` заполняет отсутствующее поле именно дефолтом
+члена структуры, `TArray<FInventoryItem> InventoryItems` в
+`UHerbalistSaveGame` не потребовал отдельной правки, тот же случай, что уже
+`bIsPlantingStock`). Заполняется в `PipelineV2::GenerateHarvestResult`
+(обычный сбор) и в водной ветке `ProcessHarvestCommand` — обе уже держат в
+руках `FGridCell` с полем `Biome` в момент сбора (снэпшот клетки приходит
+через `FHarvestCommand::TargetCell`), протаскивать биом отдельным полем
+через `FHarvestCommand` не понадобилось. Крафтовые зелья (`PotionItem`)
+поле не проставляют явно — получают тот же дефолт `MixedForest`, честно
+отражающий "у зелья нет одного места сбора".
+
+**Бонус.** Тот же паттерн Single-Writer, что уже `Cmd.Apply.
+bWardBrewBoostActive` (`GridWorldManagerAlchemy.cpp`): вызывающая сторона
+(`AGridWorldManager::ApplyAlchemyResult`) считает число РАЗНЫХ
+`SourceBiome` среди НЕ-водных ингредиентов (вода — разбавитель, не трава,
+не имеет "места сбора" в смысле этого бонуса) до постановки команды в
+очередь и кладёт готовое число в новое поле `FApplyCommand::
+DistinctIngredientBiomeCount` (`CommandTypes.h`) — `ProcessApplyCommand`
+(`PipelineV2.cpp`) только читает его, не пересобирает `TSet` из
+`Cmd.Ingredients` сам заново (хотя технически мог бы — решено в пользу
+единообразия с остальными резолвящимися вне пайплайна модификаторами
+варки, Shrine/Ward/MoonPhase/Bifurcation). Максимум физически 3
+ингредиента одновременно (`AlchemyTransferWidget.cpp`, три слота
+`IngredientSlot1-3`, вода — отдельный `WaterSlot`, не входит в счёт).
+
+Две ступени, не плавная формула (по прямой просьбе не усложнять формулу
+сверх необходимого): ≥2 разных биома — плоская надбавка
+`CrossBiomeCoherenceBonus` к `EffectiveIntent.Coherence`, тем же путём, что
+уже `ShrineCoherenceBonus`/`WardBrewBoostCoherenceBonus`; все 3 ингредиента
+из 3 разных биомов — вдвое (`BaseBonus * 2.0f`, чистое число ступеней, без
+дополнительной настройки под второй порог). Новая настройка
+`CrossBiomeCoherenceBonus=0.03` (`HerbalistSettings.h`, категория
+`Alchemy`, новая — под этот флэт-бонус общей формулы варки не подошла ни
+одна из существующих `Shrines`/`Wards`) — того же порядка величины
+(0.03-0.05), что и `WardBrewBoostCoherenceBonus=0.05`, но у нижней границы:
+оберег требует найти/вырастить кристалл в Пещере и держать его активным
+(реальная инвестиция), тогда как разнобиомный набор в трёх слотах котла не
+стоит игроку ничего сверх обычного сбора, только маршрута — получить
+дешевле, значит бонус скромнее.
+
+**Тесты** (`PipelineV2ApplyTest.cpp`, три новых, `ProjectHerbalist.
+PipelineV2.ApplyCrossBiome*`, тот же RunApply/MakeIngredient-стенд, что уже
+использует `ApplyWardBrewBoostCoherenceBonus`): `ApplyCrossBiomeNoBonus
+BelowTwoDistinctBiomes` — гейт `>= 2` не срабатывает ни на 0, ни на 1
+(бит-в-бит одинаковый `Coherence`/`Stability` при одном сиде — ловит именно
+границу, не только "бонуса вообще нет"); `ApplyCrossBiomeBonusForTwo
+DistinctBiomes` — 2 разных биома поднимают записанный `Coherence` и, вслед
+за ним, `Stability` зелья (не мёртвый код, реально доходит до конца
+пайплайна, тот же приём, что и у `ApplyWardBrewBoostCoherenceBonus`);
+`ApplyCrossBiomeBonusForThreeDistinctBiomesIsStronger` — все 3 из 3 сильнее
+частичных 2 из 3. Третий тест намеренно держит воду в списке ингредиентов
+(3 травы + вода, не просто 3 травы) — без воды варка вырождается в Ash
+(05_Systems.md, "обязательность воды"), вырожденная ветка возвращается ДО
+Morok/Zaryana (см. шапку `PipelineV2ApplyTest.cpp`), и `Stability` тогда
+была бы фиксированной константой, не зависящей от `Coherence` вовсе —
+тест бы ничего не поймал.
+
+**Итог:** 328 → 331 тест, **331/331, два чистых прогона, ноль регрессий.**
+Ни один `.uasset`/DataTable не тронут — правка целиком в C++
+(`FInventoryItem`/`FApplyCommand`/`ProcessApplyCommand`/
+`ApplyAlchemyResult`/новая настройка). Ритуальная варка
+(`GridWorldManagerRitual.cpp`) идёт мимо обычной очереди команд и не
+получает `DistinctIngredientBiomeCount` (остаётся дефолтным `1`, без
+бонуса) — тот же уже задокументированный разрыв, что и у `MoonPhase`/
+`bWardBrewBoostActive` там же, сознательно не расширен в рамках этой
+задачи.
+Файлы: Core/Types/HerbalistCoreTypes.h (`FInventoryItem::SourceBiome`),
+Core/Simulation/Public/CommandTypes.h (`FApplyCommand::
+DistinctIngredientBiomeCount`), Core/Simulation/Private/PipelineV2.cpp
+(`GenerateHarvestResult`, `ProcessHarvestCommand`, `ProcessApplyCommand`),
+Core/World/GridWorldManagerAlchemy.cpp (`ApplyAlchemyResult`),
+Core/Config/HerbalistSettings.h (`CrossBiomeCoherenceBonus`),
+Source/ProjectHerbalistTests/Private/Tests/PipelineV2ApplyTest.cpp
+(`MakeIngredient`/`RunApply` расширены, три новых теста).

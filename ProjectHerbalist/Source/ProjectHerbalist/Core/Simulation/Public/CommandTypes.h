@@ -94,6 +94,19 @@ struct FApplyCommand
     // трогает Bifurcation, это отдельная, слабая-но-непрерывная механика, не
     // Камень-оберег.
     bool bWardBrewBoostActive = false;
+
+    // Межбиомная варка (DESIGN_Community_And_Homestead.md §2.4, прямой запрос
+    // пользователя, 2026-09-04) -- тот же принцип "резолвится вне Pipeline",
+    // что bWardBrewBoostActive выше: вызывающая сторона
+    // (AGridWorldManager::ApplyAlchemyResult) считает число РАЗНЫХ
+    // FInventoryItem::SourceBiome среди не-водных ингредиентов ДО постановки
+    // команды в очередь и кладёт готовое число сюда -- ProcessApplyCommand
+    // (PipelineV2.cpp) только читает его, не пересобирает TSet из
+    // Cmd.Ingredients сам. Максимум физически 3 ингредиента одновременно
+    // (AlchemyTransferWidget.cpp, три слота), поэтому значение всегда 0..3.
+    // 1 (по умолчанию — один биом или ни одного не-водного ингредиента) не
+    // даёт бонуса; см. CrossBiomeCoherenceBonus, HerbalistSettings.h.
+    int32 DistinctIngredientBiomeCount = 1;
 };
 
 // S – сбор ресурса (Harvest)

@@ -32,7 +32,8 @@ namespace
 {
     FInventoryItem MakeIngredient(FName ID, float Magnitude, float Distortion, float Stability,
         float Purity, float Potency = 0.f, float Resonance = 0.f, float Corruption = 0.f,
-        float Body = 1.f, float Mind = 0.f, float Spirit = 0.f, float Nature = 0.f)
+        float Body = 1.f, float Mind = 0.f, float Spirit = 0.f, float Nature = 0.f,
+        EBiomeType SourceBiome = EBiomeType::MixedForest)
     {
         FInventoryItem Item;
         Item.IngredientID = ID;
@@ -49,6 +50,11 @@ namespace
         Item.State.Meta.Potency = Potency;
         Item.State.Meta.Resonance = Resonance;
         Item.State.Meta.Corruption = Corruption;
+        // Межбиомная варка (FInventoryItem::SourceBiome, 2026-09-04) -- дефолт
+        // MixedForest тот же, что и у поля в HerbalistCoreTypes.h, большинство
+        // существующих тестов выше не передают этот параметр и остаются
+        // однобиомными (DistinctIngredientBiomeCount=1, без бонуса).
+        Item.SourceBiome = SourceBiome;
         return Item;
     }
 
@@ -84,7 +90,8 @@ namespace
     FStateDelta RunApply(const TArray<FInventoryItem>& Ingredients, bool bIsCrafting,
         const FIntPoint& TargetCell, FRandomStream& Rng,
         const FWorldSnapshot& WorldSnap, const FBiomeSnapshot& BiomeSnap, float CallerCoherence = 0.f,
-        EMoonPhase MoonPhase = EMoonPhase::NewMoon, bool bWardBrewBoostActive = false)
+        EMoonPhase MoonPhase = EMoonPhase::NewMoon, bool bWardBrewBoostActive = false,
+        int32 DistinctIngredientBiomeCount = 1)
     {
         FInventorySnapshot InvSnap;
         FCommandBatch CmdBatch;
@@ -96,6 +103,11 @@ namespace
         Entry.Apply.Intent.Coherence = CallerCoherence;
         Entry.Apply.MoonPhase = MoonPhase;
         Entry.Apply.bWardBrewBoostActive = bWardBrewBoostActive;
+        // Межбиомная варка (2026-09-04) -- тот же принцип, что и bWardBrewBoostActive
+        // выше: тесты кладут готовое число напрямую, тем же путём, что и
+        // AGridWorldManager::ApplyAlchemyResult (GridWorldManagerAlchemy.cpp)
+        // делает из настоящих FInventoryItem::SourceBiome вне теста.
+        Entry.Apply.DistinctIngredientBiomeCount = DistinctIngredientBiomeCount;
         CmdBatch.AddCommand(Entry);
         return Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
     }
@@ -814,6 +826,152 @@ bool FPipelineV2ApplyWardBrewBoostCoherenceBonusTest::RunTest(const FString& Par
         WardPotion->Coherence > NoWardPotion->Coherence + KINDA_SMALL_NUMBER);
     TestTrue(TEXT("Ward-boosted Coherence raises Stability just like the shrine bonus does"),
         WardPotion->Ingredient.State.Meta.Stability > NoWardPotion->Ingredient.State.Meta.Stability + KINDA_SMALL_NUMBER);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Межбиомная варка (DESIGN_Community_And_Homestead.md §2.4, прямой запрос
+// пользователя, 2026-09-04) — "поощрить сбор ингредиентов из разных биомов
+// для одной варки". Cmd.DistinctIngredientBiomeCount -- готовое число,
+// которое в реальной игре вычисляет AGridWorldManager::ApplyAlchemyResult
+// из FInventoryItem::SourceBiome (GridWorldManagerAlchemy.cpp), тесты кладут
+// его напрямую через RunApply, тем же приёмом, что и bWardBrewBoostActive
+// в тесте выше. Тот же набор ингредиентов (Herb+Water), что и у оберега
+// BrewBoost выше -- сравнение при одном и том же сиде, значит любая разница
+// в Coherence целиком объясняется бонусом за межбиомность, не шумом Rng.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyCrossBiomeNoBonusBelowTwoDistinctBiomesTest,
+    "ProjectHerbalist.PipelineV2.ApplyCrossBiomeNoBonusBelowTwoDistinctBiomes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyCrossBiomeNoBonusBelowTwoDistinctBiomesTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Все ингредиенты честно помечены одним и тем же биомом (Taiga) -- это
+    // и есть "варка из ингредиентов одного биома" из требования (a).
+    TArray<FInventoryItem> Ingredients = {
+        MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, EBiomeType::Taiga),
+        MakeWater(0.5f, 0.4f)
+    };
+
+    // Гейт формулы -- ">= 2 разных биома". 0 и 1 обе лежат ПОД порогом и
+    // обязаны дать бит-в-бит одинаковый Coherence при одном и том же сиде:
+    // если бы гейт был сломан (например, "> 0" вместо ">= 2"), это
+    // расхождение поймало бы регрессию именно на границе, а не только "бонус
+    // вообще есть".
+    FRandomStream RngZero(13);
+    FStateDelta DeltaZeroBiomes = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngZero, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 0);
+
+    FRandomStream RngOne(13);
+    FStateDelta DeltaOneBiome = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngOne, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 1);
+
+    const FInventoryOperation* PotionZero = nullptr;
+    for (const FInventoryOperation& Op : DeltaZeroBiomes.InventoryOps) if (Op.OpType == EInventoryOpType::Add) PotionZero = &Op;
+    const FInventoryOperation* PotionOne = nullptr;
+    for (const FInventoryOperation& Op : DeltaOneBiome.InventoryOps) if (Op.OpType == EInventoryOpType::Add) PotionOne = &Op;
+    if (!TestNotNull(TEXT("Zero-biome potion op"), PotionZero) || !TestNotNull(TEXT("One-biome potion op"), PotionOne))
+        return false;
+
+    TestEqual(TEXT("A single (or no) source biome gets no cross-biome bonus at all -- same Coherence either side of the gate"),
+        PotionZero->Coherence, PotionOne->Coherence);
+    TestEqual(TEXT("...and the same resulting Stability, since nothing pushed Coherence up"),
+        PotionZero->Ingredient.State.Meta.Stability, PotionOne->Ingredient.State.Meta.Stability);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyCrossBiomeBonusForTwoDistinctBiomesTest,
+    "ProjectHerbalist.PipelineV2.ApplyCrossBiomeBonusForTwoDistinctBiomes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyCrossBiomeBonusForTwoDistinctBiomesTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Один и тот же список ингредиентов для обоих прогонов -- меняется
+    // только готовое число DistinctIngredientBiomeCount, ровно то, что в
+    // реальной игре отличало бы сбор "всё в Тайге" от сбора "Тайга + Степь".
+    TArray<FInventoryItem> Ingredients = {
+        MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, EBiomeType::Taiga),
+        MakeWater(0.5f, 0.4f)
+    };
+
+    FRandomStream RngSameBiome(17);
+    FStateDelta SameBiomeDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngSameBiome, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 1);
+
+    FRandomStream RngTwoBiomes(17);
+    FStateDelta TwoBiomesDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngTwoBiomes, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 2);
+
+    const FInventoryOperation* SameBiomePotion = nullptr;
+    for (const FInventoryOperation& Op : SameBiomeDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) SameBiomePotion = &Op;
+    const FInventoryOperation* TwoBiomesPotion = nullptr;
+    for (const FInventoryOperation& Op : TwoBiomesDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) TwoBiomesPotion = &Op;
+    if (!TestNotNull(TEXT("Same-biome potion op"), SameBiomePotion) || !TestNotNull(TEXT("Two-biome potion op"), TwoBiomesPotion))
+        return false;
+
+    TestTrue(TEXT("Two distinct source biomes raise the recorded Coherence at the same seed"),
+        TwoBiomesPotion->Coherence > SameBiomePotion->Coherence + KINDA_SMALL_NUMBER);
+    TestTrue(TEXT("Cross-biome-boosted Coherence raises Stability, just like Shrine/Ward bonuses do -- not dead code"),
+        TwoBiomesPotion->Ingredient.State.Meta.Stability > SameBiomePotion->Ingredient.State.Meta.Stability + KINDA_SMALL_NUMBER);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyCrossBiomeBonusForThreeDistinctBiomesIsStrongerTest,
+    "ProjectHerbalist.PipelineV2.ApplyCrossBiomeBonusForThreeDistinctBiomesIsStronger",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyCrossBiomeBonusForThreeDistinctBiomesIsStrongerTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Три ингредиента (физический предел трёх слотов котла --
+    // AlchemyTransferWidget.cpp, IngredientSlot1-3), честно из трёх разных
+    // биомов, плюс вода (её собственный, отдельный слот -- WaterSlot,
+    // AlchemyTransferWidget.h -- не считается ни ингредиентом, ни источником
+    // биома для этого бонуса). Вода обязательна здесь -- без неё варка без
+    // единой капли воды вырождается в Ash (05_Systems.md, "обязательность
+    // воды") ДО Morok/Zaryana (см. шапку файла), и Stability тогда была бы
+    // фиксированной константой, не зависящей от Coherence вовсе.
+    TArray<FInventoryItem> Ingredients = {
+        MakeIngredient(TEXT("TaigaHerb"), 0.6f, 0.3f, 0.4f, 0.4f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, EBiomeType::Taiga),
+        MakeIngredient(TEXT("SteppeHerb"), 0.5f, 0.25f, 0.45f, 0.45f, 0.f, 0.f, 0.f, 0.8f, 0.f, 0.f, 0.2f, EBiomeType::Steppe),
+        MakeIngredient(TEXT("BogHerb"), 0.55f, 0.2f, 0.5f, 0.5f, 0.f, 0.f, 0.f, 0.7f, 0.f, 0.f, 0.3f, EBiomeType::Bog),
+        MakeWater(0.5f, 0.4f),
+    };
+
+    FRandomStream RngTwoBiomes(23);
+    FStateDelta TwoBiomesDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngTwoBiomes, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 2);
+
+    FRandomStream RngThreeBiomes(23);
+    FStateDelta ThreeBiomesDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngThreeBiomes, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 3);
+
+    const FInventoryOperation* TwoBiomesPotion = nullptr;
+    for (const FInventoryOperation& Op : TwoBiomesDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) TwoBiomesPotion = &Op;
+    const FInventoryOperation* ThreeBiomesPotion = nullptr;
+    for (const FInventoryOperation& Op : ThreeBiomesDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) ThreeBiomesPotion = &Op;
+    if (!TestNotNull(TEXT("Two-biome potion op"), TwoBiomesPotion) || !TestNotNull(TEXT("Three-biome potion op"), ThreeBiomesPotion))
+        return false;
+
+    // Требование: "если ВСЕ 3 ингредиента из 3 РАЗНЫХ биомов -- можно
+    // рассмотреть чуть больший бонус" -- реализовано как удвоенная ступень
+    // (см. ProcessApplyCommand, PipelineV2.cpp), значит полный разнобой
+    // ОБЯЗАН дать Coherence строго выше частичного (2 из 3).
+    TestTrue(TEXT("All three ingredients from three different biomes beats only two distinct biomes"),
+        ThreeBiomesPotion->Coherence > TwoBiomesPotion->Coherence + KINDA_SMALL_NUMBER);
+    TestTrue(TEXT("...and the same holds for the resulting Stability -- the tier genuinely reaches the formula"),
+        ThreeBiomesPotion->Ingredient.State.Meta.Stability > TwoBiomesPotion->Ingredient.State.Meta.Stability + KINDA_SMALL_NUMBER);
     return true;
 }
 

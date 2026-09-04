@@ -172,6 +172,10 @@ namespace Simulation
         // CreationTime проставляет вызывающая сторона (ProcessHarvestCommand) из
         // WorldSnap.WorldTime — здесь его не знаем.
         Result.bSubjectToDecay = true;
+        // Межбиомная варка (FInventoryItem::SourceBiome, HerbalistCoreTypes.h,
+        // 2026-09-04) — Cell уже под рукой, тот же источник, что и BiomeState
+        // выше, отдельно протаскивать биом через FHarvestCommand не нужно.
+        Result.SourceBiome = Cell.Biome;
         return Result;
     }
 
@@ -836,6 +840,10 @@ namespace Simulation
             WaterItem.CreationTime = WorldSnap.WorldTime;
             WaterItem.bSubjectToDecay = true;
             WaterItem.bIsWater = true;
+            // Вода тоже честно помнит клетку сбора (не участвует в подсчёте
+            // межбиомности -- вызывающая сторона, ApplyAlchemyResult, игнорирует
+            // bIsWater-предметы, но поле не должно молчать о том, что известно).
+            WaterItem.SourceBiome = Cell->Biome;
 
             FInventoryOperation Op;
             Op.ContainerID = 0;
@@ -972,6 +980,22 @@ namespace Simulation
         {
             const float WardBonus = ShrineSettings ? ShrineSettings->WardBrewBoostCoherenceBonus : 0.05f;
             EffectiveIntent.Coherence = FMath::Clamp(EffectiveIntent.Coherence + WardBonus, 0.0f, 1.0f);
+        }
+
+        // Межбиомная варка (DESIGN_Community_And_Homestead.md §2.4, 2026-09-04)
+        // -- та же плоская надбавка к Coherence, что и у оберега BrewBoost
+        // выше, но её сила зависит от того, СКОЛЬКО разных биомов собрано в
+        // котле (Cmd.DistinctIngredientBiomeCount, готовое число от
+        // ApplyAlchemyResult -- см. CommandTypes.h). Две ступени, не плавная
+        // формула: 2 разных биома -- обычный бонус, все 3 (физический предел
+        // котла, AlchemyTransferWidget.cpp) -- удвоенный, тем же простым
+        // приёмом "полный набор сильнее частичного", что уже bBothHigh/
+        // bBothLow-ветки ReactAxis выше в этом файле.
+        if (Cmd.DistinctIngredientBiomeCount >= 2)
+        {
+            const float BaseBonus = ShrineSettings ? ShrineSettings->CrossBiomeCoherenceBonus : 0.03f;
+            const float CrossBiomeBonus = (Cmd.DistinctIngredientBiomeCount >= 3) ? BaseBonus * 2.0f : BaseBonus;
+            EffectiveIntent.Coherence = FMath::Clamp(EffectiveIntent.Coherence + CrossBiomeBonus, 0.0f, 1.0f);
         }
 
         EAlchemyOutcome Outcome = EAlchemyOutcome::Valid;

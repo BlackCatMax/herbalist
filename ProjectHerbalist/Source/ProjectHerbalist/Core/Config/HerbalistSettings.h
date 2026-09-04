@@ -1023,6 +1023,20 @@ public:
     // всю округу).
     UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0"))
     int32 WardMorokReductionRadius = 1;
+
+    // --- Межбиомная варка (DESIGN_Community_And_Homestead.md §2.4, прямой
+    // запрос пользователя, 2026-09-04) — "поощрить сбор ингредиентов из
+    // разных биомов для одной варки". Та же плоская надбавка к Coherence,
+    // что уже WardBrewBoostCoherenceBonus выше (ProcessApplyCommand,
+    // PipelineV2.cpp), но заметно слабее его: оберег требует найти/вырастить
+    // кристалл в Пещере и держать его активным — реальную инвестицию,
+    // тогда как разнобиомный набор в трёх слотах котла (AlchemyTransferWidget.cpp)
+    // не стоит игроку ничего сверх обычного сбора, только маршрута. Черновое
+    // число намеренно взято НИЖЕ нижней границы диапазона WardBrewBoost
+    // (0.05) — того же порядка величины (0.03-0.05), но у самой дешёвой
+    // границы, раз получить бонус легче.
+    UPROPERTY(config, EditAnywhere, Category = "Alchemy", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float CrossBiomeCoherenceBonus = 0.03f;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

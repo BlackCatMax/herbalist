@@ -554,6 +554,21 @@ struct PROJECTHERBALIST_API FInventoryItem
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     bool bIsPlantingStock = false;
 
+    // Биом сбора (DESIGN_Community_And_Homestead.md §2.4, межбиомная варка,
+    // 2026-09-04) — прямой запрос: поощрить варку из ингредиентов РАЗНЫХ
+    // биомов (см. FApplyCommand::DistinctIngredientBiomeCount, ProcessApplyCommand,
+    // PipelineV2.cpp). Проставляется один раз при харвесте, тем же принципом,
+    // что уже bIsWater выше (не требует обращения к реестрам постфактум) —
+    // PipelineV2::ProcessHarvestCommand уже держит в руках FGridCell с полем
+    // Biome в момент сбора, отдельно протаскивать его через FHarvestCommand
+    // не нужно. Дефолт MixedForest (а не первый по счёту Tundra) — нейтральный
+    // "срединный" биом для предметов без честного источника (сваренные зелья,
+    // старые сейвы без этого поля): тегированная сериализация USaveGame
+    // (UHerbalistSaveGame::InventoryItems) заполняет отсутствующее поле именно
+    // этим значением по умолчанию, не нулём enum'а.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    EBiomeType SourceBiome = EBiomeType::MixedForest;
+
     bool IsEmpty() const { return IngredientID.IsNone() || Count <= 0; }
     void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; CreationTime = 0.0f; bSubjectToDecay = true; }
     bool IsValid() const { return !IngredientID.IsNone() && Count > 0; }
