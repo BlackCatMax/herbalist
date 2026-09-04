@@ -1317,7 +1317,24 @@ bool AGridWorldManager::SpawnOneResourceInCell(FGridCell& Cell, const FHarvestCo
     const EGardenNiche* PlotNiche, ABiomeRegionVolume* ClaimingRegion, UIngredientRegistrySubsystem* IngredientSubsystem)
 {
     FName IngredientID = NAME_None;
-    if (IngredientSubsystem)
+
+    // Посадка (PlantSeed, DESIGN_Community_And_Homestead.md §2.4, 2026-09-04)
+    // -- клетка с явно посаженным видом обходит вероятностный выбор ЦЕЛИКОМ,
+    // включая PickWeightedResource и все его окна (сезон/время/луна/погода/
+    // высота): "здесь посажено именно это", не "склоняется к этому в среднем
+    // чаще". Не применяется на воде -- тот же принцип, что и у PlotNiche чуть
+    // ниже (пристройка сада не подделывает нишу для водных клеток);
+    // PlantSeedInCell в любом случае требует зарегистрированную пристройку на
+    // этой клетке, но поле проверяется здесь напрямую, не полагаясь на то,
+    // как оно было проставлено. Персистентно: ни первичное заселение, ни
+    // StartRegeneration (оба вызывают именно эту функцию на той же Cell) не
+    // сбрасывают Cell.PlantedSpeciesID -- посадка переживает отрастание после
+    // сбора, не разовый эффект.
+    if (!Cell.bIsWater && !Cell.PlantedSpeciesID.IsNone())
+    {
+        IngredientID = Cell.PlantedSpeciesID;
+    }
+    else if (IngredientSubsystem)
     {
         // Водные растения (2026-09-02, прямой запрос пользователя):
         // "если у биома есть водные растения, то они разрешены к
@@ -1506,6 +1523,48 @@ void AGridWorldManager::RegisterGardenPlot(const FIntPoint& Cell, EGardenNiche N
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Garden] Plot at (%d,%d) set to niche %d"), Cell.X, Cell.Y, (int32)Niche);
 }
 
+bool AGridWorldManager::PlantSeedInCell(const FIntPoint& CellCoord, FName SpeciesID, EGardenNiche SpeciesNiche)
+{
+    // Посадка (PlantSeed, DESIGN_Community_And_Homestead.md §2.4, 2026-09-04)
+    // -- в отличие от RegisterGardenPlot выше (какую нишу подделывает
+    // пристройка), это про то, КАКОЙ КОНКРЕТНО вид посажен в уже
+    // существующую пристройку. Резолв SpeciesNiche (IngredientTableRow::
+    // GardenNiche растения) -- дело вызывающей стороны (AHerbalistPlayerController::
+    // PlantSeed через IngredientRegistrySubsystem), тот же принцип границы
+    // "инвентарный поиск + резолв ряда в контроллере, мировое состояние
+    // здесь", что уже держат ActivateWard/OfferToCommunity -- эта функция
+    // не обращается к GameInstance вовсе, поэтому напрямую вызываема из
+    // автотестов (GameInstanceSubsystem недоступен в Editor-мире тестов).
+    FGridCell* Cell = GetCell(CellCoord.X, CellCoord.Y);
+    if (!Cell)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Garden] PlantSeedInCell: no cell at (%d,%d)"), CellCoord.X, CellCoord.Y);
+        return false;
+    }
+
+    const EGardenNiche* PlotNiche = GardenPlots.Find(CellCoord);
+    if (!PlotNiche || *PlotNiche == EGardenNiche::None)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Garden] PlantSeedInCell: (%d,%d) has no garden plot registered (see SetGardenPlot)"), CellCoord.X, CellCoord.Y);
+        return false;
+    }
+
+    // Тот же класс валидации, что уже RegisterGardenPlot/SetGardenPlot --
+    // отказ с логом, не тихая подмена: сажать степную траву в Погребе не
+    // должно молча "сработать как-нибудь".
+    if (*PlotNiche != SpeciesNiche)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Garden] PlantSeedInCell: (%d,%d) is niche %d, species %s needs niche %d, refused"),
+            CellCoord.X, CellCoord.Y, (int32)*PlotNiche, *SpeciesID.ToString(), (int32)SpeciesNiche);
+        return false;
+    }
+
+    Cell->PlantedSpeciesID = SpeciesID;
+    MarkCellDirty(CellCoord.X, CellCoord.Y);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Garden] PlantSeedInCell: (%d,%d) planted with %s"), CellCoord.X, CellCoord.Y, *SpeciesID.ToString());
+    return true;
+}
+
 void AGridWorldManager::StartRegeneration(FGridCell& Cell)
 {
     // Поресурсно, не по клетке (2026-09-04, "а можно отрастание сделать
@@ -1596,6 +1655,9 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     Cmd.Harvest.bIronAverse   = Actor->GetIsIronAverse();
     Cmd.Harvest.bDelicate     = Actor->GetIsDelicate();
     Cmd.Harvest.Tool          = PC ? PC->CurrentGatheringTool : EGatheringTool::BareHands;
+    // Намерение сбора (DESIGN_Community_And_Homestead.md §2.4, PlantSeed,
+    // 2026-09-04) -- тот же принцип чтения контроллера, что Tool выше.
+    Cmd.Harvest.bForPlanting  = PC && PC->CurrentHarvestIntent == EHarvestIntent::Seed;
     QueueCommand(Cmd);
 
     // Поресурсно (2026-09-04) -- каждый собранный ресурс запускает СВОЙ

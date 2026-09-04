@@ -128,6 +128,15 @@ struct FHarvestCommand
     EGatheringTool Tool = EGatheringTool::BareHands;
     bool bIronAverse = false;
     bool bDelicate = false;
+
+    // Намерение сбора (DESIGN_Community_And_Homestead.md §2.4, PlantSeed,
+    // 2026-09-04) — тот же принцип "резолвится вне Pipeline", что Tool
+    // выше: вызывающая сторона (AGridWorldManager::OnResourceCollected из
+    // AHerbalistPlayerController::CurrentHarvestIntent) читает намерение
+    // ДО постановки команды в очередь. true — PipelineV2.cpp::
+    // ProcessHarvestCommand кладёт в инвентарь посадочный материал
+    // (FInventoryItem::bIsPlantingStock), не обычный ингредиент.
+    bool bForPlanting = false;
 };
 
 // B – диалог (реанимирован 2026-08-31, см. комментарий у ECommandPrimitive

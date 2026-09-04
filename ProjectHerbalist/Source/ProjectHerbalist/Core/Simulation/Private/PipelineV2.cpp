@@ -874,6 +874,14 @@ namespace Simulation
         FInventoryItem Harvested = GenerateHarvestResult(*Cell, Cmd.IngredientID, Cmd.BaseState, Cmd.Resilience, Cmd.MoonPhase, Cmd.Tool, Cmd.bIronAverse, Cmd.bDelicate, Rng);
         Harvested.CreationTime = WorldSnap.WorldTime;
 
+        // Посадочный материал (SetHarvestIntent "seed", DESIGN_Community_And_
+        // Homestead.md §2.4, 2026-09-04) -- тот же дикий куст, другое
+        // назначение собранного предмета, не отдельный расчёт State: клетка
+        // деградирует/накапливает HarvestStress ровно как при обычном сборе
+        // выше (сбор есть сбор независимо от цели), различие только в том,
+        // ЧТО в итоге кладётся в инвентарь.
+        Harvested.bIsPlantingStock = Cmd.bForPlanting;
+
         FInventoryOperation Op;
         Op.ContainerID = 0;
         Op.Ingredient = Harvested;

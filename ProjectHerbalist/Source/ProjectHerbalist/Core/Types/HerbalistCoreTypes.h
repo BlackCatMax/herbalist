@@ -158,6 +158,23 @@ enum class EGatheringTool : uint8
     BoneKnife
 };
 
+// Намерение сбора (DESIGN_Community_And_Homestead.md §2.4, PlantSeed,
+// 2026-09-04) — прямой запрос: сбор ДЛЯ ПОСАДКИ в грядку сада должен
+// давать другой результат, чем сбор ТОГО ЖЕ дикого растения на варку.
+// Тот же самый Harvest() у уже существующего актора выдаёт либо обычный
+// ингредиент (Brew, поведение до этой правки), либо посадочный материал
+// (Seed, FInventoryItem::bIsPlantingStock) — не новый предмет в руке и не
+// новый актор, тот же приём переключателя, что уже CurrentGatheringTool
+// (SetGatheringTool): Exec-команда (SetHarvestIntent) меняет enum на
+// контроллере, читается AGridWorldManager::OnResourceCollected так же, как
+// CurrentGatheringTool.
+UENUM(BlueprintType)
+enum class EHarvestIntent : uint8
+{
+    Brew,
+    Seed
+};
+
 UENUM(BlueprintType)
 enum class EAlchemyOutcome : uint8
 {
@@ -387,6 +404,23 @@ struct PROJECTHERBALIST_API FGridCell
     // не гейтятся этим флагом — вне заявленного в задаче объёма.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
     bool bEternallyPure = false;
+
+    // Посадка (PlantSeed, DESIGN_Community_And_Homestead.md §2.4, 2026-09-04)
+    // — в отличие от полива/State→BaseState (RegisterGardenPlot/GardenPlots
+    // выше, вероятностный жест "подталкивания" в сторону нужного вида среди
+    // кандидатов ниши), это явно посаженный конкретный вид семенем/черенком.
+    // NAME_None = не посажено (обычное поведение, вероятностный выбор среди
+    // кандидатов ниши не меняется). AGridWorldManager::SpawnOneResourceInCell
+    // читает поле напрямую и, если оно не пусто, полностью обходит
+    // PickWeightedResource — "здесь посажено именно это", не "склоняется к
+    // этому". Персистентное поле (не одноразовый эффект): переживает
+    // отрастание после сбора (StartRegeneration зовёт тот же
+    // SpawnOneResourceInCell на той же Cell, поле не сбрасывается ни там, ни
+    // при первичном заселении) — посадка держится, пока игрок не пересадит
+    // другой вид тем же PlantSeed. Сохраняется в FSavedCellState
+    // (HerbalistSaveTypes.h), тот же класс поля, что State/HarvestStress выше.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Garden")
+    FName PlantedSpeciesID = NAME_None;
 };
 
 // ========== Сущности-"хозяева" (Основной уровень, 16_Entity_Manifestation §16.3) ==========
@@ -502,6 +536,23 @@ struct PROJECTHERBALIST_API FInventoryItem
     // добывать которую как раз и не должен Травник.
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     EAlchemyOutcome BrewOutcome = EAlchemyOutcome::Valid;
+
+    // Посадочный материал (DESIGN_Community_And_Homestead.md §2.4, PlantSeed,
+    // 2026-09-04) — тот же IngredientID/ряд DT_IngredientClass, что и обычный
+    // собранный ингредиент того же вида (вариант А из двух предложенных:
+    // отдельное bool-поле проще нового FName-идентификатора без строки
+    // таблицы), просто другое назначение предмета: собран с намерением
+    // SetHarvestIntent("seed"), см. PipelineV2.cpp::ProcessHarvestCommand.
+    // Годится только для AHerbalistPlayerController::PlantSeed, не для варки
+    // напрямую (варка не проверяет этот флаг — тот же кусок растения годится
+    // и в котёл, если игрок так решит, это не запрет, а лишь то, что PlantSeed
+    // ищет именно такой предмет). УЧАСТВУЕТ в проверке стекуемости
+    // (UHerbalistInventoryComponent::AreItemsStackable) — иначе посадочный
+    // материал молча слился бы в один стек с обычным ингредиентом того же
+    // вида (тот же IngredientID) при первом же AddItem, и оба назначения
+    // потеряли бы смысл.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bIsPlantingStock = false;
 
     bool IsEmpty() const { return IngredientID.IsNone() || Count <= 0; }
     void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; CreationTime = 0.0f; bSubjectToDecay = true; }

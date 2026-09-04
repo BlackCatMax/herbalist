@@ -578,6 +578,19 @@ void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
     UE_LOG(LogHerbalistPlayer, Log, TEXT("SetGatheringTool: %s"), *ToolName);
 }
 
+void AHerbalistPlayerController::SetHarvestIntent(FString IntentName)
+{
+    IntentName.ToLowerInline();
+    if (IntentName == TEXT("brew"))       CurrentHarvestIntent = EHarvestIntent::Brew;
+    else if (IntentName == TEXT("seed"))  CurrentHarvestIntent = EHarvestIntent::Seed;
+    else
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetHarvestIntent: unknown intent '%s' (ожидались brew/seed)"), *IntentName);
+        return;
+    }
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("SetHarvestIntent: %s"), *IntentName);
+}
+
 namespace
 {
     void PrintDialogueNode(const FDialogueDefinition& Def, const FDialogueNode& Node, float Respect)
@@ -789,6 +802,70 @@ void AHerbalistPlayerController::SetGardenPlot(int32 X, int32 Y, FString NicheNa
     }
 
     Manager->RegisterGardenPlot(FIntPoint(X, Y), Niche);
+}
+
+void AHerbalistPlayerController::PlantSeed(int32 X, int32 Y, FString IngredientID)
+{
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("PlantSeed: no inventory component"));
+        return;
+    }
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("PlantSeed: world manager not found"));
+        return;
+    }
+
+    const FName SpeciesID(*IngredientID);
+
+    // Резолв GardenNiche растения — тот же приём, что уже ActivateWard.
+    // НЕ покрыто автотестом на этом уровне: GameInstanceSubsystem недоступен
+    // в Editor-мире автотестов (см. ROADMAP.md) — сам эффект
+    // (AGridWorldManager::PlantSeedInCell) протестирован напрямую, минуя
+    // этот резолв.
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(SpeciesID) : nullptr;
+    if (!Row)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("PlantSeed: '%s' unknown ingredient"), *IngredientID);
+        return;
+    }
+
+    // Владение — тот же поиск по имени, что уже OfferToCommunity/ActivateWard,
+    // но с доп. условием bIsPlantingStock: обычный собранный ингредиент того
+    // же вида (SetHarvestIntent "brew") не годится для посадки — только то,
+    // что собрано намерением "seed" (см. комментарий у FInventoryItem::
+    // bIsPlantingStock). Списывается по индексу, тот же приём, что
+    // OfferToCommunity/TradeWithCommunity -- ровно ту единицу, что нашли,
+    // не случайную более позднюю копию с тем же IngredientID.
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    int32 FoundIndex = INDEX_NONE;
+    for (int32 i = 0; i < CurrentItems.Num(); ++i)
+    {
+        if (CurrentItems[i].IngredientID == SpeciesID && CurrentItems[i].bIsPlantingStock && CurrentItems[i].Count > 0)
+        {
+            FoundIndex = i;
+            break;
+        }
+    }
+    if (FoundIndex == INDEX_NONE)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("PlantSeed: no planting stock of '%s' in inventory (SetHarvestIntent seed, then harvest it first)"), *IngredientID);
+        return;
+    }
+
+    if (!Manager->PlantSeedInCell(FIntPoint(X, Y), SpeciesID, Row->GardenNiche))
+    {
+        // PlantSeedInCell уже отчиталась конкретной причиной отказа (нет
+        // клетки / нет пристройки / ниша не совпала) — здесь списывать
+        // предмет не за что.
+        return;
+    }
+
+    InventoryComponent->RemoveItem(FoundIndex, 1);
 }
 
 void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)

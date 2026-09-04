@@ -6357,3 +6357,149 @@ Source/ProjectHerbalistTests/Private/Commandlets/WardCrystalAppendCommandlet.h/.
 Source/ProjectHerbalistTests/Private/Tests/WardTest.cpp,
 herbalist_docs/Herbalist_Vault/04_Compendium/Минералы/Куриный бог.md
 (новая карточка).
+
+### Посадка — сбор "на высадку" ≠ сбор "на зелье" (2026-09-04, автономная задача)
+
+Прямой запрос пользователя: "механика использования садов должна
+различать сбор растения ДЛЯ ПОСАДКИ в грядку и сбор ТОГО ЖЕ растения для
+варки — сейчас это один и тот же `Harvest()`, результат неотличим, и
+посадка вообще не выбирает вид явно". До этой правки грядка сада
+(`DESIGN_Community_And_Homestead.md §2.4`) была только "подталкиванием":
+игрок льёт зелья, `Cell.State` ползёт к чьему-то `BaseState`, а какой
+конкретно вид ниши прорастёт — решает `IngredientRegistrySubsystem::
+PickWeightedResource` вероятностно. Baseline подтверждён: 316/316 (второй
+заход механики оберегов уже успел добавить `MorokReduction` за время
+чтения этой задачи — оба автономных агента работали параллельно в одном
+репозитории, см. правило "перечитывай файл заново перед каждой правкой" в
+задаче).
+
+**Решена вся отправная точка задачи как предложена, без отклонений —
+проверил на более чистую архитектуру ближе к уже существующим паттернам и
+не нашёл: четыре развилки ложатся на уже существующие приёмы проекта один
+в один.**
+
+**1. Режим сбора** — `EHarvestIntent` (`Brew`/`Seed`, `HerbalistCoreTypes.h`),
+новое поле `AHerbalistPlayerController::CurrentHarvestIntent`, тот же
+приём переключателя, что уже `CurrentGatheringTool`: Exec-команда
+`SetHarvestIntent brew|seed` (без ввода — `brew`, поведение до этой
+правки). Читается `AGridWorldManager::OnResourceCollected` в новое поле
+`FHarvestCommand::bForPlanting` ровно тем же путём, что уже
+`Cmd.Harvest.Tool = PC->CurrentGatheringTool` рядом. `PipelineV2.cpp::
+ProcessHarvestCommand` проставляет `Harvested.bIsPlantingStock =
+Cmd.bForPlanting` на уже посчитанном `GenerateHarvestResult` — деградация
+клетки/`HarvestStress` не отличаются от обычного сбора (сбор есть сбор
+независимо от цели, разнится только то, что кладётся в инвентарь).
+
+**2. Посадочный материал — вариант А (bool-поле), не вариант Б
+(отдельный `FName`-идентификатор), решено и обосновано, как просила
+задача.** `FInventoryItem::bIsPlantingStock` — тот же `IngredientID`/ряд
+`DT_IngredientClass`, что и обычный собранный ингредиент того же вида,
+просто другое назначение предмета. Довод: вариант Б потребовал бы либо
+новых строк таблицы на каждый вид (задача прямо просила без этого — "семена
+работают через уже существующие `IngredientID`"), либо отдельного резолва
+имени/иконки/`DisplayName` мимо `DT_IngredientClass` — искусственная
+инфраструктура ради одного bool. **Побочный эффект, не предусмотренный
+изначально, но необходимый: `UHerbalistInventoryComponent::
+AreItemsStackable` теперь сравнивает и `bIsPlantingStock`** — без этого
+семя и обычная собранная трава ОДНОГО вида (один и тот же `IngredientID`)
+молча слились бы в один стек при первом же `AddItem` (`MergeStack` этот
+флаг не трогает вовсе), и `PlantSeed`/варка нашли бы в инвентаре не то,
+что искали — не отдельная фича сверх запроса, а условие, без которого
+"вариант А" не работал бы вообще.
+
+**3. Посадка** — `PlantSeed X Y IngredientID`
+(`AHerbalistPlayerController::PlantSeed`), тот же приём поиска предмета в
+инвентаре по имени, что уже `ActivateWard`/`OfferToCommunity`, но с доп.
+условием `bIsPlantingStock` (обычный собранный ингредиент того же вида не
+годится — только то, что собрано намерением `seed`). Списывает 1 единицу
+по индексу найденного слота. Резолв `IngredientTableRow::GardenNiche`
+через `IngredientRegistrySubsystem` (нужен `GameInstance`) остаётся в
+контроллере, мировой эффект — в `AGridWorldManager::PlantSeedInCell`,
+которая САМА `GameInstance` не трогает вовсе: та же граница
+"инвентарный поиск + резолв ряда в контроллере, мировое состояние в
+`GridWorldManager`", что уже держат `ActivateWard`/`RegisterGardenPlot` —
+и та же причина: тестируемость напрямую в автотестах (см. ниже).
+Валидация — тот же класс, что `RegisterGardenPlot`/`SetGardenPlot`: нет
+зарегистрированной пристройки на клетке — отказ с логом; ниша растения не
+совпадает с нишей клетки — отказ с логом, никакой тихой подмены.
+
+**4. Эффект посадки на спавн** — новое персистентное поле
+`FGridCell::PlantedSpeciesID` (`FName`, `NAME_None` по умолчанию).
+`AGridWorldManager::SpawnOneResourceInCell` (общая точка входа и для
+первичного заселения, и для `StartRegeneration` — та же функция, не
+дублирована) читает поле НАПРЯМУЮ, в самом начале: если оно не пусто (и
+клетка не водная — тот же принцип, что уже у `PlotNiche` рядом), выбор
+ингредиента полностью обходит `PickWeightedResource` целиком — "здесь
+посажено именно это", не "статистически чаще это". **Решено: ВСЕ слоты
+клетки, не только первый** — задача явно оставляла выбор на решение
+агента; посаженная грядка однородна по самой сути посадки (в отличие от
+дикорастущей клетки, где разные виды одной ниши правдоподобно растут
+вперемешку), "один в один посажено — один в один выросло" честнее духу
+механики, чем "первый посажен, остальные два по-прежнему на удачу".
+Регенерация после сбора идёт через ТУ ЖЕ функцию на той же `Cell` — поле
+не сбрасывается ни там, ни при первичном заселении, посадка НЕ разовая
+(прямое требование задачи).
+
+Персистентность — да, добавлено, тот же уровень, что `GardenPlots`:
+`FSavedCellState::PlantedSpeciesID` (`HerbalistSaveTypes.h`) +
+`CaptureSaveCells`/`ApplySaveCells` (`GridWorldManagerSave.cpp`). Клетка
+попадает в сохранение через `DirtyCellIndices` (сад — "только тронутые
+клетки", не вся сетка) — `PlantSeedInCell` зовёт `MarkCellDirty`, тот же
+приём, что и `RegisterGardenPlot`/сбор.
+
+**Тесты — 8 новых, `Herbalist.HarvestIntent.*` (2, без мира —
+`Simulation::ExecutePipeline` напрямую, тот же приём, что уже
+`GatheringToolTest.cpp`/`MoonPhaseTest.cpp` для соседних модификаторов
+сбора) и `Herbalist.GardenPlanting.*` (6, `WardTest.cpp`-паттерн — прямые
+вызовы `AGridWorldManager` без `PlayerController`, `GameInstanceSubsystem`
+недоступен в Editor-мире автотестов):**
+`RequiresGardenPlotAtCell`/`RequiresMatchingNiche` (валидация
+`PlantSeedInCell`), `OverridesProbabilisticNichePick` (синтетическая
+таблица с двумя кандидатами ниши, второй — намеренно с `RarityWeight` в
+100 раз выше посаженного, чтобы доказать, что вероятностный путь
+действительно обойдён, не просто "чаще выигрывает"),
+`SurvivesHarvestAndRegrowthReuse` (тот же вызов `SpawnOneResourceInCell`
+дважды подряд с симулированным сбором между ними — честный эквивалент
+проверки "переживает отрастание", раз реальный таймер `StartRegeneration`
+не срабатывает в автотесте, тот же класс ограничения, что уже
+`ResourceRegrowthTest.cpp` объясняет), `PersistsThroughSaveLoad`
+(`CaptureSaveCells`/`ApplySaveCells` напрямую, тот же приём, что уже
+`Herbalist.Community.GardenPlotsSurviveSaveLoad`), и
+`PlantingStockDoesNotStackWithOrdinaryIngredient` (регрессия на пункт 2
+выше, через реальный `AHerbalistPlayerController`+`InventoryComponent`,
+тот же паттерн, что уже `ArtifactInventoryTest.cpp`).
+
+**Один тест поймал реальный, не выдуманный баг тестового окружения, не
+кода**: `SurvivesHarvestAndRegrowthReuse` на клетке (7,7) падал на самом
+первом `SpawnOneResourceInCell` — `FindFreeSpawnPositionInCell` честно
+не находила свободного места. `L_TestDev` (персистентный редакторский
+мир автотестов) — не голая тестовая сцена, а настоящий авторски
+расставленный уровень с ландшафтом и статикой; клетка (7,7) на нём
+физически чем-то занята, соседняя (6,6), уже использованная
+`OverridesProbabilisticNichePick` — свободна. Переставил тест на (6,6) —
+свойство уровня, не баг механики посадки.
+
+**Не покрыто автотестом, тот же принятый класс пробела, что уже у
+`ActivateWard`/`TradeWithCommunity`**: резолв `IngredientTableRow` по
+имени внутри `AHerbalistPlayerController::PlantSeed`
+(`GameInstanceSubsystem` недоступен в Editor-мире автотестов, см.
+ROADMAP.md) — сам эффект (`PlantSeedInCell`) протестирован напрямую, в
+обход этого резолва.
+
+**Ни один `.uasset` не тронут** — семена работают через уже существующие
+`IngredientID`, ни новых строк `DT_IngredientClass`, ни правок других
+таблиц не потребовалось, ровно как и предполагала форма задачи.
+
+**Итог:** 316 → 324 теста, **324/324, два чистых прогона, ноль
+регрессий.** Файлы: Core/Types/HerbalistCoreTypes.h (`EHarvestIntent`,
+`FGridCell::PlantedSpeciesID`, `FInventoryItem::bIsPlantingStock`),
+Core/Simulation/Public/CommandTypes.h (`FHarvestCommand::bForPlanting`),
+Core/Simulation/Private/PipelineV2.cpp (`ProcessHarvestCommand`),
+Core/World/GridWorldManager.h/GridWorldManagerCore.cpp
+(`PlantSeedInCell`, `SpawnOneResourceInCell`, `OnResourceCollected`),
+Core/World/GridWorldManagerSave.cpp, Core/Save/HerbalistSaveTypes.h
+(`FSavedCellState::PlantedSpeciesID`),
+Core/Inventory/HerbalistInventoryComponent.cpp (`AreItemsStackable`),
+Player/HerbalistPlayerController.h/.cpp (`SetHarvestIntent`, `PlantSeed`),
+Source/ProjectHerbalistTests/Private/Tests/HarvestIntentTest.cpp (новый),
+Source/ProjectHerbalistTests/Private/Tests/GardenPlantingTest.cpp (новый).

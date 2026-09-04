@@ -390,6 +390,21 @@ public:
 
     void RegisterGardenPlot(const FIntPoint& Cell, EGardenNiche Niche);
 
+    // Посадка (PlantSeed, DESIGN_Community_And_Homestead.md §2.4, 2026-09-04)
+    // -- в отличие от RegisterGardenPlot выше (какую нишу подделывает
+    // пристройка), это про то, какой КОНКРЕТНО вид посажен в уже
+    // существующую пристройку: FGridCell::PlantedSpeciesID персистентно
+    // переопределяет вероятностный GetRandomResourceForNiche в
+    // SpawnOneResourceInCell/StartRegeneration. SpeciesNiche (IngredientTableRow::
+    // GardenNiche растения) резолвится вызывающей стороной (AHerbalistPlayerController::
+    // PlantSeed через IngredientRegistrySubsystem) -- та же граница "инвентарный
+    // поиск + резолв ряда в контроллере, мировое состояние здесь", что уже
+    // держат ActivateWard/OfferToCommunity; эта функция не трогает GameInstance,
+    // поэтому напрямую вызываема из автотестов. false + лог -- нет такой
+    // клетки/нет пристройки/ниша не совпала с видом (тот же класс валидации,
+    // что RegisterGardenPlot/SetGardenPlot).
+    bool PlantSeedInCell(const FIntPoint& CellCoord, FName SpeciesID, EGardenNiche SpeciesNiche);
+
     // ---- Сбор ----
     // HarvestFromCell/HarvestFromCellSimple удалены 2026-09-02 (чистка мёртвого
     // кода): обе с давних пор были заглушками-пустышками ("deprecated, use

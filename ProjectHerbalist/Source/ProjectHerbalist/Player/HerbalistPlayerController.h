@@ -64,6 +64,17 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Harvesting")
     EGatheringTool CurrentGatheringTool = EGatheringTool::BareHands;
 
+    // Намерение сбора (DESIGN_Community_And_Homestead.md §2.4, PlantSeed,
+    // 2026-09-04) — читается AGridWorldManager::OnResourceCollected в
+    // Cmd.Harvest.bForPlanting, тот же приём переключателя, что уже
+    // CurrentGatheringTool выше: Exec-команда (SetHarvestIntent), не новый
+    // предмет в руке. Brew (по умолчанию) — обычный ингредиент, поведение
+    // до этой правки. Seed — тот же самый дикий куст даёт посадочный
+    // материал (FInventoryItem::bIsPlantingStock) вместо обычного
+    // предмета, годный только для PlantSeed ниже.
+    UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Harvesting")
+    EHarvestIntent CurrentHarvestIntent = EHarvestIntent::Brew;
+
     // Два предмета-спутника (21_Journey_And_Artifacts.md §21.2, ревизия
     // "Update docs" 2026-09-01) — НЕ предметы инвентаря (FInventoryItem
     // заточен под распад/стек, плохо подходит постоянному дару), два bool,
@@ -150,6 +161,13 @@ public:
     UFUNCTION(Exec)
     void SetGatheringTool(FString ToolName);
 
+    // Переключить намерение сбора (§ комментарий у CurrentHarvestIntent
+    // выше). IntentName: "brew" (по умолчанию, обычный ингредиент) /
+    // "seed" (посадочный материал для PlantSeed) — тот же строковый
+    // приём, что SetGatheringTool.
+    UFUNCTION(Exec)
+    void SetHarvestIntent(FString IntentName);
+
     // Диалоги (DESIGN_Community_And_Homestead.md §1.1, 2026-08-31) — v1
     // консольный, тем же принципом, что SetGatheringTool/SetGardenPlot:
     // TalkTo открывает разговор с хозяином места на клетке (X,Y) — печатает
@@ -186,6 +204,23 @@ public:
     // GetRandomResourceForNiche) работает уже сейчас.
     UFUNCTION(Exec)
     void SetGardenPlot(int32 X, int32 Y, FString NicheName);
+
+    // Посадить конкретный вид в уже зарегистрированную грядку сада
+    // (DESIGN_Community_And_Homestead.md §2.4, PlantSeed, 2026-09-04) — в
+    // отличие от SetGardenPlot выше (какую нишу подделывает пристройка,
+    // растёт вероятностно среди её кандидатов), это явная посадка: списывает
+    // 1 единицу посадочного материала (FInventoryItem::bIsPlantingStock,
+    // собирается с SetHarvestIntent "seed") ИМЕНИ IngredientID из инвентаря,
+    // требует совпадения GardenNiche растения с уже назначенной нишей
+    // клетки (X,Y) — тот же приём поиска по имени, что уже ActivateWard,
+    // и тот же класс валидации, что уже RegisterGardenPlot/SetGardenPlot
+    // (отказ с логом, не тихая подмена). Сам эффект (AGridWorldManager::
+    // PlantSeedInCell — проверка ниши + Cell.PlantedSpeciesID) не трогает
+    // GameInstance и напрямую тестируется в автотестах; этот резолв
+    // инвентаря по имени — нет, тот же класс пробела, что уже у
+    // ActivateWard/TradeWithCommunity (см. ROADMAP.md).
+    UFUNCTION(Exec)
+    void PlantSeed(int32 X, int32 Y, FString IngredientID);
 
     // Активировать оберег (кристалл Пещеры, DESIGN_Community_And_Homestead.md
     // §2.4, 2026-09-04) — тот же приём поиска в инвентаре, что уже

@@ -267,6 +267,15 @@ int32 UHerbalistInventoryComponent::FindStackableSlot(const FInventoryItem& Item
 bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, const FInventoryItem& B) const
 {
     if (A.IngredientID != B.IngredientID) return false;
+
+    // Посадочный материал (DESIGN_Community_And_Homestead.md §2.4, PlantSeed,
+    // 2026-09-04) несёт тот же IngredientID, что обычный собранный
+    // ингредиент того же вида (bIsPlantingStock — единственное, что их
+    // различает) — без этой проверки они бы молча слились в один стек при
+    // первом же AddItem (MergeStack не трогает bIsPlantingStock вовсе), и
+    // PlantSeed либо TestNewApply нашли бы в инвентаре не то, что искали.
+    if (A.bIsPlantingStock != B.bIsPlantingStock) return false;
+
     return HerbalistCore::Math::AreStatesSimilar(A.State, B.State);
 }
 

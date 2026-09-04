@@ -59,6 +59,14 @@ struct PROJECTHERBALIST_API FSavedCellState
     // что ManifestedEntityID выше.
     UPROPERTY()
     bool bEternallyPure = false;
+
+    // Посадка (PlantSeed, DESIGN_Community_And_Homestead.md §2.4, 2026-09-04)
+    // — игровое решение игрока (PlantSeedInCell), не производная от клетки,
+    // тот же класс поля, что ManifestedEntityID/bEternallyPure выше: без
+    // этого перезагрузка молча стирала бы все посадки, откатывая грядку
+    // обратно к вероятностному GetRandomResourceForNiche.
+    UPROPERTY()
+    FName PlantedSpeciesID = NAME_None;
 };
 
 UCLASS()
