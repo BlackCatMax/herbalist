@@ -291,6 +291,30 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.01", ClampMax = "1.0"))
     float JarDecayMultiplier = 0.25f;
 
+    // Гниение как терминальное состояние (2026-09-04, прямой запрос: "с
+    // биологической точки зрения гнилая трава не зола... либо выкидывать,
+    // либо придумать применение" — решено придумать, см. Fertilizer ниже).
+    // До этой правки ApplyDecayToItem гнал предмет к предельно испорченному
+    // состоянию и молча останавливался там навсегда — честная "куча вечной
+    // травы", просто гнилой, слот никогда не освобождался. Оба порога
+    // должны сойтись одновременно (И, не ИЛИ) — предмет обязан быть
+    // одновременно и без чистоты, и предельно искажён, не просто одно из
+    // двух по случайному крену decay.
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float RotConversionPurityThreshold = 0.05f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float RotConversionDistortionThreshold = 0.95f;
+
+    // --- Fertilizer (Перегной, 2026-09-04) ---
+    // На сколько поднимается Environment.Fertility клетки за один внесённый
+    // Перегной (ApplyFertilizer X Y, HerbalistPlayerController.cpp) —
+    // черновое число, тот же порядок величины, что и у других плоских
+    // прибавок к клеточным полям в проекте (например ShrineCoherenceBonus),
+    // не с потолка, но и не измерено отдельно — начальная отправная точка.
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Fertilizer", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float FertilizerFertilityBonus = 0.1f;
+
     // --- Entity Manifestation (02_GDD/16_Entity_Manifestation.md) — вертикальный срез ---
     // Гнильники (Низший, Болото): порог Corruption клетки для проявления зоны.
     UPROPERTY(config, EditAnywhere, Category = "Entities|Gnilniki", meta = (ClampMin = "0.0", ClampMax = "1.0"))

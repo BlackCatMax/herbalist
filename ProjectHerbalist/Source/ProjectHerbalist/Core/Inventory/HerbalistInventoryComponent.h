@@ -110,6 +110,20 @@ protected:
     // Применить порчу к одному предмету (если bSubjectToDecay == true)
     void ApplyDecayToItem(FInventoryItem& Item, float DeltaTime, float DecayRate);
 
+public:
+    // Гниение как терминальное состояние (2026-09-04) -- чистая функция от
+    // Meta (без обращения к реестрам/GameInstance), чтобы её можно было
+    // протестировать напрямую в Editor-мире автотестов, где IngredientRegistrySubsystem
+    // недоступен (тот же класс ограничения, что уже у TradeWithCommunity/PlantSeed).
+    static bool ShouldConvertToPeregnoy(const FMeta& Meta, float PurityThreshold, float DistortionThreshold);
+
+    // ID новой карточки-компоста (DT_IngredientClass, PeregnoyAppendCommandlet) --
+    // единственное место, где это имя жёстко зашито в коде, остальные места
+    // читают эту константу.
+    static const FName PeregnoyIngredientID;
+
+protected:
+
     // Периодичность обновления (в секундах)
     static constexpr float DecayUpdateInterval = 1.0f;
     float TimeSinceLastDecayUpdate = 0.0f;

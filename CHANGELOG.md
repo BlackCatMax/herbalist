@@ -7042,3 +7042,75 @@ Direction) снижены с "сильнейший из шести криста�
 `RitualBrewingTest.cpp`, `WardTest.cpp`, `DT_IngredientClass.uasset`,
 `herbalist_docs/Herbalist_Vault/04_Compendium/Минералы/Зорин-камень.md`
 (переименован из `Алатырь.md`), `ROADMAP.md`.
+
+### Гниение как терминальное состояние: Перегной + внесение в клетку (2026-09-04)
+
+Прямой запрос пользователя при разборе систем хранения: "чтобы у игрока не
+было оверлода по количеству доступных растений, чтобы сбор и готовка шли с
+умом, а не так, что у него есть кучи вечной травы". Разбор кода нашёл
+реальную причину: `ApplyDecayToItem` (`HerbalistInventoryComponent.cpp`)
+честно гонит Meta предмета к предельно испорченному состоянию (Purity→0,
+Distortion→1), но НИКОГДА не завершает этот путь — предмет остаётся в
+инвентаре навсегда, максимально гнилой, слот не освобождается. "Куча вечной
+травы" была технически возможна уже сейчас, просто гнилой, а не свежей.
+
+Первая идея (превратить в Золу, `EAlchemyOutcome::Ash`) отклонена самим же
+пользователем как биологически неверная — зола от огня, гниль от сырости и
+времени, разные процессы. Решение: **новый терминальный предмет "Перегной"**
+вместо повторного использования вырожденного алхимического исхода.
+
+**Порог конверсии** (`HerbalistSettings.h::RotConversionPurityThreshold=0.05`/
+`RotConversionDistortionThreshold=0.95`, подтверждено пользователем) — оба
+условия одновременно (И, не ИЛИ): `UHerbalistInventoryComponent::
+ShouldConvertToPeregnoy(Meta, ...)` — чистая функция без обращения к
+реестрам, тестируется напрямую (тот же приём, что уже `GetDominantAxis`
+тестируется в обход GameInstance). `TickComponent` вызывает её сразу после
+`ApplyDecayToItem` для каждого не-водного предмета (вода протухшая — не то
+же самое, что трава, сгнившая в перегной; минералы/обереги не попадают под
+конверсию сами по себе — их `DecayRate=0`, порог никогда не пересекается).
+При срабатывании: `IngredientID` меняется на `PeregnoyIngredientID`,
+`bSubjectToDecay=false` (терминально, дальше decay не трогает), `State`
+резолвится через уже открытый в `TickComponent` `IngredientRegistrySubsystem`.
+
+**Применение — сразу, не отложено** (по прямому решению пользователя):
+новый Exec `ApplyFertilizer X Y` (`HerbalistPlayerController.cpp`) списывает
+1 Перегной из инвентаря, зовёт новую `AGridWorldManager::
+ApplyFertilizerToCell` — поднимает `FGridCell::Environment.Fertility` на
+`FertilizerFertilityBonus` (черновое число 0.1, `HerbalistSettings.h`),
+зажато в [0,1]. В отличие от `PlantSeed`/`ActivateWard` — ID Перегноя
+фиксированная константа кода (`UHerbalistInventoryComponent::
+PeregnoyIngredientID`), не строка от вызывающей стороны, поэтому резолва
+через `IngredientRegistrySubsystem` в контроллере не требуется вовсе, и сам
+поиск в инвентаре напрямую тестируем (не тот класс пробела, что у
+`PlantSeed`/`ActivateWard`, где резолв ряда по имени НЕ покрыт тестом).
+
+Новая карточка компендиума (`04_Compendium/Растительность/Перегной.md`, не
+привязана к биому — не собирается, образуется только гниением). Новый
+безопасный коммандлет `PeregnoyAppendCommandlet` (точечный `AddRow`,
+идемпотентен), живая таблица 95→96 рядов.
+
+**Побочная находка и починка**: сборка после добавления `PeregnoyTest.cpp`
+впервые свалила модуль тестов в ошибку компиляции MSVC C2084 — одинаковое
+тело `SpawnControllerAndBeginPlay` в анонимных namespace одновременно
+`GardenPlantingTest.cpp` и `ArtifactInventoryTest.cpp`, безобидное дублирование
+до этого момента (не оказывались в одной unity-единице трансляции), тот же
+класс ODR-проблемы, что уже когда-то решён для `SpawnAndBeginPlay`
+(`TestWorldHelpers.h`, комментарий в шапке файла). Починено тем же приёмом —
+общий хелпер вынесен в `TestWorldHelpers.h`, оба дубликата удалены.
+
+**Итог:** 337 → 341 тест, **341/341, два чистых прогона, ноль регрессий.**
+Файлы: `HerbalistSettings.h` (новые пороги/бонус), `HerbalistInventoryComponent.h/.cpp`
+(`ShouldConvertToPeregnoy`, `PeregnoyIngredientID`, конверсия в `TickComponent`),
+`GridWorldManager.h`/`GridWorldManagerCore.cpp` (`ApplyFertilizerToCell`),
+`HerbalistPlayerController.h/.cpp` (`ApplyFertilizer` Exec), новый
+`PeregnoyAppendCommandlet.h/.cpp`, `DT_IngredientClass.uasset` (+1 ряд),
+`herbalist_docs/Herbalist_Vault/04_Compendium/Растительность/Перегной.md`
+(новая), `TestWorldHelpers.h`/`GardenPlantingTest.cpp`/`ArtifactInventoryTest.cpp`
+(ODR-починка), новый `PeregnoyTest.cpp` (4 теста).
+
+**Не сделано в этот заход, сознательно вне рамок**: переносные контейнеры
+(стартовая корзина + общинная торговля Мешком/Туёсом), домашние хранилища
+как расширения дома (мгновенное "рытьё" при материалах+отношении — тот же
+принцип §2.2, что уже держит апгрейд), сушка с честным изменением алхимии
+по каждой карточке компендиума — три отдельных, ещё не начатых куска,
+см. ROADMAP.md.

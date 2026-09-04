@@ -9,6 +9,8 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
 
+const FName UHerbalistInventoryComponent::PeregnoyIngredientID = FName(TEXT("Перегной"));
+
 UHerbalistInventoryComponent::UHerbalistInventoryComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
@@ -56,6 +58,9 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
         }
     }
 
+    const float RotPurityThreshold = Settings ? Settings->RotConversionPurityThreshold : 0.05f;
+    const float RotDistortionThreshold = Settings ? Settings->RotConversionDistortionThreshold : 0.95f;
+
     for (FInventoryItem& Item : Items)
     {
         if (Item.bSubjectToDecay)
@@ -83,8 +88,32 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
                 }
             }
             ApplyDecayToItem(Item, DecayUpdateInterval, EffectiveGlobalDecayRate * IngredientDecay);
+
+            // Гниение как терминальное состояние (2026-09-04) -- только
+            // не-водная органика (вода протухшая -- не то же самое, что
+            // трава, сгнившая в перегной; минералы/обереги сюда не попадают
+            // сами по себе, у них DecayRate=0, порог никогда не достигается).
+            // ShouldConvertToPeregnoy -- чистая функция от State (без
+            // обращения к реестрам), тестируется напрямую без GameInstance.
+            if (!Item.bIsWater && ShouldConvertToPeregnoy(Item.State.Meta, RotPurityThreshold, RotDistortionThreshold))
+            {
+                Item.IngredientID = PeregnoyIngredientID;
+                Item.bSubjectToDecay = false;   // терминальное состояние, дальше решать нечего
+                if (IngredientReg)
+                {
+                    if (const FIngredientTableRow* PeregnoyRow = IngredientReg->GetRow(PeregnoyIngredientID))
+                    {
+                        Item.State = PeregnoyRow->BaseState;
+                    }
+                }
+            }
         }
     }
+}
+
+bool UHerbalistInventoryComponent::ShouldConvertToPeregnoy(const FMeta& Meta, float PurityThreshold, float DistortionThreshold)
+{
+    return Meta.Purity < PurityThreshold && Meta.Distortion > DistortionThreshold;
 }
 
 void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float DeltaTime, float DecayRate)

@@ -26,23 +26,11 @@
 
 namespace
 {
-    // Manager -- явно передаётся и инжектируется (SetWorldManagerForTests),
-    // не полагается на FindWorldManager()'s TActorIterator: в этом же
-    // персистентном редакторском мире другие тесты подряд спавнят/уничтожают
-    // свои собственные AGridWorldManager, и BeginPlay может найти чужой,
-    // ещё не убранный сборщиком мусора экземпляр вместо нужного (см.
-    // комментарий у SetWorldManagerForTests, HerbalistPlayerController.h).
-    AHerbalistPlayerController* SpawnControllerAndBeginPlay(UWorld* World, AGridWorldManager* Manager)
-    {
-        if (!World) return nullptr;
-        AHerbalistPlayerController* PC = World->SpawnActor<AHerbalistPlayerController>();
-        if (PC)
-        {
-            PC->DispatchBeginPlay();
-            PC->SetWorldManagerForTests(Manager);
-        }
-        return PC;
-    }
+    // SpawnControllerAndBeginPlay -- вынесено в TestWorldHelpers.h (2026-09-04,
+    // ODR-дубликат с GardenPlantingTest.cpp, тот же класс проблемы, что уже
+    // решён для SpawnAndBeginPlay). Manager явно передаётся и инжектируется
+    // (SetWorldManagerForTests) — та же причина, что и раньше, см. комментарий
+    // у SetWorldManagerForTests, HerbalistPlayerController.h.
 
     int32 CountItemsWithID(UHerbalistInventoryComponent* Inventory, FName ID)
     {

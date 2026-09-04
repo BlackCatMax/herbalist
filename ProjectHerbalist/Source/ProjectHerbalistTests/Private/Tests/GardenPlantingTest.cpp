@@ -72,17 +72,9 @@ namespace
         return Registry;
     }
 
-    AHerbalistPlayerController* SpawnControllerAndBeginPlay(UWorld* World, AGridWorldManager* Manager)
-    {
-        if (!World) return nullptr;
-        AHerbalistPlayerController* PC = World->SpawnActor<AHerbalistPlayerController>();
-        if (PC)
-        {
-            PC->DispatchBeginPlay();
-            PC->SetWorldManagerForTests(Manager);
-        }
-        return PC;
-    }
+    // SpawnControllerAndBeginPlay -- вынесено в TestWorldHelpers.h (2026-09-04,
+    // ODR-дубликат с ArtifactInventoryTest.cpp, тот же класс проблемы, что уже
+    // решён для SpawnAndBeginPlay).
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGardenPlanting_RequiresGardenPlotAtCell,

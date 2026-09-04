@@ -868,6 +868,50 @@ void AHerbalistPlayerController::PlantSeed(int32 X, int32 Y, FString IngredientI
     InventoryComponent->RemoveItem(FoundIndex, 1);
 }
 
+void AHerbalistPlayerController::ApplyFertilizer(int32 X, int32 Y)
+{
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ApplyFertilizer: no inventory component"));
+        return;
+    }
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ApplyFertilizer: world manager not found"));
+        return;
+    }
+
+    // ID фиксирован кодом (не строка от вызывающей стороны, как у
+    // PlantSeed/ActivateWard) — резолва через IngredientRegistrySubsystem не
+    // требуется, поиск в инвентаре прямой.
+    const FName PeregnoyID = UHerbalistInventoryComponent::PeregnoyIngredientID;
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    int32 FoundIndex = INDEX_NONE;
+    for (int32 i = 0; i < CurrentItems.Num(); ++i)
+    {
+        if (CurrentItems[i].IngredientID == PeregnoyID && CurrentItems[i].Count > 0)
+        {
+            FoundIndex = i;
+            break;
+        }
+    }
+    if (FoundIndex == INDEX_NONE)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ApplyFertilizer: no Peregnoy in inventory"));
+        return;
+    }
+
+    if (!Manager->ApplyFertilizerToCell(FIntPoint(X, Y)))
+    {
+        // ApplyFertilizerToCell уже отчиталась причиной отказа (нет клетки) —
+        // списывать предмет не за что.
+        return;
+    }
+
+    InventoryComponent->RemoveItem(FoundIndex, 1);
+}
+
 void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
 {
     if (!InventoryComponent)

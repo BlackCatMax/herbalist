@@ -21,6 +21,7 @@
 #include "Core/World/BiomeRegionVolume.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
+#include "Player/HerbalistPlayerController.h"
 #include "Components/SplineComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -85,6 +86,23 @@ namespace
             Manager->DispatchBeginPlay();
         }
         return Manager;
+    }
+
+    // Тот же ODR-урок, что и у SpawnAndBeginPlay выше -- было продублировано
+    // одинаковым телом в GardenPlantingTest.cpp и ArtifactInventoryTest.cpp,
+    // безобидно, пока оба не оказались в одной unity-единице трансляции
+    // (обнаружено 2026-09-04 добавлением PeregnoyTest.cpp, тот же MSVC C2084,
+    // что и в шапке файла). Один общий хелпер, обе точки вызова переведены сюда.
+    AHerbalistPlayerController* SpawnControllerAndBeginPlay(UWorld* World, AGridWorldManager* Manager)
+    {
+        if (!World) return nullptr;
+        AHerbalistPlayerController* PC = World->SpawnActor<AHerbalistPlayerController>();
+        if (PC)
+        {
+            PC->DispatchBeginPlay();
+            PC->SetWorldManagerForTests(Manager);
+        }
+        return PC;
     }
 
     // Инициализирует UBiomeGraphSubsystem боевым DA_BiomeGraph -- тот же путь,

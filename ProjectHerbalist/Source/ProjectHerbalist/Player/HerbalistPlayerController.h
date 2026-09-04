@@ -222,6 +222,17 @@ public:
     UFUNCTION(Exec)
     void PlantSeed(int32 X, int32 Y, FString IngredientID);
 
+    // Внести перегной в клетку (2026-09-04, "Перегной... применение сразу
+    // делаем") — списывает 1 единицу UHerbalistInventoryComponent::
+    // PeregnoyIngredientID из инвентаря, поднимает Environment.Fertility
+    // клетки (X,Y) на FertilizerFertilityBonus. В отличие от PlantSeed/
+    // ActivateWard выше — ID перегноя фиксированная константа кода, не
+    // строка от вызывающей стороны, резолва через IngredientRegistrySubsystem
+    // не требуется вовсе: и поиск в инвентаре, и сам эффект (AGridWorldManager::
+    // ApplyFertilizerToCell) не трогают GameInstance.
+    UFUNCTION(Exec)
+    void ApplyFertilizer(int32 X, int32 Y);
+
     // Активировать оберег (кристалл Пещеры, DESIGN_Community_And_Homestead.md
     // §2.4, 2026-09-04) — тот же приём поиска в инвентаре, что уже
     // OfferToCommunity, но БЕЗ списания (кристалл не расходуется, тот же

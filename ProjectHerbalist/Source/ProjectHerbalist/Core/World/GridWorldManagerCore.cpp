@@ -1565,6 +1565,25 @@ bool AGridWorldManager::PlantSeedInCell(const FIntPoint& CellCoord, FName Specie
     return true;
 }
 
+bool AGridWorldManager::ApplyFertilizerToCell(const FIntPoint& CellCoord)
+{
+    FGridCell* Cell = GetCell(CellCoord.X, CellCoord.Y);
+    if (!Cell)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Fertilizer] ApplyFertilizerToCell: no cell at (%d,%d)"), CellCoord.X, CellCoord.Y);
+        return false;
+    }
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Bonus = Settings ? Settings->FertilizerFertilityBonus : 0.1f;
+    Cell->Environment.Fertility = FMath::Clamp(Cell->Environment.Fertility + Bonus, 0.0f, 1.0f);
+    MarkCellDirty(CellCoord.X, CellCoord.Y);
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Fertilizer] ApplyFertilizerToCell: (%d,%d) Fertility now %.3f"),
+        CellCoord.X, CellCoord.Y, Cell->Environment.Fertility);
+    return true;
+}
+
 void AGridWorldManager::StartRegeneration(FGridCell& Cell)
 {
     // Поресурсно, не по клетке (2026-09-04, "а можно отрастание сделать

@@ -405,6 +405,15 @@ public:
     // что RegisterGardenPlot/SetGardenPlot).
     bool PlantSeedInCell(const FIntPoint& CellCoord, FName SpeciesID, EGardenNiche SpeciesNiche);
 
+    // Внесение перегноя (2026-09-04, "Перегной... применение сразу делаем")
+    // -- поднимает Environment.Fertility клетки на FertilizerFertilityBonus
+    // (HerbalistSettings.h), зажато в [0,1]. Владение предметом (есть ли
+    // Перегной в инвентаре) проверяет AHerbalistPlayerController::ApplyFertilizer
+    // -- тот же принцип границы, что и у PlantSeedInCell выше: эта функция
+    // не трогает GameInstance, только мировое состояние клетки, поэтому
+    // напрямую вызываема из автотестов. false + лог -- нет такой клетки.
+    bool ApplyFertilizerToCell(const FIntPoint& CellCoord);
+
     // ---- Сбор ----
     // HarvestFromCell/HarvestFromCellSimple удалены 2026-09-02 (чистка мёртвого
     // кода): обе с давних пор были заглушками-пустышками ("deprecated, use
