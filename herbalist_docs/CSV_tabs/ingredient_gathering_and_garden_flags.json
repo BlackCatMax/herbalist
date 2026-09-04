@@ -36,5 +36,11 @@
 
   {"Name": "tai_02", "GardenNiche": "ShadeBed"},
   {"Name": "tai_04", "GardenNiche": "ShadeBed"},
-  {"Name": "tai_09", "GardenNiche": "Mycelium"}
+  {"Name": "tai_09", "GardenNiche": "Mycelium"},
+
+  {"Name": "broad_03", "GardenNiche": "ShadeBed"},
+  {"Name": "broad_04", "GardenNiche": "ShadeBed"},
+  {"Name": "broad_06", "GardenNiche": "ShadeBed"},
+  {"Name": "broad_07", "GardenNiche": "ShadeBed"},
+  {"Name": "broad_09", "GardenNiche": "Mycelium"}
 ]
