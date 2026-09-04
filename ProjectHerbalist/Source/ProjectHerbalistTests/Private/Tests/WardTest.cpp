@@ -179,4 +179,122 @@ bool FHerbalistWard_MorokReductionOnlyAppliesAtNightNearActivation::RunTest(cons
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Тиражные обереги (награда ритуалов перехода ярусов биомов, 2026-09-04,
+// GridWorldManagerWards.cpp::ActivateTieredWard) -- "как активировал/надел
+// оберег, так он и работает" (прямой запрос): НЕТ GameClockSeconds-экспаери,
+// в отличие от трёх оберегов выше. Продвигаем часы на 100х WardDurationSeconds
+// (черновое число 600) и убеждаемся, что тиражный оберег всё ещё активен --
+// та самая проверка "не постоянное действие" НЕ применяется к этой тройке.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWard_TieredWardHasNoExpiry,
+    "Herbalist.Ward.TieredWardHasNoExpiry",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWard_TieredWardHasNoExpiry::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->GetCell(5, 5)->Biome = EBiomeType::Taiga;
+
+    Manager->SetGameClockSeconds(1000.0f);
+    Manager->ActivateTieredWard(EWardEffectType::EntityConceal, { EBiomeType::Taiga, EBiomeType::ForestSteppe });
+    TestTrue(TEXT("Active immediately after activation (home biome)"), Manager->IsTieredConcealmentActive(FIntPoint(5, 5)));
+
+    // Часы двигаются на 100х WardDurationSeconds (600) -- если бы тиражный
+    // оберег по ошибке разделял таймер со старой тройкой, это давно истекло бы.
+    Manager->SetGameClockSeconds(1000.0f + 100.0f * 600.0f);
+    TestTrue(TEXT("Still active after 100x WardDurationSeconds -- no timer at all"), Manager->IsTieredConcealmentActive(FIntPoint(5, 5)));
+
+    Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// EntityConceal (тираж) -- полная защита в домашнем биоме клетки, никакой
+// защиты вне них (см. довод у AGridWorldManager::IsTieredConcealmentActive:
+// геометрия по биому клетки, не Center+Radius от места активации).
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWard_TieredConcealmentOnlyProtectsHomeBiome,
+    "Herbalist.Ward.TieredConcealmentOnlyProtectsHomeBiome",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWard_TieredConcealmentOnlyProtectsHomeBiome::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->GetCell(5, 5)->Biome = EBiomeType::Taiga;         // домашний биом (Алатырь: Taiga+ForestSteppe)
+    Manager->GetCell(6, 6)->Biome = EBiomeType::Steppe;        // НЕ домашний
+
+    TestFalse(TEXT("Not active before activation"), Manager->IsTieredConcealmentActive(FIntPoint(5, 5)));
+
+    Manager->ActivateTieredWard(EWardEffectType::EntityConceal, { EBiomeType::Taiga, EBiomeType::ForestSteppe });
+
+    TestTrue(TEXT("Full protection at a cell in a home biome"), Manager->IsTieredConcealmentActive(FIntPoint(5, 5)));
+    TestFalse(TEXT("No protection at a cell outside the home biomes"), Manager->IsTieredConcealmentActive(FIntPoint(6, 6)));
+
+    Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// MorokReduction (тираж) -- полная сила (WardMorokReductionAmount) в домашнем
+// биоме клетки, ослабленная (x TieredWardOutOfBiomeStrength) вне них, ночью
+// только (тот же гейт, что и у Куриного бога).
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWard_TieredMorokReductionWeakerOutsideHomeBiome,
+    "Herbalist.Ward.TieredMorokReductionWeakerOutsideHomeBiome",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWard_TieredMorokReductionWeakerOutsideHomeBiome::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // Синь-камень: домашние биомы MixedForest+BroadleafForest.
+    Manager->GetCell(5, 5)->Biome = EBiomeType::MixedForest;   // домашний
+    Manager->GetCell(6, 6)->Biome = EBiomeType::Tundra;        // НЕ домашний
+
+    TestEqual(TEXT("0.0f before activation (home cell)"), Manager->GetTieredMorokReductionAmount(FIntPoint(5, 5)), 0.0f);
+
+    // Эталон "как было бы без тиражного оберега" -- снят ДО активации, ночью,
+    // на обеих клетках (тот же приём, что и MorokReductionOnlyAppliesAtNightNearActivation
+    // выше в этом файле).
+    Manager->SetGameClockSeconds(29.0f * 60.0f);   // Ночь
+    if (!TestTrue(TEXT("Sanity: really Night"), Manager->IsNight())) { Manager->Destroy(); return false; }
+    const float BaselineNightHome = Manager->ComputePerceptionDistortion(5, 5);
+    const float BaselineNightAway = Manager->ComputePerceptionDistortion(6, 6);
+
+    Manager->ActivateTieredWard(EWardEffectType::MorokReduction, { EBiomeType::MixedForest, EBiomeType::BroadleafForest });
+
+    const float HomeAmount = Manager->GetTieredMorokReductionAmount(FIntPoint(5, 5));
+    const float AwayAmount = Manager->GetTieredMorokReductionAmount(FIntPoint(6, 6));
+
+    TestTrue(TEXT("Home biome gives a positive reduction"), HomeAmount > 0.0f);
+    TestTrue(TEXT("Away biome gives a smaller, still positive reduction (weakened, not zero)"),
+        AwayAmount > 0.0f && AwayAmount < HomeAmount - KINDA_SMALL_NUMBER);
+
+    const float NightDistortionHome = Manager->ComputePerceptionDistortion(5, 5);
+    const float NightDistortionAway = Manager->ComputePerceptionDistortion(6, 6);
+
+    TestTrue(TEXT("Home cell: distortion drops once the tiered ward is active, at night"),
+        NightDistortionHome < BaselineNightHome - KINDA_SMALL_NUMBER);
+    TestTrue(TEXT("Away cell: distortion also drops, but by less than the home cell did"),
+        (BaselineNightAway - NightDistortionAway) < (BaselineNightHome - NightDistortionHome) - KINDA_SMALL_NUMBER);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

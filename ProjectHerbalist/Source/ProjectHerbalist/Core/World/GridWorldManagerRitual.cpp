@@ -15,6 +15,9 @@
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Simulation/Private/PipelineV2.h"
+#include "Core/Data/IngredientTableRow.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Engine/GameInstance.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
@@ -30,6 +33,21 @@ namespace
         for (const FInventoryItem& Item : Items)
         {
             if (Item.bIsWater && Item.IngredientID == RequiredWaterTypeID) return true;
+        }
+        return false;
+    }
+
+    // Рецептурный гейт между ярусами биомов (RitualTypes.h,
+    // FRitualStepDefinition::RequiredIngredientIDs) -- хотя бы один из
+    // НЕ-водных предметов, добавленных именно на этом шаге, обязан быть
+    // конкретным ключ-ингредиентом яруса, не любой травой. Пусто =
+    // "любые N" (как у "ЗаревойВоды"), тот же смысл, что и раньше.
+    bool HasRequiredIngredient(const TArray<FInventoryItem>& Items, const TArray<FName>& RequiredIngredientIDs)
+    {
+        if (RequiredIngredientIDs.Num() == 0) return true;
+        for (const FInventoryItem& Item : Items)
+        {
+            if (!Item.bIsWater && RequiredIngredientIDs.Contains(Item.IngredientID)) return true;
         }
         return false;
     }
@@ -67,6 +85,7 @@ ERitualStepResult AGridWorldManager::TryAdvanceRitual(const FIntPoint& CauldronC
         if (Step.bRequiresDusk && !IsDusk()) continue;
         if (Step.bRequiresNight && !IsNight()) continue;
         if (!HasRequiredWater(NewIngredients, Step.RequiredWaterTypeID)) continue;
+        if (!HasRequiredIngredient(NewIngredients, Step.RequiredIngredientIDs)) continue;
 
         // Условия шага выполнены -- продвигаем.
         FActiveRitualState NewState = Active ? *Active : FActiveRitualState();
@@ -76,6 +95,48 @@ ERitualStepResult AGridWorldManager::TryAdvanceRitual(const FIntPoint& CauldronC
 
         if (NewState.CompletedSteps >= Recipe.Steps.Num())
         {
+            // Рецептурный гейт между ярусами биомов (RitualTypes.h::
+            // FRitualRecipeDefinition::GrantsIngredientID) -- награда не
+            // варится ComputeApplyResult'ом вовсе: один ключ-ингредиент
+            // "сварить" осмысленно нельзя, сама ритуальная форма тут --
+            // способ получить редкий предмет (кристалл следующего яруса),
+            // не алхимия. НЕ идёт мимо честной варки как обход/эксплойт --
+            // это единственный путь получить именно этот предмет, он в
+            // принципе не craftable обычным Apply.
+            if (Recipe.GrantsIngredientID != NAME_None)
+            {
+                ActiveRituals.Remove(CauldronCell);
+
+                FInventoryItem Reward;
+                Reward.IngredientID = Recipe.GrantsIngredientID;
+                Reward.Count = 1;
+                Reward.bIsWater = false;
+
+                // Резолв State через IngredientRegistrySubsystem -- тот же
+                // приём, что уже AHerbalistPlayerController::ActivateWard
+                // использует для резолва кристалла по имени. Недоступен в
+                // Editor-мире автотестов (GameInstanceSubsystem) -- без
+                // реестра предмет всё равно возвращается (голый
+                // FRealState()), тесты бьют по IngredientID, не по State
+                // (тот же класс пробела, что уже у TradeWithCommunity/
+                // PlantSeed, см. ROADMAP.md).
+                if (UGameInstance* GameInstance = GetGameInstance())
+                {
+                    if (UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>())
+                    {
+                        if (const FIngredientTableRow* Row = IngredientSubsystem->GetRow(Recipe.GrantsIngredientID))
+                        {
+                            Reward.State = Row->BaseState;
+                        }
+                    }
+                }
+
+                OutPotion = Reward;
+                UE_LOG(LogHerbalistAlchemy, Log, TEXT("[Ritual] %s completed at (%d,%d): granted '%s'"),
+                    *Recipe.RecipeID.ToString(), CauldronCell.X, CauldronCell.Y, *Recipe.GrantsIngredientID.ToString());
+                return ERitualStepResult::Completed;
+            }
+
             // Ритуал завершён -- варим по-честному тем же пайплайном, что и
             // обычная варка, с bIsRitual=true (см. ComputeApplyResult §8 —
             // градации опасности по числу ингредиентов не действуют:

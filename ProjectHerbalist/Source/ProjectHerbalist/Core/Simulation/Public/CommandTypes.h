@@ -107,6 +107,20 @@ struct FApplyCommand
     // 1 (по умолчанию — один биом или ни одного не-водного ингредиента) не
     // даёт бонуса; см. CrossBiomeCoherenceBonus, HerbalistSettings.h.
     int32 DistinctIngredientBiomeCount = 1;
+
+    // Тиражный оберег BrewBoost (награда ритуала перехода ярусов биомов,
+    // 2026-09-04) -- тот же принцип "резолвится вне Pipeline", что и
+    // bWardBrewBoostActive выше, но котёл стоит на одном месте (дом),
+    // поэтому "биом игрока" бессмысленен как критерий -- вместо этого
+    // AGridWorldManager::ApplyAlchemyResult (GridWorldManagerAlchemy.cpp)
+    // смотрит FInventoryItem::SourceBiome каждого не-водного ингредиента
+    // этой варки: 1.0 (полная сила), если ХОТЯ БЫ ОДИН собран в домашнем
+    // биоме тиражного BrewBoost-кристалла; TieredWardOutOfBiomeStrength
+    // (HerbalistSettings.h), если ни один; 0.0 если тиражный BrewBoost не
+    // активирован вовсе. ProcessApplyCommand (PipelineV2.cpp) домножает на
+    // эту величину базовый WardBrewBoostCoherenceBonus -- переиспользует
+    // существующую силу надбавки как базу, не изобретает вторую константу.
+    float TieredBrewBoostStrength = 0.0f;
 };
 
 // S – сбор ресурса (Harvest)

@@ -399,6 +399,17 @@ float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
         Perceived -= Settings ? Settings->WardMorokReductionAmount : 0.1f;
     }
 
+    // Тиражный MorokReduction (награда ритуала перехода ярусов биомов,
+    // 2026-09-04) — независимый, не взаимоисключающий источник снижения:
+    // тот же ночной гейт, что и у Куриного бога выше (защита сна, не
+    // восприятия вообще), но своя геометрия (домашний биом клетки, не
+    // Center+Radius, см. GetTieredMorokReductionAmount). 0.0f, если
+    // тиражный MorokReduction не активирован — вычитание безопасно всегда.
+    if (IsNight())
+    {
+        Perceived -= GetTieredMorokReductionAmount(FIntPoint(X, Y));
+    }
+
     return FMath::Clamp(Perceived, 0.0f, 1.0f);
 }
 
@@ -782,6 +793,11 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 (bWasActive || (!IsInvisibilityCapActive(FIntPoint(Cell.X, Cell.Y))
                     && !IsAlkonostSuppressionActiveForBiome(Cell.Biome)
                     && !IsWardConcealmentActive(FIntPoint(Cell.X, Cell.Y))
+                    // Тиражный EntityConceal (награда ритуала перехода ярусов
+                    // биомов, 2026-09-04) — независимый, не
+                    // взаимоисключающий источник подавления, своя геометрия
+                    // (домашний биом клетки, см. IsTieredConcealmentActive).
+                    && !IsTieredConcealmentActive(FIntPoint(Cell.X, Cell.Y))
                     && !IsCrowdedBySameEntity(Cell, Def))))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
@@ -1169,7 +1185,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // Шапка, заметно меньшим радиусом.
             if (bEligible && CanManifest(*Cell, Def.EntityID) &&
                 (bWasActive || (!IsInvisibilityCapActive(*Anchor) && !IsAlkonostSuppressionActiveForBiome(Cell->Biome)
-                    && !IsWardConcealmentActive(*Anchor))))
+                    && !IsWardConcealmentActive(*Anchor)
+                    // Тиражный EntityConceal — тот же независимый источник
+                    // подавления, что и у Низшего/Основного ранга выше.
+                    && !IsTieredConcealmentActive(*Anchor))))
             {
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);

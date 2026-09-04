@@ -99,3 +99,70 @@ bool AGridWorldManager::IsWardMorokReductionActive(const FIntPoint& Cell) const
     const int32 Dist = FMath::Max(FMath::Abs(Cell.X - WardMorokReductionCenter.X), FMath::Abs(Cell.Y - WardMorokReductionCenter.Y));
     return Dist <= Radius;
 }
+
+// ============================================================================
+// ТИРАЖНЫЕ ОБЕРЕГИ (награда ритуалов перехода ярусов биомов, 2026-09-04)
+// ============================================================================
+//
+// В отличие от трёх оберегов выше -- НЕТ таймера (прямой запрос: "как
+// активировал/надел, так и работает"), НЕТ Center/Radius, запомненных на
+// активации: "дом" оберега определяется биомом клетки, для которой
+// спрашивают (GetCellConst), сверенным со списком WardHomeBiomes с
+// карточки конкретного кристалла (IngredientTableRow.h::bIsTieredWard).
+// Владение (есть ли кристалл в инвентаре) по-прежнему проверяет
+// AHerbalistPlayerController::ActivateWard, тот же принцип разделения
+// обязанностей, что и у остальных Activate*-функций этого файла.
+
+void AGridWorldManager::ActivateTieredWard(EWardEffectType Type, const TArray<EBiomeType>& HomeBiomes)
+{
+    switch (Type)
+    {
+    case EWardEffectType::EntityConceal:
+        bTieredConcealmentActive = true;
+        TieredConcealmentHomeBiomes = HomeBiomes;
+        break;
+    case EWardEffectType::MorokReduction:
+        bTieredMorokReductionActive = true;
+        TieredMorokReductionHomeBiomes = HomeBiomes;
+        break;
+    case EWardEffectType::BrewBoost:
+        bTieredBrewBoostActive = true;
+        TieredBrewBoostHomeBiomes = HomeBiomes;
+        break;
+    default:
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Ward] ActivateTieredWard: unhandled WardEffectType"));
+        break;
+    }
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Ward] Tiered ward activated (Type=%d, %d home biomes), no expiry"),
+        static_cast<int32>(Type), HomeBiomes.Num());
+}
+
+// EntityConceal (тираж) -- та же геометрия, что читает манифестация сущностей
+// (GridWorldManagerEntities.cpp, IsWardConcealmentActive рядом), но по биому
+// самой клетки, а не по расстоянию от запомненного центра (см. довод у
+// объявления в GridWorldManager.h).
+bool AGridWorldManager::IsTieredConcealmentActive(const FIntPoint& PlayerCell) const
+{
+    if (!bTieredConcealmentActive) return false;
+
+    const FGridCell* Cell = GetCellConst(PlayerCell.X, PlayerCell.Y);
+    return Cell && TieredConcealmentHomeBiomes.Contains(Cell->Biome);
+}
+
+// MorokReduction (тираж) -- полная сила в домашнем биоме, ослабленная
+// (TieredWardOutOfBiomeStrength) вне них, ноль если тиражный MorokReduction
+// не активирован вовсе -- вызывающая сторона (ComputePerceptionDistortion)
+// просто вычитает результат без отдельной проверки активности.
+float AGridWorldManager::GetTieredMorokReductionAmount(const FIntPoint& PlayerCell) const
+{
+    if (!bTieredMorokReductionActive) return 0.0f;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float FullAmount = Settings ? Settings->WardMorokReductionAmount : 0.1f;
+    const float OutOfBiomeStrength = Settings ? Settings->TieredWardOutOfBiomeStrength : 0.5f;
+
+    const FGridCell* Cell = GetCellConst(PlayerCell.X, PlayerCell.Y);
+    const bool bHome = Cell && TieredMorokReductionHomeBiomes.Contains(Cell->Biome);
+    return bHome ? FullAmount : FullAmount * OutOfBiomeStrength;
+}

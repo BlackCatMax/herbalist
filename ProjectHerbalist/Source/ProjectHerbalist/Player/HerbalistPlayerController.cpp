@@ -918,6 +918,17 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
         return;
     }
 
+    // Тиражные обереги (награда ритуалов перехода ярусов биомов, 2026-09-04,
+    // IngredientTableRow.h::bIsTieredWard) -- отдельный, единый диспетчер,
+    // НЕ через Center-резолвящий switch ниже: у тиражных нет ни таймера, ни
+    // Center (см. довод у AGridWorldManager::ActivateTieredWard). Старые три
+    // кристалла (bIsTieredWard=false) идут прежним путём без изменений.
+    if (Row->bIsTieredWard)
+    {
+        Manager->ActivateTieredWard(Row->WardEffectType, Row->WardHomeBiomes);
+        return;
+    }
+
     switch (Row->WardEffectType)
     {
     case EWardEffectType::BrewBoost:

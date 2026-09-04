@@ -91,7 +91,7 @@ namespace
         const FIntPoint& TargetCell, FRandomStream& Rng,
         const FWorldSnapshot& WorldSnap, const FBiomeSnapshot& BiomeSnap, float CallerCoherence = 0.f,
         EMoonPhase MoonPhase = EMoonPhase::NewMoon, bool bWardBrewBoostActive = false,
-        int32 DistinctIngredientBiomeCount = 1)
+        int32 DistinctIngredientBiomeCount = 1, float TieredBrewBoostStrength = 0.f)
     {
         FInventorySnapshot InvSnap;
         FCommandBatch CmdBatch;
@@ -108,6 +108,12 @@ namespace
         // AGridWorldManager::ApplyAlchemyResult (GridWorldManagerAlchemy.cpp)
         // делает из настоящих FInventoryItem::SourceBiome вне теста.
         Entry.Apply.DistinctIngredientBiomeCount = DistinctIngredientBiomeCount;
+        // Тиражный оберег BrewBoost (награда ритуала перехода ярусов биомов,
+        // 2026-09-04) -- тот же принцип, что и bWardBrewBoostActive выше:
+        // тесты кладут готовое 0.0/TieredWardOutOfBiomeStrength/1.0 напрямую,
+        // тем же путём, что и AGridWorldManager::ApplyAlchemyResult делает из
+        // настоящих FInventoryItem::SourceBiome + TieredBrewBoostHomeBiomes.
+        Entry.Apply.TieredBrewBoostStrength = TieredBrewBoostStrength;
         CmdBatch.AddCommand(Entry);
         return Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
     }
@@ -826,6 +832,61 @@ bool FPipelineV2ApplyWardBrewBoostCoherenceBonusTest::RunTest(const FString& Par
         WardPotion->Coherence > NoWardPotion->Coherence + KINDA_SMALL_NUMBER);
     TestTrue(TEXT("Ward-boosted Coherence raises Stability just like the shrine bonus does"),
         WardPotion->Ingredient.State.Meta.Stability > NoWardPotion->Ingredient.State.Meta.Stability + KINDA_SMALL_NUMBER);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Тиражный оберег BrewBoost (награда ритуала перехода ярусов биомов,
+// 2026-09-04, CommandTypes.h::FApplyCommand::TieredBrewBoostStrength) --
+// котёл стоит на месте, поэтому "биом игрока" бессмысленен: сила зависит
+// от того, собран ли хотя бы один ингредиент этой варки (SourceBiome) в
+// домашнем биоме кристалла. Тест бьёт по ProcessApplyCommand напрямую
+// (через RunApply), минуя AGridWorldManager::ApplyAlchemyResult -- тот же
+// приём, что и у соседнего теста Камня-оберега/межбиомного бонуса выше:
+// три ступени (0.0 неактивен / TieredWardOutOfBiomeStrength вне дома / 1.0
+// дома) сравниваются попарно при ОДНОМ и том же сиде.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyTieredBrewBoostStrengthTest,
+    "ProjectHerbalist.PipelineV2.ApplyTieredBrewBoostStrength",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyTieredBrewBoostStrengthTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    TArray<FInventoryItem> Ingredients = { MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f), MakeWater(0.5f, 0.4f) };
+
+    FRandomStream RngInactive(7);
+    FStateDelta InactiveDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngInactive, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 1,
+        /*TieredBrewBoostStrength*/ 0.0f);
+
+    FRandomStream RngWeak(7);
+    FStateDelta WeakDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngWeak, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 1,
+        /*TieredBrewBoostStrength*/ 0.5f);
+
+    FRandomStream RngFull(7);
+    FStateDelta FullDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngFull, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false, /*DistinctIngredientBiomeCount*/ 1,
+        /*TieredBrewBoostStrength*/ 1.0f);
+
+    const FInventoryOperation* InactivePotion = nullptr;
+    for (const FInventoryOperation& Op : InactiveDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) InactivePotion = &Op;
+    const FInventoryOperation* WeakPotion = nullptr;
+    for (const FInventoryOperation& Op : WeakDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) WeakPotion = &Op;
+    const FInventoryOperation* FullPotion = nullptr;
+    for (const FInventoryOperation& Op : FullDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) FullPotion = &Op;
+    if (!TestNotNull(TEXT("Inactive potion op"), InactivePotion) || !TestNotNull(TEXT("Weak potion op"), WeakPotion)
+        || !TestNotNull(TEXT("Full potion op"), FullPotion))
+        return false;
+
+    TestTrue(TEXT("Weak (out-of-biome) strength raises Coherence over inactive"),
+        WeakPotion->Coherence > InactivePotion->Coherence + KINDA_SMALL_NUMBER);
+    TestTrue(TEXT("Full (in-biome) strength raises Coherence further than weak"),
+        FullPotion->Coherence > WeakPotion->Coherence + KINDA_SMALL_NUMBER);
     return true;
 }
 

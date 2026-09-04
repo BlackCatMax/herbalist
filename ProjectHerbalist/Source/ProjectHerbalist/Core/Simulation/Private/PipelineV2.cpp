@@ -982,6 +982,20 @@ namespace Simulation
             EffectiveIntent.Coherence = FMath::Clamp(EffectiveIntent.Coherence + WardBonus, 0.0f, 1.0f);
         }
 
+        // Тиражный оберег BrewBoost (награда ритуала перехода ярусов биомов,
+        // 2026-09-04) -- та же базовая надбавка WardBrewBoostCoherenceBonus,
+        // что и у Камня-оберега выше, но домноженная на TieredBrewBoostStrength
+        // (0.0/TieredWardOutOfBiomeStrength/1.0, уже посчитано вызывающей
+        // стороной -- AGridWorldManager::ApplyAlchemyResult, см. CommandTypes.h).
+        // Складывается с bWardBrewBoostActive-веткой выше, не заменяет её --
+        // независимые источники надбавки, ровно как IsWardConcealmentActive/
+        // IsTieredConcealmentActive независимы друг от друга при проявлении.
+        if (Cmd.TieredBrewBoostStrength > 0.0f)
+        {
+            const float WardBonus = ShrineSettings ? ShrineSettings->WardBrewBoostCoherenceBonus : 0.05f;
+            EffectiveIntent.Coherence = FMath::Clamp(EffectiveIntent.Coherence + WardBonus * Cmd.TieredBrewBoostStrength, 0.0f, 1.0f);
+        }
+
         // Межбиомная варка (DESIGN_Community_And_Homestead.md §2.4, 2026-09-04)
         // -- та же плоская надбавка к Coherence, что и у оберега BrewBoost
         // выше, но её сила зависит от того, СКОЛЬКО разных биомов собрано в

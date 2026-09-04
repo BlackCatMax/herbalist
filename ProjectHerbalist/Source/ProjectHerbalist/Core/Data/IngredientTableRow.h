@@ -244,6 +244,24 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ward", meta = (EditCondition = "bIsWard"))
     EWardEffectType WardEffectType = EWardEffectType::None;
+
+    // ---- Тиражные обереги (награда ритуалов перехода ярусов биомов,
+    // RitualTypes.h::FRitualRecipeDefinition::GrantsIngredientID) — В
+    // ОТЛИЧИЕ от трёх исходных кристаллов выше (Плакун-камень/Громовая
+    // стрела/Куриный бог, bIsTieredWard=false у них, таймер по
+    // WardDurationSeconds не тронут) у тиражных НЕТ ТАЙМЕРА ("как
+    // активировал/надел оберег, так он и работает", прямой запрос) --
+    // вместо срока действия их сила зависит от того, в "своём" ли биоме
+    // используется эффект: WardHomeBiomes называет пару биомов яруса,
+    // ДЛЯ КОТОРОГО предназначен конкретный кристалл (полная сила там),
+    // вне них -- ослабленная (см. UHerbalistSettings::
+    // TieredWardOutOfBiomeStrength, AGridWorldManager::ActivateTieredWard).
+    // false/пусто у всех обычных трав/грибов и у трёх исходных кристаллов.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ward", meta = (EditCondition = "bIsWard"))
+    bool bIsTieredWard = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ward", meta = (EditCondition = "bIsTieredWard"))
+    TArray<EBiomeType> WardHomeBiomes;
 };
 
 // Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются

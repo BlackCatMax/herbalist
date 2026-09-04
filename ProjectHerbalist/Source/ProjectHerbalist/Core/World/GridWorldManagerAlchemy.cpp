@@ -1,5 +1,6 @@
 // Core/World/GridWorldManagerAlchemy.cpp
 #include "Core/World/GridWorldManager.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "Player/HerbalistPlayerController.h"
@@ -44,6 +45,34 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
             }
         }
         Cmd.Apply.DistinctIngredientBiomeCount = FMath::Max(1, DistinctBiomes.Num());
+    }
+    // Тиражный оберег BrewBoost (награда ритуала перехода ярусов биомов,
+    // 2026-09-04) -- тот же принцип "резолвится здесь, не в Pipeline", что
+    // и bWardBrewBoostActive/DistinctIngredientBiomeCount выше. Котёл стоит
+    // на месте (дом) -- "биом игрока" бессмысленен, поэтому смотрим
+    // FInventoryItem::SourceBiome каждого не-водного ингредиента этой варки:
+    // полная сила (1.0), если ХОТЯ БЫ ОДИН собран в домашнем биоме
+    // тиражного кристалла, иначе ослабленная (TieredWardOutOfBiomeStrength).
+    // 0.0, если тиражный BrewBoost не активирован вовсе -- см. довод у
+    // FApplyCommand::TieredBrewBoostStrength, CommandTypes.h.
+    {
+        float Strength = 0.0f;
+        if (bTieredBrewBoostActive)
+        {
+            bool bAnyIngredientAtHome = false;
+            for (const FInventoryItem& Ing : Ingredients)
+            {
+                if (!Ing.bIsWater && TieredBrewBoostHomeBiomes.Contains(Ing.SourceBiome))
+                {
+                    bAnyIngredientAtHome = true;
+                    break;
+                }
+            }
+            const UHerbalistSettings* Settings = GetHerbalistSettings();
+            const float OutOfBiomeStrength = Settings ? Settings->TieredWardOutOfBiomeStrength : 0.5f;
+            Strength = bAnyIngredientAtHome ? 1.0f : OutOfBiomeStrength;
+        }
+        Cmd.Apply.TieredBrewBoostStrength = Strength;
     }
     QueueCommand(Cmd);
 

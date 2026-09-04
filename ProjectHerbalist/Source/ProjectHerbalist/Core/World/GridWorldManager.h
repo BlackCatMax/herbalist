@@ -1037,6 +1037,43 @@ public:
     bool IsWardMorokReductionActive() const;
     bool IsWardMorokReductionActive(const FIntPoint& Cell) const;
 
+    // ---- Тиражные обереги (награда ритуалов перехода ярусов биомов,
+    // RitualTypes.h::FRitualRecipeDefinition::GrantsIngredientID,
+    // IngredientTableRow.h::bIsTieredWard) — В ОТЛИЧИЕ от трёх оберегов
+    // выше (Плакун-камень/Громовая стрела/Куриный бог) у этих троих НЕТ
+    // ТАЙМЕРА (прямой запрос: "как активировал/надел оберег, так он и
+    // работает") — вместо GameClockSeconds-экспаери их сила зависит от
+    // того, "в своём" ли биоме используется эффект (WardHomeBiomes на
+    // карточке кристалла, TieredWardOutOfBiomeStrength, HerbalistSettings.h).
+    // Ни Center, ни Radius не запоминаются на активации (в отличие от
+    // ActivateWardConcealment/ActivateWardMorokReduction выше) — "дом"
+    // оберега определяется биомом КЛЕТКИ, для которой спрашивают
+    // (см. IsTieredConcealmentActive/GetTieredMorokReductionAmount ниже),
+    // не расстоянием от места, где оберег был надет. ----
+
+    // Переключает нужную пару bTiered*/Tiered*HomeBiomes по Type (BrewBoost/
+    // EntityConceal/MorokReduction) — тот же диспетчер, что уже
+    // AHerbalistPlayerController::ActivateWard делает для трёх старых
+    // оберегов через switch, только без выбора конкретной Activate-функции:
+    // здесь одна функция на все три эффекта, различаемые параметром.
+    void ActivateTieredWard(EWardEffectType Type, const TArray<EBiomeType>& HomeBiomes);
+
+    // EntityConceal (тираж) — Cell.Biome ЭТОЙ клетки в TieredConcealmentHomeBiomes
+    // -> полная защита (тот же гейт проявления, что и IsWardConcealmentActive
+    // выше, независимый и не взаимоисключающий источник); вне домашних биомов
+    // -- защиты нет (радиус вокруг игрока схлопывается до нуля, из старой
+    // Center+Radius геометрии здесь остаётся только "своя" клетка). См.
+    // довод о выборе этой геометрии у ActivateTieredWard выше.
+    bool IsTieredConcealmentActive(const FIntPoint& PlayerCell) const;
+
+    // MorokReduction (тираж) — полный WardMorokReductionAmount, если Cell.Biome
+    // в TieredMorokReductionHomeBiomes, иначе WardMorokReductionAmount *
+    // TieredWardOutOfBiomeStrength (черновой коэффициент, HerbalistSettings.h).
+    // 0.0f, если тиражный MorokReduction не активирован вовсе -- вызывающая
+    // сторона (ComputePerceptionDistortion) просто вычитает результат, без
+    // отдельной проверки bTieredMorokReductionActive.
+    float GetTieredMorokReductionAmount(const FIntPoint& PlayerCell) const;
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -1181,6 +1218,19 @@ protected:
     FIntPoint WardConcealmentCenter = FIntPoint(-1, -1);
     float WardMorokReductionExpiryGameSeconds = 0.0f;
     FIntPoint WardMorokReductionCenter = FIntPoint(-1, -1);
+
+    // ---- Тиражные обереги (награда ритуалов перехода ярусов биомов,
+    // 2026-09-04, GridWorldManagerWards.cpp::ActivateTieredWard) -- НЕТ
+    // ExpiryGameSeconds-поля, в отличие от пяти выше: "нет таймера" в
+    // прямом запросе означает именно отсутствие срока действия, не
+    // сентинел с огромным числом. Тоже не персистятся (Save/Load) -- тот
+    // же довод, что и у остальных Ward-полей этого блока. ----
+    bool bTieredConcealmentActive = false;
+    TArray<EBiomeType> TieredConcealmentHomeBiomes;
+    bool bTieredMorokReductionActive = false;
+    TArray<EBiomeType> TieredMorokReductionHomeBiomes;
+    bool bTieredBrewBoostActive = false;
+    TArray<EBiomeType> TieredBrewBoostHomeBiomes;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

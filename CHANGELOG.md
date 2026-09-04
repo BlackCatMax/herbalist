@@ -6863,3 +6863,142 @@ IngredientBiomeRangePatchCommandlet.h/.cpp (новый), DESIGN_World_State.md
 (§15, статус-абзац), herbalist_docs/Herbalist_Vault/04_Compendium/
 Растительность/*/*.md (70 файлов), herbalist_docs/Herbalist_Vault/
 04_Compendium/Биомы/*.md (8 файлов), ROADMAP.md.
+
+---
+
+## 2026-09-04 — рецептурный гейт между ярусами биомов (три новых ритуала, три новых тиражных оберега)
+
+Закрывает открытый пункт ROADMAP.md "рецептурный гейт между ярусами
+биомов" — прямое продолжение сегодняшнего реассайна `AllowedBiomes` (см.
+запись выше) и уже закрытого "Котёл — прокачка" пункта: вместо апгрейда
+слотов котла выбран путь потребности/находки — три ритуала, по одному на
+переход между четырьмя ярусами опасности биомов (Тундра/Степь → Тайга/
+Лесостепь → Смешанный/Широколиственный лес → Пойма/Болото), каждый требует
+конкретный ключ-ингредиент яруса и час суток, каждый выдаёт новый кристалл-
+оберег, снаряжающий для следующего яруса.
+
+**Три ритуала (`RitualTypes.h::GetRitualRecipeDefinitions`).** Все три —
+один шаг, `IngredientCount=1`, `RequiredWaterTypeID=NAME_None` (гейт держится
+на растении/грибе и времени суток, не на воде):
+
+- **«ПорогРассвета»** (Ярус 1→2) — `ste_06` (Лазорик/Тюльпан степной) ЛИБО
+  `tun_04` (Студёный мак/Полярный мак), на рассвете. Награда: **Алатырь**
+  (`EWardEffectType::EntityConceal`, домашние биомы Taiga+ForestSteppe).
+- **«ЗакатнаяОпушка»** (Ярус 2→3) — `tai_10` (Аконит), на закате. Награда:
+  **Синь-камень** (`MorokReduction`, домашние биомы MixedForest+
+  BroadleafForest).
+- **«ПолуночныйОмут»** (Ярус 3→4) — `mix_10` (Бледная поганка), ночью.
+  Награда: **Гагат** (`BrewBoost`, домашние биомы Floodplain+Bog).
+
+Имена — тот же фольклорный принцип, что уже у трёх исходных кристаллов
+Пещеры: Алатырь — "всем камням отец", бел-горюч камень острова Буяна, на
+котором в заговорах занимается заря (Плакун-камень уже поминает его как
+компаньона в своей карточке — приятная находка постфактум, не спланированная
+заранее); Синь-камень — реальный этнографический мотив почитаемых "синих
+камней" на границах угодий/у воды, цвет закатных сумерек, грань дня и ночи;
+Гагат — окаменевшая болотная древесина, в народе носили от сглаза, самый
+мрачный из шести кристаллов, рождён в полночном омуте, для самого дальнего,
+опасного яруса.
+
+**Механика завершения ритуала (`RitualTypes.h::FRitualRecipeDefinition::
+GrantsIngredientID`, `TryAdvanceRitual`, GridWorldManagerRitual.cpp).**
+Непустой `GrantsIngredientID` на рецепте означает: завершение НЕ идёт через
+`ComputeApplyResult`/`Simulation::ExecutePipeline` вовсе (один ключ-
+ингредиент "сварить" бессмысленно) — вместо этого сразу конструируется
+`FInventoryItem` с `IngredientID=GrantsIngredientID`, `Count=1`, `State`
+резолвится через `IngredientRegistrySubsystem` (тот же приём и тот же
+известный пробел автотестов, что уже у `AHerbalistPlayerController::
+ActivateWard` — недоступен в Editor-мире тестов, тесты бьют по
+`IngredientID`, не по `State`). Гейт по конкретному ингредиенту —
+`FRitualStepDefinition::RequiredIngredientIDs` (новое поле, `TArray<FName>`):
+пусто = "любые N" (полная обратная совместимость с "ZarevayaVoda", ни одна
+строка её логики не менялась), непусто = хотя бы один из НЕ-водных предметов
+именно этого шага обязан быть одним из перечисленных ID.
+
+**Тиражные обереги — без таймера, сила зависит от места
+(`IngredientTableRow.h::bIsTieredWard`/`WardHomeBiomes`,
+GridWorldManagerWards.cpp::ActivateTieredWard/IsTieredConcealmentActive/
+GetTieredMorokReductionAmount, GridWorldManagerAlchemy.cpp,
+CommandTypes.h::FApplyCommand::TieredBrewBoostStrength,
+PipelineV2.cpp::ProcessApplyCommand).** Прямой запрос: "как активировал/
+надел оберег, так он и работает" — в ОТЛИЧИЕ от трёх исходных кристаллов
+(Плакун-камень/Громовая стрела/Куриный бог, `bIsTieredWard=false`, таймер
+`WardDurationSeconds` НЕ тронут ни байтом) у тиражных нет
+`GameClockSeconds`-экспаери вовсе. Взамен — геометрия по биому клетки, не
+по расстоянию от места активации (нет ни Center, ни Radius, запомненных на
+`ActivateTieredWard`):
+
+- **EntityConceal** (Алатырь) — полная защита (тот же гейт проявления
+  сущностей, что и `IsWardConcealmentActive`, независимый и не
+  взаимоисключающий источник) в клетке домашнего биома, никакой — вне них.
+- **MorokReduction** (Синь-камень) — полный `WardMorokReductionAmount` в
+  домашнем биоме, `× TieredWardOutOfBiomeStrength` (новая черновая настройка,
+  0.5, категория Wards) вне них; тот же ночной гейт, что у Куриного бога.
+- **BrewBoost** (Гагат) — котёл стоит на месте (дом), поэтому "биом игрока"
+  бессмысленен как критерий: `AGridWorldManager::ApplyAlchemyResult` смотрит
+  `FInventoryItem::SourceBiome` каждого не-водного ингредиента ЭТОЙ варки —
+  полная сила, если хотя бы один собран в домашнем биоме, ослабленная, если
+  ни один. `ProcessApplyCommand` домножает существующий
+  `WardBrewBoostCoherenceBonus` на `TieredBrewBoostStrength` (0.0/
+  `TieredWardOutOfBiomeStrength`/1.0) — переиспользует силу надбавки как
+  базу, не изобретает вторую константу. Складывается с обычным
+  `bWardBrewBoostActive`, не заменяет его.
+
+**Новые кристаллы (коммандлет `TieredWardCrystalAppendCommandlet`, по
+образцу `WardCrystalAppendCommandlet`).** Точечный `Table->AddRow` в живой
+`DT_IngredientClass`, идемпотентно (запуск подтвердил: "добавлено 3,
+пропущено 0", таблица теперь 95 рядов). В ОТЛИЧИЕ от исходной тройки —
+`GardenNiche::None`, не `Cave`, `AllowedBiomes` тоже пуст: эти три кристалла
+не растут НИГДЕ, единственный путь получения — завершить соответствующий
+ритуал. `Resilience=1.0`, не 0.0 — намеренно другое решение: жест
+`State→BaseState`, ради которого исходная тройка держит `Resilience=0.0`
+(сад должен уметь тянуть клетку к `BaseState`), к этим трём кристаллам
+просто не применяется, они никогда не занимают клетку сада.
+
+**Тесты — 331 → 337, два чистых прогона, ноль регрессий.**
+`RitualBrewingTest.cpp` — 2 новых: правильный ключ (оба варианта у "Порога
+Рассвета") на верный час завершает ритуал одним шагом с
+`OutPotion.IngredientID == GrantsIngredientID`; неверный ключ (Бледная
+поганка вместо Лазорика/Студёного мака) на рассвете не продвигает ничего
+(перебор всех рецептов реестра даёт `NoMatch`). Регрессия "ZarevayaVoda" —
+без изменений, покрыта уже существующими 4 тестами того же файла (её
+`RequiredIngredientIDs` остаётся пустым, "любые N" не тронуто).
+`WardTest.cpp` — 3 новых: тиражный оберег активирован, часы продвинуты на
+×100 от `WardDurationSeconds` (600×100), эффект всё ещё активен (нет
+таймера в принципе, не "долгий" таймер); `IsTieredConcealmentActive` —
+полная защита в клетке домашнего биома, никакой вне (два разных `Cell.Biome`,
+выставленных напрямую тем же приёмом, что уже `AmbientEntityBatch5Test.cpp`);
+`GetTieredMorokReductionAmount`/`ComputePerceptionDistortion` — сравнение
+"эталон без оберега" / "с оберегом дома" / "с оберегом вне дома" ночью,
+дом сильнее прочего. `PipelineV2ApplyTest.cpp` — 1 новый (расширен `RunApply`
+параметром `TieredBrewBoostStrength`): три ступени 0.0/0.5/1.0 при одном
+сиде дают строго возрастающую Coherence.
+
+**Отклонение от плана.** Геометрия тиражного EntityConceal/MorokReduction
+("защищает клетку игрока, вне дома радиус схлопывается до 0") реализована
+БЕЗ отслеживания живой позиции игрока внутри `GridWorldManagerEntities.cpp`
+(`UpdateEntityManifestations`/`ComputePerceptionDistortion` не принимают
+параметр "где сейчас игрок", и `ActivateTieredWard` по своей сигнатуре не
+запоминает Center) — вместо Center+Radius от места активации проверяется
+БИОМ САМОЙ клетки, для которой спрашивают: домашний биом → полная защита
+этой клетки, чужой → нет. Функционально это ближе к "оберег защищает всю
+свою территорию" (в домашнем биоме — везде, не только вплотную к игроку),
+чем к буквальному "маленький радиус вокруг игрока, схлопывающийся до нуля
+за его пределами" — но не требует новой инфраструктуры отслеживания позиции
+там, где её раньше не было, и тестируется так же прямо, как остальные
+Ward-функции (`Manager->GetCell(X,Y)->Biome = ...`, без спавна пешки).
+
+Файлы: `Core/Alchemy/RitualTypes.h`, `Core/World/GridWorldManagerRitual.cpp`,
+`Core/World/GridWorldManagerWards.cpp`, `Core/World/GridWorldManager.h`,
+`Core/World/GridWorldManagerEntities.cpp`, `Core/World/
+GridWorldManagerAlchemy.cpp`, `Core/Data/IngredientTableRow.h`,
+`Core/Config/HerbalistSettings.h`, `Core/Simulation/Public/CommandTypes.h`,
+`Core/Simulation/Private/PipelineV2.cpp`, `Player/
+HerbalistPlayerController.cpp`, `Source/ProjectHerbalistTests/Private/
+Commandlets/TieredWardCrystalAppendCommandlet.h/.cpp` (новый),
+`Source/ProjectHerbalistTests/Private/Tests/RitualBrewingTest.cpp`,
+`Source/ProjectHerbalistTests/Private/Tests/WardTest.cpp`,
+`Source/ProjectHerbalistTests/Private/Tests/PipelineV2ApplyTest.cpp`,
+`ProjectHerbalist/Content/Herbalist/Data/DT_IngredientClass.uasset` (живая
+таблица, +3 ряда), `herbalist_docs/Herbalist_Vault/04_Compendium/Минералы/
+Алатырь.md`/`Синь-камень.md`/`Гагат.md` (новые), `ROADMAP.md`.

@@ -340,4 +340,77 @@ bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent::R
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Рецептурный гейт между ярусами биомов (RitualTypes.h::FRitualRecipeDefinition::
+// GrantsIngredientID, ROADMAP.md "Котёл — прокачка/инструменты" -- закрыто
+// этим путём вместо апгрейда котла). "Порог Рассвета" (Ярус 1 -> 2): 1 шаг,
+// IngredientCount=1, ЛИБО ste_06 (Лазорик), ЛИБО tun_04 (Студёный мак), на
+// рассвете, без требования к типу воды -- НЕ варит через ComputeApplyResult,
+// сразу выдаёт готовый предмет с IngredientID == GrantsIngredientID ("Алатырь").
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_PorogRassvetaCompletesWithCorrectKeyIngredient,
+    "Herbalist.Ritual.PorogRassvetaCompletesWithCorrectKeyIngredient",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_PorogRassvetaCompletesWithCorrectKeyIngredient::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    Manager->SetGameClockSeconds(DawnMoment);
+
+    // Первый ключ (ste_06) -- один шаг, завершается немедленно (в отличие от
+    // "ZarevayaVoda", у "Порога Рассвета" всего один шаг).
+    TArray<FInventoryItem> Ste06 = { MakeRitualIngredient(TEXT("ste_06")) };
+    FRandomStream Rng1(1);
+    FInventoryItem Potion1;
+    const ERitualStepResult Result1 = Manager->TryAdvanceRitual(FIntPoint(3, 3), Ste06, Rng1, Potion1);
+    TestTrue(TEXT("ste_06 at dawn completes 'ПорогРассвета' in one step"), Result1 == ERitualStepResult::Completed);
+    TestEqual(TEXT("Reward IngredientID matches GrantsIngredientID"), Potion1.IngredientID, FName(TEXT("Алатырь")));
+    TestEqual(TEXT("Reward is a single item"), Potion1.Count, 1);
+    TestEqual(TEXT("No ritual progress left behind after immediate completion"), Manager->ActiveRituals.Num(), 0);
+
+    // Второй ключ (tun_04) -- "ЛИБО", свежая клетка котла, тот же результат.
+    TArray<FInventoryItem> Tun04 = { MakeRitualIngredient(TEXT("tun_04")) };
+    FRandomStream Rng2(2);
+    FInventoryItem Potion2;
+    const ERitualStepResult Result2 = Manager->TryAdvanceRitual(FIntPoint(4, 4), Tun04, Rng2, Potion2);
+    TestTrue(TEXT("tun_04 at dawn also completes 'ПорогРассвета' -- either key works"), Result2 == ERitualStepResult::Completed);
+    TestEqual(TEXT("Reward IngredientID matches GrantsIngredientID (second key)"), Potion2.IngredientID, FName(TEXT("Алатырь")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_PorogRassvetaDoesNotAdvanceWithWrongIngredient,
+    "Herbalist.Ritual.PorogRassvetaDoesNotAdvanceWithWrongIngredient",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_PorogRassvetaDoesNotAdvanceWithWrongIngredient::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    Manager->SetGameClockSeconds(DawnMoment);
+
+    // Правильное время и правильное число (1), но НЕ ключ-ингредиент яруса --
+    // ни "Порог Рассвета" (нужен ste_06/tun_04), ни "ZarevayaVoda" (нужно 2)
+    // не должны продвинуться этим набором.
+    TArray<FInventoryItem> WrongIngredient = { MakeRitualIngredient(TEXT("mix_10")) };   // Бледная поганка -- ключ ЯРУСА 3, не 1
+    FRandomStream Rng(1);
+    FInventoryItem Potion;
+    const ERitualStepResult Result = Manager->TryAdvanceRitual(FIntPoint(3, 3), WrongIngredient, Rng, Potion);
+
+    TestTrue(TEXT("Right count and time, wrong key ingredient -- does not advance"), Result == ERitualStepResult::NoMatch);
+    TestEqual(TEXT("No partial ritual state left behind"), Manager->ActiveRituals.Num(), 0);
+    TestTrue(TEXT("No reward granted"), Potion.IngredientID.IsNone());
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif

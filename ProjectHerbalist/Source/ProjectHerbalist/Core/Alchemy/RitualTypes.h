@@ -55,6 +55,16 @@ struct FRitualStepDefinition
     // этого WaterTypeID (см. DT_WaterTypes/water_types.json, например
     // "BogWater"). NAME_None = вода не важна на этом шаге.
     UPROPERTY(EditAnywhere) FName RequiredWaterTypeID = NAME_None;
+
+    // Ключ-ингредиент (рецептурный гейт между ярусами биомов, ROADMAP.md
+    // "Котёл — прокачка/инструменты" -> этот путь выбран вместо апгрейда
+    // слотов котла, см. довод там же) -- пусто (как у "ЗаревойВоды" выше)
+    // значит "любые N ингредиентов", тот же смысл, что и раньше, полная
+    // обратная совместимость. Непусто -- хотя бы один из НЕ-водных
+    // предметов, добавленных именно на этом шаге, обязан иметь
+    // IngredientID из этого списка (не ЛЮБЫЕ N штук, а конкретное
+    // растение/гриб этого яруса биомов, см. TryAdvanceRitual).
+    UPROPERTY(EditAnywhere) TArray<FName> RequiredIngredientIDs;
 };
 
 USTRUCT(BlueprintType)
@@ -64,6 +74,14 @@ struct FRitualRecipeDefinition
 
     UPROPERTY(EditAnywhere) FName RecipeID;
     UPROPERTY(EditAnywhere) TArray<FRitualStepDefinition> Steps;
+
+    // Рецептурный гейт между ярусами биомов -- NAME_None (как у "ЗаревойВоды"
+    // выше) значит честная варка через ComputeApplyResult, как и раньше.
+    // Непусто -- ритуал не варит зелье вовсе: завершение выдаёт готовый
+    // предмет с этим IngredientID (см. TryAdvanceRitual, "Completed"),
+    // награда -- кристалл-оберег следующего яруса, не осмысленно "сваренная"
+    // из одного ингредиента жидкость.
+    UPROPERTY(EditAnywhere) FName GrantsIngredientID = NAME_None;
 };
 
 // Прогресс одного ритуала на одной клетке котла -- живёт между шагами,
@@ -113,6 +131,74 @@ inline TArray<FRitualRecipeDefinition> GetRitualRecipeDefinitions()
         Step2.bRequiresDawn = true;
         Def.Steps.Add(Step2);
 
+        Defs.Add(Def);
+    }
+
+    // Три рецептурных гейта между ярусами биомов (ROADMAP.md "Котёл —
+    // прокачка/инструменты, дальше не в этом проходе: рецептурный гейт
+    // между ярусами" -- закрыто этим путём вместо апгрейда слотов котла:
+    // потребность/находка нового кристалла, не запертая дверь по числу
+    // ингредиентов). Каждый требует ровно 1 ключ-ингредиент своего яруса
+    // и верный час, БЕЗ требования к типу воды (гейт держится на растении
+    // и времени суток, не на воде) -- один шаг, честно завершается сразу.
+    // Награда каждого -- GrantsIngredientID (см. TryAdvanceRitual), НЕ
+    // варится ComputeApplyResult'ом.
+
+    // Ярус 1 (Тундра/Степь) -> Ярус 2. Ключ -- Лазорик (ste_06, Тюльпан
+    // степной) ИЛИ Студёный мак (tun_04, Полярный мак), оба -- эндемики
+    // ровно этого яруса (ROADMAP.md "биомный дисбаланс", 2026-09-04:
+    // единственные 6 карточек, оставленные однобиомными как настоящие
+    // ботанические специалисты, включают эти две). Рассвет -- порог,
+    // пробуждение: "Алатырь" (награда, min_04 компендиума) -- бел-горюч
+    // камень острова Буяна, на котором в заговорах вспыхивает заря.
+    {
+        FRitualRecipeDefinition Def;
+        Def.RecipeID = FName(TEXT("PorogRassveta"));
+
+        FRitualStepDefinition Step;
+        Step.IngredientCount = 1;
+        Step.bRequiresDawn = true;
+        Step.RequiredIngredientIDs = { FName(TEXT("ste_06")), FName(TEXT("tun_04")) };
+        Def.Steps.Add(Step);
+
+        Def.GrantsIngredientID = FName(TEXT("Алатырь"));
+        Defs.Add(Def);
+    }
+
+    // Ярус 2 (Тайга/Лесостепь) -> Ярус 3. Ключ -- Аконит (tai_10),
+    // растение глухой тайги. Закат -- грань дня и ночи, опушка леса:
+    // "Синь-камень" (награда, min_05) -- пограничный священный валун на
+    // опушке/берегу, цвет закатных сумерек.
+    {
+        FRitualRecipeDefinition Def;
+        Def.RecipeID = FName(TEXT("ZakatnayaOpushka"));
+
+        FRitualStepDefinition Step;
+        Step.IngredientCount = 1;
+        Step.bRequiresDusk = true;
+        Step.RequiredIngredientIDs = { FName(TEXT("tai_10")) };
+        Def.Steps.Add(Step);
+
+        Def.GrantsIngredientID = FName(TEXT("Синь-камень"));
+        Defs.Add(Def);
+    }
+
+    // Ярус 3 (Смешанный/Широколиственный лес) -> Ярус 4. Ключ -- Бледная
+    // поганка (mix_10), самый смертоносный гриб компендиума. Ночь --
+    // полночь, омут, глубина: "Гагат" (награда, min_06) -- чёрный камень,
+    // рождённый в толще болотной топи (окаменевшая древесина), тот же
+    // мотив глубины/тьмы.
+    {
+        FRitualRecipeDefinition Def;
+        Def.RecipeID = FName(TEXT("PolunochnyOmut"));
+
+        FRitualStepDefinition Step;
+        Step.IngredientCount = 1;
+        Step.bRequiresNight = true;
+        Step.RequiredIngredientIDs = { FName(TEXT("mix_10")) };
+        Def.Steps.Add(Step);
+
+        Def.GrantsIngredientID = FName(TEXT("Гагат"));
         Defs.Add(Def);
     }
 

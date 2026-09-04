@@ -1024,6 +1024,21 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0"))
     int32 WardMorokReductionRadius = 1;
 
+    // Тиражные обереги (награда ритуалов перехода ярусов биомов, 2026-09-04,
+    // GridWorldManagerWards.cpp::ActivateTieredWard/IsTieredConcealmentActive/
+    // GetTieredMorokReductionAmount, GridWorldManagerAlchemy.cpp) — НЕТ
+    // таймера, вместо него сила зависит от того, "в своём" ли биоме
+    // используется эффект: полная сила в WardHomeBiomes кристалла, эта доля
+    // — вне них. Черновое число, как и WardDurationSeconds/
+    // WardBrewBoostCoherenceBonus выше — фольклор называет что кристалл
+    // "снаряжает" для конкретного яруса, не долю силы вне дома, той цифры
+    // ни в одном источнике нет; 0.5 выбрано так же произвольно, как и
+    // остальные Wards-числа этой категории (не ноль — оберег не бесполезен
+    // за пределами дома, иначе "слабая, но постоянная" защита превратилась
+    // бы в "либо есть, либо нет").
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float TieredWardOutOfBiomeStrength = 0.5f;
+
     // --- Межбиомная варка (DESIGN_Community_And_Homestead.md §2.4, прямой
     // запрос пользователя, 2026-09-04) — "поощрить сбор ингредиентов из
     // разных биомов для одной варки". Та же плоская надбавка к Coherence,
