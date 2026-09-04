@@ -107,6 +107,54 @@ bool FHerbalistNameUtils_EpithetFollowsQualityPriority::RunTest(const FString& P
 }
 
 // ---------------------------------------------------------------------------
+// Находка диагностики 2026-09-04 (см. CHANGELOG.md, "Пороги эпитетов не
+// пересчитаны под новую формулу варки" -- закрыто): пороги 0.6/0.65 сами по
+// себе достижимы (полный перебор реальных пар DT_IngredientClass даёт
+// эпитет выше "хилого" в ~92% Valid-исходов), но GetValidEpithet вообще не
+// смотрела на Magnitude -- честно мощная варка без выраженной оси качества
+// молча получала "Хилую", неотличимую от реально слабой. "Могутный" --
+// седьмой эпитет для этого хвоста, порог 0.45 откалиброван по измеренному
+// распределению (p90 Magnitude по полному перебору пар/выборке троек = 0.442).
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistNameUtils_HighMagnitudeWithoutQualitySignalIsMogutnyNotKhilyi,
+    "Herbalist.NameUtils.HighMagnitudeWithoutQualitySignalIsMogutnyNotKhilyi",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistNameUtils_HighMagnitudeWithoutQualitySignalIsMogutnyNotKhilyi::RunTest(const FString& Parameters)
+{
+    // Все качественные оси нейтральны (0.3, ниже любого из 0.5/0.6/0.65
+    // порогов выше) -- без Magnitude это ровно "Bland" case из теста
+    // приоритета, честный "хилый" фолбэк.
+    FRealState Weak = MakeState(1.f, 0.f, 0.f, 0.f, 0.3f, 0.3f, 0.3f, 0.1f, 0.1f);
+    Weak.Magnitude = 0.1f;
+    const FString WeakName = GeneratePotionName(EAlchemyOutcome::Valid, Weak).ToString();
+    TestTrue(TEXT("Low Magnitude, no quality signal -> khilyi (genuinely weak)"), WeakName.Contains(TEXT("илый")));
+
+    // Ровно та же качественная картина, но Magnitude далеко за порогом
+    // (0.45) -- честно мощная варка, обязана звучать иначе.
+    FRealState Strong = Weak;
+    Strong.Magnitude = 0.6f;
+    const FString StrongName = GeneratePotionName(EAlchemyOutcome::Valid, Strong).ToString();
+    TestTrue(TEXT("High Magnitude, no quality signal -> mogutnyi, not khilyi"), StrongName.Contains(TEXT("огутн")));
+    TestFalse(TEXT("High Magnitude no longer falls back to khilyi"), StrongName.Contains(TEXT("илый")));
+
+    // Порог реально пороговый, не всегда включён: чуть ниже 0.45 всё ещё
+    // хилый.
+    FRealState JustBelow = Weak;
+    JustBelow.Magnitude = 0.4f;
+    const FString JustBelowName = GeneratePotionName(EAlchemyOutcome::Valid, JustBelow).ToString();
+    TestTrue(TEXT("Magnitude just below 0.45 still falls back to khilyi"), JustBelowName.Contains(TEXT("илый")));
+
+    // Приоритет: Magnitude -- самый последний сигнал, не перевешивает ни один
+    // из пяти качественных эпитетов, даже если Magnitude тоже высокий.
+    FRealState CorruptAndPowerful = MakeState(1.f, 0.f, 0.f, 0.f, 0.1f, 0.1f, 0.1f, /*Corruption*/ 0.9f, 0.1f);
+    CorruptAndPowerful.Magnitude = 0.9f;
+    const FString CorruptAndPowerfulName = GeneratePotionName(EAlchemyOutcome::Valid, CorruptAndPowerful).ToString();
+    TestTrue(TEXT("Corruption still wins over high Magnitude (priority order unchanged)"), CorruptAndPowerfulName.Contains(TEXT("оганый")));
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Purified/Catastrophe -- отдельные, узнаваемые семьи слов, не смешиваются
 // с обычной Valid-варкой и друг с другом.
 // ---------------------------------------------------------------------------
