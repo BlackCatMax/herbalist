@@ -757,13 +757,18 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // снимает уже проявленное, это другой предмет). Перо Алконоста
             // (§16.4, 2026-09-02) — та же подавляющая проверка, но
             // масштабированная на конкретный биом клетки, не всю сетку.
-            // IsCrowdedBySameEntity -- последним в цепочке намеренно: это
-            // единственная проверка с обходом соседей (радиус в клетках), и
-            // короткое замыкание && не даёт ей выполниться, пока клетка не
-            // прошла все дешёвые гейты (биом, ось, время, погода).
+            // Оберег EntityConceal (Плакун-камень, §2.4, 2026-09-04) — та же
+            // проверка, что и Шапка, но заметно меньшим радиусом
+            // (WardConcealmentRadius) — слабая, но непрерывная версия того же
+            // укрытия. IsCrowdedBySameEntity -- последним в цепочке
+            // намеренно: это единственная проверка с обходом соседей (радиус
+            // в клетках), и короткое замыкание && не даёт ей выполниться,
+            // пока клетка не прошла все дешёвые гейты (биом, ось, время,
+            // погода).
             if (bEligible && CanManifest(Cell, Def.EntityID) &&
                 (bWasActive || (!IsInvisibilityCapActive(FIntPoint(Cell.X, Cell.Y))
                     && !IsAlkonostSuppressionActiveForBiome(Cell.Biome)
+                    && !IsWardConcealmentActive(FIntPoint(Cell.X, Cell.Y))
                     && !IsCrowdedBySameEntity(Cell, Def))))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
@@ -1146,9 +1151,12 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // проходит как раньше), "не даёт проявиться", не снимает уже
             // проявленное (это Гребень, UseCombOnCell). Перо Алконоста
             // (§16.4, 2026-09-02) — та же подавляющая проверка, масштабированная
-            // на биом якорной клетки, не всю сетку.
+            // на биом якорной клетки, не всю сетку. Оберег EntityConceal
+            // (Плакун-камень, §2.4, 2026-09-04) — та же проверка, что и
+            // Шапка, заметно меньшим радиусом.
             if (bEligible && CanManifest(*Cell, Def.EntityID) &&
-                (bWasActive || (!IsInvisibilityCapActive(*Anchor) && !IsAlkonostSuppressionActiveForBiome(Cell->Biome))))
+                (bWasActive || (!IsInvisibilityCapActive(*Anchor) && !IsAlkonostSuppressionActiveForBiome(Cell->Biome)
+                    && !IsWardConcealmentActive(*Anchor))))
             {
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);

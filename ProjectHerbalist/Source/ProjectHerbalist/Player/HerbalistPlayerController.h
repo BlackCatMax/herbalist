@@ -187,6 +187,20 @@ public:
     UFUNCTION(Exec)
     void SetGardenPlot(int32 X, int32 Y, FString NicheName);
 
+    // Активировать оберег (кристалл Пещеры, DESIGN_Community_And_Homestead.md
+    // §2.4, 2026-09-04) — тот же приём поиска в инвентаре, что уже
+    // OfferToCommunity, но БЕЗ списания (кристалл не расходуется, тот же
+    // принцип, что уже Шапка-невидимка: пока в инвентаре есть хотя бы один,
+    // можно активировать снова после истечения окна). CrystalIngredientID —
+    // точное имя ряда DT_IngredientClass ("Плакун-камень"/"Громовая
+    // стрела"). Резолвит FIngredientTableRow::WardEffectType через
+    // IngredientRegistrySubsystem и зовёт AGridWorldManager::
+    // ActivateWardBrewBoost/ActivateWardConcealment — та же граница
+    // "инвентарный поиск + резолв ряда в контроллере, мировое состояние в
+    // GridWorldManager", что уже держат OfferToCommunity/RegisterGardenPlot.
+    UFUNCTION(Exec)
+    void ActivateWard(FString CrystalIngredientID);
+
     // Основать базу (21_Journey_And_Artifacts.md §21.2, 2026-09-01) — v1
     // тот же приём, что SetGardenPlot: консоль вместо физической
     // постройки-актора, сам механизм (AGridWorldManager::Bases →

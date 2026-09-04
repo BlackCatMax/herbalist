@@ -84,7 +84,7 @@ namespace
     FStateDelta RunApply(const TArray<FInventoryItem>& Ingredients, bool bIsCrafting,
         const FIntPoint& TargetCell, FRandomStream& Rng,
         const FWorldSnapshot& WorldSnap, const FBiomeSnapshot& BiomeSnap, float CallerCoherence = 0.f,
-        EMoonPhase MoonPhase = EMoonPhase::NewMoon)
+        EMoonPhase MoonPhase = EMoonPhase::NewMoon, bool bWardBrewBoostActive = false)
     {
         FInventorySnapshot InvSnap;
         FCommandBatch CmdBatch;
@@ -95,6 +95,7 @@ namespace
         Entry.Apply.bIsCrafting = bIsCrafting;
         Entry.Apply.Intent.Coherence = CallerCoherence;
         Entry.Apply.MoonPhase = MoonPhase;
+        Entry.Apply.bWardBrewBoostActive = bWardBrewBoostActive;
         CmdBatch.AddCommand(Entry);
         return Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
     }
@@ -772,6 +773,47 @@ bool FPipelineV2ApplyShrineCoherenceBonusTest::RunTest(const FString& Parameters
         ShrinePotion->Ingredient.State.Meta.Stability > NoShrinePotion->Ingredient.State.Meta.Stability + KINDA_SMALL_NUMBER);
     TestTrue(TEXT("Recorded Coherence itself is higher with the shrine bonus"),
         ShrinePotion->Coherence > NoShrinePotion->Coherence + KINDA_SMALL_NUMBER);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Оберег BrewBoost (Громовая стрела, DESIGN_Community_And_Homestead.md §2.4,
+// 2026-09-04) — та же сравнительная проверка, что и у капища выше (Zaryana
+// axis-mix нелинейный, не считается вручную), но БЕЗ ShrineInfluence/радиуса:
+// личный эффект ношения оберега, не место. Массовый/крафтящийся аналог
+// Камня-оберега — не трогает Bifurcation, только Coherence.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyWardBrewBoostCoherenceBonusTest,
+    "ProjectHerbalist.PipelineV2.ApplyWardBrewBoostCoherenceBonus",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyWardBrewBoostCoherenceBonusTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    TArray<FInventoryItem> Ingredients = { MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f), MakeWater(0.5f, 0.4f) };
+
+    FRandomStream RngNoWard(7);
+    FStateDelta NoWardDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngNoWard, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false);
+
+    FRandomStream RngWithWard(7);
+    FStateDelta WardDelta = RunApply(Ingredients, /*bIsCrafting*/ true, FIntPoint(5, 5), RngWithWard, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ true);
+
+    const FInventoryOperation* NoWardPotion = nullptr;
+    for (const FInventoryOperation& Op : NoWardDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) NoWardPotion = &Op;
+    const FInventoryOperation* WardPotion = nullptr;
+    for (const FInventoryOperation& Op : WardDelta.InventoryOps) if (Op.OpType == EInventoryOpType::Add) WardPotion = &Op;
+    if (!TestNotNull(TEXT("No-ward potion op"), NoWardPotion) || !TestNotNull(TEXT("Ward potion op"), WardPotion))
+        return false;
+
+    TestTrue(TEXT("Active BrewBoost raises the recorded Coherence at the same seed"),
+        WardPotion->Coherence > NoWardPotion->Coherence + KINDA_SMALL_NUMBER);
+    TestTrue(TEXT("Ward-boosted Coherence raises Stability just like the shrine bonus does"),
+        WardPotion->Ingredient.State.Meta.Stability > NoWardPotion->Ingredient.State.Meta.Stability + KINDA_SMALL_NUMBER);
     return true;
 }
 

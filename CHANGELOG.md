@@ -6093,3 +6093,150 @@ IngredientGatheringAndGardenPatch`), в `Mycelium` остаются только
 
 **Итог:** 311/311, два чистых прогона (число тестов не изменилось —
 расширен существующий тест, не заведён новый).
+
+### Механика оберегов — первый вертикальный срез (2026-09-04, автономная задача)
+
+Кристаллы (культивируемый ресурс Пещеры, тот же жест State→BaseState, что
+и травы) + собственно механика "оберега" — до этого захода в Пещере было
+только место (GardenNiche::Cave), ни одной карточки кристалла, ни строчки
+кода эффекта. Baseline подтверждён: 311/311.
+
+**Ключевое ограничение задачи (дословно): "работа оберегов слабая, но
+постоянная, есть временные лимиты, не постоянное действие"** — НЕ разовый
+расходуемый предмет (как Гребень/Яблоко) и НЕ бессрочный баф при ношении.
+
+**Решение 1 — модель таймера.** Из трёх предложенных кандидатов выбран
+GameClockSeconds-экспаери (тот же паттерн, что уже
+InvisibilityCapExpiryGameSeconds/YouthAppleClarityBoostExpiryGameSeconds/
+AlkonostSuppressionExpiryGameSeconds, GridWorldManager.h): активация
+записывает GameClockSeconds + WardDurationSeconds, запрос сравнивает
+текущее GameClockSeconds с этой меткой. DisappearTimerHandle
+(AHerbalistResourceActor) отклонён — это разовый таймер НА АКТОР
+(уничтожение объекта), не подходит состоянию игрока, которое переживает
+множество тиков и запросов. ShrineNeglectDecayDays/HistoryPurityLerpRate
+отклонены — оба про ПЛАВНОЕ затухание без жёсткого нуля, а тут нужно
+настоящее "включено, потом резко выключено, можно включить снова" — ровно
+то, что уже даёт Шапка-невидимка. Выбор даёт и активацию, и истечение, и
+переактивацию бесплатно, без единой новой концепции.
+
+**Решение 2 — где хранить состояние.** На AGridWorldManager
+(GridWorldManagerWards.cpp, новый файл, тот же принцип "файл на группу
+эффектов", что уже GridWorldManagerArtifactEffects.cpp/
+GridWorldManagerProphetFeathers.cpp), НЕ на AHerbalistPlayerController.
+Довод: и BrewBoost (нужен из PipelineV2.cpp::ProcessApplyCommand), и
+EntityConceal (нужен из GridWorldManagerEntities.cpp, гейт проявления
+сущностей) читаются мировой симуляцией, не UI/вводом — тем же местом, где
+уже живут все остальные Zaryana/Artifacts-таймеры. Владение (есть ли
+кристалл в инвентаре) НЕ проверяется на AGridWorldManager — тот же
+принцип разделения обязанностей, что уже OfferToCommunity/
+RegisterGardenPlot: инвентарные поиски делает контроллер
+(AHerbalistPlayerController::ActivateWard, новая Exec-команда,
+ActivateWard <IngredientID>), резолвит FIngredientTableRow::WardEffectType
+через IngredientRegistrySubsystem и зовёт ActivateWardBrewBoost()/
+ActivateWardConcealment(Cell). Кристалл НЕ списывается активацией — тот
+же принцип, что уже Шапка-невидимка ("не расходуется... тот же предмет
+можно активировать снова после истечения").
+
+**Решение 3 — форма данных на карточке.** Не отдельная таблица
+FWardDefinition, а два новых поля прямо на FIngredientTableRow
+(bIsWard/EWardEffectType WardEffectType) — тот же масштаб правки, что уже
+GardenNiche/bIronAverse/bDelicate. Сила/длительность эффекта — НЕ на
+карточке, а общие настройки на UHerbalistSettings
+(WardDurationSeconds/WardBrewBoostCoherenceBonus/WardConcealmentRadius),
+тем же принципом, что уже InvisibilityCapDurationSeconds/
+ShrineCoherenceBonus: фольклор называет ХАРАКТЕР защиты конкретного
+предмета (плакун-камень против нечисти, громовая стрела в варке), не её
+игровую силу в долях/секундах — разводить эти два смысла по разным полям
+показалось честнее, чем изобретать псевдо-точное число на каждой отдельной
+карточке. Отдельная DataTable-таблица FWardDefinition была бы лишней
+индирекцией ради двух строк.
+
+**Два эффекта реализованы до конца** (вертикальный срез — не все 4+
+категории разом):
+- **BrewBoost** (Громовая стрела) — плоская надбавка к Coherence на варке
+  (Cmd.Apply.bWardBrewBoostActive, резолвится вне Pipeline тем же приёмом,
+  что уже bBifurcationCharmActive/MoonPhase; ProcessApplyCommand добавляет
+  WardBrewBoostCoherenceBonus тем же путём, что и бонус капища
+  ShrineCoherenceBonus, но БЕЗ радиуса влияния и заметно слабее: 0.05
+  плоских против капищенских до 0.15 масштабированных). Массовый/
+  крафтящийся аналог Камня-оберега — НЕ трогает Bifurcation (та ветка
+  целиком остаётся за bBifurcationCharmActive, не смешана с новой
+  механикой).
+- **EntityConceal** (Плакун-камень) — слабая версия Шапки-невидимки:
+  IsWardConcealmentActive(Cell) встроена в оба существующих гейта
+  проявления (GridWorldManagerEntities.cpp, амбиентные + Landmark),
+  Chebyshev-радиус WardConcealmentRadius=1 заметно меньше
+  InvisibilityCapRadius=3.
+
+**Два кристалла добавлены** (WardCrystalAppendCommandlet,
+-run=WardCrystalAppend, тот же Table->AddRow-приём, что уже
+ArtifactIngredientAppendCommandlet — НЕ полный JSON-роундтрип):
+- **Плакун-камень** (EntityConceal) — пара к уже существующей
+  Плакун-траве (riv_11, bIronAverse=true): реальный мотив заговорной
+  традиции, плакун-трава и плакун-камень нередко поминаются рядом, тот же
+  слёзный/отгоняющий-нечисть смысл в двух обличьях, растительном и
+  каменном; в некоторых заговорах ставится в один ритуальный ландшафт с
+  бел-горюч камнем Алатырём.
+- **Громовая стрела** (BrewBoost) — окаменелость-белемнит, в русской
+  народной традиции "громовая стрела"/"перунова стрела" (второе народное
+  имя, "чёртов палец", НЕ используется — уже занято тегом Лещины и шишек
+  Ольхи чёрной в компендиуме, прямое указание задачи): считалась застывшей
+  молнией Перуна, хранилась в доме от пожара/порчи, использовалась как
+  лечебно-охранный амулет для скота.
+
+Оба — AllowedBiomes пуст (никогда не выпадают случайным сбором, тот же
+принцип, что артефакты/перья), GardenNiche=Cave, Class=Mineral,
+DecayRate=0 (камень не портится — факт материала, не баланс),
+Resilience=0.0 **намеренно НЕ 1.0** — сад должен уметь тянуть Cell.State к
+BaseState кристалла (§2.4: "растут тем же жестом State→BaseState, что и
+травы"), Resilience=1.0 сломал бы этот жест точно так же, как сломал его у
+Дубовой коры (см. запись 2026-08-31). Оси/Meta — не из фольклора буквально
+(заговоры не называют чисел), а перевод качественного фольклорного
+характера в существующую шкалу, та же практика, что уже у всех 76
+карточек компендиума трав. Компендиумные карточки — новая папка
+herbalist_docs/Herbalist_Vault/04_Compendium/Минералы/ (Плакун-камень.md/
+Громовая стрела.md), тот же формат (frontmatter + Описание/Свойства в
+алхимии/Где искать/Применение/Легенды и поверья), что уже держит
+Растительность/.
+
+**Сознательно не реализовано в этом заходе** (спроектировано в
+комментарии EWardEffectType, HerbalistCoreTypes.h, не заглушка в коде):
+- **MorokReduction** (Куриный бог) — камень с естественной сквозной дырой,
+  настоящий народный оберег, вешался над постелью против кикиморы/нечисти/
+  дурных снов. Прецедент эффекта в коде есть (Perception::PerceiveValue/
+  GlobalPerceptionClarity), но категория не заведена даже как значение
+  EWardEffectType — третий эффект и третья карточка остаются следующим
+  заходом, не половинчатой реализацией сейчас.
+- **PathReveal** (показ троп) — фольклорной опоры за это время не
+  подобрано (камни-путеводители в поверьях не нашлись при доступной
+  проверке); отложено до находки реальной улики, не выдумано с нуля.
+
+**Известный, принятый пробел в тестировании**: резолв кристалла из
+инвентаря по имени (ActivateWard → IngredientRegistrySubsystem::GetRow)
+НЕ покрыт автотестом напрямую — тот же класс ограничения, что уже у
+TradeWithCommunity (GameInstanceSubsystem недоступен в Editor-мире
+автотестов, см. ROADMAP.md). Сам эффект протестирован полностью в обход
+этого резолва: WardTest.cpp (3 теста, тем же вертикальным срезом, что
+ArtifactEffectsTest.cpp уже применяет к Шапке-невидимке — активация/
+истечение/геометрия радиуса напрямую через AGridWorldManager) +
+ProjectHerbalist.PipelineV2.ApplyWardBrewBoostCoherenceBonus
+(PipelineV2ApplyTest.cpp, та же сравнительная проверка через реальный
+Simulation::ExecutePipeline, что уже ApplyShrineCoherenceBonus).
+
+Обереги-состояния (WardBrewBoostExpiryGameSeconds/
+WardConcealmentExpiryGameSeconds/WardConcealmentCenter) НЕ персистятся в
+Save/Load — тот же сознательно принятый класс "короткого игрового окна",
+что уже не сохраняют InvisibilityCap/YouthApple/Alkonost.
+
+**Итог:** 311 → 315 тестов, **315/315, два чистых прогона, ноль
+регрессий.** Файлы: Core/Types/HerbalistCoreTypes.h (EWardEffectType),
+Core/Data/IngredientTableRow.h (bIsWard/WardEffectType),
+Core/Config/HerbalistSettings.h (категория Wards),
+Core/World/GridWorldManager.h/GridWorldManagerWards.cpp (новый),
+Core/World/GridWorldManagerAlchemy.cpp, Core/World/GridWorldManagerEntities.cpp,
+Core/Simulation/Public/CommandTypes.h, Core/Simulation/Private/PipelineV2.cpp,
+Player/HerbalistPlayerController.h/.cpp (ActivateWard),
+ProjectHerbalistTests/Private/Commandlets/WardCrystalAppendCommandlet.h/.cpp
+(новый), ProjectHerbalistTests/Private/Tests/WardTest.cpp (новый),
+ProjectHerbalistTests/Private/Tests/PipelineV2ApplyTest.cpp,
+herbalist_docs/Herbalist_Vault/04_Compendium/Минералы/*.md (новая папка).

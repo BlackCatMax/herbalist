@@ -953,6 +953,19 @@ namespace Simulation
             EffectiveIntent.Coherence = FMath::Clamp(EffectiveIntent.Coherence + ShrineInfluence * Bonus, 0.0f, 1.0f);
         }
 
+        // Оберег BrewBoost (Громовая стрела, DESIGN_Community_And_Homestead.md
+        // §2.4, 2026-09-04) -- та же надбавка к Coherence, что и у капища
+        // выше, но БЕЗ радиуса влияния (личный эффект ношения, не место) и
+        // заметно слабее -- плоский WardBrewBoostCoherenceBonus вместо
+        // ShrineInfluence-масштабированного ShrineCoherenceBonus. Массовый/
+        // крафтящийся аналог Камня-оберега (не трогает Bifurcation -- та
+        // ветка остаётся исключительно за Cmd.bBifurcationCharmActive).
+        if (Cmd.bWardBrewBoostActive)
+        {
+            const float WardBonus = ShrineSettings ? ShrineSettings->WardBrewBoostCoherenceBonus : 0.05f;
+            EffectiveIntent.Coherence = FMath::Clamp(EffectiveIntent.Coherence + WardBonus, 0.0f, 1.0f);
+        }
+
         EAlchemyOutcome Outcome = EAlchemyOutcome::Valid;
         FVector4 AxisDeltaForFootprint;
         FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint, Cmd.bIsRitual, Cmd.bBifurcationCharmActive, Cmd.MoonPhase);

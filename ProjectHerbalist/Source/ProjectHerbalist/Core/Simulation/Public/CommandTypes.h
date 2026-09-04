@@ -84,6 +84,16 @@ struct FApplyCommand
     // команд, тот же известный, отдельно задокументированный разрыв, что и у
     // bBifurcationCharmActive.
     EMoonPhase MoonPhase = EMoonPhase::NewMoon;
+
+    // Оберег BrewBoost (Громовая стрела, DESIGN_Community_And_Homestead.md
+    // §2.4, 2026-09-04) -- тот же принцип "резолвится вне Pipeline", что
+    // bBifurcationCharmActive/MoonPhase выше: вызывающая сторона
+    // (AGridWorldManager::ApplyAlchemyResult) читает IsWardBrewBoostActive().
+    // Применяется как маленькая плоская надбавка к Coherence, тем же путём,
+    // что и бонус капища (ShrineCoherenceBonus, ProcessApplyCommand) -- НЕ
+    // трогает Bifurcation, это отдельная, слабая-но-непрерывная механика, не
+    // Камень-оберег.
+    bool bWardBrewBoostActive = false;
 };
 
 // S – сбор ресурса (Harvest)

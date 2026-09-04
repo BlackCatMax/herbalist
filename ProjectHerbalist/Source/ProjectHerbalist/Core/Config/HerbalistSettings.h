@@ -969,6 +969,42 @@ public:
     // умеренном Distortion.
     UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float MirrorPropheticChance = 0.3f;
+
+    // --- Обереги (кристаллы Пещеры, DESIGN_Community_And_Homestead.md §2.4,
+    // 2026-09-04) — активация даёт "слабый, но непрерывный" эффект,
+    // ограниченный по времени (прямая формулировка запроса), тем же
+    // GameClockSeconds-экспаери, что уже InvisibilityCap/YouthApple/
+    // Alkonost (см. довод у EWardEffectType, HerbalistCoreTypes.h). Общие
+    // для ЛЮБОГО оберега настройки, не поле на каждой карточке — карточка
+    // определяет только КАКОЙ эффект (WardEffectType), не его силу/срок.
+
+    // Черновое число, как и остальные Zaryana/Artifacts-таймеры этой сессии
+    // (ArtifactWarmthGainPerBrew и т.п.) — фольклор называет ХАРАКТЕР
+    // защиты оберега (плакун-камень против нечисти, громовая стрела в
+    // варке), не срок в игровых секундах, той цифры ни в одном заговоре
+    // нет. Взят тот же порядок величины, что и у остальных таймеров этой
+    // категории (сотни игровых секунд), сознательно длиннее
+    // InvisibilityCapDurationSeconds (300) и YouthAppleWindowSeconds (180)
+    // — эффект слабее, но должен продержаться дольше короткого артефактного
+    // пика, иначе активировать его вообще не имело бы смысла.
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0"))
+    float WardDurationSeconds = 600.0f;
+
+    // BrewBoost — надбавка к Coherence, тем же путём, что и ShrineCoherenceBonus
+    // (см. ProcessApplyCommand, PipelineV2.cpp), но БЕЗ радиуса влияния (личный
+    // эффект ношения, не место) и заметно слабее: капище даёт до
+    // ShrineCoherenceBonus×ShrineInfluence (полная надбавка 0.15 в упор),
+    // оберег — плоские 0.05 всегда, никогда не сильнее капища. Черновое
+    // число той же природы, что и WardDurationSeconds выше.
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float WardBrewBoostCoherenceBonus = 0.05f;
+
+    // EntityConceal — Chebyshev-радиус подавления новых проявлений вокруг
+    // игрока, тот же механизм, что и IsInvisibilityCapActive(Cell), но
+    // заметно меньше InvisibilityCapRadius (3) — "слабый" оберег защищает
+    // только вплотную к себе, не всю округу, как настоящая Шапка-невидимка.
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0"))
+    int32 WardConcealmentRadius = 1;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

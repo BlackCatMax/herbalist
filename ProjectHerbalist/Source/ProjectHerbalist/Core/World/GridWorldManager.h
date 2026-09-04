@@ -990,6 +990,30 @@ public:
     bool UseZharPtitsaFeatherOnCell(const FIntPoint& Cell);
     bool IsCellEternallyPure(const FIntPoint& Cell) const;
 
+    // ---- Обереги (кристаллы Пещеры, DESIGN_Community_And_Homestead.md
+    // §2.4, 2026-09-04) — GridWorldManagerWards.cpp. Владение (есть ли
+    // кристалл в инвентаре игрока) проверяет ВЫЗЫВАЮЩАЯ сторона
+    // (AHerbalistPlayerController::ActivateWard, тот же приём, что уже
+    // OfferToCommunity/RegisterGardenPlot: инвентарные поиски — дело
+    // контроллера, GridWorldManager только хранит мировое состояние
+    // эффекта) — эти функции ничего не проверяют, только активируют/читают
+    // таймер, тем же GameClockSeconds-паттерном, что уже InvisibilityCap
+    // выше. ----
+
+    // BrewBoost (Громовая стрела) — не расходуется, реактивируется свободно
+    // (тот же принцип, что Шапка-невидимка): пока в инвентаре есть хотя бы
+    // один кристалл, активировать можно снова после истечения окна.
+    bool ActivateWardBrewBoost();
+    bool IsWardBrewBoostActive() const;
+
+    // EntityConceal (Плакун-камень) — та же настоящая зона, что и у Шапки
+    // (Center фиксируется в момент активации), но заметно меньше радиусом
+    // (WardConcealmentRadius) — общая проверка без геометрии + проверка
+    // конкретной клетки, тот же парный API, что уже IsInvisibilityCapActive().
+    bool ActivateWardConcealment(const FIntPoint& Center);
+    bool IsWardConcealmentActive() const;
+    bool IsWardConcealmentActive(const FIntPoint& Cell) const;
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -1123,6 +1147,15 @@ protected:
     // применения. (-1,-1) = никогда не применялась (тот же сентинел, что
     // уже ZaryanaCell использует для "не размещена").
     FIntPoint InvisibilityCapCenter = FIntPoint(-1, -1);
+
+    // ---- Обереги (кристаллы Пещеры, §2.4, 2026-09-04) — тот же
+    // GameClockSeconds-сентинел, что и все поля выше. Не персистятся
+    // (Save/Load) — тот же сознательно принятый класс "короткого окна", что
+    // уже не сохраняют InvisibilityCap/YouthApple/Alkonost выше: активация
+    // — часть текущей игровой сессии, не долгоживущий прогресс. ----
+    float WardBrewBoostExpiryGameSeconds = 0.0f;
+    float WardConcealmentExpiryGameSeconds = 0.0f;
+    FIntPoint WardConcealmentCenter = FIntPoint(-1, -1);
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

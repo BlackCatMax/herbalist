@@ -791,6 +791,80 @@ void AHerbalistPlayerController::SetGardenPlot(int32 X, int32 Y, FString NicheNa
     Manager->RegisterGardenPlot(FIntPoint(X, Y), Niche);
 }
 
+void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
+{
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no inventory component"));
+        return;
+    }
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: world manager not found"));
+        return;
+    }
+
+    // Владение — тот же поиск по имени, что уже OfferToCommunity, но БЕЗ
+    // списания: оберег не расходуется активацией (см. комментарий у
+    // объявления). Достаточно хотя бы одной единицы в инвентаре в момент
+    // активации.
+    const FName CrystalID(*CrystalIngredientID);
+    bool bHasCrystal = false;
+    for (const FInventoryItem& Item : InventoryComponent->GetItems())
+    {
+        if (Item.IngredientID == CrystalID && Item.Count > 0)
+        {
+            bHasCrystal = true;
+            break;
+        }
+    }
+    if (!bHasCrystal)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no '%s' in inventory"), *CrystalIngredientID);
+        return;
+    }
+
+    // Резолв WardEffectType — через IngredientRegistrySubsystem, тот же
+    // приём, что уже AGridWorldManager::SpawnResourceActor. НЕ покрыто
+    // автотестом на этом уровне: GameInstanceSubsystem недоступен в
+    // Editor-мире автотестов, тот же класс пробела, что уже у
+    // TradeWithCommunity (см. ROADMAP.md) — сам эффект (AGridWorldManager::
+    // ActivateWardBrewBoost/ActivateWardConcealment/IsWard*Active) протестирован
+    // напрямую, минуя этот резолв.
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(CrystalID) : nullptr;
+    if (!Row || !Row->bIsWard || Row->WardEffectType == EWardEffectType::None)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: '%s' is not a ward"), *CrystalIngredientID);
+        return;
+    }
+
+    switch (Row->WardEffectType)
+    {
+    case EWardEffectType::BrewBoost:
+        Manager->ActivateWardBrewBoost();
+        break;
+    case EWardEffectType::EntityConceal:
+    {
+        // Настоящая зона (тот же приём, что уже UseInvisibilityCap) — центр
+        // берётся от клетки, где стоит игрок в момент активации.
+        APawn* ControlledPawn = GetPawn();
+        int32 X = 0, Y = 0;
+        if (!ControlledPawn || !Manager->WorldPositionToCell(ControlledPawn->GetActorLocation(), X, Y))
+        {
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no pawn, or pawn is outside the grid"));
+            return;
+        }
+        Manager->ActivateWardConcealment(FIntPoint(X, Y));
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void AHerbalistPlayerController::FoundBase(int32 X, int32 Y)
 {
     AGridWorldManager* Manager = FindWorldManager();

@@ -227,6 +227,23 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     // тем же жестом State->BaseState, что и травы.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Garden")
     EGardenNiche GardenNiche = EGardenNiche::None;
+
+    // ---- Обереги (кристаллы Пещеры, DESIGN_Community_And_Homestead.md
+    // §2.4, реализация 2026-09-04) — только КАТЕГОРИЯ эффекта живёт на
+    // карточке, не сила/длительность: те, как и у остальных Zaryana/
+    // Artifacts-таймеров этого проекта (InvisibilityCapDurationSeconds,
+    // ShrineCoherenceBonus...), общие настройки на UHerbalistSettings
+    // (WardDurationSeconds/WardBrewBoostCoherenceBonus/WardConcealmentRadius),
+    // не число на каждой отдельной карточке — фольклор называет ХАРАКТЕР
+    // защиты конкретного предмета, не её игровую силу в секундах/долях.
+    //
+    // false/None у всех обычных трав/грибов — только два кристалла первого
+    // захода несут эти поля (Плакун-камень/Громовая стрела).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ward")
+    bool bIsWard = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ward", meta = (EditCondition = "bIsWard"))
+    EWardEffectType WardEffectType = EWardEffectType::None;
 };
 
 // Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются

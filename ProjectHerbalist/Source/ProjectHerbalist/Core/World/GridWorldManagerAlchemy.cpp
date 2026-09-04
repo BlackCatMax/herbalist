@@ -25,6 +25,9 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     // Tier 1 п.1.2) -- тот же принцип, что и заряд оберега выше: резолвится
     // здесь, вне Pipeline.
     Cmd.Apply.MoonPhase = GetMoonPhase();
+    // Оберег BrewBoost (Громовая стрела, §2.4, 2026-09-04) -- тот же приём,
+    // что и bBifurcationCharmActive выше: резолвится здесь, не в Pipeline.
+    Cmd.Apply.bWardBrewBoostActive = IsWardBrewBoostActive();
     QueueCommand(Cmd);
 
     UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());
