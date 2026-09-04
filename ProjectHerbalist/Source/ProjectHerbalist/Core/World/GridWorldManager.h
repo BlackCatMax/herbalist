@@ -1014,6 +1014,14 @@ public:
     bool IsWardConcealmentActive() const;
     bool IsWardConcealmentActive(const FIntPoint& Cell) const;
 
+    // MorokReduction (Куриный бог, второй заход 2026-09-04) — тот же
+    // Center+Radius приём, что и EntityConceal выше, но читается из
+    // ComputePerceptionDistortion, не из гейта проявления сущностей, и
+    // только ночью (см. довод у EWardEffectType, HerbalistCoreTypes.h).
+    bool ActivateWardMorokReduction(const FIntPoint& Center);
+    bool IsWardMorokReductionActive() const;
+    bool IsWardMorokReductionActive(const FIntPoint& Cell) const;
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -1156,6 +1164,8 @@ protected:
     float WardBrewBoostExpiryGameSeconds = 0.0f;
     float WardConcealmentExpiryGameSeconds = 0.0f;
     FIntPoint WardConcealmentCenter = FIntPoint(-1, -1);
+    float WardMorokReductionExpiryGameSeconds = 0.0f;
+    FIntPoint WardMorokReductionCenter = FIntPoint(-1, -1);
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

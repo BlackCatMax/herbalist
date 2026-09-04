@@ -1,7 +1,8 @@
 // WardCrystalAppendCommandlet.h
 //
-// Добавляет ряды для первых двух кристаллов Пещеры (DESIGN_Community_And_
-// Homestead.md §2.4, механика оберегов, 2026-09-04) в живой DT_IngredientClass
+// Добавляет ряды для кристаллов Пещеры (DESIGN_Community_And_
+// Homestead.md §2.4, механика оберегов, 2026-09-04 первый заход + второй
+// заход того же дня -- Куриный бог/MorokReduction) в живой DT_IngredientClass
 // -- тот же UDataTable::AddRow-приём, что уже ArtifactIngredientAppendCommandlet
 // применяет к артефактам/перьям: строится программно в C++, не из JSON --
 // эти 2 строки не входят ни в компендиум трав (herbalist_docs/CSV_tabs/

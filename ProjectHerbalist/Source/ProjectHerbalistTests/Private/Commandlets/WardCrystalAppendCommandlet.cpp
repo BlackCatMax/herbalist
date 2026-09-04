@@ -48,6 +48,32 @@ namespace
         S.Meta.Corruption = 0.03f;
         return S;
     }
+
+    // Куриный бог (второй заход, 2026-09-04) -- камень с естественной
+    // сквозной дырой, точенной водой/ветром (см. компендиумную карточку):
+    // тот же принцип перевода КАЧЕСТВЕННОГО фольклорного характера в
+    // существующую шкалу, что и у двух кристаллов выше, не выдуманные
+    // числа. Дырка-проход и защита именно сна/дурных снов -- заметный
+    // Mind выше, чем у обоих соседей (те про тело/варку и слёзное изгнание
+    // нечисти, этот про морок восприятия во сне), Magnitude ниже всех --
+    // это самый обыденный, бытовой из трёх оберегов (вешался в курятнике),
+    // не купальский заговор и не громовой удар.
+    FRealState MakeKurinyiBogBaseState()
+    {
+        FRealState S;
+        S.Magnitude = 0.45f;
+        S.Direction.Body = 0.15f;
+        S.Direction.Mind = 0.5f;    // дыра-проход -- морок/сон/восприятие
+        S.Direction.Spirit = 0.7f;  // тот же апотропейный класс, что и плакун-камень
+        S.Direction.Nature = 0.15f;
+        S.Meta.Distortion = 0.05f;  // сама суть эффекта MorokReduction -- гасит искажение
+        S.Meta.Stability = 0.9f;
+        S.Meta.Purity = 0.85f;
+        S.Meta.Potency = 0.5f;      // слабее двух других -- самый бытовой оберег
+        S.Meta.Resonance = 0.5f;
+        S.Meta.Corruption = 0.02f;
+        return S;
+    }
 }
 
 int32 UWardCrystalAppendCommandlet::Main(const FString& Params)
@@ -64,7 +90,7 @@ int32 UWardCrystalAppendCommandlet::Main(const FString& Params)
     int32 SkippedCount = 0;
 
     auto AddCrystal = [&](FName ID, const TCHAR* DisplayName, const TCHAR* Description,
-        const FRealState& BaseState, EWardEffectType WardEffect, TArray<FName> Tags)
+        const FRealState& BaseState, EWardEffectType WardEffect, TArray<FName> Tags, FName ElementName = FName(TEXT("Огонь")))
     {
         if (Table->GetRowMap().Contains(ID))
         {
@@ -85,7 +111,7 @@ int32 UWardCrystalAppendCommandlet::Main(const FString& Params)
         Row.RarityWeight = 1;
         Row.DecayRate = 0.0f;    // камень не портится (факт материала)
         Row.Resilience = 0.0f;   // намеренно НЕ 1.0 -- сад должен уметь тянуть State к BaseState
-        Row.Element = FName(TEXT("Огонь"));
+        Row.Element = ElementName;
         Row.Tags = MoveTemp(Tags);
         Row.GardenNiche = EGardenNiche::Cave;
         Row.bIsWard = true;
@@ -110,6 +136,18 @@ int32 UWardCrystalAppendCommandlet::Main(const FString& Params)
         MakeGromovayaStrelaBaseState(),
         EWardEffectType::BrewBoost,
         { FName(TEXT("оберег")), FName(TEXT("перун")), FName(TEXT("гроза")), FName(TEXT("кристалл")) });
+
+    AddCrystal(
+        FName(TEXT("Куриный бог")),
+        TEXT("Куриный бог"),
+        TEXT("Небольшой серый камешек с одной сквозной дырочкой, проточенной в нём водой и ветром, не рукой -- оттого и сила его не человеческая. Другое имя -- Божье око. Находят такой камень случайно, в поле или на дороге, никогда не ищут нарочно: кто найдёт -- тому удача. Вешали над постелью, в хлеву, в курятнике -- от кикиморы, от порчи, от дурного глаза и от дурных снов."),
+        MakeKurinyiBogBaseState(),
+        EWardEffectType::MorokReduction,
+        { FName(TEXT("оберег")), FName(TEXT("куриный бог")), FName(TEXT("апотропей")), FName(TEXT("кристалл")) },
+        // Вода, не Огонь (в отличие от двух соседей выше) -- дырка в камне
+        // проточена именно водой/ветром по тексту поверья, не связана с
+        // громом/Купалой.
+        FName(TEXT("Вода")));
 
     if (AddedCount == 0)
     {

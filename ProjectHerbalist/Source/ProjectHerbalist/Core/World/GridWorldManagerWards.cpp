@@ -65,3 +65,37 @@ bool AGridWorldManager::IsWardConcealmentActive(const FIntPoint& Cell) const
     const int32 Dist = FMath::Max(FMath::Abs(Cell.X - WardConcealmentCenter.X), FMath::Abs(Cell.Y - WardConcealmentCenter.Y));
     return Dist <= Radius;
 }
+
+// MorokReduction (Куриный бог, второй заход 2026-09-04) — тот же
+// Center+Radius API, что и EntityConceal выше (активация фиксирует клетку
+// игрока в момент вызова). Читается только из ComputePerceptionDistortion
+// (GridWorldManagerEntities.cpp), которая сама решает применять ли эффект
+// только ночью — здесь, на уровне таймера/геометрии, никакого дневного/
+// ночного различия нет, ровно как ActivateWardConcealment не знает о
+// сущностях, которые он в итоге гасит.
+bool AGridWorldManager::ActivateWardMorokReduction(const FIntPoint& Center)
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float DurationSeconds = Settings ? Settings->WardDurationSeconds : 600.0f;
+    WardMorokReductionCenter = Center;
+    WardMorokReductionExpiryGameSeconds = GameClockSeconds + DurationSeconds;
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Ward] MorokReduction active at (%d,%d) until %.1f"),
+        Center.X, Center.Y, WardMorokReductionExpiryGameSeconds);
+    return true;
+}
+
+bool AGridWorldManager::IsWardMorokReductionActive() const
+{
+    return GameClockSeconds < WardMorokReductionExpiryGameSeconds;
+}
+
+bool AGridWorldManager::IsWardMorokReductionActive(const FIntPoint& Cell) const
+{
+    if (!IsWardMorokReductionActive()) return false;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 Radius = Settings ? Settings->WardMorokReductionRadius : 1;
+    const int32 Dist = FMath::Max(FMath::Abs(Cell.X - WardMorokReductionCenter.X), FMath::Abs(Cell.Y - WardMorokReductionCenter.Y));
+    return Dist <= Radius;
+}

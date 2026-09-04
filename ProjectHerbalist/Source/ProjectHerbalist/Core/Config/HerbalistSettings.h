@@ -1005,6 +1005,24 @@ public:
     // только вплотную к себе, не всю округу, как настоящая Шапка-невидимка.
     UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0"))
     int32 WardConcealmentRadius = 1;
+
+    // MorokReduction (Куриный бог, второй заход 2026-09-04) — насколько
+    // ослабляет воспринятое искажение (ComputePerceptionDistortion) ночью в
+    // радиусе действия. Черновое число той же природы, что и
+    // WardBrewBoostCoherenceBonus выше: НЕ полностью гасит ночную надбавку
+    // Морочников (NightPerceptionDistortionBonus=0.25) — "слабый" оберег
+    // приглушает морок, а не отменяет ночь целиком, иначе это была бы
+    // полноценная Шапка-невидимка для восприятия, не народный камешек с
+    // дырой над постелью.
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float WardMorokReductionAmount = 0.1f;
+
+    // MorokReduction — тот же Chebyshev-радиус приём, что и WardConcealmentRadius
+    // (не выдумываем третье число: тот же класс "слабый, радиус вплотную к
+    // месту активации", что и у EntityConceal — оба защищают "здесь", не
+    // всю округу).
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0"))
+    int32 WardMorokReductionRadius = 1;
 };
 
 UHerbalistSettings* GetHerbalistSettings();

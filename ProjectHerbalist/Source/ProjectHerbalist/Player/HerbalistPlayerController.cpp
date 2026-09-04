@@ -860,6 +860,20 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
         Manager->ActivateWardConcealment(FIntPoint(X, Y));
         break;
     }
+    case EWardEffectType::MorokReduction:
+    {
+        // Куриный бог — тот же Center-по-клетке-игрока приём, что и
+        // EntityConceal выше (второй заход, 2026-09-04).
+        APawn* ControlledPawn = GetPawn();
+        int32 X = 0, Y = 0;
+        if (!ControlledPawn || !Manager->WorldPositionToCell(ControlledPawn->GetActorLocation(), X, Y))
+        {
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no pawn, or pawn is outside the grid"));
+            return;
+        }
+        Manager->ActivateWardMorokReduction(FIntPoint(X, Y));
+        break;
+    }
     default:
         break;
     }

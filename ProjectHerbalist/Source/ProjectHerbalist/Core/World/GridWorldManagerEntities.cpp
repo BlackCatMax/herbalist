@@ -386,6 +386,19 @@ float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
         Perceived += 0.1f;
     }
 
+    // Куриный бог (MorokReduction, второй заход механики оберегов, 2026-09-04)
+    // — народный оберег от кикиморы и дурных снов, вешался над постелью:
+    // защита конкретно сна, не восприятия вообще, поэтому применяется ТОЛЬКО
+    // ночью (IsNight(), тот же гейт, что чуть выше даёт саму ночную надбавку
+    // Морочников) и только в радиусе вокруг места активации
+    // (IsWardMorokReductionActive(Cell), тот же Center+Radius приём, что уже
+    // EntityConceal). Днём этому обережью нечего гасить прицельно — решение
+    // обосновано у EWardEffectType (HerbalistCoreTypes.h).
+    if (IsNight() && IsWardMorokReductionActive(FIntPoint(X, Y)))
+    {
+        Perceived -= Settings ? Settings->WardMorokReductionAmount : 0.1f;
+    }
+
     return FMath::Clamp(Perceived, 0.0f, 1.0f);
 }
 
