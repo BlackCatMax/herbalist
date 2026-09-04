@@ -1,6 +1,7 @@
 #include "HerbalistNameUtils.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
+#include "Misc/Crc.h"
 
 // ============================================================================
 // Фольклорные имена зелий (2026-08-30, "не топорное 'Сильное зелье здоровья',
@@ -258,18 +259,68 @@ namespace
         return Capitalize(FString::Printf(TEXT("%s %s"), Epithet.Get(Case), Noun.Forms.Get(Case)));
     }
 
-    // Доминирующая ось Direction — та же логика выбора, что раньше жила в
-    // старой GeneratePotionName (наибольшее из четырёх значений).
+    // Доминирующая ось Direction — раньше был голый argmax (наибольшее из
+    // четырёх значений). Диагностика дисбаланса имён зелий (2026-09-04, см.
+    // CHANGELOG.md) на полном переборе пар/выборке троек реальных ингредиентов
+    // DT_IngredientClass показала, что Nature выигрывает argmax в ~60% валидных
+    // варок, и половина этой доли — не с явным отрывом: медианный зазор между
+    // 1-й и 2-й осью среди всех валидных варок ≈ 0.21, а у 36% зазор вообще
+    // <0.05 (почти ничья). Голый argmax в таких случаях звучит куда увереннее,
+    // чем математика внутри него — отсюда "Светлый Настой" как 55% всех имён.
+    //
+    // NounTieBreakGapThreshold откалиброван по этой же медиане (≈0.21,
+    // округлено до 0.2) — тот же принцип калибровки "по перцентилю измеренного
+    // распределения", каким уже откалиброван порог "Могутный" (0.45, по p90
+    // Magnitude). Ниже порога — вторая ось получает шанс, линейно растущий от
+    // 0% (на самом пороге) до 50% (при зазоре 0); на/выше порога — ось всё ещё
+    // однозначно доминирует, argmax как раньше, без лотереи.
+    constexpr float NounTieBreakGapThreshold = 0.2f;
+
     enum class EDominantAxis : uint8 { Body, Mind, Spirit, Nature };
+
+    // Не настоящая RNG: GeneratePotionName — чистая функция от State, и
+    // вызывается заново при каждой перерисовке UI (InventorySlotWidget,
+    // AlchemySlotWidget) — реальный FMath::RandRange заставил бы одно и то же
+    // зелье менять имя на каждый кадр. Хэш от точных чисел Direction даёт тот
+    // же "подброс", но детерминированно: одна и та же комбинация ингредиентов
+    // всегда попадает в один и тот же исход.
+    float DeterministicNoise01(const FDirection& Dir)
+    {
+        const uint32 Hash = FCrc::MemCrc32(&Dir, sizeof(FDirection));
+        return static_cast<float>(Hash) / static_cast<float>(MAX_uint32);
+    }
 
     EDominantAxis GetDominantAxis(const FDirection& Dir)
     {
-        EDominantAxis Best = EDominantAxis::Body;
-        float BestValue = Dir.Body;
-        if (Dir.Mind > BestValue) { Best = EDominantAxis::Mind; BestValue = Dir.Mind; }
-        if (Dir.Spirit > BestValue) { Best = EDominantAxis::Spirit; BestValue = Dir.Spirit; }
-        if (Dir.Nature > BestValue) { Best = EDominantAxis::Nature; }
-        return Best;
+        struct FAxisValue { float Value; EDominantAxis Axis; };
+        FAxisValue Vals[4] = {
+            { Dir.Body,   EDominantAxis::Body },
+            { Dir.Mind,   EDominantAxis::Mind },
+            { Dir.Spirit, EDominantAxis::Spirit },
+            { Dir.Nature, EDominantAxis::Nature },
+        };
+        // Четыре элемента -- прямая сортировка вставками дешевле и не тянет
+        // Algo/Sort.h ради тривиального случая.
+        for (int32 i = 1; i < 4; ++i)
+        {
+            const FAxisValue Cur = Vals[i];
+            int32 j = i - 1;
+            while (j >= 0 && Vals[j].Value < Cur.Value)
+            {
+                Vals[j + 1] = Vals[j];
+                --j;
+            }
+            Vals[j + 1] = Cur;
+        }
+
+        const float Gap = Vals[0].Value - Vals[1].Value;
+        if (Gap >= NounTieBreakGapThreshold)
+        {
+            return Vals[0].Axis;
+        }
+
+        const float SecondAxisChance = 0.5f * (1.0f - Gap / NounTieBreakGapThreshold);
+        return (DeterministicNoise01(Dir) < SecondAxisChance) ? Vals[1].Axis : Vals[0].Axis;
     }
 
     const FPotionNoun& GetValidNoun(EDominantAxis Axis)

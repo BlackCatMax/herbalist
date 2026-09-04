@@ -248,6 +248,83 @@ bool FHerbalistNameUtils_AllSixCasesProduceDistinctForms::RunTest(const FString&
 }
 
 // ---------------------------------------------------------------------------
+// Разбор дисбаланса имён зелий (2026-09-04, см. CHANGELOG.md): голый argmax
+// по осям Direction почти всегда выбирал Nature -> "Настой" (60% валидных
+// варок), причём почти половина этих случаев -- зазор <0.10 между 1-й и 2-й
+// осью, то есть argmax звучал куда увереннее, чем сама математика внутри.
+// GetDominantAxis теперь при зазоре < NounTieBreakGapThreshold (0.2, по
+// медиане измеренного распределения) даёт шанс второй оси -- но не через
+// RNG (GeneratePotionName вызывается заново на каждую перерисовку UI), а
+// через детерминированный хэш точных чисел State.Direction.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistNameUtils_SameStateAlwaysProducesSameName,
+    "Herbalist.NameUtils.TieBreak.SameStateAlwaysProducesSameName",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistNameUtils_SameStateAlwaysProducesSameName::RunTest(const FString& Parameters)
+{
+    // Близкий зазор (0.50 vs 0.45 = 0.05) -- ровно тот случай, где раньше
+    // argmax был бы "уверенным", а теперь есть шанс на вторую ось. Вызов
+    // GeneratePotionName дважды с идентичным State обязан дать идентичный
+    // результат -- имитирует повторную перерисовку одного и того же слота.
+    const FRealState State = MakeState(0.f, 0.45f, 0.f, 0.50f);
+    const FString First = GeneratePotionName(EAlchemyOutcome::Valid, State).ToString();
+    const FString Second = GeneratePotionName(EAlchemyOutcome::Valid, State).ToString();
+    TestEqual(TEXT("Identical State called twice yields identical name (no RNG re-roll per UI redraw)"), First, Second);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistNameUtils_ConfidentMarginAlwaysKeepsDominantAxis,
+    "Herbalist.NameUtils.TieBreak.ConfidentMarginAlwaysKeepsDominantAxis",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistNameUtils_ConfidentMarginAlwaysKeepsDominantAxis::RunTest(const FString& Parameters)
+{
+    // Nature=0.7 vs Mind=0.3 -- зазор 0.4, далеко выше порога 0.2. Body/Spirit
+    // варьируются только чтобы поменять хэш (не влияют на топ-2), проверяем,
+    // что при явном отрыве вторая ось не получает шанса вообще -- ни при
+    // каком хэше.
+    TSet<FString> Seen;
+    for (int32 i = 0; i < 10; ++i)
+    {
+        const FRealState State = MakeState(0.001f * i, 0.3f, 0.002f * i, 0.7f);
+        Seen.Add(GeneratePotionName(EAlchemyOutcome::Valid, State).ToString());
+    }
+    TestEqual(TEXT("Wide margin (gap=0.4) always resolves to the dominant axis regardless of hash"), Seen.Num(), 1);
+
+    // Зазор ровно НА пороге (0.5-0.3=0.2) -- по формуле шанс второй оси в
+    // этой точке равен нулю (0.5*(1-0.2/0.2)=0), но формально попадает в
+    // ветку Gap>=Threshold и решается без обращения к хэшу вовсе.
+    const FRealState AtThreshold = MakeState(0.f, 0.3f, 0.f, 0.5f);
+    TestTrue(TEXT("Gap exactly at threshold still resolves to the dominant axis (Nature/nastoy)"),
+        GeneratePotionName(EAlchemyOutcome::Valid, AtThreshold).ToString().Contains(TEXT("насто")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistNameUtils_CloseMarginSometimesFlipsToSecondAxis,
+    "Herbalist.NameUtils.TieBreak.CloseMarginSometimesFlipsToSecondAxis",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistNameUtils_CloseMarginSometimesFlipsToSecondAxis::RunTest(const FString& Parameters)
+{
+    // Nature=0.50 vs Mind=0.45 -- зазор 0.05, глубоко внутри зоны неуверенности
+    // (шанс второй оси = 0.5*(1-0.05/0.2) = 37.5%). Body/Spirit варьируются,
+    // чтобы получить 30 разных хэшей при одном и том же зазоре -- если
+    // подбрасывание работает, среди 30 бросков почти наверняка встретятся
+    // ОБА исхода (P(все одинаковы) < 1e-6 при 37.5%/62.5%).
+    TSet<FString> DistinctNouns;
+    for (int32 i = 0; i < 30; ++i)
+    {
+        const FRealState State = MakeState(0.001f * i, 0.45f, 0.002f * i, 0.50f);
+        const FString Name = GeneratePotionName(EAlchemyOutcome::Valid, State).ToString();
+        DistinctNouns.Add(Name.Contains(TEXT("насто")) ? TEXT("nastoy") : (Name.Contains(TEXT("дурман")) ? TEXT("durman") : TEXT("other")));
+    }
+    TestTrue(TEXT("Close margin (gap=0.05) produces both nastoy and durman across varied hashes, not always the argmax winner"),
+        DistinctNouns.Num() >= 2);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // GetItemDisplayName честно читает BrewOutcome с предмета, не всегда Valid.
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistNameUtils_DisplayNameReadsBrewOutcomeFromItem,
