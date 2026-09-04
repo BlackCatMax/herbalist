@@ -1,0 +1,518 @@
+[
+    {
+        "Name": "bol_01",
+        "AllowedBiomes": [
+            "Bog",
+            "Taiga",
+            "Tundra"
+        ]
+    },
+    {
+        "Name": "bol_02",
+        "AllowedBiomes": [
+            "Bog",
+            "Floodplain"
+        ]
+    },
+    {
+        "Name": "bol_03",
+        "AllowedBiomes": [
+            "Bog",
+            "Taiga",
+            "Tundra"
+        ]
+    },
+    {
+        "Name": "bol_04",
+        "AllowedBiomes": [
+            "Bog",
+            "Tundra",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "bol_05",
+        "AllowedBiomes": [
+            "Bog",
+            "Tundra"
+        ]
+    },
+    {
+        "Name": "bol_06",
+        "AllowedBiomes": [
+            "Bog",
+            "Floodplain"
+        ]
+    },
+    {
+        "Name": "bol_07",
+        "AllowedBiomes": [
+            "Bog",
+            "Floodplain"
+        ]
+    },
+    {
+        "Name": "bol_08",
+        "AllowedBiomes": [
+            "Bog",
+            "Tundra"
+        ]
+    },
+    {
+        "Name": "bol_09",
+        "AllowedBiomes": [
+            "Bog",
+            "Tundra"
+        ]
+    },
+    {
+        "Name": "bol_10",
+        "AllowedBiomes": [
+            "Bog",
+            "Floodplain"
+        ]
+    },
+    {
+        "Name": "bol_12",
+        "AllowedBiomes": [
+            "Bog",
+            "Floodplain"
+        ]
+    },
+    {
+        "Name": "les_01",
+        "AllowedBiomes": [
+            "ForestSteppe",
+            "Steppe"
+        ]
+    },
+    {
+        "Name": "les_02",
+        "AllowedBiomes": [
+            "ForestSteppe",
+            "Steppe"
+        ]
+    },
+    {
+        "Name": "les_09",
+        "AllowedBiomes": [
+            "ForestSteppe",
+            "Steppe",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "les_03",
+        "AllowedBiomes": [
+            "ForestSteppe",
+            "Steppe"
+        ]
+    },
+    {
+        "Name": "les_04",
+        "AllowedBiomes": [
+            "ForestSteppe",
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "les_05",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "les_06",
+        "AllowedBiomes": [
+            "ForestSteppe",
+            "Steppe",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "les_07",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "les_08",
+        "AllowedBiomes": [
+            "ForestSteppe",
+            "Steppe"
+        ]
+    },
+    {
+        "Name": "riv_01",
+        "AllowedBiomes": [
+            "Floodplain",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "riv_02",
+        "AllowedBiomes": [
+            "Floodplain",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "riv_03",
+        "AllowedBiomes": [
+            "Floodplain",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "riv_04",
+        "AllowedBiomes": [
+            "Floodplain",
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "riv_05",
+        "AllowedBiomes": [
+            "Floodplain",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "riv_06",
+        "AllowedBiomes": [
+            "Floodplain",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "riv_07",
+        "AllowedBiomes": [
+            "Floodplain",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "riv_08",
+        "AllowedBiomes": [
+            "Floodplain",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "riv_09",
+        "AllowedBiomes": [
+            "Floodplain",
+            "MixedForest",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "mix_01",
+        "AllowedBiomes": [
+            "MixedForest",
+            "ForestSteppe",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_10",
+        "AllowedBiomes": [
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_02",
+        "AllowedBiomes": [
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_03",
+        "AllowedBiomes": [
+            "MixedForest",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "mix_04",
+        "AllowedBiomes": [
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_05",
+        "AllowedBiomes": [
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_06",
+        "AllowedBiomes": [
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_09",
+        "AllowedBiomes": [
+            "MixedForest",
+            "Taiga",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_07",
+        "AllowedBiomes": [
+            "MixedForest",
+            "Taiga",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "mix_08",
+        "AllowedBiomes": [
+            "MixedForest",
+            "Taiga",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "ste_01",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "ste_08",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "ste_07",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "ste_03",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "ste_04",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "ste_05",
+        "AllowedBiomes": [
+            "Steppe",
+            "ForestSteppe",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_10",
+        "AllowedBiomes": [
+            "Taiga",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_01",
+        "AllowedBiomes": [
+            "Taiga",
+            "Tundra",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_02",
+        "AllowedBiomes": [
+            "Taiga",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_08",
+        "AllowedBiomes": [
+            "Taiga",
+            "Tundra"
+        ]
+    },
+    {
+        "Name": "tai_04",
+        "AllowedBiomes": [
+            "Taiga",
+            "MixedForest",
+            "BroadleafForest"
+        ]
+    },
+    {
+        "Name": "tai_05",
+        "AllowedBiomes": [
+            "Taiga",
+            "Tundra",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_07",
+        "AllowedBiomes": [
+            "Taiga",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_03",
+        "AllowedBiomes": [
+            "Taiga",
+            "ForestSteppe",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_09",
+        "AllowedBiomes": [
+            "Taiga",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tai_06",
+        "AllowedBiomes": [
+            "Taiga",
+            "Tundra",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "tun_06",
+        "AllowedBiomes": [
+            "Tundra",
+            "Bog",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "tun_02",
+        "AllowedBiomes": [
+            "Tundra",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "tun_05",
+        "AllowedBiomes": [
+            "Tundra",
+            "Bog",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "tun_03",
+        "AllowedBiomes": [
+            "Tundra",
+            "Bog"
+        ]
+    },
+    {
+        "Name": "tun_01",
+        "AllowedBiomes": [
+            "Tundra",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "broad_09",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest",
+            "Taiga"
+        ]
+    },
+    {
+        "Name": "broad_01",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "broad_10",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "broad_02",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "broad_03",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "broad_04",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest",
+            "Floodplain"
+        ]
+    },
+    {
+        "Name": "broad_05",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest",
+            "ForestSteppe"
+        ]
+    },
+    {
+        "Name": "broad_06",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "broad_07",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest"
+        ]
+    },
+    {
+        "Name": "broad_08",
+        "AllowedBiomes": [
+            "BroadleafForest",
+            "MixedForest",
+            "ForestSteppe"
+        ]
+    }
+]
