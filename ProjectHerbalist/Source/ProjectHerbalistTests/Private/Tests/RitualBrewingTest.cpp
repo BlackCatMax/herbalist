@@ -346,7 +346,7 @@ bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent::R
 // этим путём вместо апгрейда котла). "Порог Рассвета" (Ярус 1 -> 2): 1 шаг,
 // IngredientCount=1, ЛИБО ste_06 (Лазорик), ЛИБО tun_04 (Студёный мак), на
 // рассвете, без требования к типу воды -- НЕ варит через ComputeApplyResult,
-// сразу выдаёт готовый предмет с IngredientID == GrantsIngredientID ("Алатырь").
+// сразу выдаёт готовый предмет с IngredientID == GrantsIngredientID ("Зорин-камень").
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_PorogRassvetaCompletesWithCorrectKeyIngredient,
     "Herbalist.Ritual.PorogRassvetaCompletesWithCorrectKeyIngredient",
@@ -368,7 +368,7 @@ bool FHerbalistRitual_PorogRassvetaCompletesWithCorrectKeyIngredient::RunTest(co
     FInventoryItem Potion1;
     const ERitualStepResult Result1 = Manager->TryAdvanceRitual(FIntPoint(3, 3), Ste06, Rng1, Potion1);
     TestTrue(TEXT("ste_06 at dawn completes 'ПорогРассвета' in one step"), Result1 == ERitualStepResult::Completed);
-    TestEqual(TEXT("Reward IngredientID matches GrantsIngredientID"), Potion1.IngredientID, FName(TEXT("Алатырь")));
+    TestEqual(TEXT("Reward IngredientID matches GrantsIngredientID"), Potion1.IngredientID, FName(TEXT("Зорин-камень")));
     TestEqual(TEXT("Reward is a single item"), Potion1.Count, 1);
     TestEqual(TEXT("No ritual progress left behind after immediate completion"), Manager->ActiveRituals.Num(), 0);
 
@@ -378,7 +378,7 @@ bool FHerbalistRitual_PorogRassvetaCompletesWithCorrectKeyIngredient::RunTest(co
     FInventoryItem Potion2;
     const ERitualStepResult Result2 = Manager->TryAdvanceRitual(FIntPoint(4, 4), Tun04, Rng2, Potion2);
     TestTrue(TEXT("tun_04 at dawn also completes 'ПорогРассвета' -- either key works"), Result2 == ERitualStepResult::Completed);
-    TestEqual(TEXT("Reward IngredientID matches GrantsIngredientID (second key)"), Potion2.IngredientID, FName(TEXT("Алатырь")));
+    TestEqual(TEXT("Reward IngredientID matches GrantsIngredientID (second key)"), Potion2.IngredientID, FName(TEXT("Зорин-камень")));
 
     Manager->Destroy();
     return true;

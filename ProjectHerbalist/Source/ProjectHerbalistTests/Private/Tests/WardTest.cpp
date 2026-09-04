@@ -231,7 +231,7 @@ bool FHerbalistWard_TieredConcealmentOnlyProtectsHomeBiome::RunTest(const FStrin
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
-    Manager->GetCell(5, 5)->Biome = EBiomeType::Taiga;         // домашний биом (Алатырь: Taiga+ForestSteppe)
+    Manager->GetCell(5, 5)->Biome = EBiomeType::Taiga;         // домашний биом (Зорин-камень: Taiga+ForestSteppe)
     Manager->GetCell(6, 6)->Biome = EBiomeType::Steppe;        // НЕ домашний
 
     TestFalse(TEXT("Not active before activation"), Manager->IsTieredConcealmentActive(FIntPoint(5, 5)));

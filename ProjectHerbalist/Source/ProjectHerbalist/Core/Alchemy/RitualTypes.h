@@ -149,8 +149,13 @@ inline TArray<FRitualRecipeDefinition> GetRitualRecipeDefinitions()
     // ровно этого яруса (ROADMAP.md "биомный дисбаланс", 2026-09-04:
     // единственные 6 карточек, оставленные однобиомными как настоящие
     // ботанические специалисты, включают эти две). Рассвет -- порог,
-    // пробуждение: "Алатырь" (награда, min_04 компендиума) -- бел-горюч
-    // камень острова Буяна, на котором в заговорах вспыхивает заря.
+    // пробуждение: "Зорин-камень" (награда) -- скромный оберег на зорьке,
+    // НЕ Алатырь (первая версия ошибочно взяла имя главного, вселенского
+    // камня славянской космологии -- "всем камням отец" с острова Буяна --
+    // для самой первой, рядовой находки; исправлено 2026-09-04 по прямому
+    // замечанию пользователя, заодно и коллизия имён: FAlatyr::S0
+    // (HerbalistCoreTypes.h) уже занимает это слово под опорное состояние
+    // мира, к оберегам отношения не имеющее).
     {
         FRitualRecipeDefinition Def;
         Def.RecipeID = FName(TEXT("PorogRassveta"));
@@ -161,7 +166,7 @@ inline TArray<FRitualRecipeDefinition> GetRitualRecipeDefinitions()
         Step.RequiredIngredientIDs = { FName(TEXT("ste_06")), FName(TEXT("tun_04")) };
         Def.Steps.Add(Step);
 
-        Def.GrantsIngredientID = FName(TEXT("Алатырь"));
+        Def.GrantsIngredientID = FName(TEXT("Зорин-камень"));
         Defs.Add(Def);
     }
 

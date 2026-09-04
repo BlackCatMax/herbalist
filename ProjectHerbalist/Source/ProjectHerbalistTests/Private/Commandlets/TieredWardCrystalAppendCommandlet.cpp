@@ -17,27 +17,28 @@ namespace
     // тематических аналогов среди исходной тройки -- награда за прохождение
     // яруса опаснее любой находки в Пещере, не декоративное совпадение.
 
-    // Алатырь (Ярус 1->2, EntityConceal) -- "всем камням отец", бел-горюч
-    // камень посреди Окияна-моря на острове Буяне, откуда "заря занимается"
-    // в заговорах: источник всякой силы и света, самый чистый и мощный
-    // камень фольклора. Тот же апотропейный класс, что и у Плакун-камня
-    // (EntityConceal), но Purity/Magnitude выше -- это ПЕРВАЯ, не третья
-    // находка игрока, но самый "первозданный", легендарный образ во всём
-    // своде поверий.
-    FRealState MakeAlatyrBaseState()
+    // Зорин-камень (Ярус 1->2, EntityConceal) -- маленький светлый камень,
+    // какие в поверьях подбирают на зорьке, на распутье между полем и
+    // лесом: скромный, рядовой оберег на первый выход за порог. Тот же
+    // апотропейный класс, что и у Плакун-камня (EntityConceal), никакой
+    // особой избранности сверх него -- обе находки одного ряда. Раньше на
+    // этом месте по ошибке стоял Алатырь ("всем камням отец", остров
+    // Буян) -- несоразмерно значимое, вселенского масштаба имя для рядовой
+    // первой находки; исправлено 2026-09-04 (см. довод в RitualTypes.h).
+    FRealState MakeZorinKamenBaseState()
     {
         FRealState S;
-        S.Magnitude = 0.7f;
+        S.Magnitude = 0.6f;
         S.Direction.Body = 0.2f;
-        S.Direction.Mind = 0.3f;
-        S.Direction.Spirit = 0.9f;   // доминанта -- источник всей силы
-        S.Direction.Nature = 0.2f;
-        S.Meta.Distortion = 0.03f;   // почти нулевое -- "камень всем камням отец", предельная ясность
-        S.Meta.Stability = 0.97f;
-        S.Meta.Purity = 0.95f;       // выше любой карточки компендиума -- первозданная чистота
-        S.Meta.Potency = 0.7f;
-        S.Meta.Resonance = 0.55f;
-        S.Meta.Corruption = 0.01f;
+        S.Direction.Mind = 0.25f;
+        S.Direction.Spirit = 0.6f;   // доминанта -- скрытность, тише воды
+        S.Direction.Nature = 0.35f;
+        S.Meta.Distortion = 0.1f;
+        S.Meta.Stability = 0.75f;
+        S.Meta.Purity = 0.7f;
+        S.Meta.Potency = 0.5f;
+        S.Meta.Resonance = 0.45f;
+        S.Meta.Corruption = 0.05f;
         return S;
     }
 
@@ -100,6 +101,19 @@ int32 UTieredWardCrystalAppendCommandlet::Main(const FString& Params)
 
     int32 AddedCount = 0;
     int32 SkippedCount = 0;
+    bool bRemovedOldRow = false;
+
+    // Разовая чистка (2026-09-04): первая версия этого коммандлета создала
+    // ряд "Алатырь" -- ошибочное имя (см. довод в RitualTypes.h/выше в этом
+    // файле). Точечное удаление через RemoveRow, не JSON-роундтрип -- тот
+    // же принцип безопасности, что и у AddRow ниже. Идемпотентно: если ряда
+    // уже нет (чистая база или повторный запуск), просто ничего не делает.
+    if (Table->GetRowMap().Contains(FName(TEXT("Алатырь"))))
+    {
+        Table->RemoveRow(FName(TEXT("Алатырь")));
+        bRemovedOldRow = true;
+        UE_LOG(LogTemp, Warning, TEXT("TieredWardCrystalAppend: удалён ошибочный ряд 'Алатырь' (заменён на 'Зорин-камень')"));
+    }
 
     auto AddCrystal = [&](FName ID, const TCHAR* DisplayName, const TCHAR* Description,
         const FRealState& BaseState, EWardEffectType WardEffect, const TArray<EBiomeType>& HomeBiomes,
@@ -137,13 +151,13 @@ int32 UTieredWardCrystalAppendCommandlet::Main(const FString& Params)
     };
 
     AddCrystal(
-        FName(TEXT("Алатырь")),
-        TEXT("Алатырь"),
-        TEXT("Бел-горюч камень посреди Окияна-моря, на острове Буяне -- \"всем камням отец\", как называют его заговоры. Из-под него, по преданию, вытекает целебная река, а над ним занимается заря: порог, с которого начинается любая сила, любой день. Награда за первый пройденный рубеж -- Тундру и Степь: кто дошёл до края первого яруса живым, тому камень открывает дорогу дальше, в Тайгу и Лесостепь."),
-        MakeAlatyrBaseState(),
+        FName(TEXT("Зорин-камень")),
+        TEXT("Зорин-камень"),
+        TEXT("Небольшой светлый голыш, какие подбирают на зорьке у степной или тундровой межи -- там, где кончается открытое поле и начинается чужая, лесная сторона. Ничего особого на вид, разве что чуть тёплый, будто ещё держит утренний свет. Народ верил: такой камень в кармане отводит взгляд лихого, пока идёшь по незнакомой земле. Награда за первый пройденный рубеж -- Тундру и Степь: скромный, рядовой оберег в дорогу, не более."),
+        MakeZorinKamenBaseState(),
         EWardEffectType::EntityConceal,
         { EBiomeType::Taiga, EBiomeType::ForestSteppe },
-        { FName(TEXT("оберег")), FName(TEXT("алатырь")), FName(TEXT("буян")), FName(TEXT("апотропей")), FName(TEXT("кристалл")), FName(TEXT("рассвет")) },
+        { FName(TEXT("оберег")), FName(TEXT("зорин-камень")), FName(TEXT("зорька")), FName(TEXT("апотропей")), FName(TEXT("кристалл")), FName(TEXT("рассвет")) },
         FName(TEXT("Огонь")));
 
     AddCrystal(
