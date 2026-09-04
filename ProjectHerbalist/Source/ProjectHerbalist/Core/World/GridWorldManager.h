@@ -374,9 +374,10 @@ public:
     ERitualStepResult TryAdvanceRitual(const FIntPoint& CauldronCell, const TArray<FInventoryItem>& NewIngredients,
         FRandomStream& Rng, FInventoryItem& OutPotion);
 
-    // ---- Сад (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) ----
+    // ---- Сад (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31; шестая
+    // пристройка Cave — 2026-09-04) ----
     // Клетка с зарегистрированной пристройкой (Грибница/Погреб/Водоём/
-    // Открытая или Тенистая грядка) — SpawnResourcesInCell/StartRegeneration
+    // Открытая или Тенистая грядка/Пещера) — SpawnResourcesInCell/StartRegeneration
     // берут кандидатов из EGardenNiche ингредиента вместо AllowedBiomes
     // клетки (постройка физически подделывает нишу, не переносит биом
     // целиком, см. IngredientRegistrySubsystem::GetRandomResourceForNiche).

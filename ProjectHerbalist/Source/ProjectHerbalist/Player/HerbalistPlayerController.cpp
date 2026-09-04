@@ -781,9 +781,10 @@ void AHerbalistPlayerController::SetGardenPlot(int32 X, int32 Y, FString NicheNa
     else if (NicheName == TEXT("pond"))    Niche = EGardenNiche::Pond;
     else if (NicheName == TEXT("sunny"))   Niche = EGardenNiche::SunnyBed;
     else if (NicheName == TEXT("shade"))   Niche = EGardenNiche::ShadeBed;
+    else if (NicheName == TEXT("cave"))    Niche = EGardenNiche::Cave;
     else if (NicheName != TEXT("none"))
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: unknown niche '%s' (ожидались mycelium/cellar/pond/sunny/shade/none)"), *NicheName);
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: unknown niche '%s' (ожидались mycelium/cellar/pond/sunny/shade/cave/none)"), *NicheName);
         return;
     }
 

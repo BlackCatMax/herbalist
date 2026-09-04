@@ -258,6 +258,12 @@ bool FHerbalistCommunity_GardenPlotsSurviveSaveLoad::RunTest(const FString& Para
 
     Manager->RegisterGardenPlot(FIntPoint(2, 3), EGardenNiche::Mycelium);
     Manager->RegisterGardenPlot(FIntPoint(5, 5), EGardenNiche::Pond);
+    // Cave -- шестая ниша (2026-09-04, DESIGN_Community_And_Homestead.md
+    // §2.4), тот же приём Save/Load обязан работать и на ней, не только на
+    // пяти исходных -- ничего в этом пути не переключается по конкретному
+    // значению enum'а (обычная TMap-запись), но регрессия должна поймать,
+    // если это когда-нибудь перестанет быть так.
+    Manager->RegisterGardenPlot(FIntPoint(7, 7), EGardenNiche::Cave);
     Save->GardenPlots = Manager->GardenPlots;   // тот же порядок, что SaveGame()
 
     // Симулируем дальнейшую игру после сохранения -- новая пристройка и
@@ -266,11 +272,13 @@ bool FHerbalistCommunity_GardenPlotsSurviveSaveLoad::RunTest(const FString& Para
     Manager->RegisterGardenPlot(FIntPoint(9, 9), EGardenNiche::ShadeBed);
     Manager->GardenPlots = Save->GardenPlots;   // тот же порядок, что LoadGame()
 
-    TestEqual(TEXT("Exactly the two saved plots come back, not the post-save edits"), Manager->GardenPlots.Num(), 2);
+    TestEqual(TEXT("Exactly the three saved plots come back, not the post-save edits"), Manager->GardenPlots.Num(), 3);
     const EGardenNiche* Mycelium = Manager->GardenPlots.Find(FIntPoint(2, 3));
     const EGardenNiche* Pond = Manager->GardenPlots.Find(FIntPoint(5, 5));
+    const EGardenNiche* Cave = Manager->GardenPlots.Find(FIntPoint(7, 7));
     TestTrue(TEXT("(2,3) restored to Mycelium"), Mycelium && *Mycelium == EGardenNiche::Mycelium);
     TestTrue(TEXT("(5,5) restored to Pond"), Pond && *Pond == EGardenNiche::Pond);
+    TestTrue(TEXT("(7,7) restored to Cave"), Cave && *Cave == EGardenNiche::Cave);
     TestFalse(TEXT("(9,9), assigned only after the save point, is not present"), Manager->GardenPlots.Contains(FIntPoint(9, 9)));
 
     Manager->Destroy();

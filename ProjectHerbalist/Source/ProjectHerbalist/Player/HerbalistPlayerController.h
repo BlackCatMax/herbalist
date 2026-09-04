@@ -178,8 +178,9 @@ public:
     void TradeWithCommunity(FString OfferedIngredientID, FString WantedIngredientID);
 
     // Зарегистрировать клетку как грядку сада с пристройкой NicheName
-    // (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) — "mycelium"/
-    // "cellar"/"pond"/"sunny"/"shade", "none" снимает регистрацию. v1:
+    // (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31; шестая ниша Cave
+    // добавлена 2026-09-04) — "mycelium"/"cellar"/"pond"/"sunny"/"shade"/
+    // "cave", "none" снимает регистрацию. v1:
     // тот же приём, что SetGatheringTool — консоль вместо физической
     // постройки-актора, сам механизм (AGridWorldManager::GardenPlots →
     // GetRandomResourceForNiche) работает уже сейчас.

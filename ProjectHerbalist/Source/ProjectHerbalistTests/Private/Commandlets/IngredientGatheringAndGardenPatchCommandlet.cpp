@@ -25,6 +25,7 @@ namespace
         if (Value == TEXT("Pond"))       { OutNiche = EGardenNiche::Pond;       return true; }
         if (Value == TEXT("SunnyBed"))   { OutNiche = EGardenNiche::SunnyBed;   return true; }
         if (Value == TEXT("ShadeBed"))   { OutNiche = EGardenNiche::ShadeBed;   return true; }
+        if (Value == TEXT("Cave"))       { OutNiche = EGardenNiche::Cave;       return true; }
         if (Value == TEXT("None"))       { OutNiche = EGardenNiche::None;       return true; }
         return false;
     }
