@@ -268,8 +268,9 @@ public:
     // бесов/Злыдней). Изначально заведены только два полюса (Basket/Cellar,
     // "инфраструктура + 2-3 примера"), три остальных (Sack/Cabinet/Jar)
     // добавлены тем же днём отдельным заходом ("проработка инвентаря и
-    // систем хранения") — спектр от худшего к лучшему:
-    // Sack(1.4) > Basket(1.3) > None(1.0) > Cabinet(0.7) > Cellar(0.4) > Jar(0.25).
+    // систем хранения") — спектр от худшего к лучшему (Tues добавлен
+    // 2026-09-04, переносные контейнеры игрока):
+    // Sack(1.4) > Basket(1.3) > None(1.0) > Tues(0.85) > Cabinet(0.7) > Cellar(0.4) > Jar(0.25).
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.1", ClampMax = "5.0"))
     float BasketDecayMultiplier = 1.3f;
 
@@ -277,6 +278,18 @@ public:
     // и куда уязвимее для моли/вредителей, чем плетёная корзина.
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.1", ClampMax = "5.0"))
     float SackDecayMultiplier = 1.4f;
+
+    // Туёс (берестяной короб, 2026-09-04, переносные контейнеры игрока) —
+    // единственный ПЕРЕНОСНОЙ контейнер лучше базовой линии: береста
+    // обладает реальным природным антисептическим/влагостойким свойством
+    // (см. карточку компендиума, 04_Compendium/Утварь/Туёс.md), заметно
+    // надёжнее корзины/мешка. Но всё же не мебель дома — намеренно хуже
+    // Cabinet/Cellar/Jar, иначе то, что несёшь на себе в дороге, было бы
+    // лучше настоящего погреба, а это разрушило бы смысл "дом лучше похода".
+    // Диапазон клампа как у Cabinet/Cellar ниже (0.05-1.0, лучше базовой
+    // линии), не как у Basket/Sack (0.1-5.0, хуже базовой линии).
+    UPROPERTY(config, EditAnywhere, Category = "Inventory|Decay", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+    float TuesDecayMultiplier = 0.85f;
 
     // Шкаф — лучше базовой линии (закрыт от пыли/вредителей), но не так
     // хорош, как погреб: комнатная температура и влажность, не стабильные.
@@ -314,6 +327,30 @@ public:
     // не с потолка, но и не измерено отдельно — начальная отправная точка.
     UPROPERTY(config, EditAnywhere, Category = "Inventory|Fertilizer", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float FertilizerFertilityBonus = 0.1f;
+
+    // --- Домашние хранилища (DESIGN_Community_And_Homestead.md §2.2,
+    // 2026-09-04, BuildHomeStorage) --- "погреб выкопать" -- буквальное
+    // расширение дома, не ниша сада; постройка мгновенна при выполнении
+    // условий (мягкая прокачка §2.2: материалы + Respect хозяина, не число
+    // опыта).
+    //
+    // Порог Respect Домового -- симметричен уже откалиброванному
+    // отрицательному порогу того же хозяина (AggravatedCurseThreshold=-0.6
+    // на строке "Домовой" DT_Landmarks, см. LandmarkTypes.h/ROADMAP.md §
+    // "Отягощённое проклятие") -- то же число, отражённое в хорошую
+    // сторону, не с потолка: симметричная дистанция от нейтрального 0 в обе
+    // стороны для одного и того же хозяина места.
+    UPROPERTY(config, EditAnywhere, Category = "Storage", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+    float HomeStorageRespectThreshold = 0.6f;
+
+    // Материал -- Дубовая кора (broad_10, DT_IngredientClass, компендиум
+    // "Широколиственный лес"): Resilience=1.0 в проекте ("не портится") --
+    // реальный, прочный материал для стройки, не абстрактный ресурс.
+    // Количество черновое, тот же порядок величины, что и другие плоские
+    // требования проекта (например HomeStorageMaterialCount единиц одного
+    // стека, RemoveItem списывает разом).
+    UPROPERTY(config, EditAnywhere, Category = "Storage", meta = (ClampMin = "1", ClampMax = "9"))
+    int32 HomeStorageMaterialCount = 3;
 
     // --- Entity Manifestation (02_GDD/16_Entity_Manifestation.md) — вертикальный срез ---
     // Гнильники (Низший, Болото): порог Corruption клетки для проявления зоны.
@@ -1078,4 +1115,12 @@ public:
     float CrossBiomeCoherenceBonus = 0.03f;
 };
 
-UHerbalistSettings* GetHerbalistSettings();
+// PROJECTHERBALIST_API добавлен 2026-09-04 (обнаружено при линковке
+// ProjectHerbalistTests -- новый тест другого, параллельного захода этой же
+// сессии, HomeStorageTest.cpp, впервые вызвал эту свободную функцию из
+// МОДУЛЯ ProjectHerbalistTests, не только изнутри ProjectHerbalist. Без
+// маркера DLL-экспорта символ не был виден за пределы своего модуля --
+// LNK2019 "unresolved external symbol" при линковке Tests.dll, хотя
+// компиляция каждого файла по отдельности проходила чисто. Чисто
+// видимость символа, поведение функции не меняется ни на бит.
+PROJECTHERBALIST_API UHerbalistSettings* GetHerbalistSettings();

@@ -20,8 +20,11 @@
 //   компендиума.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Storage/StorageContainer.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
+#include "Engine/World.h"
 
 void AGridWorldManager::RegisterBase(const FIntPoint& Cell)
 {
@@ -68,4 +71,51 @@ bool AGridWorldManager::IsValidBrewingLocation(const FIntPoint& Cell) const
         if (B.Cell == Cell) return true;
     }
     return false;
+}
+
+// Домашние хранилища (DESIGN_Community_And_Homestead.md §2.2, 2026-09-04) --
+// см. подробный довод у объявления (GridWorldManager.h): только сам эффект
+// (спавн AStorageContainer у клетки-якоря дома), владение/Respect/материал
+// уже проверены вызывающей стороной (AHerbalistPlayerController::
+// BuildHomeStorage) -- тот же принцип границы, что уже PlantSeedInCell/
+// ApplyFertilizerToCell в GridWorldManagerCore.cpp.
+AStorageContainer* AGridWorldManager::SpawnHomeStorageContainer(const FIntPoint& AnchorCell, EStorageContainerType ContainerType)
+{
+    const FGridCell* Cell = GetCellConst(AnchorCell.X, AnchorCell.Y);
+    if (!Cell)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[HomeStorage] (%d,%d) is outside the grid -- not built"), AnchorCell.X, AnchorCell.Y);
+        return nullptr;
+    }
+
+    // "Рядом с клеткой" котла, не поверх неё (прямая формулировка запроса) --
+    // сдвиг на полклетки в сторону +X. Не JitterRadius/FindFreeSpawnPositionInCell
+    // (тот путь трейсит на ландшафт и проверяет занятость коллизией, см.
+    // SpawnResourceActor) -- намеренно проще: постройка мгновенна и
+    // детерминирована по решению игрока, не вероятностная россыпь ресурсов,
+    // а тот же класс упрощения делает эту функцию тестируемой без
+    // настоящего ландшафта под ногами (см. StorageContainerTest.cpp — тот
+    // же голый SpawnActor, без трассировки).
+    FVector SpawnPos = GetCellWorldPositionFlat(AnchorCell.X, AnchorCell.Y);
+    SpawnPos.X += CellSize * 0.5f;
+    SpawnPos.Z = GetCellHeight(AnchorCell.X, AnchorCell.Y) + 5.0f;
+
+    UWorld* World = GetWorld();
+    AStorageContainer* NewContainer = World ? World->SpawnActor<AStorageContainer>(AStorageContainer::StaticClass(), SpawnPos, FRotator::ZeroRotator) : nullptr;
+    if (!NewContainer)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[HomeStorage] SpawnActor failed near (%d,%d)"), AnchorCell.X, AnchorCell.Y);
+        return nullptr;
+    }
+
+    // AStorageContainer's constructor defaults ContainerType to Basket
+    // (see StorageContainer.cpp) -- overridden here to what was actually built.
+    if (NewContainer->InventoryComponent)
+    {
+        NewContainer->InventoryComponent->ContainerType = ContainerType;
+    }
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[HomeStorage] Built container type=%d near (%d,%d)"),
+        (int32)ContainerType, AnchorCell.X, AnchorCell.Y);
+    return NewContainer;
 }

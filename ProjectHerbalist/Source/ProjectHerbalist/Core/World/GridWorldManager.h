@@ -23,9 +23,11 @@ class AHerbalistEntityActor;
 class AHerbalistPlayerController;
 class ALandscape;
 class ABiomeRegionVolume;
+class AStorageContainer;
 struct FWorldSnapshot;
 struct FStateDelta;
 struct FSavedCellState;
+enum class EStorageContainerType : uint8;
 
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
@@ -672,6 +674,21 @@ public:
     // (тот же принцип, что уже у инструментов/сада: механизм есть, визуал —
     // отдельная задача), эта функция не вызывается пока ниоткуда в коде.
     bool IsValidBrewingLocation(const FIntPoint& Cell) const;
+
+    // ---- Домашние хранилища (DESIGN_Community_And_Homestead.md §2.2,
+    // 2026-09-04) — буквальное расширение дома ("погреб выкопать"), не ниша
+    // сада: прямой запрос пользователя. Постройка МГНОВЕННА при выполнении
+    // условий (тот же принцип "мягкой прокачки" §2.2 — материалы + Respect
+    // хозяина, не число опыта), не растянутый во времени процесс. Владение/
+    // Respect Домового/списание материала — дело вызывающей стороны
+    // (AHerbalistPlayerController::BuildHomeStorage, тот же класс границы,
+    // что уже держат ActivateWard/PlantSeed): эта функция — только сам
+    // эффект, спавн AStorageContainer у клетки-якоря дома, НЕ трогает
+    // GameInstance, напрямую тестируема (тот же принцип, что уже
+    // PlantSeedInCell/ApplyFertilizerToCell выше). Возвращает nullptr при
+    // отказе (клетка вне сетки/спавн не удался) — вызывающая сторона уже
+    // отчиталась причиной, здесь второго лога не требуется.
+    AStorageContainer* SpawnHomeStorageContainer(const FIntPoint& AnchorCell, EStorageContainerType ContainerType);
 
     // ---- Общинный кластер (DESIGN_Community_And_Homestead.md §1,
     // 17_Hero_And_Community.md §17.3, реализация 2026-08-31): Молва,

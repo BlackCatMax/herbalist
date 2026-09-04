@@ -7114,3 +7114,242 @@ PeregnoyIngredientID`), не строка от вызывающей сторон
 принцип §2.2, что уже держит апгрейд), сушка с честным изменением алхимии
 по каждой карточке компендиума — три отдельных, ещё не начатых куска,
 см. ROADMAP.md.
+
+### Домашние хранилища как расширения дома: BuildHomeStorage (2026-09-04)
+
+Второй из трёх кусков "Хранилищ" (см. запись выше). Прямой запрос
+пользователя при разборе: домашнее хранилище — НЕ ниша сада (не мгновенная
+разметка клетки без физического представления), а буквальное **расширение
+дома** ("погреб условно выкопать надо"), но при этом сама постройка
+**мгновенна** при выполнении условий, не растянутый во времени процесс —
+тот же принцип "мягкой прокачки" `DESIGN_Community_And_Homestead.md §2.2`
+("апгрейд доступен не за накопленные очки, а по факту — материалы есть И
+отношение с нужным хозяином достаточное"), не новая механика ожидания.
+
+**Новый Exec `BuildHomeStorage <cellar|cabinet|jar>`**
+(`HerbalistPlayerController.h/.cpp`) — строковый парсер типа контейнера, тем
+же приёмом, что уже `SetGardenPlot`/`SetGatheringTool`. Из шести значений
+`EStorageContainerType` строится дома только три СТАЦИОНАРНЫХ (Cabinet/
+Cellar/Jar) — Basket/Sack/Tues переносные, их "надевают" через
+`EquipContainer` (см. запись выше про Переносные контейнеры), не строят;
+None — отсутствие контейнера, тоже не предлагается.
+
+**Клетка-якорь** — не абстрактное место, а ровно та клетка, где
+`AAlchemyTableActor::BeginPlay` уже регистрирует Домового
+(`AGridWorldManager::RegisterDomovoi`), найденная через
+`TActorIterator<AAlchemyTableActor>` — "у дома уже есть чёткая клетка-якорь"
+(прямая формулировка запроса).
+
+**Гейт — два условия, оба обязательны:**
+1. **Respect Домового ≥ `HomeStorageRespectThreshold` (0.6, новая настройка
+   `HerbalistSettings.h`, категория `Storage`)** — читается тем же путём,
+   что уже `TalkTo`/`ChooseDialogueBranch` (`AGridWorldManager::
+   FindLandmarkAt` на клетке-якоре, `FEntityLandmark::Respect`, EntityID
+   "Домовой"). Порог 0.6 выбран НЕ с потолка — симметричен уже
+   откалиброванному отрицательному порогу того же самого хозяина
+   (`AggravatedCurseThreshold = -0.6` на строке "Домовой" DT_Landmarks,
+   `LandmarkTypes.h`, эскалация в домашнюю Кикимору при плохих
+   отношениях) — то же число, отражённое в хорошую сторону.
+2. **`HomeStorageMaterialCount` (3, та же категория настроек) единиц
+   Дубовой коры (`broad_10`, DT_IngredientClass, компендиум "Широколиственный
+   лес")** — реальный, прочный материал: карточка уже несёт `Resilience=1.0`
+   ("не портится") в проекте, разумный выбор для стройки, не абстрактный
+   ресурс. ID материала — константа кода (`static const FName
+   HomeStorageMaterialID`), не строка от вызывающей стороны, тем же приёмом,
+   что уже `ApplyFertilizer`/`PeregnoyIngredientID` — резолва через
+   `IngredientRegistrySubsystem` не требуется вовсе. Требует всех единиц
+   ОДНИМ стеком (сумма по нескольким стекам не считается) — тот же класс
+   v1-упрощения, что и у остальных Exec-путей этого файла.
+
+**v1-ограничение**: не больше одного хранилища каждого типа (проверка по
+всем `AStorageContainer` в мире через `TActorIterator`, не по отдельному
+списку "домашних") — без него повторный `BuildHomeStorage cellar` тихо
+плодил бы независимые Погреба, что читается как дублирующий баг, не как
+расширение дома. Разные типы друг друга не блокируют — Cabinet и Cellar
+можно построить оба.
+
+**Разделение обязанностей — тот же принцип границы, что уже держат
+`PlantSeed`/`ApplyFertilizer`:** новая `AGridWorldManager::
+SpawnHomeStorageContainer(AnchorCell, ContainerType)`
+(`GridWorldManagerBases.cpp`, рядом с `RegisterBase`/
+`IsValidBrewingLocation` — та же "домашняя" тематика файла) — ТОЛЬКО сам
+эффект: спавнит `AStorageContainer` со сдвигом на полклетки от AnchorCell
+(рядом с котлом, не поверх него), ставит запрошенный `ContainerType`. Не
+трогает GameInstance, без трассировки на ландшафт/проверки занятости
+коллизией (в отличие от `SpawnResourceActor` — постройка мгновенна и
+детерминирована решением игрока, не вероятностная россыпь ресурсов), что
+заодно делает функцию тестируемой без настоящего ландшафта под ногами.
+Владение/Respect/списание материала — в контроллере (`BuildHomeStorage`),
+резолв ряда по имени здесь НЕ требуется вовсе (в отличие от `PlantSeed`/
+`ActivateWard`/`EquipContainer` — материал фиксированная константа, тот же
+класс, что уже `ApplyFertilizer`), поэтому, в отличие от того класса
+пробела, `BuildHomeStorage` целиком тестируем без GameInstance тоже.
+
+**Побочная находка при первом прогоне теста**: `BuildRequiresRespectAndMaterial`
+падал с симптомом "Respect Домового всегда 0.00", хотя тест явно поднимал
+его перед решающим шагом — причина не в самом `BuildHomeStorage`, а в
+изоляции теста: `TActorIterator<AAlchemyTableActor>` внутри него подбирал
+ПЕРВЫЙ стол в персистентном тестовом мире, а не обязательно свежепоставленный
+этим тестом (тот же класс гонки, что уже описан в `TestWorldHelpers.h` про
+`AGridWorldManager`/`ABiomeRegionVolume` — `Destroy()` не гарантирует
+немедленное удаление из итератора). Починено тем же приёмом: явная очистка
+всех `AAlchemyTableActor`/`AStorageContainer` в мире в начале теста, до
+спавна собственных.
+
+**Итог:** 344 → 346 тест (341 базовых + 3 от параллельного агента
+переносных контейнеров, работавшего над тем же деревом одновременно, см.
+запись выше про Переносные контейнеры), **346/346, два чистых прогона, ноль
+регрессий.** Новый `HomeStorageTest.cpp` — 2 теста:
+`SpawnCreatesContainerWithRequestedType` (тип не захардкожен, отказ на
+клетке вне сетки) и `BuildRequiresRespectAndMaterial` (полный гейт: ни
+Respect, ни материала — отказ; материал есть, Respect низкий — отказ; оба
+условия — построено; дубликат того же типа — отказ; другой тип — не
+блокируется; переносной тип — не строится вовсе).
+Файлы: `HerbalistSettings.h` (`HomeStorageRespectThreshold`/
+`HomeStorageMaterialCount`, категория `Storage`), `GridWorldManager.h`
+(`SpawnHomeStorageContainer` declaration, forward-declare `AStorageContainer`/
+`EStorageContainerType`), `GridWorldManagerBases.cpp`
+(`SpawnHomeStorageContainer` implementation), `HerbalistPlayerController.h/.cpp`
+(`BuildHomeStorage` Exec), новый `HomeStorageTest.cpp` (2 теста), `ROADMAP.md`.
+
+### Переносные контейнеры игрока: Корзина/Мешок/Туёс + EquipContainer (2026-09-04)
+
+Первый из трёх кусков "Хранилищ" (см. запись выше по дате) — параллельный
+заход той же сессии, что и `BuildHomeStorage` (запись ниже по файлу,
+хронологически рядом). Прямой запрос пользователя при разборе: игрок должен
+уметь **носить с собой** разные переносные контейнеры (Корзина/Мешок/Туёс),
+физическую вещь в инвентаре, меняющую decay личного инвентаря — не
+абстрактный выбор. `AHerbalistPlayerController::InventoryComponent` до этой
+правки жёстко нёс `ContainerType::None`, никогда не переключался.
+
+**Новый `EStorageContainerType::Tues`** (`HerbalistInventoryComponent.h`) —
+берестяной короб, вставлен в перечисление между `Sack` и `Cabinet`.
+Фольклорная проверка той же сессии подтвердила реальность туеса: береста
+обладает настоящим природным антисептическим/влагостойким свойством, оттого
+превосходила многие другие сосуды для хранения — чисто славянская вещь
+(источники: soik.ru "как правильно хранить лечебные травы",
+uvatmuseum.kultura-to.ru "берестяные туеса"). Новая настройка
+`TuesDecayMultiplier = 0.85` (`HerbalistSettings.h`, `Inventory|Decay`) —
+заметно лучше `None`(1.0)/`Basket`(1.3)/`Sack`(1.4), но намеренно хуже
+стационарной мебели дома `Cabinet`(0.7)/`Cellar`(0.4)/`Jar`(0.25): переносной
+короб не может быть лучше настоящего погреба, иначе это разрушило бы смысл
+"дом лучше похода". Полный спектр решения — `Herbalist.Storage.
+ContainerTypesOrderDecayCorrectly` (`StorageContainerTest.cpp`) расширен
+седьмой точкой в ту же цепочку неравенств, не переписан с нуля.
+
+**Новое поле `FIngredientTableRow::GrantsContainerType`**
+(`IngredientTableRow.h`, `EStorageContainerType`, default `None`) — если
+карточка представляет переносной контейнер, здесь указано, какой
+`ContainerType` она даёт при экипировке. Потребовал включения
+`Core/Inventory/HerbalistInventoryComponent.h` в `IngredientTableRow.h`
+(проверено на отсутствие цикла — `HerbalistInventoryComponent.h` не тянет
+`IngredientTableRow.h` ни напрямую, ни транзитивно).
+
+**Новый Exec `EquipContainer <IngredientID>`** (`AHerbalistPlayerController`)
+— тот же приём поиска владения в инвентаре по имени, что уже `ActivateWard`,
+резолв `GrantsContainerType` через `IngredientRegistrySubsystem`. Логика
+экипировки вынесена в отдельную, тестируемую напрямую
+`UHerbalistInventoryComponent::TryEquipContainer(IngredientID, GrantsType)`
+(тот же класс границы, что уже разделяет `PlantSeed`/`ActivateWard` от их
+Exec-обёрток — резолв ряда по имени НЕ покрыт автотестом, GameInstanceSubsystem
+недоступен в Editor-мире тестов, сам эффект протестирован напрямую). НЕ
+расходует предмет — контейнер носишь, не сжигаешь, тот же принцип, что уже у
+активации оберегов.
+
+**Стартовая Корзина** (`AHerbalistPlayerController::BeginPlay`) — при старте
+добавляет 1 "Корзина" в инвентарь и сразу ставит `ContainerType = Basket`
+(не `None`). Проверено: `UHerbalistSaveSubsystem` НЕ сохраняет и не
+восстанавливает `ContainerType` вовсе (только список `InventoryItems`, см.
+`HerbalistSaveTypes.h`/`HerbalistSaveSubsystem.cpp`) — `LoadGame()` тоже
+никогда не вызывается автоматически из `BeginPlay`, только явной Exec-командой
+игрока, поэтому эта правка не может быть "откачена" загрузкой сохранения
+позже в той же сессии. Известное, принятое ограничение: загрузка СТАРОГО
+сохранения (без Корзины в `InventoryItems`) заменит список предметов целиком
+(`RestoreItems`), потеряв косметическую "квитанцию" Корзины, но
+`ContainerType` при этом останется `Basket` — тот же класс несохраняемого
+поля, что уже отмечен у остальных находок этой сессии, не новая проблема.
+
+**Три новые карточки-утвари** (`ContainerAppendCommandlet`, безопасный
+точечный `AddRow`, тот же приём, что `PeregnoyAppendCommandlet`/
+`TieredWardCrystalAppendCommandlet`) — `Class=Catalyst` (не расходуемый
+инструмент/утварь, не сырьё варки), `bIsWater=false`, `AllowedBiomes` пуст,
+`GardenNiche=None`, `DecayRate=0.0`, `Resilience=1.0`, скромные BaseState
+(тот же порядок величины, что уже у Перегноя):
+- **Корзина** → `Basket`, `RarityWeight=5`.
+- **Мешок** → `Sack`, `RarityWeight=3`.
+- **Туёс** → `Tues`, `RarityWeight=1`.
+
+**Отклонение от числового плана (важно)**: план запроса называл это "низкий
+`RarityWeight`" для Корзины (частый/дешёвый) и "заметно выше" для Туеса
+(реже/дороже) — прямая проверка `ComputeCommunityTradeValue`
+(`GridWorldManagerCommunity.cpp`) и уже существующего комментария у
+`TradeValueRarityWeight` (`HerbalistSettings.h`: "меньше вес спавна = реже =
+ценнее") показала, что это ЧИСЛЕННО ровно наоборот: цена товара обратно
+пропорциональна его `RarityWeight` (`InverseRarity = 1/RarityWeight`), то
+есть НИЗКИЙ `RarityWeight` = РЕДКИЙ и ДОРОГОЙ, а не частый/дешёвый.
+Реализовано по ФАКТИЧЕСКОЙ формуле, ради заявленного экономического
+результата (Корзина — самая частая и дешёвая при обмене, Туёс — самая
+редкая и дорогая): Корзина несёт САМЫЙ ВЫСОКИЙ `RarityWeight` (5) из трёх,
+Туёс — самый низкий (1), Мешок — посередине (3). Числовой порядок обратен
+буквальной формулировке плана, качественный результат — ровно тот, что был
+запрошен.
+
+Три новые карточки компендиума —
+`herbalist_docs/Herbalist_Vault/04_Compendium/Утварь/` (новая подпапка,
+отдельная от "Минералы"/"Растительность" категория утвари): `Корзина.md`,
+`Мешок.md`, `Туёс.md`. Текст Корзины/Мешка проверен WebSearch (лукошко из
+лыка/бересты — обязательный атрибут крестьянского дома, для сбора
+ягод-грибов и хранения сыпучих продуктов; дерюга/рогожа — грубая тканина из
+лыка/мочала, держит влагу вместо проветривания) — источники: ru.wikipedia.org
+"Лукошко"/"Мешковина"/"Рогожа", ar.culture.ru "Корзина-лукошко". Текст Туеса
+опирается на источники, найденные фольклорной проверкой той же сессии (см.
+выше).
+
+**Побочная находка и починка, обнаружена этим заходом**: сборка после
+добавления новых тестов впервые слинковала `ProjectHerbalistTests.dll`
+против свободной функции `GetHerbalistSettings()` (`HerbalistSettings.h`) —
+LNK2019 "unresolved external symbol". Причина — параллельный заход этой же
+сессии (`BuildHomeStorage`, запись выше по файлу) впервые вызвал эту функцию
+из МОДУЛЯ `ProjectHerbalistTests` (`HomeStorageTest.cpp`), а не только
+изнутри `ProjectHerbalist`, где она всегда вызывалась раньше — без маркера
+`PROJECTHERBALIST_API` символ не был виден за пределы своего модуля.
+Починено добавлением `PROJECTHERBALIST_API` к объявлению — чисто
+видимость символа для линковщика, поведение функции не меняется ни на бит;
+без этой правки не собирался ВЕСЬ модуль тестов, включая тесты этого
+захода. Не относится по существу ни к переносным контейнерам, ни к
+домашним хранилищам — исправлено, потому что блокировало сборку обоих
+параллельных заходов одновременно.
+
+**Побочная регрессия и починка**: `Herbalist.GardenPlanting.
+PlantingStockDoesNotStackWithOrdinaryIngredient` (`GardenPlantingTest.cpp`)
+проверял `TestEqual("Two distinct slots...", Items.Num(), 2)` — общий счётчик
+слотов инвентаря свежего `AHerbalistPlayerController`. Со стартовой Корзиной
+в `BeginPlay` (см. выше) этот счётчик стал равен 3, не 2, при абсолютно
+корректном поведении — тест считал слоты не того, что проверял. Починено
+подсчётом слотов только `PlantedSpecies` (что тест реально хотел проверить —
+"не слились ли посадочный и обычный стек одного вида"), не общий `Items.Num()`.
+
+**Итог:** 341 (до обоих параллельных заходов) → 346 тест, **345/346, два
+чистых прогона**. Три новых теста (`EquipContainerTest.cpp`:
+`OwnedItemSwitchesContainerType`/`MissingItemRefusesAndLeavesContainerTypeUntouched`/
+`NonContainerRowRefusesEvenIfOwned`), один расширенный
+(`Herbalist.Storage.ContainerTypesOrderDecayCorrectly` — седьмая точка
+спектра), один починенный от чужой регрессии
+(`Herbalist.GardenPlanting.PlantingStockDoesNotStackWithOrdinaryIngredient`)
+— ВСЕ пять проходят чисто, стабильно на обоих прогонах. Единственный Fail
+(`Herbalist.HomeStorage.BuildRequiresRespectAndMaterial`) принадлежит
+параллельному заходу `BuildHomeStorage` (запись выше по файлу) — не вызван
+и не затронут этой правкой (диагностика в логе: "Домовой Respect 0.00 below
+threshold 0.60, refused" — их собственный тестовый сетап, не пересекается с
+переносными контейнерами ни по файлам, ни по логике).
+
+Файлы: `HerbalistInventoryComponent.h/.cpp` (`EStorageContainerType::Tues`,
+`TryEquipContainer`, decay switch-case), `HerbalistSettings.h`
+(`TuesDecayMultiplier`, `PROJECTHERBALIST_API` на `GetHerbalistSettings`),
+`IngredientTableRow.h` (`GrantsContainerType`), `HerbalistPlayerController.h/.cpp`
+(`EquipContainer` Exec, стартовая Корзина в `BeginPlay`), новый
+`ContainerAppendCommandlet.h/.cpp`, `DT_IngredientClass.uasset` (+3 ряда,
+96→99), новая `herbalist_docs/Herbalist_Vault/04_Compendium/Утварь/`
+(`Корзина.md`/`Мешок.md`/`Туёс.md`), новый `EquipContainerTest.cpp` (3 теста),
+`StorageContainerTest.cpp` (расширен на Tues), `GardenPlantingTest.cpp`
+(починка регрессии), `ROADMAP.md`.

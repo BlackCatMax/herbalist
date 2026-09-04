@@ -247,6 +247,22 @@ public:
     UFUNCTION(Exec)
     void ActivateWard(FString CrystalIngredientID);
 
+    // Надеть переносной контейнер (Корзина/Мешок/Туёс, 2026-09-04, "разберём
+    // тщательно" систему хранения, прямой запрос пользователя) — тот же
+    // приём поиска в инвентаре по имени и та же граница "инвентарный поиск +
+    // резолв ряда в контроллере, эффект в компоненте", что уже держит
+    // ActivateWard выше. ContainerIngredientID — точное имя ряда
+    // DT_IngredientClass ("Корзина"/"Мешок"/"Туёс"). НЕ списывается —
+    // контейнер носишь, не сжигаешь, тот же принцип, что и оберег.
+    // Резолв FIngredientTableRow::GrantsContainerType через
+    // IngredientRegistrySubsystem НЕ покрыт автотестом на этом уровне
+    // (GameInstanceSubsystem недоступен в Editor-мире автотестов, тот же
+    // класс пробела, что уже у ActivateWard/TradeWithCommunity/PlantSeed,
+    // см. ROADMAP.md) — сам эффект (UHerbalistInventoryComponent::
+    // TryEquipContainer) протестирован напрямую, минуя этот резолв.
+    UFUNCTION(Exec)
+    void EquipContainer(FString ContainerIngredientID);
+
     // Основать базу (21_Journey_And_Artifacts.md §21.2, 2026-09-01) — v1
     // тот же приём, что SetGardenPlot: консоль вместо физической
     // постройки-актора, сам механизм (AGridWorldManager::Bases →
@@ -254,6 +270,24 @@ public:
     // дубликат) — на стороне AGridWorldManager::RegisterBase.
     UFUNCTION(Exec)
     void FoundBase(int32 X, int32 Y);
+
+    // Домашнее хранилище (DESIGN_Community_And_Homestead.md §2.2, 2026-09-04,
+    // прямой запрос пользователя: "домашние хранилища — это буквальное
+    // расширение дома... погреб условно выкопать надо", постройка
+    // МГНОВЕННА при выполнении условий, не растянутый процесс). Строит
+    // ContainerTypeName ("cellar"/"cabinet"/"jar" — только стационарные
+    // типы, не переносные Basket/Sack/None, см. ROADMAP.md пункт 1 про
+    // "надел контейнер") у клетки-якоря дома (AAlchemyTableActor, найденной
+    // через TActorIterator, та же клетка, где RegisterDomovoi сажает
+    // Домового). Гейт — мягкая прокачка §2.2: Respect Домового ≥
+    // HomeStorageRespectThreshold И HomeStorageMaterialCount единиц
+    // Дубовой коры (broad_10) в инвентаре одним стеком. Резолв
+    // владения/Respect/списание материала — здесь (тот же класс границы,
+    // что уже держат ActivateWard/PlantSeed); сам эффект (AGridWorldManager::
+    // SpawnHomeStorageContainer) не трогает GameInstance и напрямую
+    // тестируем.
+    UFUNCTION(Exec)
+    void BuildHomeStorage(FString ContainerTypeName);
 
     // Отладочный ярлык — устанавливает bHasMirror/bHasYarnBall напрямую,
     // в обход честной добычи через OfferForArtifact (§21.3). НЕ канонiчный

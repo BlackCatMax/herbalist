@@ -354,8 +354,17 @@ bool FHerbalistGardenPlanting_PlantingStockDoesNotStackWithOrdinaryIngredient::R
     Seed.bIsPlantingStock = true;
     PC->InventoryComponent->AddItem(Seed, 1);
 
+    // Считаем слоты только PlantedSpecies, не общий Items.Num() -- с
+    // 2026-09-04 (стартовая Корзина, BeginPlay) в инвентаре свежего
+    // контроллера уже лежит один посторонний предмет ("Корзина"), общий
+    // счётчик слотов больше не равен ровно двум даже при верном поведении.
     const TArray<FInventoryItem> Items = PC->InventoryComponent->GetItems();
-    if (TestEqual(TEXT("Two distinct slots, not one merged stack"), Items.Num(), 2))
+    int32 PlantedSpeciesSlots = 0;
+    for (const FInventoryItem& Item : Items)
+    {
+        if (Item.IngredientID == PlantedSpecies) ++PlantedSpeciesSlots;
+    }
+    if (TestEqual(TEXT("Two distinct PlantedSpecies slots, not one merged stack"), PlantedSpeciesSlots, 2))
     {
         int32 OrdinaryCount = 0, SeedCount = 0;
         for (const FInventoryItem& Item : Items)

@@ -40,6 +40,7 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     {
     case EStorageContainerType::Basket:  ContainerDecayMultiplier = Settings ? Settings->BasketDecayMultiplier  : 1.3f;  break;
     case EStorageContainerType::Sack:    ContainerDecayMultiplier = Settings ? Settings->SackDecayMultiplier    : 1.4f;  break;
+    case EStorageContainerType::Tues:    ContainerDecayMultiplier = Settings ? Settings->TuesDecayMultiplier    : 0.85f; break;
     case EStorageContainerType::Cabinet: ContainerDecayMultiplier = Settings ? Settings->CabinetDecayMultiplier : 0.7f;  break;
     case EStorageContainerType::Cellar:  ContainerDecayMultiplier = Settings ? Settings->CellarDecayMultiplier  : 0.4f;  break;
     case EStorageContainerType::Jar:     ContainerDecayMultiplier = Settings ? Settings->JarDecayMultiplier     : 0.25f; break;
@@ -114,6 +115,37 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
 bool UHerbalistInventoryComponent::ShouldConvertToPeregnoy(const FMeta& Meta, float PurityThreshold, float DistortionThreshold)
 {
     return Meta.Purity < PurityThreshold && Meta.Distortion > DistortionThreshold;
+}
+
+bool UHerbalistInventoryComponent::TryEquipContainer(FName IngredientID, EStorageContainerType GrantsType)
+{
+    // Карточка не описывает контейнер вовсе (обычная трава/минерал) --
+    // нечего экипировать, независимо от владения.
+    if (GrantsType == EStorageContainerType::None)
+    {
+        return false;
+    }
+
+    // Владение -- тот же поиск по имени, что уже OfferToCommunity/ActivateWard
+    // в контроллере, но здесь без обращения к GameInstance: только Items
+    // этого инвентаря. Не списывается -- контейнер носишь, не сжигаешь,
+    // тот же принцип, что уже у активации оберегов (ActivateWard).
+    bool bOwnsItem = false;
+    for (const FInventoryItem& Item : Items)
+    {
+        if (Item.IngredientID == IngredientID && Item.Count > 0)
+        {
+            bOwnsItem = true;
+            break;
+        }
+    }
+    if (!bOwnsItem)
+    {
+        return false;
+    }
+
+    ContainerType = GrantsType;
+    return true;
 }
 
 void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float DeltaTime, float DecayRate)

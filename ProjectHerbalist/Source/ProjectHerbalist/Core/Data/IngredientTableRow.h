@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"   // EStorageContainerType, см. GrantsContainerType ниже
 #include "IngredientTableRow.generated.h"
 
 UENUM(BlueprintType)
@@ -262,6 +263,17 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ward", meta = (EditCondition = "bIsTieredWard"))
     TArray<EBiomeType> WardHomeBiomes;
+
+    // ---- Переносные контейнеры (Корзина/Мешок/Туёс, 2026-08-31/09-04,
+    // "разберём тщательно" систему хранения, прямой запрос пользователя) ----
+    // Если карточка представляет предмет-контейнер (утварь, не растение/
+    // минерал/вода), здесь указано, какой EStorageContainerType личного
+    // инвентаря игрока она даёт при экипировке (AHerbalistPlayerController::
+    // EquipContainer -> UHerbalistInventoryComponent::TryEquipContainer).
+    // None (по умолчанию, все обычные травы/грибы/минералы/обереги) —
+    // карточка не является контейнером вовсе.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Storage")
+    EStorageContainerType GrantsContainerType = EStorageContainerType::None;
 };
 
 // Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются

@@ -47,6 +47,36 @@ void AHerbalistPlayerController::BeginPlay()
             Subsystem->AddMappingContext(DefaultMappingContext, 0);
         }
     }
+
+    // Стартовая Корзина (2026-09-04, переносные контейнеры игрока,
+    // "разберём тщательно" систему хранения, прямой запрос пользователя:
+    // игрок с самого начала игры имеет примитивный контейнер, лучшие
+    // получаются через общину). InventoryComponent->ContainerType раньше
+    // был жёстко None и никогда не переключался -- ставится Basket сразу,
+    // не через EquipContainer, оба должны совпасть с первого кадра.
+    //
+    // LoadGame() (Exec, ниже) НЕ вызывается автоматически из BeginPlay --
+    // только явной командой игрока -- поэтому этот стартовый инвентарь
+    // всегда закладывается первым; UHerbalistSaveSubsystem не сохраняет
+    // и не восстанавливает ContainerType вовсе (только список InventoryItems,
+    // см. HerbalistSaveTypes.h/HerbalistSaveSubsystem.cpp), так что явный
+    // LoadGame() поверх этого BeginPlay не откатит ContainerType назад --
+    // тот же класс несохраняемого поля, что уже был у остальных находок
+    // этой сессии. Item сконструирован напрямую, без резолва через
+    // IngredientRegistrySubsystem -- тот же приём, что уже
+    // AddArtifactToInventory (bSubjectToDecay=false, State по умолчанию):
+    // предмет-утварь, не собранная трава, State содержательно не участвует
+    // в декее (DecayRate=0.0 у карточки "Корзина" тоже, двойная защита,
+    // тот же принцип, что уже комментарий у AddArtifactToInventory).
+    if (InventoryComponent)
+    {
+        FInventoryItem StartingBasket;
+        StartingBasket.IngredientID = FName(TEXT("Корзина"));
+        StartingBasket.Count = 1;
+        StartingBasket.bSubjectToDecay = false;
+        InventoryComponent->AddItem(StartingBasket);
+        InventoryComponent->ContainerType = EStorageContainerType::Basket;
+    }
 }
 
 void AHerbalistPlayerController::SetupInputComponent()
@@ -1011,6 +1041,37 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
     }
 }
 
+void AHerbalistPlayerController::EquipContainer(FString ContainerIngredientID)
+{
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: no inventory component"));
+        return;
+    }
+
+    // Резолв GrantsContainerType — тот же приём, что уже ActivateWard/
+    // PlantSeed. НЕ покрыто автотестом на этом уровне (GameInstanceSubsystem
+    // недоступен в Editor-мире автотестов, см. довод у объявления в .h) —
+    // сам эффект (TryEquipContainer) протестирован напрямую, минуя резолв.
+    const FName ContainerID(*ContainerIngredientID);
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(ContainerID) : nullptr;
+    if (!Row || Row->GrantsContainerType == EStorageContainerType::None)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: '%s' is not a container"), *ContainerIngredientID);
+        return;
+    }
+
+    if (!InventoryComponent->TryEquipContainer(ContainerID, Row->GrantsContainerType))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: no '%s' in inventory"), *ContainerIngredientID);
+        return;
+    }
+
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("EquipContainer: equipped '%s' (ContainerType=%d)"), *ContainerIngredientID, static_cast<int32>(Row->GrantsContainerType));
+}
+
 void AHerbalistPlayerController::FoundBase(int32 X, int32 Y)
 {
     AGridWorldManager* Manager = FindWorldManager();
@@ -1021,6 +1082,124 @@ void AHerbalistPlayerController::FoundBase(int32 X, int32 Y)
     }
 
     Manager->RegisterBase(FIntPoint(X, Y));
+}
+
+void AHerbalistPlayerController::BuildHomeStorage(FString ContainerTypeName)
+{
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: no inventory component"));
+        return;
+    }
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: world manager not found"));
+        return;
+    }
+
+    // Строковый парсер типа (тот же приём, что SetGardenPlot) — только
+    // СТАЦИОНАРНЫЕ типы хранения имеют смысл как построенное расширение
+    // дома. Basket/Sack/Tues — переносные (носишь на себе, "надеваешь"
+    // через EquipContainer выше), не роются/не строятся; None — отсутствие
+    // контейнера вовсе.
+    ContainerTypeName.ToLowerInline();
+    EStorageContainerType ContainerType = EStorageContainerType::None;
+    if (ContainerTypeName == TEXT("cellar"))       ContainerType = EStorageContainerType::Cellar;
+    else if (ContainerTypeName == TEXT("cabinet")) ContainerType = EStorageContainerType::Cabinet;
+    else if (ContainerTypeName == TEXT("jar"))     ContainerType = EStorageContainerType::Jar;
+    else
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: unknown/unbuildable container type '%s' (ожидались cellar/cabinet/jar)"), *ContainerTypeName);
+        return;
+    }
+
+    // Клетка-якорь дома — ровно та, где AAlchemyTableActor::BeginPlay уже
+    // регистрирует Домового (RegisterDomovoi): "у дома уже есть чёткая
+    // клетка-якорь" (прямой запрос пользователя), не абстрактное место.
+    AAlchemyTableActor* Table = nullptr;
+    for (TActorIterator<AAlchemyTableActor> It(GetWorld()); It; ++It)
+    {
+        Table = *It;
+        break;
+    }
+    if (!Table)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: no alchemy table (home anchor) found in the world"));
+        return;
+    }
+    const FIntPoint AnchorCell = Table->GetGridCoords();
+
+    // Не давать построить второй экземпляр того же типа хранения дома —
+    // простое v1-ограничение: без него повторный BuildHomeStorage cellar
+    // тихо давал бы два независимых Погреба (каждый со своим MaxSlots),
+    // что читается как дублирующий баг, не как расширение дома. Проверка
+    // по всем AStorageContainer в мире (не по отдельному списку "домашних")
+    // — сознательно просто для v1.
+    for (TActorIterator<AStorageContainer> It(GetWorld()); It; ++It)
+    {
+        AStorageContainer* Existing = *It;
+        if (Existing && Existing->InventoryComponent && Existing->InventoryComponent->ContainerType == ContainerType)
+        {
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: a %s already exists, refusing a duplicate"), *ContainerTypeName);
+            return;
+        }
+    }
+
+    // Respect Домового — тот же реестр, что уже TalkTo/ChooseDialogueBranch
+    // читают (Manager->FindLandmarkAt на клетке дома, EntityID="Домовой").
+    // Порог симметричен уже откалиброванному отрицательному порогу того же
+    // хозяина (AggravatedCurseThreshold=-0.6, LandmarkTypes.h/DT_Landmarks)
+    // — не с потолка.
+    const FEntityLandmark* Landmark = Manager->FindLandmarkAt(AnchorCell);
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float RespectThreshold = Settings ? Settings->HomeStorageRespectThreshold : 0.6f;
+    const float CurrentRespect = Landmark ? Landmark->Respect : 0.0f;
+    if (!Landmark || CurrentRespect < RespectThreshold)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: Домовой Respect %.2f below threshold %.2f, refused"),
+            CurrentRespect, RespectThreshold);
+        return;
+    }
+
+    // Материал — Дубовая кора (broad_10, DT_IngredientClass, компендиум
+    // "Широколиственный лес"): Resilience=1.0 в проекте ("не портится") —
+    // реальный, прочный материал для стройки, не абстрактный ресурс. ID
+    // фиксирован кодом (не строка от вызывающей стороны, тот же приём, что
+    // уже ApplyFertilizer/PeregnoyIngredientID) — резолва через
+    // IngredientRegistrySubsystem не требуется. Требует всех единиц ОДНИМ
+    // стеком (обычный путь: сбор одного вида стекуется в один слот до
+    // MAX_STACK_SIZE=9) — сумма по нескольким стекам не считается, тот же
+    // класс v1-упрощения, что и у остальных Exec-путей этого файла.
+    static const FName HomeStorageMaterialID(TEXT("broad_10"));
+    const int32 RequiredCount = Settings ? Settings->HomeStorageMaterialCount : 3;
+
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    int32 FoundIndex = INDEX_NONE;
+    for (int32 i = 0; i < CurrentItems.Num(); ++i)
+    {
+        if (CurrentItems[i].IngredientID == HomeStorageMaterialID && CurrentItems[i].Count >= RequiredCount)
+        {
+            FoundIndex = i;
+            break;
+        }
+    }
+    if (FoundIndex == INDEX_NONE)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: needs %d Дубовая кора (broad_10) in a single stack, not enough"), RequiredCount);
+        return;
+    }
+
+    AStorageContainer* NewContainer = Manager->SpawnHomeStorageContainer(AnchorCell, ContainerType);
+    if (!NewContainer)
+    {
+        // SpawnHomeStorageContainer уже отчиталась причиной отказа —
+        // списывать материал не за что.
+        return;
+    }
+
+    InventoryComponent->RemoveItem(FoundIndex, RequiredCount);
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("BuildHomeStorage: built '%s' near (%d,%d)"), *ContainerTypeName, AnchorCell.X, AnchorCell.Y);
 }
 
 void AHerbalistPlayerController::GiveZaryanaGifts()

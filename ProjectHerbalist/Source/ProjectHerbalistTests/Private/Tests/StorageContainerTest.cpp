@@ -8,6 +8,13 @@
 // Cabinet хуже Cellar хуже Jar -- не только "выше/ниже базовой линии",
 // как проверялось для исходных двух, а правильный относительный порядок
 // всех шести.
+//
+// Tues (туёс, 2026-09-04, переносные контейнеры игрока) добавлен в тот же
+// тест, не отдельным файлом -- структура уже проверяет ровно то, что нужно
+// (полный относительный порядок), встроить седьмую точку в существующую
+// цепочку неравенств честнее, чем дублировать хелпер/тест с нуля. Место в
+// спектре -- между None и Cabinet (лучше базовой линии, но переносной
+// контейнер не может быть лучше стационарной мебели дома).
 
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Types/HerbalistCoreTypes.h"
@@ -65,13 +72,15 @@ bool FHerbalistStorage_ContainerTypesOrderDecayCorrectly::RunTest(const FString&
     const float SackDecay    = MeasureDecayFor(World, EStorageContainerType::Sack);
     const float BasketDecay  = MeasureDecayFor(World, EStorageContainerType::Basket);
     const float NoneDecay    = MeasureDecayFor(World, EStorageContainerType::None);
+    const float TuesDecay    = MeasureDecayFor(World, EStorageContainerType::Tues);
     const float CabinetDecay = MeasureDecayFor(World, EStorageContainerType::Cabinet);
     const float CellarDecay  = MeasureDecayFor(World, EStorageContainerType::Cellar);
     const float JarDecay     = MeasureDecayFor(World, EStorageContainerType::Jar);
 
     TestTrue(TEXT("Sack decays worse than Basket"), SackDecay > BasketDecay);
     TestTrue(TEXT("Basket decays worse than None (baseline)"), BasketDecay > NoneDecay);
-    TestTrue(TEXT("None decays worse than Cabinet"), NoneDecay > CabinetDecay);
+    TestTrue(TEXT("None decays worse than Tues (portable, but better than the baseline)"), NoneDecay > TuesDecay);
+    TestTrue(TEXT("Tues decays worse than Cabinet (portable is still worse than home furniture)"), TuesDecay > CabinetDecay);
     TestTrue(TEXT("Cabinet decays worse than Cellar"), CabinetDecay > CellarDecay);
     TestTrue(TEXT("Cellar decays worse than Jar (best of all)"), CellarDecay > JarDecay);
 
