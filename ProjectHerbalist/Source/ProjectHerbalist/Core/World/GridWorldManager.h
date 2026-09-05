@@ -743,11 +743,35 @@ public:
     static bool ComputeTradeReceivedCount(float Rate, int32& OutCount);
 
     // Обмен (§1.2) — курс ЦенностьA/ЦенностьB, домножен на (1 +
-    // TradeMolvaRateBonus×Molva). OutReceived получает WantedIngredientID с
-    // его собственным BaseState (реестр) и Count по ComputeTradeReceivedCount
-    // выше. false = ничего не найдено в реестре, Offered.Count<=0, ИЛИ курс
-    // не тянет даже на 1 единицу (см. довод у ComputeTradeReceivedCount).
+    // TradeMolvaRateBonus×Molva). OutReceived получает WantedIngredientID,
+    // Count по ComputeTradeReceivedCount выше и State — из
+    // CommunityIngredientQuality (реально увиденное общиной среднее
+    // качество вида, аудит 2026-09-05), либо табличный BaseState, пока
+    // община ни разу его не получала. false = ничего не найдено в реестре,
+    // Offered.Count<=0, ИЛИ курс не тянет даже на 1 единицу (см. довод у
+    // ComputeTradeReceivedCount).
     bool TryTradeWithCommunity(const FInventoryItem& Offered, FName WantedIngredientID, FInventoryItem& OutReceived) const;
+
+    // Обновляет CommunityIngredientQuality реально отданной единицей (аудит
+    // 2026-09-05). Публично и НЕ вызывается изнутри TryTradeWithCommunity
+    // (та специально осталась const — чистый расчёт курса, никаких
+    // мутаций): вызывающая сторона (AHerbalistPlayerController::
+    // TradeWithCommunity) зовёт этот метод сама, ПОСЛЕ того как реально
+    // списала предложенный товар — тот же принцип разделения "расчёт
+    // отдельно от побочных эффектов", что уже держит OfferToCommunity
+    // (не трогает инвентарь) в стороне от списания на контроллере.
+    // OfferToCommunity — исключение: сама уже мутирует Molva, поэтому сама
+    // же и пишет сюда, вызывающей стороне звать не нужно.
+    void RecordCommunityIngredientQuality(FName IngredientID, const FRealState& State, int32 Count);
+
+    // Публично только для теста на саму математику усреднения (аудит
+    // 2026-09-05) — TryTradeWithCommunity не тестируется отдельным
+    // автотестом (нужен IngredientRegistrySubsystem, недоступный в
+    // Editor-тестах), но взвешенное среднее в RecordCommunityIngredientQuality
+    // — чистая математика без реестра, тестируема напрямую. nullptr — вид,
+    // которого община ни разу не получала (TryTradeWithCommunity в этом
+    // случае честно откатывается на табличный BaseState).
+    const FRealState* GetCommunityIngredientQualityForTest(FName IngredientID) const { return CommunityIngredientQuality.Find(IngredientID); }
 
     // ---- Заряна: фрагменты памяти и Буян (обсуждение в сессии 2026-08-24,
     // 06_Progression.md "Прогрессия через Заряну", 15_Cycles_And_Shrines.md
@@ -1213,6 +1237,21 @@ protected:
     // сохранения, то есть равнялась ровно этому снимку — не сохранённое
     // "среднее", а буквально то, чем была клетка, пока её не тронули.
     TArray<FSavedCellState> CellBaselines;
+
+    // Отслеживаемое среднее качество каждого вида, реально прошедшего через
+    // общину (Подношение + предложенная сторона Обмена) — аудит 2026-09-05,
+    // решение пользователя: желаемая сторона Обмена (см. TryTradeWithCommunity)
+    // больше не оценивается по вечно чистому табличному BaseState, а по тому,
+    // что община РЕАЛЬНО получала. Взвешено количеством реально отданных
+    // единиц (Count=1 за слот у подношения — ровно то, что списывается,
+    // см. довод у OfferToCommunity; полный Item.Count у обмена — ровно то,
+    // что списывает TradeWithCommunity). Пока для вида нет ни одной записи
+    // (община ещё не получала его вовсе) — честный фолбэк на BaseState в
+    // TryTradeWithCommunity, не на нулевое состояние. Не сохраняется —
+    // сессионное состояние, тем же допущением, что и у остального
+    // общинного курса (Molva — исключение, персистится отдельно).
+    TMap<FName, FRealState> CommunityIngredientQuality;
+    TMap<FName, int32> CommunityIngredientSampleCount;
 
     UPROPERTY()
     TObjectPtr<UPerceptionComponent> PerceptionComponent;

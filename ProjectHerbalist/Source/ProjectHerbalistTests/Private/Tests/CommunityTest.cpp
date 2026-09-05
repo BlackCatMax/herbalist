@@ -257,6 +257,61 @@ bool FHerbalistCommunity_OfferingMultipleItemsScalesMolvaNotAveraged::RunTest(co
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCommunity_RecordIngredientQualityAveragesByCount,
+    "Herbalist.Community.RecordIngredientQualityAveragesByCount",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCommunity_RecordIngredientQualityAveragesByCount::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05 (решение пользователя): ComputeCommunityTradeValue
+    // оценивал предложенный игроком предмет по его РЕАЛЬНОМУ State, а
+    // желаемый -- всегда по чистому табличному BaseState. Теперь желаемое
+    // читается из CommunityIngredientQuality -- взвешенного по количеству
+    // среднего реально полученных общиной единиц. Сам обмен (TryTradeWithCommunity)
+    // не тестируется отдельно здесь -- нужен IngredientRegistrySubsystem,
+    // недоступный в Editor-тестах (см. шапку файла); здесь проверяется
+    // именно новая математика усреднения.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    static const FName ProbeID(TEXT("QualityProbe"));
+    TestNull(TEXT("Никогда не полученный вид не имеет записи -- TryTradeWithCommunity откатится на BaseState"),
+        Manager->GetCommunityIngredientQualityForTest(ProbeID));
+
+    FRealState First;
+    First.Magnitude = 0.2f;
+    First.Meta.Purity = 0.2f;
+    Manager->RecordCommunityIngredientQuality(ProbeID, First, 1);
+
+    const FRealState* AfterFirst = Manager->GetCommunityIngredientQualityForTest(ProbeID);
+    if (TestNotNull(TEXT("Первый экземпляр задаёт стартовое среднее целиком"), AfterFirst))
+    {
+        TestEqual(TEXT("Magnitude равен первому образцу"), AfterFirst->Magnitude, 0.2f);
+    }
+
+    FRealState Second;
+    Second.Magnitude = 0.8f;
+    Second.Meta.Purity = 0.8f;
+    // Ещё 2 экземпляра First (итого 3) плюс 1 экземпляр Second -- вес 3:1.
+    Manager->RecordCommunityIngredientQuality(ProbeID, First, 2);
+    Manager->RecordCommunityIngredientQuality(ProbeID, Second, 1);
+
+    const FRealState* AfterFour = Manager->GetCommunityIngredientQualityForTest(ProbeID);
+    if (TestNotNull(TEXT("Запись после четырёх образцов существует"), AfterFour))
+    {
+        // (0.2*3 + 0.8*1)/4 = 0.35 -- честное взвешенное среднее по
+        // количеству, не последний образец и не голое 50/50.
+        TestEqual(TEXT("Magnitude -- взвешенное среднее по количеству"), AfterFour->Magnitude, 0.35f, 0.001f);
+        TestEqual(TEXT("Purity -- то же самое взвешивание"), AfterFour->Meta.Purity, 0.35f, 0.001f);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCommunity_AvailableCapacityPreventsSilentItemLoss,
     "Herbalist.Community.AvailableCapacityPreventsSilentItemLoss",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

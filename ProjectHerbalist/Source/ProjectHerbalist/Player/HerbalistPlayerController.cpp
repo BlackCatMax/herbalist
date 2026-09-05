@@ -823,6 +823,13 @@ void AHerbalistPlayerController::TradeWithCommunity(FString OfferedIngredientID,
     // значит и списать нужно весь стек, а не 1 единицу. Раньше здесь стояла
     // RemoveItem(FoundIndex, 1): стек из 5 трав оценивался как 5, а терял
     // игрок только 1 -- бесплатная утечка ценности при любом стеке > 1.
+    // Общине "видно" реальное качество предложенного (аудит 2026-09-05,
+    // решение пользователя) -- ДО RemoveItem ниже, пока CurrentItems[FoundIndex]
+    // ещё отражает то, что реально отдаётся (RemoveItem мутирует инвентарь,
+    // не этот локальный снимок, но по порядку читаем честности ради раньше).
+    Grid->RecordCommunityIngredientQuality(CurrentItems[FoundIndex].IngredientID,
+        CurrentItems[FoundIndex].State, CurrentItems[FoundIndex].Count);
+
     InventoryComponent->RemoveItem(FoundIndex, CurrentItems[FoundIndex].Count);
     InventoryComponent->AddItem(Received, Received.Count);
 }

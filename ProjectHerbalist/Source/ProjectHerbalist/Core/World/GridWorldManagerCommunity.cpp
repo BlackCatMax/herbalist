@@ -15,6 +15,57 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
+namespace
+{
+    // Взвешенное по количеству единиц среднее FRealState — ПРОСТОЕ, без
+    // "разброса от смешивания" HerbalistCore::Math::BlendRealStatesForStack:
+    // тот приём смоделирован для физического смешения трав в одном стеке/
+    // котле (см. довод там же), а не для абстрактной статистики "какого
+    // качества сейчас община в среднем видит этот ингредиент" — лишняя
+    // драма здесь не нужна, только честное среднее. Локально здесь, не в
+    // HerbalistCoreMath.h — пока единственный потребитель.
+    void AverageRealStateByCount(FRealState& Target, const FRealState& Source, int32 TargetCount, int32 AddedCount)
+    {
+        const int32 NewCount = TargetCount + AddedCount;
+        if (NewCount <= 0) return;
+        const float OldWeight = (float)TargetCount / NewCount;
+        const float NewWeight = (float)AddedCount / NewCount;
+
+        Target.Magnitude = Target.Magnitude * OldWeight + Source.Magnitude * NewWeight;
+
+        Target.Direction.Body   = Target.Direction.Body   * OldWeight + Source.Direction.Body   * NewWeight;
+        Target.Direction.Mind   = Target.Direction.Mind   * OldWeight + Source.Direction.Mind   * NewWeight;
+        Target.Direction.Spirit = Target.Direction.Spirit * OldWeight + Source.Direction.Spirit * NewWeight;
+        Target.Direction.Nature = Target.Direction.Nature * OldWeight + Source.Direction.Nature * NewWeight;
+        Target.Direction.NormalizeSum();
+
+        Target.Meta.Distortion = Target.Meta.Distortion * OldWeight + Source.Meta.Distortion * NewWeight;
+        Target.Meta.Stability  = Target.Meta.Stability  * OldWeight + Source.Meta.Stability  * NewWeight;
+        Target.Meta.Purity     = Target.Meta.Purity     * OldWeight + Source.Meta.Purity     * NewWeight;
+        Target.Meta.Potency    = Target.Meta.Potency    * OldWeight + Source.Meta.Potency    * NewWeight;
+        Target.Meta.Resonance  = Target.Meta.Resonance  * OldWeight + Source.Meta.Resonance  * NewWeight;
+        Target.Meta.Corruption = Target.Meta.Corruption * OldWeight + Source.Meta.Corruption * NewWeight;
+    }
+}
+
+void AGridWorldManager::RecordCommunityIngredientQuality(FName IngredientID, const FRealState& State, int32 Count)
+{
+    if (Count <= 0 || IngredientID.IsNone()) return;
+
+    int32& SampleCount = CommunityIngredientSampleCount.FindOrAdd(IngredientID, 0);
+    if (SampleCount == 0)
+    {
+        // Первый экземпляр этого вида, увиденный общиной — задаёт стартовое
+        // среднее целиком, усреднять пока не с чем.
+        CommunityIngredientQuality.Add(IngredientID, State);
+    }
+    else
+    {
+        AverageRealStateByCount(CommunityIngredientQuality.FindOrAdd(IngredientID), State, SampleCount, Count);
+    }
+    SampleCount += Count;
+}
+
 float AGridWorldManager::OfferToCommunity(const TArray<FInventoryItem>& Items)
 {
     if (Items.Num() == 0) return 0.0f;
@@ -33,6 +84,12 @@ float AGridWorldManager::OfferToCommunity(const TArray<FInventoryItem>& Items)
     {
         SumPurity += Item.State.Meta.Purity;
         SumCorruption += Item.State.Meta.Corruption;
+
+        // Аудит 2026-09-05 (решение пользователя): каждый слот здесь даёт
+        // ровно 1 реально отданную единицу (вызывающая сторона списывает
+        // RemoveItem(Index, 1) за каждый найденный слот, см. довод выше про
+        // Count.Num() vs сумму) — Count=1, не Item.Count.
+        RecordCommunityIngredientQuality(Item.IngredientID, Item.State, 1);
     }
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
@@ -79,12 +136,20 @@ bool AGridWorldManager::TryTradeWithCommunity(const FInventoryItem& Offered, FNa
     const float OfferedValue = ComputeCommunityTradeValue(Offered);
     if (OfferedValue <= 0.0f) return false;
 
-    // Единица желаемого — её собственный BaseState, Count=1, тот же вызов
-    // ComputeCommunityTradeValue, что и для предложенного, курс без двойной
-    // бухгалтерии.
+    // Единица желаемого — Count=1, тот же вызов ComputeCommunityTradeValue,
+    // что и для предложенного, курс без двойной бухгалтерии. State — аудит
+    // 2026-09-05, решение пользователя: раньше здесь всегда стоял чистый
+    // табличный BaseState, а предложенный игроком предмет оценивался по
+    // РЕАЛЬНОМУ State (с бонусами сушки/отстоя/выпаривания) — асимметрия,
+    // позволявшая постепенно "отмывать" качество через округление при
+    // повторных обменах туда-обратно. Теперь желаемое оценивается по тому,
+    // что община РЕАЛЬНО видела (CommunityIngredientQuality, взвешенное
+    // среднее реально полученных единиц — см. RecordCommunityIngredientQuality) —
+    // честный фолбэк на BaseState, пока община ни разу не получала этот вид.
     FInventoryItem WantedUnit;
     WantedUnit.IngredientID = WantedIngredientID;
-    WantedUnit.State = WantedRow->BaseState;
+    const FRealState* KnownQuality = CommunityIngredientQuality.Find(WantedIngredientID);
+    WantedUnit.State = KnownQuality ? *KnownQuality : WantedRow->BaseState;
     WantedUnit.Count = 1;
     const float WantedUnitValue = ComputeCommunityTradeValue(WantedUnit);
     if (WantedUnitValue <= 0.0f) return false;
