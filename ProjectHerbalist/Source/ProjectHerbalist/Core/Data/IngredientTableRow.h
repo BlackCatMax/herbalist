@@ -300,6 +300,27 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     // из 76 Plant/Fungus, с реальным ботаническим обоснованием каждой.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Drying")
     FMeta DriedStateDelta;
+
+    // Длительность сушки ЭТОЙ карточки, в секундах (2026-09-05, прямой запрос
+    // пользователя: "процесс сушки у разных растений разный (длительность)").
+    // До этой правки UHerbalistSettings::DryingDurationSeconds было ОДНИМ
+    // глобальным числом на все 76 карточек Plant/Fungus разом — тонкий лист
+    // и плотный корень/кора сохли одинаково, что противоречит реальной
+    // травнической практике (лист/цветок сохнет за день, корень/кора — за
+    // недели). См. довод и калибровку по категориям (Трава/Ягода/Гриб/
+    // плотный материал) у UHerbalistSettings::DryingDurationSeconds.
+    //
+    // Сентинел -1 (дефолт) -- "эта карточка НЕ несёт явного значения, читать
+    // глобальный фолбэк" (UHerbalistInventoryComponent::TickComponent). НЕ 0
+    // сознательно: карточка, для которой заход забудет проставить число (или
+    // будущая новая карточка компендиума), должна упасть на разумный
+    // глобальный фолбэк, а не сохнуть мгновенно/никогда из-за забытого нуля.
+    // Все 76 карточек Plant/Fungus пропатчены точечно (см.
+    // ingredient_drying_duration_patch.json, IngredientDryingDurationPatchCommandlet)
+    // -- сентинел остаётся только защитой на будущее, не рабочим состоянием
+    // сейчас.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Drying")
+    float DryingDurationSeconds = -1.0f;
 };
 
 // Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются

@@ -8,7 +8,7 @@
 // 1. TickDryingItem/ApplyDriedStateDelta -- чистые функции состояния, БЕЗ
 //    обращения к реестрам, тестируются напрямую (тот же приём, что
 //    ShouldConvertToPeregnoy).
-// 2. Полный путь через TickComponent (bIsDryingRack=true) -- таймер
+// 2. Полный путь через TickComponent (StationType==DryingRack) -- таймер
 //    взводится/считает/завершается, decay резко падает после bIsDried.
 //    DriedStateDelta через реестр здесь НЕ проверяется (IngredientRegistrySubsystem
 //    недоступен в Editor-мире автотестов, тот же класс пробела, что уже у
@@ -16,9 +16,14 @@
 //    этого для честных ботанических дельт конкретных карточек.
 // 3. AreItemsStackable -- сушёный и свежий предмет одного вида, а также два
 //    предмета в процессе сушки, не стекуются молча.
+// 4. ResolveDryingDurationSeconds (2026-09-05, "процесс сушки у разных
+//    растений разный (длительность)") -- чистая функция резолва приоритета
+//    карточка-vs-глобальный-фолбэк, тем же приёмом, что и пункт 1: рукописная
+//    FIngredientTableRow вместо реестра.
 
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Data/IngredientTableRow.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -141,7 +146,7 @@ bool FHerbalistDrying_ApplyDriedStateDeltaAddsAndClamps::RunTest(const FString& 
 }
 
 // ---------------------------------------------------------------------------
-// Полный путь через TickComponent: инвентарь-сушилка (bIsDryingRack=true)
+// Полный путь через TickComponent: инвентарь-сушилка (StationType==DryingRack)
 // доводит свежий предмет до bIsDried=true за DryingDurationSeconds, и после
 // этого он портится заметно медленнее (DriedItemDecayMultiplier). Реестр
 // недоступен в Editor-мире автотестов -- DriedStateDelta здесь честно не
@@ -159,7 +164,7 @@ bool FHerbalistDrying_DryingRackDriesItemAndSlowsDecay::RunTest(const FString& P
     AActor* Owner = World->SpawnActor<AActor>();
     UHerbalistInventoryComponent* Rack = NewObject<UHerbalistInventoryComponent>(Owner);
     Rack->RegisterComponent();
-    Rack->bIsDryingRack = true;
+    Rack->StationType = EProcessingStationType::DryingRack;
 
     FInventoryItem Item;
     Item.IngredientID = FName(TEXT("TestHerb"));
@@ -181,11 +186,15 @@ bool FHerbalistDrying_DryingRackDriesItemAndSlowsDecay::RunTest(const FString& P
     // см. HerbalistInventoryComponent.cpp) -- КАЖДЫЙ вызов, даже с огромным
     // DeltaTime, продвигает таймер сушки ровно на DecayUpdateInterval=1с
     // (ровно тот же приём троттлинга, что уже у decay). Один вызов с
-    // DeltaTime=1000 НЕ пересекает 480с сушки за раз -- нужно 480 отдельных
-    // срабатываний. Гоняем DeltaTime=1с построчно (запас с лишним) до
-    // завершения, тем же способом, каким реально тикает игра много кадров подряд.
+    // DeltaTime=1000 НЕ пересекает 1920с сушки (глобальный фолбэк
+    // UHerbalistSettings::DryingDurationSeconds, 2026-09-05 -- см. довод там)
+    // за раз -- нужно 1920 отдельных срабатываний, IngredientRegistrySubsystem
+    // недоступен в Editor-мире автотестов (см. шапку файла), поэтому
+    // "TestHerb" не резолвится карточкой и всегда падает на глобальный
+    // фолбэк. Гоняем DeltaTime=1с построчно (запас с лишним) до завершения,
+    // тем же способом, каким реально тикает игра много кадров подряд.
     bool bBecameDried = false;
-    for (int32 i = 0; i < 500 && !bBecameDried; ++i)
+    for (int32 i = 0; i < 2000 && !bBecameDried; ++i)
     {
         Rack->TickComponent(1.0f, ELevelTick::LEVELTICK_All, &DummyTick);
         const FInventoryItem* Slot = Rack->GetSlot(0);
@@ -326,6 +335,95 @@ bool FHerbalistDrying_DriedAndFreshDoNotStack::RunTest(const FString& Parameters
     TestEqual(TEXT("Fresh and dried items of the same species occupy two distinct slots, not merged"), Inventory->GetItems().Num(), 2);
 
     Owner->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// ResolveDryingDurationSeconds -- чистая функция резолва приоритета
+// "карточка vs глобальный фолбэк" (2026-09-05, "процесс сушки у разных
+// растений разный (длительность)", прямой запрос пользователя). Рукописная
+// FIngredientTableRow вместо реестра, тем же приёмом, что и остальные тесты
+// этого файла (см. шапку).
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDrying_ResolveDryingDurationSecondsPrefersCardOverGlobal,
+    "Herbalist.Drying.ResolveDryingDurationSecondsPrefersCardOverGlobal",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDrying_ResolveDryingDurationSecondsPrefersCardOverGlobal::RunTest(const FString& Parameters)
+{
+    const float GlobalFallback = 1920.0f;   // текущий UHerbalistSettings::DryingDurationSeconds (1 игровые сутки)
+
+    // (a) Карточка не резолвится вовсе (Row == nullptr -- ингредиент не
+    // найден в реестре, тот же случай, что реестр недоступен) -- падаем на
+    // глобальный фолбэк.
+    {
+        const float Result = UHerbalistInventoryComponent::ResolveDryingDurationSeconds(nullptr, GlobalFallback);
+        TestEqual(TEXT("No row at all -- falls back to the global setting"), Result, GlobalFallback);
+    }
+
+    // (a) Карточка резолвится, но НЕ несёт явного значения -- сентинел -1,
+    // ДЕФОЛТ FIngredientTableRow::DryingDurationSeconds ровно для карточек,
+    // для которых заход забудет проставить число -- тоже падаем на глобальный
+    // фолбэк, не на 0/мгновенную сушку.
+    {
+        FIngredientTableRow RowWithoutExplicitValue;
+        TestEqual(TEXT("Default DryingDurationSeconds is the -1 sentinel"), RowWithoutExplicitValue.DryingDurationSeconds, -1.0f);
+
+        const float Result = UHerbalistInventoryComponent::ResolveDryingDurationSeconds(&RowWithoutExplicitValue, GlobalFallback);
+        TestEqual(TEXT("Row with the -1 sentinel -- falls back to the global setting"), Result, GlobalFallback);
+    }
+
+    // (b) Карточка несёт ЯВНОЕ значение, короткое, отличное от глобального --
+    // используем ЕГО, не глобальное (реальный случай: тонкая трава сохнет
+    // куда быстрее плотного корня/коры, см. довод у
+    // FIngredientTableRow::DryingDurationSeconds).
+    {
+        FIngredientTableRow RowWithExplicitValue;
+        RowWithExplicitValue.DryingDurationSeconds = 300.0f;
+
+        const float Result = UHerbalistInventoryComponent::ResolveDryingDurationSeconds(&RowWithExplicitValue, GlobalFallback);
+        TestEqual(TEXT("Row with an explicit value -- uses the card's own number"), Result, 300.0f);
+        TestTrue(TEXT("Card value differs from the global fallback in this test on purpose"), Result != GlobalFallback);
+    }
+
+    return true;
+}
+
+// Комбинация ResolveDryingDurationSeconds + TickDryingItem (обе чистые,
+// проверенные по отдельности выше/в TickDryingItemStartsCountsDownCompletes)
+// на короткой дистанции: карточка с явным коротким числом досыхает за
+// считанные тики, тот же ингредиент БЕЗ карточки (падает на глобальный
+// 1920с фолбэк) за те же несколько тиков ещё даже не близко -- разница
+// видна за 6 тиков теста, не нужно крутить полные 1920 итераций.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDrying_CardDurationDriesFasterThanGlobalFallback,
+    "Herbalist.Drying.CardDurationDriesFasterThanGlobalFallback",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDrying_CardDurationDriesFasterThanGlobalFallback::RunTest(const FString& Parameters)
+{
+    const float GlobalFallback = 1920.0f;
+
+    FIngredientTableRow ShortDryingCard;
+    ShortDryingCard.DryingDurationSeconds = 5.0f;   // тонкий лист, короче фолбэка на три порядка
+
+    FInventoryItem CardItem;
+    CardItem.IngredientID = FName(TEXT("TestShortDryHerb"));
+
+    FInventoryItem FallbackItem;
+    FallbackItem.IngredientID = FName(TEXT("TestNoCardHerb"));
+
+    for (int32 i = 0; i < 6; ++i)
+    {
+        const float CardDuration = UHerbalistInventoryComponent::ResolveDryingDurationSeconds(&ShortDryingCard, GlobalFallback);
+        UHerbalistInventoryComponent::TickDryingItem(CardItem, 1.0f, CardDuration);
+
+        const float FallbackDuration = UHerbalistInventoryComponent::ResolveDryingDurationSeconds(nullptr, GlobalFallback);
+        UHerbalistInventoryComponent::TickDryingItem(FallbackItem, 1.0f, FallbackDuration);
+    }
+
+    TestTrue(TEXT("Item whose card names a short 5s duration is fully dried after 6s of ticking"), CardItem.bIsDried);
+    TestFalse(TEXT("Item with no card (1920s global fallback) is nowhere near done after the same 6s"), FallbackItem.bIsDried);
+
     return true;
 }
 
