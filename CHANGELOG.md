@@ -8634,3 +8634,34 @@ Editor-тестах, см. шапку `CommunityTest.cpp`). Файлы:
 `Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerCommunity.cpp`,
 `Player/HerbalistPlayerController.cpp`,
 `ProjectHerbalistTests/.../Tests/CommunityTest.cpp`, `ROADMAP.md`.
+
+## TraceReplay: сверка расширена на все каналы дельты (2026-09-05)
+
+Прямой запрос пользователя, следующий пункт из отложенных находок аудита.
+`ReplayAndCompare` сверял только `WorldChanges` (Magnitude/Distortion) и
+`InventoryOps`, но безусловно печатал "SUCCESS — delta is deterministic" —
+`TargetStateNudges`/`BiomeActivations`/`Footprints` не сравнивались вовсе.
+Реальный рассинхрон в ЛЮБОМ из этих трёх каналов проходил бы как
+подтверждённый детерминизм, хотя собственная документация функции уже
+обещала "true, если дельта ПОЛНОСТЬЮ совпадает" — реализация не
+дотягивала до уже заявленного контракта.
+
+Исправлено: добавлены три блока сравнения, той же глубиной, что уже
+`WorldChanges` (Magnitude/Distortion, не каждое поле) — не новая планка
+точности, просто закрыты пропущенные каналы той же меркой.
+`TargetStateNudges` сравнивается как `WorldChanges` (по клетке,
+Magnitude+Distortion); `BiomeActivations` — поэлементно по порядку (тот же
+детерминированный пайплайн формирует его в фиксированной
+последовательности, не мультимножество); `Footprints` — поэлементно по
+`BiomeID`+`MorokImpact`+`ZaryanaImpact`.
+
+**Итог:** 387 → 390 тестов, **390/390, два чистых прогона, ноль
+регрессий.** Три новых теста, тем же приёмом подделки, что уже
+`CatchesWorldChangeCountMismatch` (харвест-команда сама не производит эти
+три канала, значит настоящий повтор даёт по ним 0 записей — подделка
+"добавить одну лишнюю запись в исходный кадр" гарантированно ловится):
+`FHerbalistTraceReplay_CatchesTargetStateNudgeMismatch`,
+`FHerbalistTraceReplay_CatchesBiomeActivationsMismatch`,
+`FHerbalistTraceReplay_CatchesFootprintMismatch`. Файлы:
+`Core/Simulation/Private/TraceReplay.cpp`,
+`ProjectHerbalistTests/.../Tests/TraceReplayTest.cpp`, `ROADMAP.md`.

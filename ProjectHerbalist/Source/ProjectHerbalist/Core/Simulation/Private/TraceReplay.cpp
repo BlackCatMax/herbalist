@@ -41,6 +41,77 @@ namespace Simulation
             }
         }
 
+        // Аудит 2026-09-05: раньше сверялись только WorldChanges/InventoryOps —
+        // TargetStateNudges/BiomeActivations/Footprints не проверялись вовсе,
+        // а SUCCESS ниже печатался безусловно. Реальный рассинхрон в ЭТИХ
+        // каналах проходил бы молча. Та же глубина (Magnitude/Distortion, не
+        // каждое поле), что уже у WorldChanges выше — не новая планка точности,
+        // просто закрываем пропущенные каналы той же меркой.
+        if (ReplayedDelta.TargetStateNudges.Num() != Frame.GeneratedDelta.TargetStateNudges.Num())
+        {
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: TargetStateNudges count mismatch. Original: %d, Replay: %d"),
+                Frame.GeneratedDelta.TargetStateNudges.Num(), ReplayedDelta.TargetStateNudges.Num());
+            return false;
+        }
+        for (const auto& Pair : Frame.GeneratedDelta.TargetStateNudges)
+        {
+            const FIntPoint& Coord = Pair.Key;
+            const FRealState* ReplayedNudge = ReplayedDelta.TargetStateNudges.Find(Coord);
+            if (!ReplayedNudge)
+            {
+                UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: Missing TargetStateNudge (%d,%d) in replayed delta"), Coord.X, Coord.Y);
+                return false;
+            }
+            if (ReplayedNudge->Magnitude != Pair.Value.Magnitude ||
+                ReplayedNudge->Meta.Distortion != Pair.Value.Meta.Distortion)
+            {
+                UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: TargetStateNudge (%d,%d) mismatch"), Coord.X, Coord.Y);
+                return false;
+            }
+        }
+
+        // BiomeActivations — порядок значим (тот же детерминированный
+        // пайплайн формирует его в фиксированной последовательности, см.
+        // приём поэлементного сравнения у InventoryOps ниже), не мультимножество.
+        if (ReplayedDelta.BiomeActivations.Num() != Frame.GeneratedDelta.BiomeActivations.Num())
+        {
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: BiomeActivations count mismatch. Original: %d, Replay: %d"),
+                Frame.GeneratedDelta.BiomeActivations.Num(), ReplayedDelta.BiomeActivations.Num());
+            return false;
+        }
+        for (int32 i = 0; i < Frame.GeneratedDelta.BiomeActivations.Num(); ++i)
+        {
+            if (Frame.GeneratedDelta.BiomeActivations[i] != ReplayedDelta.BiomeActivations[i])
+            {
+                UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: BiomeActivations[%d] mismatch (%s vs %s)"),
+                    i, *Frame.GeneratedDelta.BiomeActivations[i].ToString(), *ReplayedDelta.BiomeActivations[i].ToString());
+                return false;
+            }
+        }
+
+        // Footprints — тот же поэлементный приём, глубина сравнения BiomeID +
+        // оба импакта (та же "значимые поля, не каждый байт" мерка, что уже
+        // у WorldChanges/InventoryOps выше).
+        if (ReplayedDelta.Footprints.Num() != Frame.GeneratedDelta.Footprints.Num())
+        {
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: Footprints count mismatch. Original: %d, Replay: %d"),
+                Frame.GeneratedDelta.Footprints.Num(), ReplayedDelta.Footprints.Num());
+            return false;
+        }
+        for (int32 i = 0; i < Frame.GeneratedDelta.Footprints.Num(); ++i)
+        {
+            const FBiomeFootprintEntry& Original = Frame.GeneratedDelta.Footprints[i];
+            const FBiomeFootprintEntry& Replayed = ReplayedDelta.Footprints[i];
+            if (Original.BiomeID != Replayed.BiomeID ||
+                Original.MorokImpact != Replayed.MorokImpact ||
+                Original.ZaryanaImpact != Replayed.ZaryanaImpact)
+            {
+                UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: Footprints[%d] mismatch (%s)"),
+                    i, *Original.BiomeID.ToString());
+                return false;
+            }
+        }
+
         // Сравниваем операции инвентаря — количество И значения. Аудит
         // 2026-08-31 нашёл реальный пробел: до этой правки сравнивалось
         // только Num(), не содержимое — Harvest-команда (единственный

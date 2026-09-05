@@ -155,6 +155,67 @@ bool FHerbalistTraceReplay_CatchesCellStateMismatch::RunTest(const FString& Para
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTraceReplay_CatchesTargetStateNudgeMismatch,
+    "Herbalist.TraceReplay.CatchesTargetStateNudgeMismatch",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTraceReplay_CatchesTargetStateNudgeMismatch::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05: раньше TargetStateNudges вообще не сравнивался --
+    // подделка здесь молча проходила бы как SUCCESS. Тот же приём
+    // подделки, что уже CatchesWorldChangeCountMismatch применяет к
+    // WorldChanges (харвест-команда сама по себе не трогает
+    // TargetStateNudges, значит и реальный повтор даст здесь 0 записей).
+    const int32 Seed = 9006;
+    FTraceFrame Frame = CaptureHarvestFrame(Seed);
+    Frame.GeneratedDelta.TargetStateNudges.Add(FIntPoint(50, 50), FRealState());
+
+    FRandomStream ReplayRng(Seed);
+    const bool bMatches = Simulation::ReplayAndCompare(Frame, ReplayRng);
+
+    TestFalse(TEXT("A tampered TargetStateNudges count is caught, not silently accepted"), bMatches);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTraceReplay_CatchesBiomeActivationsMismatch,
+    "Herbalist.TraceReplay.CatchesBiomeActivationsMismatch",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTraceReplay_CatchesBiomeActivationsMismatch::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05: BiomeActivations тоже не сравнивался вовсе.
+    const int32 Seed = 9007;
+    FTraceFrame Frame = CaptureHarvestFrame(Seed);
+    Frame.GeneratedDelta.BiomeActivations.Add(FName(TEXT("TamperedBiome")));
+
+    FRandomStream ReplayRng(Seed);
+    const bool bMatches = Simulation::ReplayAndCompare(Frame, ReplayRng);
+
+    TestFalse(TEXT("A tampered BiomeActivations count is caught, not silently accepted"), bMatches);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTraceReplay_CatchesFootprintMismatch,
+    "Herbalist.TraceReplay.CatchesFootprintMismatch",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTraceReplay_CatchesFootprintMismatch::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05: Footprints тоже не сравнивался вовсе.
+    const int32 Seed = 9008;
+    FTraceFrame Frame = CaptureHarvestFrame(Seed);
+    FBiomeFootprintEntry FakeFootprint;
+    FakeFootprint.BiomeID = FName(TEXT("TamperedBiome"));
+    FakeFootprint.MorokImpact = 0.5f;
+    Frame.GeneratedDelta.Footprints.Add(FakeFootprint);
+
+    FRandomStream ReplayRng(Seed);
+    const bool bMatches = Simulation::ReplayAndCompare(Frame, ReplayRng);
+
+    TestFalse(TEXT("A tampered Footprints count is caught, not silently accepted"), bMatches);
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTraceReplay_DifferentSeedProducesDifferentResultAndIsCaught,
     "Herbalist.TraceReplay.DifferentSeedProducesDifferentResultAndIsCaught",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
