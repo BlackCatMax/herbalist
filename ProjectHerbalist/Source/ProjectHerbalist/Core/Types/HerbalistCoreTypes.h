@@ -569,6 +569,46 @@ struct PROJECTHERBALIST_API FInventoryItem
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     EBiomeType SourceBiome = EBiomeType::MixedForest;
 
+    // Сушка (DESIGN_Community_And_Homestead.md §2.2, "Хранилища" пункт 3,
+    // 2026-09-04, прямой запрос пользователя: "сушка — не контейнер, а
+    // ПРОЦЕСС... растянутый во игровое время, не мгновенно") — в отличие от
+    // EStorageContainerType (множитель decay ТАРЫ, применяется мгновенно к
+    // уже собранному предмету), сушка ПРЕВРАЩАЕТ сам предмет: свежая трава
+    // портится независимо от того, в чём её несут, сушёная — на порядки
+    // медленнее (см. DriedItemDecayMultiplier, HerbalistSettings.h), и у
+    // части растений честно меняет алхимические оси (FIngredientTableRow::
+    // DriedStateDelta) — не только сохранность, реальная травническая
+    // практика (эфирные масла улетучиваются, действующие вещества
+    // концентрируются при удалении воды, у части ядовитых/галлюциногенных
+    // растений сам характер действия меняется, см. компендиумные карточки
+    // с разделом "## Сушка").
+    //
+    // false (дефолт) = свежий предмет, обычное поведение. Ставится true
+    // ровно один раз, когда DryingTimeRemainingSeconds досчитывает до нуля
+    // (UHerbalistInventoryComponent::TickDryingItem) — терминальный переход
+    // вперёд, как у bIsPlantingStock/BrewOutcome выше, не откатывается назад.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bIsDried = false;
+
+    // Таймер процесса сушки, В СЕКУНДАХ РЕАЛЬНОГО ВРЕМЕНИ — тот же принцип,
+    // что уже DecayUpdateInterval/ApplyDecayToItem в этом же компоненте
+    // (реальные секунды тика, не GameClockSeconds моста, которого у
+    // UHerbalistInventoryComponent нет и не должно быть — см. довод у
+    // bIsDryingRack, HerbalistInventoryComponent.h).
+    //
+    // -1 (сентинел) = предмет не сушится и никогда не сушился. При первом
+    // тике внутри инвентаря-сушилки (bIsDryingRack=true) взводится в
+    // DryingDurationSeconds (HerbalistSettings.h) и с каждым тиком считает
+    // вниз; по достижении <=0 предмет становится bIsDried=true выше, поле
+    // фиксируется на 0. ВАЖНОЕ СВОЙСТВО, не отдельный код: таймер тикает
+    // ТОЛЬКО пока предмет физически лежит в инвентаре с bIsDryingRack=true
+    // (TickComponent проверяет свой собственный флаг) — переложенный в
+    // обычный карман/корзину предмет просто перестаёт досчитывать, ровно
+    // как в жизни: снял с сушила — не досохнет сам по себе, повесил
+    // обратно — досчитает с того же места.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float DryingTimeRemainingSeconds = -1.0f;
+
     bool IsEmpty() const { return IngredientID.IsNone() || Count <= 0; }
     void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; CreationTime = 0.0f; bSubjectToDecay = true; }
     bool IsValid() const { return !IngredientID.IsNone() && Count > 0; }

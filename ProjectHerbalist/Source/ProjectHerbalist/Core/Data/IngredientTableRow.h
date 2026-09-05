@@ -274,6 +274,32 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     // карточка не является контейнером вовсе.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Storage")
     EStorageContainerType GrantsContainerType = EStorageContainerType::None;
+
+    // ---- Сушка (DESIGN_Community_And_Homestead.md §2.2, "Хранилища" пункт
+    // 3, 2026-09-04, прямой запрос пользователя: "хочу честно с изменением
+    // свойств") — ДЕЛЬТА, не переопределение (FRealState DriedStateOverride
+    // отброшен как менее честный вариант: сушка МЕНЯЕТ уже собранное
+    // растение со всем его собственным разбросом состояния — биом сбора,
+    // порча к моменту сушки, случайный джиттер MergeStack — не стирает его
+    // до нового фиксированного значения). Складывается с Item.State.Meta в
+    // момент завершения сушки (UHerbalistInventoryComponent::TickComponent,
+    // тем же приёмом клампа [0,1], что уже ApplyDecayToItem), Direction не
+    // трогается — ось "характера" (Body/Mind/Spirit/Nature) сушка физически
+    // не меняет, только реальные Meta-оси (сила/чистота/испорченность),
+    // см. довод у каждой отдельной карточки (раздел "## Сушка" компендиума).
+    //
+    // Все нули (дефолт) — сушка НЕ меняет алхимические оси этой карточки,
+    // только сохранность (bIsDried уже даёт свой decay-множитель отдельно
+    // от этого поля, DriedItemDecayMultiplier, HerbalistSettings.h). Это
+    // честный, распространённый случай реальной травнической практики —
+    // большинство трав компендиума сохраняют профиль при сушке, просто
+    // портятся медленнее; не выдумываем дельту без реального ботанического
+    // основания (тот же принцип "честные пробелы", что уже у AllowedBiomes/
+    // GardenNiche прохода 2026-09-04, см. CHANGELOG.md). Ненулевые дельты
+    // проставлены точечно (DryingStatePatchCommandlet) только 6 карточкам
+    // из 76 Plant/Fungus, с реальным ботаническим обоснованием каждой.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Drying")
+    FMeta DriedStateDelta;
 };
 
 // Текущие условия сбора в момент вызова GetRandomResourceForBiome — читаются

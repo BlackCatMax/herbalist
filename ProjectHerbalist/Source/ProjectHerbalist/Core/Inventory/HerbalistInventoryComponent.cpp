@@ -62,6 +62,11 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     const float RotPurityThreshold = Settings ? Settings->RotConversionPurityThreshold : 0.05f;
     const float RotDistortionThreshold = Settings ? Settings->RotConversionDistortionThreshold : 0.95f;
 
+    // Сушка (2026-09-04) -- значения читаются один раз на весь тик компонента,
+    // тем же приёмом, что и GlobalDecayRate/RotPurityThreshold выше.
+    const float DryingDuration = Settings ? Settings->DryingDurationSeconds : 480.0f;
+    const float DriedDecayMultiplier = Settings ? Settings->DriedItemDecayMultiplier : 0.1f;
+
     for (FInventoryItem& Item : Items)
     {
         if (Item.bSubjectToDecay)
@@ -88,9 +93,19 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
                     IngredientDecay = Row->DecayRate;
                 }
             }
-            ApplyDecayToItem(Item, DecayUpdateInterval, EffectiveGlobalDecayRate * IngredientDecay);
 
-            // Гниение как терминальное состояние (2026-09-04) -- только
+            // Сушёный предмет портится на порядки медленнее свежего (2026-09-04)
+            // -- ОТДЕЛЬНЫЙ множитель от ContainerDecayMultiplier выше (сушка
+            // про воду в самом растении, тара -- про воздух/влагу вокруг
+            // него, см. довод у DriedItemDecayMultiplier, HerbalistSettings.h).
+            // Читается ДО возможного завершения сушки этим же тиком ниже --
+            // предмет, досохший только что, получает пониженный decay уже
+            // со СЛЕДУЮЩЕГО тика, не задним числом на этот же.
+            const float ItemDecayMultiplier = Item.bIsDried ? DriedDecayMultiplier : 1.0f;
+
+            ApplyDecayToItem(Item, DecayUpdateInterval, EffectiveGlobalDecayRate * IngredientDecay * ItemDecayMultiplier);
+
+            // Гниение как терминальное состояние (2026-08-29) -- только
             // не-водная органика (вода протухшая -- не то же самое, что
             // трава, сгнившая в перегной; минералы/обереги сюда не попадают
             // сами по себе, у них DecayRate=0, порог никогда не достигается).
@@ -108,6 +123,29 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
                     }
                 }
             }
+            // Сушилка (2026-09-04) -- только если этот КОНКРЕТНЫЙ инвентарь
+            // сейчас сушилка (bIsDryingRack), предмет не вода (сушат листья/
+            // корни/грибы, не воду) и ещё не высох. "else if", не отдельный
+            // if -- предмет, только что превратившийся в Перегной строкой
+            // выше, больше не тот ингредиент, которым был секунду назад, и
+            // сушить (взводить его же таймер) уже нечего в этом же тике.
+            else if (bIsDryingRack && !Item.bIsWater && !Item.bIsDried)
+            {
+                if (TickDryingItem(Item, DecayUpdateInterval, DryingDuration))
+                {
+                    // Только что досохло этим тиком -- честная дельта
+                    // алхимических осей (если карточка её несёт, см. довод у
+                    // FIngredientTableRow::DriedStateDelta) требует реестра,
+                    // которого у чистой TickDryingItem нет и не должно быть.
+                    if (IngredientReg)
+                    {
+                        if (const FIngredientTableRow* Row = IngredientReg->GetRow(Item.IngredientID))
+                        {
+                            ApplyDriedStateDelta(Item.State.Meta, Row->DriedStateDelta);
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -115,6 +153,37 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
 bool UHerbalistInventoryComponent::ShouldConvertToPeregnoy(const FMeta& Meta, float PurityThreshold, float DistortionThreshold)
 {
     return Meta.Purity < PurityThreshold && Meta.Distortion > DistortionThreshold;
+}
+
+bool UHerbalistInventoryComponent::TickDryingItem(FInventoryItem& Item, float DeltaTime, float DryingDurationSeconds)
+{
+    if (Item.DryingTimeRemainingSeconds < 0.0f)
+    {
+        // Первое попадание в сушилку -- взводим таймер, ничего не решаем
+        // этим же вызовом (симметрично тому, как StartRegeneration ставит
+        // таймер и ждёт СЛЕДУЮЩЕГО срабатывания, не решает синхронно).
+        Item.DryingTimeRemainingSeconds = DryingDurationSeconds;
+        return false;
+    }
+
+    Item.DryingTimeRemainingSeconds -= DeltaTime;
+    if (Item.DryingTimeRemainingSeconds <= 0.0f)
+    {
+        Item.DryingTimeRemainingSeconds = 0.0f;
+        Item.bIsDried = true;
+        return true;
+    }
+    return false;
+}
+
+void UHerbalistInventoryComponent::ApplyDriedStateDelta(FMeta& Meta, const FMeta& Delta)
+{
+    Meta.Distortion = FMath::Clamp(Meta.Distortion + Delta.Distortion, 0.0f, 1.0f);
+    Meta.Stability   = FMath::Clamp(Meta.Stability  + Delta.Stability,  0.0f, 1.0f);
+    Meta.Purity      = FMath::Clamp(Meta.Purity     + Delta.Purity,     0.0f, 1.0f);
+    Meta.Potency     = FMath::Clamp(Meta.Potency    + Delta.Potency,    0.0f, 1.0f);
+    Meta.Resonance   = FMath::Clamp(Meta.Resonance  + Delta.Resonance,  0.0f, 1.0f);
+    Meta.Corruption  = FMath::Clamp(Meta.Corruption + Delta.Corruption, 0.0f, 1.0f);
 }
 
 bool UHerbalistInventoryComponent::TryEquipContainer(FName IngredientID, EStorageContainerType GrantsType)
@@ -336,6 +405,21 @@ bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, co
     // первом же AddItem (MergeStack не трогает bIsPlantingStock вовсе), и
     // PlantSeed либо TestNewApply нашли бы в инвентаре не то, что искали.
     if (A.bIsPlantingStock != B.bIsPlantingStock) return false;
+
+    // Сушка (2026-09-04): сушёный и свежий предмет одного вида -- уже разные
+    // алхимические сущности (DriedStateDelta честно меняет часть карточек,
+    // см. IngredientTableRow.h), тот же довод, что и у bIsPlantingStock
+    // строкой выше -- молчаливое слияние стёрло бы это различие.
+    if (A.bIsDried != B.bIsDried) return false;
+
+    // Предмет, уже сушащийся (таймер взведён, но ещё не досчитал), не
+    // стекуется вовсе -- даже с другим таким же "в процессе" предметом: у
+    // каждого слота свой независимый DryingTimeRemainingSeconds, а MergeStack
+    // ниже это поле не усредняет (в отличие от CreationTime), молчаливое
+    // слияние либо потеряло бы прогресс одного из двух, либо держало бы в
+    // одном слоте два разных таймера одновременно -- оба варианта хуже,
+    // чем просто не дать таким предметам разделить слот, пока сушка идёт.
+    if (A.DryingTimeRemainingSeconds >= 0.0f || B.DryingTimeRemainingSeconds >= 0.0f) return false;
 
     return HerbalistCore::Math::AreStatesSimilar(A.State, B.State);
 }

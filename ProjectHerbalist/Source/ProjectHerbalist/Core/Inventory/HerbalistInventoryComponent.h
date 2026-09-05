@@ -124,6 +124,25 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool TryEquipContainer(FName IngredientID, EStorageContainerType GrantsType);
 
+    // Сушилка (DESIGN_Community_And_Homestead.md §2.2, "Хранилища" пункт 3,
+    // 2026-09-04) — станция-процесс, НЕ тип контейнера (EStorageContainerType
+    // остаётся отдельной осью, множитель тары не про сушку вовсе). Тот же
+    // приём, что уже ContainerType: плоское поле на самом компоненте,
+    // выставляется владельцем-актором (ADryingRackActor в конструкторе, тем
+    // же жестом, что AStorageContainer выставляет ContainerType=Basket) —
+    // не отдельный подкласс UActorComponent, инвентарь функционально тот же,
+    // просто с другим поведением TickComponent для предметов внутри него.
+    //
+    // false (дефолт, обычный инвентарь/тара) — TickComponent не трогает
+    // DryingTimeRemainingSeconds предметов вовсе, ровно как до появления
+    // сушки. true — каждый нежидкий, ещё не высохший предмет в этом
+    // инвентаре взводит и досчитывает свой таймер (см. TickDryingItem
+    // ниже), пока физически лежит здесь (см. довод у
+    // FInventoryItem::DryingTimeRemainingSeconds — переложил в обычный
+    // карман, таймер замер на месте, не сброшен).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+    bool bIsDryingRack = false;
+
 protected:
     UPROPERTY()
     TArray<FInventoryItem> Items;
@@ -146,6 +165,26 @@ public:
     // единственное место, где это имя жёстко зашито в коде, остальные места
     // читают эту константу.
     static const FName PeregnoyIngredientID;
+
+    // Сушка (2026-09-04) -- чистая функция состояния таймера, БЕЗ обращения
+    // к реестрам (тот же принцип тестируемости без GameInstance, что уже
+    // ShouldConvertToPeregnoy выше): взводит DryingTimeRemainingSeconds при
+    // первом вызове (сентинел -1), иначе считает вниз на DeltaTime; по
+    // достижении <=0 фиксирует bIsDried=true и возвращает true (сигнал
+    // вызывающей стороне -- "только что досохло, применяй DriedStateDelta",
+    // требующую реестра, отдельным шагом снаружи, см. TickComponent). Не
+    // проверяет bIsWater/bIsDryingRack/Class сама -- эти решения принимает
+    // вызывающая сторона (тот же принцип границы, что уже у
+    // ShouldConvertToPeregnoy: чистая функция получает уже отфильтрованный
+    // вход, а не фильтрует сама).
+    static bool TickDryingItem(FInventoryItem& Item, float DeltaTime, float DryingDurationSeconds);
+
+    // Применяет FIngredientTableRow::DriedStateDelta к Meta предмета в
+    // момент завершения сушки -- тот же приём клампа [0,1], что уже
+    // ApplyDecayToItem применяет к Distortion/Corruption/Purity/Stability
+    // (отдельная функция, не инлайн в TickComponent -- тестируема напрямую
+    // без реестра/GameInstance, ровно как TickDryingItem выше).
+    static void ApplyDriedStateDelta(FMeta& Meta, const FMeta& Delta);
 
 protected:
 
