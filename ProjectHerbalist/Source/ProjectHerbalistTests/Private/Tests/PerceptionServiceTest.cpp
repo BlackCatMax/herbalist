@@ -171,8 +171,7 @@ bool FHerbalistPerception_ComputePerceivedInventoryPreservesStructure::RunTest(c
     FInventoryItem ItemB; ItemB.IngredientID = FName(TEXT("Probe2")); ItemB.State = PerceptionTestMidRangeState(0.4f);
     InvSnap.ContainerContents.Add(0, { ItemA, ItemB });
 
-    FRandomStream Rng(2);
-    const FPerceivedInventory Perceived = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, Rng, 0.0f);
+    const FPerceivedInventory Perceived = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, 0.0f);
 
     const TArray<FInventoryItem>* Container = Perceived.ContainerContents.Find(0);
     if (!TestNotNull(TEXT("Container 0 present in perceived inventory"), Container)) return false;
@@ -183,6 +182,46 @@ bool FHerbalistPerception_ComputePerceivedInventoryPreservesStructure::RunTest(c
             (*Container)[0].IngredientID, FName(TEXT("Probe1")));
         TestEqual(TEXT("Second item's IngredientID preserved"), (*Container)[1].IngredientID, FName(TEXT("Probe2")));
     }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPerception_InventoryNoiseIsStableForSameIdentityAndState,
+    "Herbalist.Perception.InventoryNoiseIsStableForSameIdentityAndState",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPerception_InventoryNoiseIsStableForSameIdentityAndState::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05 + решение пользователя: шум предмета в инвентаре —
+    // функция identity+State, не тикового сида. Держать тултип открытым
+    // (то есть звать ComputePerceivedInventory повторно на НЕИЗМЕНИВШЕМСЯ
+    // предмете) больше не должно давать разные значения, которые можно
+    // усреднить до честного S_real.
+    FInventoryItem Item;
+    Item.IngredientID = FName(TEXT("Probe1"));
+    Item.CreationTime = 123.5f;
+    Item.State = PerceptionTestMidRangeState(0.7f);   // высокая Distortion -- шум заметен, есть что перепутать
+
+    FInventorySnapshot InvSnap;
+    InvSnap.ContainerContents.Add(0, { Item });
+
+    const FPerceivedInventory First = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, 0.0f);
+    const FPerceivedInventory Second = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, 0.0f);
+
+    const FInventoryItem& A = (*First.ContainerContents.Find(0))[0];
+    const FInventoryItem& B = (*Second.ContainerContents.Find(0))[0];
+    TestEqual(TEXT("Same item, same call twice -- identical noisy Magnitude (nothing to average)"), A.State.Magnitude, B.State.Magnitude);
+    TestEqual(TEXT("Same item, same call twice -- identical noisy Distortion"), A.State.Meta.Distortion, B.State.Meta.Distortion);
+
+    // Меняем реальное состояние (как порча/сушка/отстой сдвинули бы его) --
+    // шум обязан сдвинуться сам, а не остаться приклеенным к старому значению.
+    FInventoryItem ChangedItem = Item;
+    ChangedItem.State.Meta.Distortion = 0.71f;
+    FInventorySnapshot ChangedSnap;
+    ChangedSnap.ContainerContents.Add(0, { ChangedItem });
+    const FPerceivedInventory AfterChange = Simulation::FPerceptionService::ComputePerceivedInventory(ChangedSnap, 0.0f);
+    const FInventoryItem& C = (*AfterChange.ContainerContents.Find(0))[0];
+    TestNotEqual(TEXT("Real state changed -- perceived Magnitude noise draw is now a different one"), A.State.Magnitude, C.State.Magnitude);
 
     return true;
 }

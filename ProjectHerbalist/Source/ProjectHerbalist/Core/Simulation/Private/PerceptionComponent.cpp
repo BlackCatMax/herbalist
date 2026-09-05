@@ -27,14 +27,14 @@ void UPerceptionComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
     const AGridWorldManager* Owner = Cast<AGridWorldManager>(GetOwner());
     const float Clarity = Owner ? Owner->GetGlobalPerceptionClarity() : 0.0f;
 
-    // Сид -- тот же источник (GetCurrentWorldSeed), что раньше давал
-    // WorldSnap.WorldSeed из полного захвата мира, но без самого захвата:
-    // детерминизм инвентарного шума (важен для трейса/реплея) сохранён,
-    // цена 250 000-клеточного снапшота — нет.
-    FRandomStream Rng(Owner ? Owner->GetCurrentWorldSeed() : 0);
-
+    // Больше НЕ общий Rng от тикового сида (аудит 2026-09-05: держи тултип
+    // открытым 10-15с — каждый опрос давал новый шум от свежего
+    // CurrentTickID, усреднение таких независимых просмотров восстанавливало
+    // честное S_real в обход всей механики искажения). ComputePerceivedInventory
+    // сама сеет шум каждого предмета от его identity+State — см. подробный
+    // комментарий в PerceptionService.h/.cpp.
     FInventorySnapshot InvSnap = Simulation::FSnapshotService::CaptureInventory();
-    CachedPerceivedInventory = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, Rng, Clarity);
+    CachedPerceivedInventory = Simulation::FPerceptionService::ComputePerceivedInventory(InvSnap, Clarity);
 }
 
 const FPerceivedWorld& UPerceptionComponent::GetPerceivedWorld() const

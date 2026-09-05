@@ -41,7 +41,36 @@ namespace Simulation
         return Result;
     }
 
-    FPerceivedInventory FPerceptionService::ComputePerceivedInventory(const FInventorySnapshot& RealInventory, FRandomStream& Rng, float Clarity)
+    // Сид = чистая функция identity+текущего State предмета (аудит 2026-09-05,
+    // "пересчитывается каждый тик из тикового сида — держи тултип открытым и
+    // усредни шум до честного значения"; решение пользователя: заменить на
+    // identity+состояние, без понятия "радиуса", которого у предмета в
+    // инвентаре физически нет). CreationTime — стабильный якорь ЭКЗЕМПЛЯРА
+    // (проставляется один раз при харвесте, не меняется, пока предмет не
+    // пересоздан/не стакнут заново), IngredientID отличает разные травы,
+    // остальные поля State гарантируют, что шум сам сдвинется, когда
+    // реальное состояние предмета действительно изменится (порча/сушка/
+    // отстой), а не будет молча плавать от опроса к опросу без причины.
+    static int32 ComputeInventoryPerceptionSeed(const FInventoryItem& Item)
+    {
+        uint32 Seed = 20260905u;
+        Seed = HashCombine(Seed, GetTypeHash(Item.IngredientID));
+        Seed = HashCombine(Seed, GetTypeHash(Item.CreationTime));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Magnitude));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Meta.Distortion));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Meta.Purity));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Meta.Stability));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Meta.Corruption));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Meta.Potency));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Meta.Resonance));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Direction.Body));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Direction.Mind));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Direction.Spirit));
+        Seed = HashCombine(Seed, GetTypeHash(Item.State.Direction.Nature));
+        return static_cast<int32>(Seed);
+    }
+
+    FPerceivedInventory FPerceptionService::ComputePerceivedInventory(const FInventorySnapshot& RealInventory, float Clarity)
     {
         FPerceivedInventory Result;
         for (const auto& Pair : RealInventory.ContainerContents)
@@ -51,7 +80,8 @@ namespace Simulation
             for (const FInventoryItem& Item : Pair.Value)
             {
                 FInventoryItem Perceived = Item;
-                Perceived.State = PerceiveRealState(Item.State, Rng, Clarity);
+                FRandomStream ItemRng(ComputeInventoryPerceptionSeed(Item));
+                Perceived.State = PerceiveRealState(Item.State, ItemRng, Clarity);
                 PerceivedItems.Add(MoveTemp(Perceived));
             }
             Result.ContainerContents.Add(Pair.Key, MoveTemp(PerceivedItems));
