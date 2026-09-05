@@ -297,4 +297,67 @@ bool FHerbalistWard_TieredMorokReductionWeakerOutsideHomeBiome::RunTest(const FS
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Аудит 2026-09-05: "таймеры оберегов/артефактов не сохраняются, а
+// GameClockSeconds откатывается назад при загрузке -- активный оберег
+// может 'прожить' намного дольше заявленного окна". Шесть
+// GameClockSeconds-таймеров (Ward*/InvisibilityCap/YouthApple/Alkonost)
+// осознанно не персистятся (см. комментарии у полей в GridWorldManager.h) --
+// но без явного сброса откат часов назад мог оставить их формально "ещё не
+// истёкшими" относительно нового, более раннего времени. LoadGame теперь
+// зовёт ResetSessionOnlyWardTimers явно; здесь проверяется сам метод.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWard_ResetSessionOnlyTimersClearsAllSix,
+    "Herbalist.Ward.ResetSessionOnlyTimersClearsAllSix",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWard_ResetSessionOnlyTimersClearsAllSix::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FAcquiredArtifact Cap;
+    Cap.ArtifactID = FName(TEXT("Шапка-невидимка"));
+    FAcquiredArtifact Apple;
+    Apple.ArtifactID = FName(TEXT("Молодильное яблоко"));
+    Manager->SetAcquiredArtifacts({ Cap, Apple });
+    Manager->SetAcquiredFeathers({ FName(TEXT("Перо Алконоста")) });
+
+    Manager->SetGameClockSeconds(1000.0f);
+    TestTrue(TEXT("BrewBoost activates"), Manager->ActivateWardBrewBoost());
+    TestTrue(TEXT("Concealment activates"), Manager->ActivateWardConcealment(FIntPoint(5, 5)));
+    TestTrue(TEXT("MorokReduction activates"), Manager->ActivateWardMorokReduction(FIntPoint(5, 5)));
+    TestTrue(TEXT("InvisibilityCap activates"), Manager->UseInvisibilityCap(FIntPoint(5, 5)));
+    TestTrue(TEXT("YouthApple activates"), Manager->UseYouthApple());
+    TestTrue(TEXT("Alkonost activates"), Manager->UseAlkonostFeatherOnBiome(EBiomeType::ForestSteppe));
+
+    TestTrue(TEXT("BrewBoost active before reset"), Manager->IsWardBrewBoostActive());
+    TestTrue(TEXT("Concealment active before reset"), Manager->IsWardConcealmentActive());
+    TestTrue(TEXT("MorokReduction active before reset"), Manager->IsWardMorokReductionActive());
+    TestTrue(TEXT("InvisibilityCap active before reset"), Manager->IsInvisibilityCapActive());
+    TestTrue(TEXT("YouthApple active before reset"), Manager->IsYouthAppleClarityBoostActiveForTest());
+    TestTrue(TEXT("Alkonost active before reset"), Manager->IsAlkonostSuppressionActiveForBiome(EBiomeType::ForestSteppe));
+
+    // "Загрузка более раннего сейва" -- часы откатываются НАЗАД. Без
+    // ResetSessionOnlyWardTimers все шесть таймеров остались бы на старых
+    // Expiry-значениях, которые теперь снова оказались бы В БУДУЩЕМ
+    // относительно нового GameClockSeconds -- обереги читались бы активными
+    // ещё раз, хотя не должны переживать загрузку вовсе.
+    Manager->SetGameClockSeconds(1.0f);
+    Manager->ResetSessionOnlyWardTimers();
+
+    TestFalse(TEXT("BrewBoost inactive after reset"), Manager->IsWardBrewBoostActive());
+    TestFalse(TEXT("Concealment inactive after reset"), Manager->IsWardConcealmentActive());
+    TestFalse(TEXT("MorokReduction inactive after reset"), Manager->IsWardMorokReductionActive());
+    TestFalse(TEXT("InvisibilityCap inactive after reset"), Manager->IsInvisibilityCapActive());
+    TestFalse(TEXT("YouthApple inactive after reset"), Manager->IsYouthAppleClarityBoostActiveForTest());
+    TestFalse(TEXT("Alkonost inactive after reset"), Manager->IsAlkonostSuppressionActiveForBiome(EBiomeType::ForestSteppe));
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

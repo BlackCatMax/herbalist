@@ -1005,6 +1005,12 @@ public:
     // MolodilnoeYablokoWindowSeconds (черновое число).
     bool UseYouthApple();
 
+    // Публично только для теста на ResetSessionOnlyWardTimers (аудит
+    // 2026-09-05) — в остальном коде читается инлайн в GridWorldManagerZaryana.cpp
+    // (GetZaryanaPerceivedState), отдельного публичного предиката не было
+    // и не нужно было до сих пор.
+    bool IsYouthAppleClarityBoostActiveForTest() const { return GameClockSeconds < YouthAppleClarityBoostExpiryGameSeconds; }
+
     // Шапка-невидимка (Баба-Яга) — временное, повторно используемое:
     // пока активно, подавляет НОВЫЕ проявления Низшего/Легендарного ранга
     // в НАСТОЯЩЕЙ зоне (2026-09-02, "чиним до настоящей зоны" — Chebyshev-
@@ -1165,6 +1171,26 @@ public:
     // сторона (ComputePerceptionDistortion) просто вычитает результат, без
     // отдельной проверки bTieredMorokReductionActive.
     float GetTieredMorokReductionAmount(const FIntPoint& PlayerCell) const;
+
+    // Аудит 2026-09-05: "таймеры оберегов/артефактов не сохраняются, а
+    // GameClockSeconds откатывается назад при загрузке — активный оберег
+    // может 'прожить' намного дольше заявленного окна". Сами таймеры
+    // (Ward*/InvisibilityCap/YouthApple/Alkonost выше) осознанно НЕ
+    // персистятся — задокументированное решение "короткое окно, часть
+    // текущей сессии, не долгоживущий прогресс" (см. комментарии у полей).
+    // Но реализация этого решения была неполной: LoadGame восстанавливает
+    // GameClockSeconds (тот ДЕЙСТВИТЕЛЬНО персистится), а эти шесть
+    // ExpiryGameSeconds-полей — нет, оставаясь на прежнем значении. Если
+    // откат GameClockSeconds назад проносит его НИЖЕ уже стоящего
+    // Expiry-значения (оберег истёк/не активировался вовсе в загруженной
+    // точке, но Expiry всё ещё указывает на будущее ОТНОСИТЕЛЬНО нового
+    // GameClockSeconds) — оберег читается как активный ещё раз, на полный
+    // WardDurationSeconds, хотя по стоящему за решением намерению должен
+    // был быть выключен. Явный сброс здесь — единственный способ реально
+    // выполнить уже принятое "не переживает загрузку", независимо от того,
+    // в какую сторону откатились часы. Вызывается из
+    // UHerbalistSaveSubsystem::LoadGame.
+    void ResetSessionOnlyWardTimers();
 
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }

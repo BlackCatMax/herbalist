@@ -141,6 +141,16 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->RngBaseSeed = Save->RngBaseSeed;
     WorldManager->SetCurrentTickID(Save->CurrentTickID);
     WorldManager->SetGameClockSeconds(Save->GameClockSeconds);
+
+    // Аудит 2026-09-05: таймеры оберегов/артефактных эффектов "короткого
+    // окна" (Ward*/InvisibilityCap/YouthApple/Alkonost) осознанно не
+    // персистятся — но GameClockSeconds выше ТОЛЬКО ЧТО откатился (вперёд
+    // или назад, не важно), а сами таймеры без явного сброса остались бы
+    // на прежнем значении. Без этого отступление к более раннему сейву
+    // могло прочитать давно истёкший/никогда не активированный в этой
+    // временной точке оберег как ещё активный на полный WardDurationSeconds
+    // заново — см. подробный довод у ResetSessionOnlyWardTimers.
+    WorldManager->ResetSessionOnlyWardTimers();
     WorldManager->SetEntityLandmarks(Save->EntityLandmarks);
     WorldManager->SetShrines(Save->Shrines);
     WorldManager->Molva = Save->Molva;

@@ -100,6 +100,26 @@ bool AGridWorldManager::IsWardMorokReductionActive(const FIntPoint& Cell) const
     return Dist <= Radius;
 }
 
+// Аудит 2026-09-05: см. подробный довод у объявления в GridWorldManager.h.
+// Шесть GameClockSeconds-таймеров "короткого окна" (Ward*, InvisibilityCap,
+// YouthApple, Alkonost) осознанно не персистятся, но без явного сброса
+// здесь откат GameClockSeconds назад при LoadGame мог оставить их
+// формально "ещё не истёкшими" относительно нового, более раннего
+// времени — оберег читался бы активным ещё раз, вопреки уже принятому
+// решению "не переживает загрузку".
+void AGridWorldManager::ResetSessionOnlyWardTimers()
+{
+    AlkonostSuppressionExpiryGameSeconds = 0.0f;
+    YouthAppleClarityBoostExpiryGameSeconds = 0.0f;
+    InvisibilityCapExpiryGameSeconds = 0.0f;
+    InvisibilityCapCenter = FIntPoint(-1, -1);
+    WardBrewBoostExpiryGameSeconds = 0.0f;
+    WardConcealmentExpiryGameSeconds = 0.0f;
+    WardConcealmentCenter = FIntPoint(-1, -1);
+    WardMorokReductionExpiryGameSeconds = 0.0f;
+    WardMorokReductionCenter = FIntPoint(-1, -1);
+}
+
 // ============================================================================
 // ТИРАЖНЫЕ ОБЕРЕГИ (награда ритуалов перехода ярусов биомов, 2026-09-04)
 // ============================================================================
