@@ -806,6 +806,18 @@ void AHerbalistPlayerController::TradeWithCommunity(FString OfferedIngredientID,
         return;
     }
 
+    // Проверка вместимости ДО списания (аудит 2026-09-05): AddItem при
+    // переполнении молча роняет остаток, а предложенный товар списывался бы
+    // уже безвозвратно к этому моменту -- игрок терял и товар, и оплату
+    // разом. Раз то, что предлагает община, физически некуда положить --
+    // сделка честно отказывает целиком, ничего не списывается.
+    if (InventoryComponent->GetAvailableCapacityFor(Received) < Received.Count)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("TradeWithCommunity: not enough room for %d x '%s', trade refused"),
+            Received.Count, *WantedIngredientID);
+        return;
+    }
+
     // Аудит 2026-08-31: ComputeCommunityTradeValue домножает цену на весь
     // Item.Count предложенного стека (см. GridWorldManagerCommunity.cpp) --
     // значит и списать нужно весь стек, а не 1 единицу. Раньше здесь стояла

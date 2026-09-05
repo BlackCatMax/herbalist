@@ -19,18 +19,25 @@ float AGridWorldManager::OfferToCommunity(const TArray<FInventoryItem>& Items)
 {
     if (Items.Num() == 0) return 0.0f;
 
+    // Сумма, не среднее (аудит 2026-09-05): вызывающая сторона
+    // (AHerbalistPlayerController::OfferToCommunity) списывает ровно 1
+    // единицу за КАЖДЫЙ найденный слот массива Items -- значит и вклад в
+    // Molva обязан расти с числом слотов, иначе поднести 5 разных слотов
+    // одной травы давало бы то же ΔMolva, что поднести 1, при этом реально
+    // потеряв впятеро больше. Для типового случая "один слот за раз"
+    // (Items.Num()==1) поведение не меняется -- сумма одного слагаемого
+    // равна среднему по одному слагаемому, калибровку MolvaOfferingGain
+    // трогать не пришлось.
     float SumPurity = 0.0f, SumCorruption = 0.0f;
     for (const FInventoryItem& Item : Items)
     {
         SumPurity += Item.State.Meta.Purity;
         SumCorruption += Item.State.Meta.Corruption;
     }
-    const float AvgPurity = SumPurity / Items.Num();
-    const float AvgCorruption = SumCorruption / Items.Num();
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float Gain = Settings ? Settings->MolvaOfferingGain : 0.03f;
-    const float DeltaMolva = Gain * (AvgPurity - AvgCorruption);
+    const float DeltaMolva = Gain * (SumPurity - SumCorruption);
 
     Molva = FMath::Clamp(Molva + DeltaMolva, -1.0f, 1.0f);
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Community] Offered %d item(s), ΔMolva=%.4f, Molva=%.3f"),
@@ -88,9 +95,23 @@ bool AGridWorldManager::TryTradeWithCommunity(const FInventoryItem& Offered, FNa
     // в §1.2 документа ("выше Molva -> выгоднее курс").
     const float Rate = (OfferedValue / WantedUnitValue) * (1.0f + MolvaBonus * Molva);
 
+    int32 ReceivedCount = 0;
+    if (!ComputeTradeReceivedCount(Rate, ReceivedCount))
+    {
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[Community] Trade %s -> %s refused: rate %.4f too low for even 1 unit"),
+            *Offered.IngredientID.ToString(), *WantedIngredientID.ToString(), Rate);
+        return false;
+    }
+
     OutReceived = WantedUnit;
-    OutReceived.Count = FMath::Max(1, FMath::FloorToInt(Rate));
+    OutReceived.Count = ReceivedCount;
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Community] Trade %s(x%d) -> %s(x%d), rate=%.3f, Molva=%.3f"),
         *Offered.IngredientID.ToString(), Offered.Count, *WantedIngredientID.ToString(), OutReceived.Count, Rate, Molva);
     return true;
+}
+
+bool AGridWorldManager::ComputeTradeReceivedCount(float Rate, int32& OutCount)
+{
+    OutCount = FMath::FloorToInt(Rate);
+    return OutCount >= 1;
 }

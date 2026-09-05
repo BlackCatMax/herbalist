@@ -415,6 +415,29 @@ void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float 
     Item.State.Direction.NormalizeSum();
 }
 
+int32 UHerbalistInventoryComponent::GetAvailableCapacityFor(const FInventoryItem& Item) const
+{
+    int32 Capacity = 0;
+
+    // Место в уже существующих стекуемых слотах -- тот же критерий, что
+    // FindStackableSlot использует внутри AddItem, но здесь суммируем ВСЕ
+    // подходящие слоты разом, не первый найденный (AddItem сам переходит к
+    // следующему, если текущий заполнился -- см. цикл ниже).
+    for (const FInventoryItem& Slot : Items)
+    {
+        if (Slot.IngredientID == Item.IngredientID && Slot.Count < MAX_STACK_SIZE && AreItemsStackable(Slot, Item))
+        {
+            Capacity += MAX_STACK_SIZE - Slot.Count;
+        }
+    }
+
+    // Плюс свободные слоты (до MaxSlots), каждый -- целая новая стопка.
+    const int32 FreeSlots = FMath::Max(0, MaxSlots - Items.Num());
+    Capacity += FreeSlots * MAX_STACK_SIZE;
+
+    return Capacity;
+}
+
 bool UHerbalistInventoryComponent::AddItem(const FInventoryItem& Item, int32 Amount)
 {
     if (Amount <= 0 || Item.IngredientID.IsNone() || Item.Count <= 0)

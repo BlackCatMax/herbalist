@@ -104,6 +104,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool AddItem(const FInventoryItem& Item, int32 Amount = 1);
 
+    // Сколько единиц Item реально поместится СЕЙЧАС, без добавления
+    // (2026-09-05, экономика общины -- аудит нашёл: AddItem при переполнении
+    // молча роняет остаток, а вызывающая сторона (TradeWithCommunity) уже
+    // списала предложенный товар к этому моменту -- игрок терял и товар, и
+    // оплату разом). Тот же приём поиска стекуемого слота, что и AddItem
+    // (FindStackableSlot/AreItemsStackable), плюс свободные слоты по
+    // MAX_STACK_SIZE каждый -- вызывающая сторона сверяется ДО списания.
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    int32 GetAvailableCapacityFor(const FInventoryItem& Item) const;
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool RemoveItem(int32 Index, int32 Amount = 1);
 

@@ -28,9 +28,11 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Save/HerbalistSaveTypes.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -182,6 +184,123 @@ bool FHerbalistCommunity_TradeFailsForEmptyOffer::RunTest(const FString& Paramet
     TestFalse(TEXT("Offering zero count fails regardless of whether the wanted ingredient is known"), bSucceeded);
 
     Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Экономика: три находки аудита 2026-09-05, каждая закрыта отдельно.
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCommunity_TradeRateBelowOneIsRefusedNotRoundedUp,
+    "Herbalist.Community.TradeRateBelowOneIsRefusedNotRoundedUp",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCommunity_TradeRateBelowOneIsRefusedNotRoundedUp::RunTest(const FString& Parameters)
+{
+    // Чистая функция, вынесена именно затем, чтобы это решение проверялось
+    // без резолва IngredientRegistrySubsystem (недоступного в Editor-тестах,
+    // см. шапку файла) -- раньше FMath::Max(1, FloorToInt(Rate)) давал
+    // бесплатную единицу при любом, сколь угодно невыгодном курсе.
+    int32 Count = -1;
+    TestFalse(TEXT("Rate just below 1.0 is refused, not rounded up to a free unit"),
+        AGridWorldManager::ComputeTradeReceivedCount(0.999f, Count));
+
+    TestFalse(TEXT("A very unfavorable rate (cheapest-for-priciest) is refused"),
+        AGridWorldManager::ComputeTradeReceivedCount(0.05f, Count));
+
+    TestTrue(TEXT("Rate of exactly 1.0 succeeds"),
+        AGridWorldManager::ComputeTradeReceivedCount(1.0f, Count));
+    TestEqual(TEXT("...with Count==1"), Count, 1);
+
+    TestTrue(TEXT("Rate above 1.0 succeeds and floors down"),
+        AGridWorldManager::ComputeTradeReceivedCount(3.7f, Count));
+    TestEqual(TEXT("...Count==3, not rounded up to 4"), Count, 3);
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCommunity_OfferingMultipleItemsScalesMolvaNotAveraged,
+    "Herbalist.Community.OfferingMultipleItemsScalesMolvaNotAveraged",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCommunity_OfferingMultipleItemsScalesMolvaNotAveraged::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05: подношение 5 разных слотов одной травы теряло
+    // впятеро больше товара (RemoveItem(Index,1) на каждый найденный слот,
+    // AHerbalistPlayerController::OfferToCommunity), но раньше давало то же
+    // ΔMolva, что подношение одного слота (среднее по Items.Num()) -- прямой
+    // антистимул щедрости. Сумма чинит это, сохраняя типовой случай (1
+    // предмет) без изменений.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* SingleManager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Single-offer manager spawned"), SingleManager)) return false;
+    const float SingleDelta = SingleManager->OfferToCommunity({ MakeCommunityOfferingItem(0.9f, 0.05f) });
+    SingleManager->Destroy();
+
+    AGridWorldManager* TripleManager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Triple-offer manager spawned"), TripleManager)) return false;
+    TArray<FInventoryItem> ThreeSimilarItems = {
+        MakeCommunityOfferingItem(0.9f, 0.05f),
+        MakeCommunityOfferingItem(0.9f, 0.05f),
+        MakeCommunityOfferingItem(0.9f, 0.05f),
+    };
+    const float TripleDelta = TripleManager->OfferToCommunity(ThreeSimilarItems);
+    TripleManager->Destroy();
+
+    TestTrue(TEXT("Offering 3 similar-quality items gives noticeably more ΔMolva than offering 1"),
+        TripleDelta > SingleDelta * 2.5f);
+    TestTrue(TEXT("...and it's not more than the honest 3x either (no double-counting)"),
+        TripleDelta <= SingleDelta * 3.0f + KINDA_SMALL_NUMBER);
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCommunity_AvailableCapacityPreventsSilentItemLoss,
+    "Herbalist.Community.AvailableCapacityPreventsSilentItemLoss",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCommunity_AvailableCapacityPreventsSilentItemLoss::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05: TradeWithCommunity списывало предложенный товар,
+    // затем AddItem молча ронял излишек при переполненном инвентаре --
+    // GetAvailableCapacityFor даёт вызывающей стороне способ проверить ДО
+    // списания, не после потери.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AActor* Owner = World->SpawnActor<AActor>();
+    UHerbalistInventoryComponent* Inventory = NewObject<UHerbalistInventoryComponent>(Owner);
+    Inventory->RegisterComponent();
+    Inventory->MaxSlots = 2;
+
+    FInventoryItem Filler;
+    Filler.IngredientID = FName(TEXT("FillerA"));
+    Filler.Count = UHerbalistInventoryComponent::MAX_STACK_SIZE;
+    Inventory->AddItem(Filler, Filler.Count);
+
+    FInventoryItem OtherFiller;
+    OtherFiller.IngredientID = FName(TEXT("FillerB"));
+    OtherFiller.Count = UHerbalistInventoryComponent::MAX_STACK_SIZE;
+    Inventory->AddItem(OtherFiller, OtherFiller.Count);
+
+    // Оба слота из MaxSlots=2 заняты до предела -- для третьего, незнакомого
+    // вида места нет вовсе.
+    FInventoryItem WantedNew;
+    WantedNew.IngredientID = FName(TEXT("SomethingElseEntirely"));
+    TestEqual(TEXT("No room at all for a brand-new ingredient once both slots are full"),
+        Inventory->GetAvailableCapacityFor(WantedNew), 0);
+
+    // Частично занятый стекуемый слот честно даёт оставшееся место, не 0 и
+    // не полный MAX_STACK_SIZE.
+    Inventory->RemoveItem(0, 3);   // FillerA: 9 -> 6, оставляет 3 места в своём слоте
+    FInventoryItem MoreFillerA;
+    MoreFillerA.IngredientID = FName(TEXT("FillerA"));
+    TestEqual(TEXT("Partially-filled stackable slot reports its real remaining room"),
+        Inventory->GetAvailableCapacityFor(MoreFillerA), 3);
+
+    Owner->Destroy();
     return true;
 }
 
