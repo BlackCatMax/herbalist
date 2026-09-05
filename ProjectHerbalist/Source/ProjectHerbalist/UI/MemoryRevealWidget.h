@@ -28,6 +28,10 @@ public:
     // безопасно и в этом случае).
     void Show(const FText& Text, float DisplaySeconds);
 
+    // Публично только для теста на "виджет сломан навсегда без AddToViewport"
+    // (аудит 2026-09-05, см. подробный комментарий у BuildLayout()/Show() в .cpp).
+    FText GetBodyTextForTest() const;
+
 protected:
     virtual void NativeConstruct() override;
 

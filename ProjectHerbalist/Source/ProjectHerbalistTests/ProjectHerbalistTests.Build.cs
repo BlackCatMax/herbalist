@@ -21,7 +21,15 @@ public class ProjectHerbalistTests : ModuleRules
             "AutomationTest",
             "Json",          // BiomeGraphExportCommandlet.cpp
             "AssetRegistry", // FAssetRegistryModule::AssetCreated -- новые *CreateCommandlet, создающие DataTable-ассет с нуля (2026-09-02)
-            "PCG"            // UPCGHerbalistGridSettings -- узел обратной связи «симуляция -> граф» (2026-09-03)
+            "PCG",           // UPCGHerbalistGridSettings -- узел обратной связи «симуляция -> граф» (2026-09-03)
+            // Первые тесты на виджеты (AlchemyUIBugfixesTest.cpp, 2026-09-05) --
+            // FGeometry/FPointerEvent (SlateCore) и CreateWidget<>/UUserWidget
+            // (UMG/Slate) раньше отсюда не вызывались ни разу, транзитивность
+            // Public-зависимостей ProjectHerbalist на компоновку не хватило --
+            // явные записи нужны так же, как уже явно указан InputCore выше.
+            "Slate",
+            "SlateCore",
+            "UMG"
         });
 
         // GEditor/UEditorEngine (SaveSystemTest.cpp — GetEditorWorldContext) — только

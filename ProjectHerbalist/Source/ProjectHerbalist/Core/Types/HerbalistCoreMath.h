@@ -109,10 +109,23 @@ namespace HerbalistCore::Math
     }
 
     // Сравнение двух состояний с заданными допусками
-    bool AreStatesSimilar(const FRealState& A, const FRealState& B,
+    PROJECTHERBALIST_API bool AreStatesSimilar(const FRealState& A, const FRealState& B,
         float MagnitudeThreshold = 0.15f,
         float DistortionThreshold = 0.2f,
         float PurityThreshold = 0.2f,
         float StabilityThreshold = 0.2f,
         float DirectionThreshold = 0.15f);
+
+    // Взвешенное смешение двух FRealState при слиянии стопок (вынесено из
+    // UHerbalistInventoryComponent::MergeStack, аудит 2026-09-05: у котла
+    // UAlchemySlotWidget::AddItem раньше молча отбрасывал State любой второй
+    // и последующей единицы травы, добавленной в уже занятый слот — Pipeline
+    // потом варил Count копий ПЕРВОЙ единицы, а не честную смесь. Одна и та
+    // же формула для обоих мест, не две разные копии одной идеи — включает
+    // не только линейную интерполяцию по весам количества, но и намеренный
+    // "разброс от смешивания" (расхождение Distortion/Purity исходных
+    // состояний не гасится усреднением целиком, а частично остаётся —
+    // смешивать разнородные травы должно быть немного грязнее, чем усреднять
+    // идентичные).
+    PROJECTHERBALIST_API void BlendRealStatesForStack(FRealState& Target, const FRealState& Source, int32 TargetCount, int32 AddedCount);
 }

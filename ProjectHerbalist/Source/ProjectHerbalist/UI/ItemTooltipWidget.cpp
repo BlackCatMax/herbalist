@@ -2,6 +2,7 @@
 #include "Components/TextBlock.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/HerbalistNameUtils.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 
 void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
@@ -13,7 +14,16 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
     // §2.4 нашёл её в двух других виджетах, эта третья не была найдена и там,
     // и в мета-аудите). Общий хелпер вместо третьей копии.
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
-    if (NameText) NameText->SetText(FText::FromString(GetItemDisplayName(Item, nullptr)));
+
+    // Реестр вместо nullptr (аудит 2026-09-05): без него GetItemDisplayName
+    // для любой обычной травы падает на последний return — сырой
+    // IngredientID (латиницей/техническим именем), не человекочитаемое имя
+    // из DataTable. Тот же приём получения реестра, что уже
+    // AlchemySlotWidget.cpp/InventorySlotWidget.cpp.
+    UIngredientRegistrySubsystem* IngSub = nullptr;
+    if (PC && PC->GetGameInstance())
+        IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
+    if (NameText) NameText->SetText(FText::FromString(GetItemDisplayName(Item, IngSub)));
 
     // Морочники (16_Entity_Manifestation §16.5) — раньше PC->CurrentGlobalDistortion
     // считался честно, но не был виден игроку нигде (AUDIT §1.4/META_AUDIT §6).

@@ -9,6 +9,7 @@
 #include "UI/ItemTooltipWidget.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Core/Types/HerbalistNameUtils.h"   // <-- добавлено
+#include "Core/Types/HerbalistCoreMath.h"
 #include "Core/Simulation/Private/PerceptionService.h"
 #include "Core/World/GridWorldManager.h"
 
@@ -46,31 +47,58 @@ bool UAlchemySlotWidget::AddItem(const FInventoryItem& Item, int32 Amount)
         return false;
     if (Amount <= 0) return false;
 
+    // GlobalPerceptionClarity (найдено при аудите 2026-08-24: котёл был
+    // единственным местом, читающим восприятие мимо неё) — тот же
+    // AGridWorldManager, откуда уже берётся CurrentAlchemyTable.
+    float Clarity = 0.0f;
+    if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
+    {
+        if (AGridWorldManager* WorldManager = PC->FindWorldManager())
+        {
+            Clarity = WorldManager->GetGlobalPerceptionClarity();
+        }
+    }
+
     if (!bHasItem)
     {
+        // Переполнение (аудит 2026-09-05): раньше Amount молча клэмпился до
+        // MaxCount, непоместившийся остаток "исчезал" без возврата в
+        // исходный инвентарь, а функция всё равно возвращала true --
+        // вызывающая сторона (NativeOnDrop) считала весь Amount принятым.
+        // Явный отказ вместо тихого усечения -- тот же принцип, что уже
+        // ComputeTradeReceivedCount (Rate<1 отказывает сделку целиком, не
+        // округляет). Отказ здесь автоматически восстанавливает несостоявшийся
+        // сплит: Slate зовёt NativeOnDragCancelled на виджете-ИСТОЧНИКЕ
+        // перетаскивания (InventorySlotWidget, не этом), который уже умеет
+        // возвращать SplitItem, если DragOp->bIsSplit остался true.
+        if (Amount > MaxCount) return false;
         StoredItem = Item;
         bHasItem = true;
-        Count = FMath::Min(Amount, MaxCount);
+        Count = Amount;
         // Считаем один раз, на входе в слот — не при каждом UpdateDisplay,
         // иначе имя зелья/ингредиента мигало бы новым искажением на любой
         // перерисовке (см. CHANGELOG.md 2026-08-23: иллюзия должна быть устойчивой).
-        // GlobalPerceptionClarity (найдено при аудите 2026-08-24: котёл был
-        // единственным местом, читающим восприятие мимо неё) — тот же
-        // AGridWorldManager, откуда уже берётся CurrentAlchemyTable.
-        float Clarity = 0.0f;
-        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
-        {
-            if (AGridWorldManager* WorldManager = PC->FindWorldManager())
-            {
-                Clarity = WorldManager->GetGlobalPerceptionClarity();
-            }
-        }
         PerceivedState = Simulation::FPerceptionService::PerceiveRealState(StoredItem.State, PerceptionRng, Clarity);
     }
     else
     {
         if (StoredItem.IngredientID != Item.IngredientID) return false;
-        Count = FMath::Min(Count + Amount, MaxCount);
+        if (Count + Amount > MaxCount) return false;
+
+        // Смешение State добавляемой единицы, не только счётчика (аудит
+        // 2026-09-05): раньше вторая и последующие единицы травы, добавленные
+        // в уже занятый слот, полностью теряли собственный State -- Pipeline
+        // потом варил Count копий ПЕРВОЙ добавленной единицы, не честную
+        // смесь. Общая формула с HerbalistInventoryComponent::MergeStack —
+        // см. HerbalistCore::Math::BlendRealStatesForStack.
+        HerbalistCore::Math::BlendRealStatesForStack(StoredItem.State, Item.State, Count, Amount);
+        Count += Amount;
+
+        // Реальный State слота только что сместился блендом выше -- честно
+        // пересчитываем восприятие на НОВОМ State, тем же приёмом, что и при
+        // первом добавлении. Играть старым PerceivedState было бы так же
+        // нечестно, как не считать его вовсе (см. комментарий выше).
+        PerceivedState = Simulation::FPerceptionService::PerceiveRealState(StoredItem.State, PerceptionRng, Clarity);
     }
     UpdateDisplay();
     return true;
@@ -105,15 +133,31 @@ FReply UAlchemySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeo
 {
     if (bHasItem)
     {
-        APlayerController* PC = GetOwningPlayer();
-        AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
-        if (HPC && HPC->InventoryComponent)
+        if (SlotType == EAlchemySlotType::Result)
         {
-            FInventoryItem ItemToAdd = StoredItem;
-            ItemToAdd.Count = 1;
-            if (HPC->InventoryComponent->AddItem(ItemToAdd, 1))
+            // Дублирование зелья (аудит 2026-09-05): ResultSlot никогда не
+            // ИЗЫМАЕТ предмет из инвентаря игрока — крафт кладёт готовое
+            // зелье в реальный инвентарь напрямую через FStateDelta::InventoryOps
+            // (см. GridWorldManagerTick.cpp/AlchemyTransferWidget::CheckForNewPotion),
+            // а этот слот лишь ЗЕРКАЛИТ уже лежащий там предмет для витрины.
+            // Двойной клик раньше вызывал InventoryComponent->AddItem ещё раз —
+            // добавлял ВТОРУЮ копию уже существующего зелья, потом просто
+            // очищал витрину. Правильное действие — только очистить витрину,
+            // предмет и так уже на месте.
+            RemoveItem(Count);
+        }
+        else
+        {
+            APlayerController* PC = GetOwningPlayer();
+            AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC);
+            if (HPC && HPC->InventoryComponent)
             {
-                RemoveItem(1);
+                FInventoryItem ItemToAdd = StoredItem;
+                ItemToAdd.Count = 1;
+                if (HPC->InventoryComponent->AddItem(ItemToAdd, 1))
+                {
+                    RemoveItem(1);
+                }
             }
         }
     }

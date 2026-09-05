@@ -29,6 +29,31 @@ int32 UInventorySlotWidget::FindRealIndex() const
 {
     if (!InventoryComponent) return -1;
     const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
+
+    // CreationTime — стабильный якорь идентичности стопки (аудит 2026-09-05):
+    // HerbalistInventoryComponent::TickComponent порчей/сушкой/отстоем/
+    // выпариванием непрерывно двигает State КАЖДЫЙ DecayUpdateInterval, но ни
+    // разу не зовёт OnInventoryChanged (сознательно — иначе полная
+    // пересборка списка слотов по несколько раз в секунду ломала бы
+    // drag-n-drop и тултипы), поэтому CachedItem.State у долго не
+    // обновлявшегося слота мог уйти сколь угодно далеко от настоящего.
+    // Фаззи-сравнение по State ниже в такой ситуации либо не находило ничего
+    // (действие тихо проваливалось), либо, хуже, находило ЧУЖОЙ слот, если
+    // тот случайно оказался ближе к устаревшему кэшу. CreationTime ни один
+    // из этих процессов не трогает (только MergeStack при слиянии стопок) —
+    // проверяем его первым, точным совпадением.
+    for (int32 i = 0; i < Items.Num(); ++i)
+    {
+        const FInventoryItem& Item = Items[i];
+        if (Item.IngredientID == CachedItem.IngredientID
+            && FMath::IsNearlyEqual(Item.CreationTime, CachedItem.CreationTime, 0.01f))
+        {
+            return i;
+        }
+    }
+
+    // Фолбэк — прежнее фаззи-сравнение по State (например, если CreationTime
+    // сам сдвинулся взвешенным блендом при слиянии стопок, MergeStack).
     for (int32 i = 0; i < Items.Num(); ++i)
     {
         const FInventoryItem& Item = Items[i];

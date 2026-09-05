@@ -21,6 +21,10 @@ public:
     // приватным UpdateDisplay(), не звалась ниоткуда: слот перерисовывается
     // через InitializeSlot при перестроении списка (UInventoryWidget).
 
+    // Публично только для теста на устойчивость к дрейфу State (аудит
+    // 2026-09-05, см. подробный комментарий у FindRealIndex() в .cpp).
+    int32 FindRealIndexForTest() const { return FindRealIndex(); }
+
 protected:
     virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;

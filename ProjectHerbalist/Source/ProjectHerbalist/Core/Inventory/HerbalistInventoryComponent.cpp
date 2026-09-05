@@ -643,33 +643,14 @@ bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, co
 
 void UHerbalistInventoryComponent::MergeStack(FInventoryItem& Target, const FInventoryItem& Source, int32 AddedCount)
 {
-    int32 NewCount = Target.Count + AddedCount;
-    float OldWeight = (float)Target.Count / NewCount;
-    float NewWeight = (float)AddedCount / NewCount;
+    const int32 NewCount = Target.Count + AddedCount;
+    const float OldWeight = (float)Target.Count / NewCount;
+    const float NewWeight = (float)AddedCount / NewCount;
 
-    FRealState& T = Target.State;
-    const FRealState& S = Source.State;
-
-    T.Magnitude = T.Magnitude * OldWeight + S.Magnitude * NewWeight;
-
-    T.Direction.Body   = T.Direction.Body   * OldWeight + S.Direction.Body   * NewWeight;
-    T.Direction.Mind   = T.Direction.Mind   * OldWeight + S.Direction.Mind   * NewWeight;
-    T.Direction.Spirit = T.Direction.Spirit * OldWeight + S.Direction.Spirit * NewWeight;
-    T.Direction.Nature = T.Direction.Nature * OldWeight + S.Direction.Nature * NewWeight;
-    T.Direction.NormalizeSum();
-
-    T.Meta.Distortion = T.Meta.Distortion * OldWeight + S.Meta.Distortion * NewWeight;
-    T.Meta.Stability  = T.Meta.Stability  * OldWeight + S.Meta.Stability  * NewWeight;
-    T.Meta.Purity     = T.Meta.Purity     * OldWeight + S.Meta.Purity     * NewWeight;
-    T.Meta.Potency    = T.Meta.Potency    * OldWeight + S.Meta.Potency    * NewWeight;
-    T.Meta.Resonance  = T.Meta.Resonance  * OldWeight + S.Meta.Resonance  * NewWeight;
-    T.Meta.Corruption = T.Meta.Corruption * OldWeight + S.Meta.Corruption * NewWeight;
-
-    float DistortionDiff = FMath::Abs(T.Meta.Distortion - S.Meta.Distortion);
-    T.Meta.Distortion = FMath::Clamp(T.Meta.Distortion + DistortionDiff * 0.15f, 0.0f, 1.0f);
-
-    float PurityDiff = FMath::Abs(T.Meta.Purity - S.Meta.Purity);
-    T.Meta.Purity = FMath::Clamp(T.Meta.Purity - PurityDiff * 0.1f, 0.0f, 1.0f);
+    // Смешение самого FRealState -- общая формула с AlchemySlotWidget::AddItem
+    // (аудит 2026-09-05, см. подробный комментарий у
+    // HerbalistCore::Math::BlendRealStatesForStack), не дублируем её здесь.
+    HerbalistCore::Math::BlendRealStatesForStack(Target.State, Source.State, Target.Count, AddedCount);
 
     Target.CreationTime = Target.CreationTime * OldWeight + Source.CreationTime * NewWeight;
     Target.bSubjectToDecay = Target.bSubjectToDecay && Source.bSubjectToDecay;

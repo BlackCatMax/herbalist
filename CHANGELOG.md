@@ -8193,3 +8193,144 @@ ROADMAP.md: ненасыщающееся распространение по б�
 `Core/Simulation/Private/PerceptionService.h/.cpp`,
 `Core/Simulation/Private/PerceptionComponent.cpp`,
 `ProjectHerbalistTests/.../Tests/PerceptionServiceTest.cpp`, `ROADMAP.md`.
+
+## UI/инвентарь/котёл: восемь находок аудита (2026-09-05)
+
+Прямой запрос пользователя ("UI/инвентарь и котел") — самый ощутимый для
+игрока кластер аудита 2026-09-05. Все восемь пунктов из списка ROADMAP —
+реальные баги, не дизайн-вопросы, все исправлены поведением.
+
+**1. Двойной клик по `ResultSlot` дублировал только что сваренное зелье.**
+`ResultSlot` — не настоящее хранилище: крафт кладёт готовое зелье в
+реальный инвентарь напрямую через `FStateDelta::InventoryOps`
+(`GridWorldManagerTick.cpp`), `AlchemyTransferWidget::CheckForNewPotion`
+лишь МИРРОРИТ его в `ResultSlot` для витрины, ничего не изымая. Двойной
+клик, унаследованный от Water/IngredientSlot (те ДЕЙСТВИТЕЛЬНО изымают
+предмет при дропе и обязаны вернуть его при клике), звал тот же
+`InventoryComponent->AddItem` ещё раз — добавлял ВТОРУЮ копию уже
+существующего зелья, затем просто чистил витрину. Исправлено: для
+`SlotType::Result` двойной клик только очищает витрину, инвентарь не
+трогает.
+
+**2. Закрытие котла без нажатия "Смешать" молча уничтожало ингредиенты в
+Water/IngredientSlot1-3.** Предмет, перетащенный в эти слоты, изымается
+из реального инвентаря в момент дропа и живёт дальше только в
+`StoredItem` виджета — `NativeDestruct` раньше просто отписывался от
+делегатов, ничего не возвращая. Исправлено: `NativeDestruct` теперь
+возвращает содержимое всех четырёх слотов в `PlayerInventoryComponent`
+тем же `AddItem`, что и обычный возврат по двойному клику, перед очисткой.
+Не устраняет отдельно уже существующий root-cause `AddItem`-при-
+переполнении (см. находку 4 экономического прохода, ROADMAP.md) — если
+инвентарь успел заполниться, пока котёл был открыт, возврат части
+предметов всё ещё может не поместиться; это тот же, уже документированный
+класс риска, не новый.
+
+**3. Переполнение алхимического слота молча уничтожало остаток.**
+`UAlchemySlotWidget::AddItem` клэмпил `Amount` до `MaxCount` (например,
+`WaterSlot.MaxCount=1`) и ВСЕГДА возвращал `true` — вызывающая сторона
+считала весь `Amount` принятым и не возвращала непоместившийся остаток
+источнику. Больнее всего бил Shift-сплит: `InventoryComponent::SplitStack`
+уже вынимает разделённое количество из исходной стопки ДО дропа, так что
+непринятый остаток при молчаливом усечении терялся безвозвратно — искать
+его было уже негде. Исправлено: `AddItem` теперь честно отказывает
+(`return false`), если `Amount` не помещается целиком — тот же принцип,
+что уже `ComputeTradeReceivedCount` (полный отказ вместо частичного
+округления). Отказ автоматически восстанавливает несостоявшийся сплит:
+Slate вызывает `NativeOnDragCancelled` на виджете-ИСТОЧНИКЕ перетаскивания
+(`InventorySlotWidget`, не целевом алхимическом слоте — проверено чтением
+`FUMGDragDropOp::OnDrop` в движке), который уже умеет возвращать
+`SplitItem`, если `DragOp->bIsSplit` остался `true`.
+
+**4. Несколько единиц травы с разным `State` в одном слоте котла варили N
+копий ПЕРВОЙ, не смесь.** `AddItem`'s "уже есть предмет" ветка проверяла
+только `IngredientID`, а `State` второй и последующих единиц полностью
+отбрасывался — `CollectIngredients()` строит один `FInventoryItem` с
+`Count` суммарным, но `State` от первой единицы. Настоящий инвентарь
+(`UHerbalistInventoryComponent::MergeStack`) уже решает эту же задачу
+честным взвешенным блендом (с намеренной "грязью смешивания" —
+расхождение Distortion/Purity исходников гасится не полностью). Формула
+вынесена в общую `HerbalistCore::Math::BlendRealStatesForStack`
+(`HerbalistCoreMath.h/.cpp`), теперь общая для `MergeStack` и
+`AlchemySlotWidget::AddItem` — одна копия правды, не две. Заодно
+`PerceivedState` в котле честно пересчитывается на НОВОМ State после
+бленда, а не остаётся приклеенной к состоянию первой единицы.
+
+**5. `MemoryRevealWidget::Show()` был сломан навсегда с первого вызова.**
+Дерево виджета (в т.ч. `BodyText`) строится в `NativeConstruct`, который
+UMG реально запускает только при `AddToViewport()`/`RebuildWidget()` — но
+`Show()` проверял `BodyText` ДО вызова `AddToViewport()` и на первом же
+обращении (сразу после `CreateWidget`, `BodyText` ещё `nullptr`) тихо
+выходил, так и не вызвав `AddToViewport()`: `NativeConstruct` не
+запускался НИКОГДА, `BodyText` оставался `nullptr` весь сеанс. Тот же
+класс бага, что уже был у "воспоминаний Заряны никогда не показываются"
+из первоначального разбора аудита. Исправлено: `BuildLayout()` стала
+идемпотентной (`if (BodyText) return;`) и вызывается явно в начале
+`Show()`, не полагаясь на порядок относительно `AddToViewport()`.
+
+**6. Тултип предмета показывал сырой `IngredientID`, не имя травы.**
+`ItemTooltipWidget::SetItem` звал `GetItemDisplayName(Item, nullptr)` —
+без реестра функция для любой обычной травы падает на последний `return
+Item.IngredientID.ToString()`, минуя DataTable с человекочитаемым именем
+(спецслучаи Potion/Ash/BoiledWater/Water срабатывали, обычные травы —
+нет). Единственное из четырёх мест в проекте, вызывавшее
+`GetItemDisplayName` без реестра. Исправлено: реестр резолвится тем же
+приёмом, что уже `AlchemySlotWidget.cpp`/`InventorySlotWidget.cpp`.
+
+**7. `InventorySlotWidget::FindRealIndex` мог найти чужой слот после
+порчи/сушки/отстоя/выпаривания.** `HerbalistInventoryComponent::TickComponent`
+непрерывно двигает `State` каждый `DecayUpdateInterval`, но НИ РАЗУ не
+зовёт `OnInventoryChanged` (сознательно — иначе полная пересборка списка
+слотов по нескольку раз в секунду ломала бы drag-n-drop/тултипы, см.
+находку 8 ниже). `CachedItem` слота, соответственно, не обновляется
+вовсе, а `FindRealIndex` искал реальный индекс ФАЗЗИ-сравнением State —
+ровно то, что декей непрерывно уводит прочь от закэшированного значения.
+Итог — действие могло не найти ничего (тихий отказ) или, хуже, найти
+ЧУЖОЙ слот, если тот случайно оказался ближе к устаревшему кэшу.
+Исправлено: `FindRealIndex` теперь сначала ищет точным совпадением по
+`CreationTime` — стабильному якорю идентичности стопки, который ни один
+из decay/drying/settling/evaporation процессов не трогает (только
+`MergeStack` при слиянии стопок) — и лишь при неудаче откатывается к
+прежнему фаззи-сравнению по `State`.
+
+**8. Не исправлено сознательно: `TickComponent` по-прежнему не оповещает
+UI на каждый тик декея.** Рассмотрен и отклонён вариант "просто звать
+`OnInventoryChanged` почаще" — `UInventoryWidget::RefreshInventoryDisplay`
+делает ПОЛНУЮ пересборку списка слотов (`ClearSlots()` + новые виджеты),
+и вызов этого 5 раз в секунду разрушал бы виджет-ИСТОЧНИК посреди
+перетаскивания и тултипы каждого наведения. Находка 7 выше устраняет
+именно ОПАСНУЮ часть последствия (список находит не тот стек); визуальная
+устарелость отображаемых чисел (Count/тултип) — отдельный, менее
+критичный остаточный пункт, сознательно не исправляется в этот заход
+(нужно либо более умное частичное обновление списка, либо явный
+"тик-событие только при реальном изменении", не бинарная пересборка) —
+записан в ROADMAP.md отдельно.
+
+**Итог:** 371 → 377 тестов, **377/377, два чистых прогона, ноль
+регрессий.** Первые в проекте автотесты на UMG-виджеты
+(`UAlchemySlotWidget`/`UMemoryRevealWidget`/`UInventorySlotWidget` не
+требуют ни одного `BindWidget` с реальным Blueprint-ассетом, в отличие от
+`UAlchemyTransferWidget`/`UInventoryWidget` — те целиком собраны в
+`.uasset` и падают без него на первом же обращении к дочерним виджетам,
+поэтому находки 2 и часть возможных регрессий в них не покрыты
+автотестами, только чтением кода и рассуждением о жизненном цикле UMG).
+Потребовалось добавить `Slate`/`SlateCore`/`UMG` в зависимости
+`ProjectHerbalistTests.Build.cs` (первое использование `FGeometry`/
+`FPointerEvent`/`CreateWidget<>` в тестовом модуле — транзитивности
+Public-зависимостей `ProjectHerbalist` на компоновку не хватило) и
+проставить `PROJECTHERBALIST_API` у `HerbalistCore::Math::AreStatesSimilar`/
+`BlendRealStatesForStack` (свободные функции без API-макроса линкуются
+только внутри своего модуля, не при вызове из другого — тоже впервые
+понадобилось только сейчас). Новые тесты: `FHerbalistCoreMath_
+BlendRealStatesForStackWeightsByCount`, `FHerbalistAlchemySlot_
+OverflowRefusesInsteadOfSilentlyTruncating`, `FHerbalistAlchemySlot_
+SecondUnitBlendsStateNotDiscarded`, `FHerbalistAlchemySlot_
+ResultSlotDoubleClickDoesNotDuplicate`, `FHerbalistMemoryRevealWidget_
+ShowBuildsLayoutEvenWithoutViewport`, `FHerbalistInventorySlot_
+FindRealIndexSurvivesStateDrift`. Файлы: `UI/AlchemySlotWidget.h/.cpp`,
+`UI/AlchemyTransferWidget.cpp`, `UI/ItemTooltipWidget.cpp`,
+`UI/InventorySlotWidget.h/.cpp`, `UI/MemoryRevealWidget.h/.cpp`,
+`Core/Types/HerbalistCoreMath.h/.cpp`,
+`Core/Inventory/HerbalistInventoryComponent.cpp`,
+`ProjectHerbalistTests/ProjectHerbalistTests.Build.cs`,
+`ProjectHerbalistTests/.../Tests/AlchemyUIBugfixesTest.cpp` (новый файл),
+`ROADMAP.md`.

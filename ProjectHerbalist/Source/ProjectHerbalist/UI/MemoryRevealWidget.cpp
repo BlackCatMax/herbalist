@@ -19,7 +19,16 @@ void UMemoryRevealWidget::NativeConstruct()
 // попап всплывает САМ, посреди игры, пока игрок ещё смотрит на мир, не на UI.
 void UMemoryRevealWidget::BuildLayout()
 {
-    if (!WidgetTree) return;
+    // Идемпотентно (аудит 2026-09-05): раньше дерево строилось только в
+    // NativeConstruct, который UMG реально запускает лишь при
+    // AddToViewport()/RebuildWidget() -- но Show() ниже читал BodyText ДО
+    // вызова AddToViewport() и на первом же обращении сразу после
+    // CreateWidget() тихо выходил, так и не вызвав AddToViewport(): дерево
+    // не строилось никогда, виджет был сломан весь сеанс. Теперь Show()
+    // зовёт BuildLayout() напрямую, а NativeConstruct может вызвать её
+    // ещё раз следом (через AddToViewport) -- защита от двойной
+    // пересборки (и утечки уже показанного BodyText в осиротевшее дерево).
+    if (!WidgetTree || BodyText) return;
 
     UBorder* Backdrop = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("MemoryRevealBackdrop"));
     Backdrop->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
@@ -45,8 +54,14 @@ void UMemoryRevealWidget::BuildLayout()
     PanelBackground->SetContent(BodyText);
 }
 
+FText UMemoryRevealWidget::GetBodyTextForTest() const
+{
+    return BodyText ? BodyText->GetText() : FText::GetEmpty();
+}
+
 void UMemoryRevealWidget::Show(const FText& Text, float DisplaySeconds)
 {
+    BuildLayout();
     if (!BodyText) return;
     BodyText->SetText(Text);
     if (!IsInViewport())

@@ -60,6 +60,31 @@ void UAlchemyTransferWidget::NativeConstruct()
 
 void UAlchemyTransferWidget::NativeDestruct()
 {
+    // Потеря ингредиентов при закрытии котла (аудит 2026-09-05): предмет,
+    // перетащенный в WaterSlot/IngredientSlotN, изымается из реального
+    // инвентаря игрока в момент дропа (NativeOnDrop) и живёт дальше только в
+    // StoredItem этого виджета -- ResultSlot не в счёт, он ничего не изымает
+    // (см. NativeOnMouseButtonDoubleClick выше). Раньше NativeDestruct просто
+    // отписывался от делегатов, ничего не возвращая: закрытие котла (клавиша
+    // E/ESC) без нажатия "Смешать" молча уничтожало всё, что лежало в
+    // слотах. Возвращаем содержимое обратно, тем же AddItem, что и обычный
+    // возврат по двойному клику.
+    if (PlayerInventoryComponent)
+    {
+        auto ReturnSlot = [this](UAlchemySlotWidget* SlotWidget)
+        {
+            if (!SlotWidget || !SlotWidget->GetItem() || SlotWidget->GetCount() <= 0) return;
+            FInventoryItem ItemToReturn = *SlotWidget->GetItem();
+            ItemToReturn.Count = SlotWidget->GetCount();
+            PlayerInventoryComponent->AddItem(ItemToReturn, ItemToReturn.Count);
+            SlotWidget->Clear();
+        };
+        ReturnSlot(WaterSlot);
+        ReturnSlot(IngredientSlot1);
+        ReturnSlot(IngredientSlot2);
+        ReturnSlot(IngredientSlot3);
+    }
+
     if (MixButton)
     {
         MixButton->OnClicked.RemoveDynamic(this, &UAlchemyTransferWidget::OnMixClicked);
