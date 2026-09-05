@@ -360,4 +360,57 @@ bool FHerbalistWard_ResetSessionOnlyTimersClearsAllSix::RunTest(const FString& P
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Тиражные обереги переживают сохранение/загрузку (аудит 2026-09-05, решение
+// пользователя "а)") -- в отличие от ResetSessionOnlyWardTimers выше (шесть
+// таймеров "короткого окна", которые ПРОДОЛЖАЮТ намеренно не персистится),
+// это постоянная награда за завершённый ритуал: активируем все три тиражных
+// оберега, "теряем" их сбросом на свежем AGridWorldManager (эмулирует
+// перезапуск сессии), восстанавливаем через Capture/Restore и проверяем,
+// что и bTiered*Active, и сами HomeBiomes-списки совпадают с исходными.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWard_TieredWardsSurviveCaptureAndRestore,
+    "Herbalist.Ward.TieredWardsSurviveCaptureAndRestore",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWard_TieredWardsSurviveCaptureAndRestore::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Source = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Source AGridWorldManager spawned"), Source)) return false;
+
+    Source->GetCell(5, 5)->Biome = EBiomeType::Taiga;
+    Source->ActivateTieredWard(EWardEffectType::EntityConceal, { EBiomeType::Taiga, EBiomeType::ForestSteppe });
+    Source->ActivateTieredWard(EWardEffectType::MorokReduction, { EBiomeType::MixedForest, EBiomeType::BroadleafForest });
+    Source->ActivateTieredWard(EWardEffectType::BrewBoost, { EBiomeType::Bog });
+
+    TestTrue(TEXT("Concealment active before capture"), Source->IsTieredConcealmentActive(FIntPoint(5, 5)));
+    TestTrue(TEXT("MorokReduction active before capture"), Source->GetTieredMorokReductionAmount(FIntPoint(0, 0)) > 0.0f);
+    TestTrue(TEXT("BrewBoost active before capture"), Source->IsTieredBrewBoostActiveForTest());
+
+    const FSavedTieredWards Saved = Source->CaptureTieredWards();
+
+    // Свежий AGridWorldManager -- ни один тиражный оберег не активирован,
+    // тот же приём "эмулируем перезапуск сессии", что и в остальных
+    // Capture/Restore тестах сохранений (HomeStorage, HerbalistSaveTypes.h).
+    AGridWorldManager* Target = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Target AGridWorldManager spawned"), Target)) return false;
+
+    Target->GetCell(5, 5)->Biome = EBiomeType::Taiga;
+    TestFalse(TEXT("Concealment inactive on fresh manager"), Target->IsTieredConcealmentActive(FIntPoint(5, 5)));
+    TestFalse(TEXT("BrewBoost inactive on fresh manager"), Target->IsTieredBrewBoostActiveForTest());
+
+    Target->RestoreTieredWards(Saved);
+
+    TestTrue(TEXT("Concealment active after restore"), Target->IsTieredConcealmentActive(FIntPoint(5, 5)));
+    TestTrue(TEXT("MorokReduction active after restore"), Target->GetTieredMorokReductionAmount(FIntPoint(0, 0)) > 0.0f);
+    TestTrue(TEXT("BrewBoost active after restore"), Target->IsTieredBrewBoostActiveForTest());
+
+    Source->Destroy();
+    Target->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

@@ -1192,6 +1192,22 @@ public:
     // UHerbalistSaveSubsystem::LoadGame.
     void ResetSessionOnlyWardTimers();
 
+    // Тиражные обереги (аудит 2026-09-05, решение пользователя (а)) —
+    // постоянная награда за завершённый ритуал, БЕЗ таймера, обязана
+    // пережить перезагрузку так же, как AcquiredArtifacts/AcquiredFeathers
+    // — в отличие от ResetSessionOnlyWardTimers выше (те шесть таймеров
+    // ПРОДОЛЖАЮТ намеренно не персистится). Тот же принцип Capture/Restore,
+    // что уже CaptureSaveCells/ApplySaveCells и CaptureHomeStorages/
+    // RestoreHomeStorages.
+    FSavedTieredWards CaptureTieredWards() const;
+    void RestoreTieredWards(const FSavedTieredWards& InWards);
+
+    // BrewBoost (тираж) не имеет отдельного публичного геттера силы, как
+    // Concealment/MorokReduction выше (используется внутри GridWorldManagerAlchemy.cpp
+    // напрямую по bTieredBrewBoostActive) -- этот accessor существует только
+    // для проверки Capture/Restore round-trip в тестах.
+    bool IsTieredBrewBoostActiveForTest() const { return bTieredBrewBoostActive; }
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 

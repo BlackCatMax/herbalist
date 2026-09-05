@@ -65,6 +65,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->ChosenBuyanPath = WorldManager->GetChosenBuyanPath();
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
     Save->HomeStorages = WorldManager->CaptureHomeStorages();
+    Save->TieredWards = WorldManager->CaptureTieredWards();
 
     if (AHerbalistPlayerController* PC = World ? Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()) : nullptr)
     {
@@ -168,6 +169,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));
     WorldManager->ApplySaveCells(Save->Cells);
     WorldManager->RestoreHomeStorages(Save->HomeStorages);
+    WorldManager->RestoreTieredWards(Save->TieredWards);
 
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()))
     {

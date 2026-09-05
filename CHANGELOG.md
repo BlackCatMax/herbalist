@@ -8779,3 +8779,40 @@ ROADMAP.md.
 `Core/World/GridWorldManagerWards.cpp`,
 `Core/Save/HerbalistSaveSubsystem.cpp`,
 `ProjectHerbalistTests/.../Tests/WardTest.cpp`, `ROADMAP.md`.
+
+## Тиражные обереги переживают сохранение (2026-09-05)
+
+Прямое продолжение находки выше: "заодно замечено" превратилось в вопрос
+пользователю (три варианта — оставить как есть/добавить сохранение/сделать
+одноразовым расходником), пользователь выбрал **(а) добавить сохранение**
+— "сессия становится постоянным прогрессом, как и задумано названием
+'тиражный'".
+
+**Реализовано** тем же приёмом Capture/Restore, что уже `CaptureSaveCells`/
+`ApplySaveCells` и `CaptureHomeStorages`/`RestoreHomeStorages`:
+
+- новый `USTRUCT` `FSavedTieredWards` (`HerbalistSaveTypes.h`) — три пары
+  `bool bXActive` + `TArray<EBiomeType> XHomeBiomes>` (Concealment/
+  MorokReduction/BrewBoost), зеркалящие приватные поля `AGridWorldManager`;
+- `UHerbalistSaveGame::TieredWards` — новое поле сейва;
+- `AGridWorldManager::CaptureTieredWards() const` / `RestoreTieredWards(...)`
+  — читают/пишут все три пары одним вызовом;
+- `UHerbalistSaveSubsystem::SaveGame()`/`LoadGame()` вызывают их рядом с
+  `CaptureHomeStorages`/`RestoreHomeStorages` — **вне** `ResetSessionOnlyWardTimers`,
+  сознательно: тиражные обереги — не часть той шестёрки "короткого окна",
+  которая продолжает намеренно не персистится.
+
+**Тестирование:** новый `FHerbalistWard_TieredWardsSurviveCaptureAndRestore`
+активирует все три тиражных оберега на одном `AGridWorldManager`,
+`Capture`, восстанавливает на другом, свежем (эмулирует перезапуск сессии
+без сброшенного состояния), проверяет `IsTieredConcealmentActive`/
+`GetTieredMorokReductionAmount` (оба уже были публичными) и новый
+test-only `IsTieredBrewBoostActiveForTest()` (у BrewBoost-тиража не было
+публичного предиката — сила читается инлайн в `GridWorldManagerAlchemy.cpp`,
+тот же паттерн пробела, что уже был у Молодильного яблока в находке выше).
+
+**Итог:** 391 → 392 теста, **392/392, два чистых прогона, ноль
+регрессий.** Файлы: `Core/Save/HerbalistSaveTypes.h`,
+`Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerWards.cpp`,
+`Core/Save/HerbalistSaveSubsystem.cpp`,
+`ProjectHerbalistTests/.../Tests/WardTest.cpp`, `ROADMAP.md`.

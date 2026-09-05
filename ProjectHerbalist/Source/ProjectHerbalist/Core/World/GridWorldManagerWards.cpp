@@ -133,6 +133,33 @@ void AGridWorldManager::ResetSessionOnlyWardTimers()
 // AHerbalistPlayerController::ActivateWard, тот же принцип разделения
 // обязанностей, что и у остальных Activate*-функций этого файла.
 
+// Аудит 2026-09-05, решение пользователя (а): в отличие от
+// ResetSessionOnlyWardTimers выше (шесть таймеров "короткого окна",
+// которые ПРОДОЛЖАЮТ намеренно не персистится), тиражные обереги —
+// постоянная награда за завершённый ритуал, без таймера, и обязаны
+// пережить перезагрузку так же, как AcquiredArtifacts/AcquiredFeathers.
+FSavedTieredWards AGridWorldManager::CaptureTieredWards() const
+{
+    FSavedTieredWards Saved;
+    Saved.bConcealmentActive = bTieredConcealmentActive;
+    Saved.ConcealmentHomeBiomes = TieredConcealmentHomeBiomes;
+    Saved.bMorokReductionActive = bTieredMorokReductionActive;
+    Saved.MorokReductionHomeBiomes = TieredMorokReductionHomeBiomes;
+    Saved.bBrewBoostActive = bTieredBrewBoostActive;
+    Saved.BrewBoostHomeBiomes = TieredBrewBoostHomeBiomes;
+    return Saved;
+}
+
+void AGridWorldManager::RestoreTieredWards(const FSavedTieredWards& InWards)
+{
+    bTieredConcealmentActive = InWards.bConcealmentActive;
+    TieredConcealmentHomeBiomes = InWards.ConcealmentHomeBiomes;
+    bTieredMorokReductionActive = InWards.bMorokReductionActive;
+    TieredMorokReductionHomeBiomes = InWards.MorokReductionHomeBiomes;
+    bTieredBrewBoostActive = InWards.bBrewBoostActive;
+    TieredBrewBoostHomeBiomes = InWards.BrewBoostHomeBiomes;
+}
+
 void AGridWorldManager::ActivateTieredWard(EWardEffectType Type, const TArray<EBiomeType>& HomeBiomes)
 {
     switch (Type)

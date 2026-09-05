@@ -103,6 +103,39 @@ struct PROJECTHERBALIST_API FSavedHomeStorage
     TArray<FInventoryItem> Items;
 };
 
+// Тиражные обереги (награда ритуалов перехода ярусов биомов, 2026-09-04,
+// GridWorldManagerWards.cpp::ActivateTieredWard) — аудит 2026-09-05,
+// решение пользователя (а): постоянная награда за завершённый ритуал, БЕЗ
+// таймера ("как активировал, так и работает") — в отличие от шести
+// GameClockSeconds-таймеров "короткого окна" (Ward*/InvisibilityCap/
+// YouthApple/Alkonost, см. ResetSessionOnlyWardTimers), которые
+// продолжают НЕ персистится намеренно, тиражные обереги — долгоживущий
+// прогресс и обязаны пережить перезагрузку так же, как AcquiredArtifacts/
+// AcquiredFeathers.
+USTRUCT()
+struct PROJECTHERBALIST_API FSavedTieredWards
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    bool bConcealmentActive = false;
+
+    UPROPERTY()
+    TArray<EBiomeType> ConcealmentHomeBiomes;
+
+    UPROPERTY()
+    bool bMorokReductionActive = false;
+
+    UPROPERTY()
+    TArray<EBiomeType> MorokReductionHomeBiomes;
+
+    UPROPERTY()
+    bool bBrewBoostActive = false;
+
+    UPROPERTY()
+    TArray<EBiomeType> BrewBoostHomeBiomes;
+};
+
 UCLASS()
 class PROJECTHERBALIST_API UHerbalistSaveGame : public USaveGame
 {
@@ -186,6 +219,12 @@ public:
     // что Bases выше.
     UPROPERTY()
     TArray<FAcquiredArtifact> AcquiredArtifacts;
+
+    // Тиражные обереги (аудит 2026-09-05, решение пользователя (а)) — см.
+    // подробный довод у FSavedTieredWards выше: постоянная награда за
+    // ритуал, тот же класс поля, что AcquiredArtifacts.
+    UPROPERTY()
+    FSavedTieredWards TieredWards;
 
     // Заряна (обсуждение в сессии 2026-08-24) — Clarity/Буян/собранные ID
     // растут медленно и редко, ровно то, что должно переживать сохранение.
