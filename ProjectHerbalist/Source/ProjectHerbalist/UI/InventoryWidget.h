@@ -39,9 +39,6 @@ private:
     UPROPERTY()
     UHerbalistInventoryComponent* InventoryComponent = nullptr;
 
-    UPROPERTY()
-    UHerbalistInventoryComponent* OtherInventory = nullptr;
-
     void RefreshInventoryDisplay();
     void ClearSlots();
 };

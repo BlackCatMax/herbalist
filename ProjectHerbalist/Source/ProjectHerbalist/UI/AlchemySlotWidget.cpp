@@ -126,10 +126,6 @@ bool UAlchemySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDr
     if (!DragOp || !DragOp->SourceInventory)
         return false;
 
-    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
-    if (!HPC || !HPC->InventoryComponent)
-        return false;
-
     FInventoryItem ItemToMove;
     if (DragOp->bIsSplit)
     {

@@ -17,7 +17,6 @@ class PROJECTHERBALIST_API AAlchemyTableActor : public AActor, public IInteracta
 public:
     AAlchemyTableActor();
     virtual void OnInteract_Implementation(class AHerbalistPlayerController* PC) override;
-    void SetGridCoords(const FIntPoint& InCoords) { GridCoords = InCoords; }
     FIntPoint GetGridCoords() const { return GridCoords; }
 
 protected:

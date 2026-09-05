@@ -47,8 +47,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shrine", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
     float InitialRestoration = 0.0f;
 
-    FIntPoint GetGridCoords() const { return GridCoords; }
-
 protected:
     virtual void BeginPlay() override;
 

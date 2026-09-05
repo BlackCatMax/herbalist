@@ -93,8 +93,9 @@ struct PROJECTHERBALIST_API FMemoryFragmentDefinition : public FTableRowBase
     UPROPERTY() FText TrueText;
 
     // Ложное (искажённое Мороком) воспоминание — похоже на подлинное, но
-    // с нарочитым сбоем (см. FindFalseTellSign в MemoryFragmentActor.cpp);
-    // игрок должен научиться отличать по контексту, не по тексту напрямую.
+    // с нарочитым сбоем (текст задаётся вручную на карточке, отдельной
+    // функции-детектора несоответствия в коде нет); игрок должен научиться
+    // отличать по контексту, не по тексту напрямую.
     UPROPERTY() FText FalseText;
 
     // Насколько подлинный сбор поднимает GlobalPerceptionClarity.

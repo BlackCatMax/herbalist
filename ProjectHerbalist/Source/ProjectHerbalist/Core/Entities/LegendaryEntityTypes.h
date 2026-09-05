@@ -46,8 +46,9 @@
 // 2026-09-02, юнит 3/3 (последний) миграции бестиария на DataTable —
 // тот же паттерн, что AmbientEntityTypes.h (1/3) и LandmarkTypes.h (2/3):
 // GetLegendaryEntityDefinitions() ниже лениво грузит
-// /Game/Herbalist/Data/DT_LegendaryEntities. Берегиня (см. выше) остаётся
-// вне этого файла и вне миграции — свой per-клеточный путь.
+// /Game/Herbalist/Data/DT_LegendaryEntities. Берегиня ТОЖЕ мигрировала сюда
+// (см. унификацию выше, 2026-09-02) — обычная строка реестра с
+// bUsesCellHistoryPurity=true, не исключение и не отдельный файл.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -168,13 +169,4 @@ inline const TArray<FLegendaryEntityDefinition>& GetLegendaryEntityDefinitions()
         return Defs;
     }();
     return Definitions;
-}
-
-inline const FLegendaryEntityDefinition* FindLegendaryEntityDefinition(FName EntityID)
-{
-    for (const FLegendaryEntityDefinition& D : GetLegendaryEntityDefinitions())
-    {
-        if (D.EntityID == EntityID) return &D;
-    }
-    return nullptr;
 }

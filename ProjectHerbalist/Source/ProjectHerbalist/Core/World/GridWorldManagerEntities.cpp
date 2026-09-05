@@ -534,8 +534,11 @@ bool AGridWorldManager::IsCrowdedBySameEntity(const FGridCell& Cell, const FAmbi
 
     const float SpacingCm = Def.MinSpacingMeters * 100.0f;
     const float SafeCellSize = FMath::Max(CellSize, KINDA_SMALL_NUMBER);
+    // CeilToInt здесь никогда не даёт <=0 (SpacingCm/SafeCellSize > 0 всегда,
+    // раз MinSpacingMeters>0 уже проверен выше) -- суб-клеточный spacing
+    // просто округляется вверх до радиуса 1, не отключает проверку; мёртвая
+    // ветка на этом месте убрана 2026-09-05 (чистка мусора).
     const int32 RadiusInCells = FMath::CeilToInt(SpacingCm / SafeCellSize);
-    if (RadiusInCells <= 0) return false;   // дистанция меньше клетки -- соседей и быть не может
 
     const float SpacingCmSq = SpacingCm * SpacingCm;
     for (int32 dy = -RadiusInCells; dy <= RadiusInCells; ++dy)

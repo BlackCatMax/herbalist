@@ -22,9 +22,12 @@ void UAlchemySubsystem::Initialize(FSubsystemCollectionBase& Collection)
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>();
     if (!IngredientSubsystem)
     {
-        // Не ошибка, а нормальный порядок инициализации: UAlchemySubsystem --
-        // подсистема МИРА, она стартует раньше, чем подсистемы GameInstance
-        // становятся доступны. До 2026-09-03 это писалось как Error и
+        // Не ошибка, а нормальный порядок инициализации: UAlchemySubsystem
+        // САМ является UGameInstanceSubsystem (не подсистемой мира, как
+        // утверждала более ранняя версия этого комментария) -- порядок
+        // Initialize() между подсистемами-сиблингами одного GameInstance не
+        // гарантирован движком без явного Collection.InitializeDependency<...>(),
+        // которого здесь нет. До 2026-09-03 это писалось как Error и
         // выглядело причиной поломок, которых тут нет: реестр всё равно
         // загрузится сам при первом чтении (EnsureLoaded), а раньше --
         // AProjectHerbalistGameModeBase::BeginPlay.

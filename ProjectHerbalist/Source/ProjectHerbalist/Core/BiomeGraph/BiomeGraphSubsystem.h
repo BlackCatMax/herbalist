@@ -12,8 +12,6 @@ class UMaterialParameterCollection;   // forward declaration
 struct FBiomeSnapshot;
 struct FStateDelta;
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnBiomeGraphStep, float);
-
 UCLASS()
 class PROJECTHERBALIST_API UBiomeGraphSubsystem : public UWorldSubsystem
 {
@@ -52,8 +50,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visualization")
     TSoftObjectPtr<UMaterialParameterCollection> VisualizationMPC;
 
-    FOnBiomeGraphStep OnStepExecuted;
-
 protected:
     UPROPERTY()
     TMap<FName, FBiomeGraphNode> Nodes;
@@ -76,21 +72,10 @@ protected:
 
     AGridWorldManager* FindGridWorldManager() const;
 
-    TMap<FName, TArray<int32>> AdjacencyList;
-    void BuildAdjacencyList();
-
     TMap<FName, FVector> CachedBiomeCenters;
     float CenterCacheTimer = 0.f;
     static constexpr float CenterCacheUpdateInterval = 2.0f;
     void UpdateBiomeCenters(AGridWorldManager* Grid);
-
-    enum class EBiomeGraphStepStage : uint8
-    {
-        GridToGraph,
-        Propagation,
-        GraphToGrid,
-        MemoryUpdate
-    };
 
     void InternalStep(float StepDeltaTime);
     void RecalculateFieldsFromGrid(AGridWorldManager* Grid);

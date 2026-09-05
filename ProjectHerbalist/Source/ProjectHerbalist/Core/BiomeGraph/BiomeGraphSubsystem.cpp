@@ -21,12 +21,15 @@ void UBiomeGraphSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 void UBiomeGraphSubsystem::Deinitialize()
 {
-    Super::Deinitialize();
+    // Собственный teardown ПЕРЕД Super:: (2026-09-05, чистка -- раньше было
+    // наоборот, что для UGameInstanceSubsystem не по стандартной практике
+    // движка: базовый Deinitialize может завершать жизненный цикл
+    // подсистемы, сначала должны освободиться свои ресурсы).
     Nodes.Empty();
     Edges.Empty();
-    AdjacencyList.Empty();
     CachedBiomeCenters.Empty();
     bInitialized = false;
+    Super::Deinitialize();
 }
 
 void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
@@ -51,19 +54,9 @@ void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
     GlobalInfluenceScale = Asset->GlobalInfluenceScale;
     GridBlendFactor = Asset->GridBlendFactor;
 
-    BuildAdjacencyList();
     bInitialized = true;
 
     UE_LOG(LogHerbalistBiome, Log, TEXT("Initialized with %d nodes, %d edges"), Nodes.Num(), Edges.Num());
-}
-
-void UBiomeGraphSubsystem::BuildAdjacencyList()
-{
-    AdjacencyList.Empty();
-    for (int32 i = 0; i < Edges.Num(); ++i)
-    {
-        AdjacencyList.FindOrAdd(Edges[i].FromBiome).Add(i);
-    }
 }
 
 AGridWorldManager* UBiomeGraphSubsystem::FindGridWorldManager() const
@@ -134,8 +127,6 @@ void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
 
     // Обновляем визуализацию после каждого шага
     UpdateVisualization();
-
-    OnStepExecuted.Broadcast(StepDeltaTime);
 }
 
 void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)

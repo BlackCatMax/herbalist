@@ -1147,7 +1147,6 @@ protected:
     TArray<TWeakObjectPtr<ABiomeRegionVolume>> CachedBiomeRegions;
 
     // ---- Вспомогательные данные ----
-    TSet<int32> RegrowingCells;
     TMap<int32, float> LastHarvestTimeMap;
     const float HarvestCooldown = 0.2f;
 
@@ -1320,8 +1319,6 @@ protected:
     void InitializeCells();
 
     // ---- Маркеры состояния ----
-    void MarkRegrowing(int32 X, int32 Y) { RegrowingCells.Add(Y * GridSizeX + X); }
-    void UnmarkRegrowing(int32 X, int32 Y) { RegrowingCells.Remove(Y * GridSizeX + X); }
     void MarkCellDirty(int32 X, int32 Y) { DirtyCellIndices.Add(Y * GridSizeX + X); }
 
     inline int32 GetCellIndex(int32 X, int32 Y) const { return Y * GridSizeX + X; }

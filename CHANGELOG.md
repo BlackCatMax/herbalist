@@ -7884,3 +7884,95 @@ Magnitude/Potency/Distortion/Corruption и клампов на потолке; �
 `HerbalistPlayerController.h/.cpp` (`FilterPotion` Exec), новый
 `ProjectHerbalistTests/.../Tests/PotionProcessingTest.cpp` (10 тестов),
 `ROADMAP.md`.
+
+### Чистка мусора: мёртвый код + устаревшие комментарии (2026-09-05)
+
+Прямой запрос пользователя после аудита проекта четырьмя параллельными
+read-only проходами (бестиарий, биомный граф/восприятие/детерминизм,
+сохранения/капища/община, UI/журнал/ресурсы) — "сперва чистим от мусора",
+то есть без исправления поведения, только мёртвый код и комментарии,
+разошедшиеся с кодом. Каждый пункт перепроверен `Grep` перед правкой (не
+доверял находкам аудита вслепую — агент мог принять сеттер за геттер или
+пропустить единственный реальный вызов).
+
+**Мёртвый код, подтверждено нулём точек вызова во всём модуле:**
+- `AShrineActor::GetGridCoords()` (`ShrineActor.h`) — удалён.
+- `AAlchemyTableActor::SetGridCoords()` (`AlchemyTableActor.h`) — удалён;
+  `GridCoords` присваивается напрямую в `BeginPlay`, сеттер не требовался.
+- `UBiomeGraphSubsystem::AdjacencyList`/`BuildAdjacencyList()` — поле
+  строилось на каждую инициализацию графа и ни разу не читалось;
+  `PropagateWaves` всегда шёл напрямую по `Edges`.
+- `UBiomeGraphSubsystem::EBiomeGraphStepStage` — enum из 4 значений,
+  нигде не использован как тип (стадии в `InternalStep` — просто
+  последовательные вызовы).
+- `UBiomeGraphSubsystem::OnStepExecuted`/`FOnBiomeGraphStep` — делегат без
+  единого подписчика в проекте, не `UPROPERTY`, значит и Blueprint не мог
+  быть скрытым потребителем.
+- `AGridWorldManager::RegrowingCells`/`MarkRegrowing`/`UnmarkRegrowing` —
+  ни одного вызова помимо объявления.
+- `UInventoryWidget::OtherInventory` — поле пережило удаление своего же
+  сеттера (`SetOtherInventory`, помечено удалённым в комментарии рядом ещё
+  2026-09-02), но не было убрано само.
+- `AlchemySlotWidget::NativeOnDrop` — `HPC`/`HPC->InventoryComponent`
+  доставались и проверялись на null, но не читались нигде дальше по
+  функции (вся логика уже идёт через `DragOp`) — убраны как бесполезная
+  проверка, поведение не меняется.
+- `FindLegendaryEntityDefinition()` (`LegendaryEntityTypes.h`) — в отличие
+  от близнецов `FindLandmarkDefinition`/`FindArtifactDefinition` (оба
+  реально используются), эта функция не вызывалась нигде.
+
+**Мёртвая ветка (недостижимый код, не просто неиспользуемая функция):**
+- `AGridWorldManager::IsCrowdedBySameEntity` (`GridWorldManagerEntities.cpp`)
+  — `if (RadiusInCells <= 0) return false;` математически недостижимо:
+  `MinSpacingMeters > 0` уже проверен строкой выше, значит
+  `CeilToInt(SpacingCm/SafeCellSize)` от положительного числа не может
+  дать `<= 0`. Ветка убрана, оставлен поясняющий комментарий вместо
+  неверного ("дистанция меньше клетки" на самом деле округляется до
+  радиуса 1, не отключает проверку).
+
+**Комментарии, разошедшиеся с кодом:**
+- `GridWorldManagerShrine.cpp` (шапка файла) и `BasesTest.cpp:75` всё ещё
+  указывали на `AAlchemyTableActor::BeginPlay` как место регистрации
+  капища — с 2026-09-02 регистрирует `AShrineActor::BeginPlay`, котёл и
+  капище развязаны. Поправлено в обоих местах.
+- `AlchemySubsystem.cpp` — комментарий объяснял отсутствие реестра при
+  инициализации тем, что `UAlchemySubsystem` "подсистема МИРА, стартует
+  раньше GameInstance" — класс на деле `UGameInstanceSubsystem`, настоящая
+  причина — не гарантированный порядок `Initialize()` между сиблингами
+  одного `GameInstance` без явного `InitializeDependency`. Текст поправлен
+  на верный, поведение не тронуто (реестр всё равно грузится сам при
+  первом чтении, `EnsureLoaded`).
+- `LegendaryEntityTypes.h` (шапка) утверждала, что Берегиня "остаётся вне
+  этого файла и вне миграции" — при том, что тот же файл двумя абзацами
+  выше описывает её унификацию 2026-09-02 (`bUsesCellHistoryPurity=true`,
+  обычная строка `DT_LegendaryEntities`). Самопротиворечие в одном файле,
+  поправлено.
+- `MemoryFragmentTypes.h` — комментарий ссылался на несуществующую функцию
+  `FindFalseTellSign` (`MemoryFragmentActor.cpp`, грепом по всему `Source/`
+  не найдена ни разу) — текст ложного воспоминания задаётся вручную на
+  карточке, отдельного детектора несоответствия в коде нет и не было.
+
+**Мелкая правка корректности, тот же заход (порядок, не поведение):**
+- `UBiomeGraphSubsystem::Deinitialize()` — `Super::Deinitialize()` стоял
+  ПЕРЕД собственной очисткой полей, не как принято для `UGameInstanceSubsystem`
+  (сначала свой teardown, потом базовый). Переставлено.
+
+**Намеренно НЕ тронуто в этот заход** (реальные баги/архитектурные вопросы
+из тех же четырёх аудитов, не "мусор" — отдельный, следующий заход):
+дублирование зелья по двойному клику, потеря предметов при закрытии котла,
+разлив при переполнении слота, откат сейва не очищает клетки после точки
+сохранения, экономическая дыра в торговле (`FMath::Max(1,...)`),
+ненасыщающееся распространение по биомному графу, RNG-заражение симуляции
+презентационным кодом (Травник, спавн маркера сущности), шум восприятия
+пересчитывается каждый тик вместо привязки к identity предмета.
+Полный список — в рабочей переписке этой сессии, будет закрываться по
+частям.
+
+**Итог:** 365/365 тестов, число не изменилось (чистка, не новая
+функциональность), два чистых прогона.
+Файлы: `Core/Shrine/ShrineActor.h`, `Core/Storage/AlchemyTableActor.h`,
+`Core/BiomeGraph/BiomeGraphSubsystem.h/.cpp`, `Core/World/GridWorldManager.h`,
+`Core/World/GridWorldManagerEntities.cpp`, `Core/World/GridWorldManagerShrine.cpp`,
+`Core/Entities/LegendaryEntityTypes.h`, `Core/Zaryana/MemoryFragmentTypes.h`,
+`Core/Subsystems/AlchemySubsystem.cpp`, `UI/InventoryWidget.h`,
+`UI/AlchemySlotWidget.cpp`, `ProjectHerbalistTests/.../Tests/BasesTest.cpp`.

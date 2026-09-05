@@ -1,7 +1,8 @@
 // Core/World/GridWorldManagerShrine.cpp
 //
-// Капища v1 (02_GDD/15_Cycles_And_Shrines.md §15.5) — регистрация (там, где
-// стоит котёл, см. AAlchemyTableActor::BeginPlay) и спад Restoration при
+// Капища v1 (02_GDD/15_Cycles_And_Shrines.md §15.5) — регистрация (свой
+// отдельный актор, см. AShrineActor::BeginPlay — развязано с котлом
+// 2026-09-02) и спад Restoration при
 // небрежении. Рост (подношение варкой) — в RunSimulationStep
 // (GridWorldManagerTick.cpp), там уже есть сопоставление команд с результатом,
 // которое использует и Травник. Эффект 1 (модуляция релаксации) —

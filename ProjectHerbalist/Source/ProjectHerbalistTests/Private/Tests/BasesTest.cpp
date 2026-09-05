@@ -72,7 +72,7 @@ bool FHerbalistBases_BrewingValidAtShrinesAndBasesOnly::RunTest(const FString& P
 
     TestFalse(TEXT("An arbitrary cell is not a valid brewing location"), Manager->IsValidBrewingLocation(FIntPoint(5, 5)));
 
-    // Капище (тот же слот, что AAlchemyTableActor::BeginPlay регистрирует).
+    // Капище (тот же вызов, что AShrineActor::BeginPlay делает в реальной игре).
     Manager->RegisterShrine(FIntPoint(0, 0), EShrineType::Ancestral);
     TestTrue(TEXT("A shrine cell is a valid brewing location"), Manager->IsValidBrewingLocation(FIntPoint(0, 0)));
 
