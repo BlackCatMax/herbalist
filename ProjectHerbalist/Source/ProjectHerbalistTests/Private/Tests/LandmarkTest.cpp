@@ -25,6 +25,7 @@
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -288,6 +289,54 @@ bool FHerbalistLandmark_DomovoiIsNotSeededByBiome::RunTest(const FString& Parame
         if (L.EntityID == FName(TEXT("Домовой"))) bFoundDomovoi = true;
     }
     TestFalse(TEXT("SeedTestLandmarks alone never places Домовой -- only AAlchemyTableActor::BeginPlay does"), bFoundDomovoi);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLandmark_DomovoiSurvivesBeginPlayRaceWithAlchemyTable,
+    "Herbalist.Landmark.DomovoiSurvivesBeginPlayRaceWithAlchemyTable",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistLandmark_DomovoiSurvivesBeginPlayRaceWithAlchemyTable::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05: UE не гарантирует порядок BeginPlay между акторами
+    // уровня -- если AAlchemyTableActor::BeginPlay (сам зовёт RegisterDomovoi)
+    // отрабатывает РАНЬШЕ AGridWorldManager::BeginPlay (InitializeCells ->
+    // SeedTestLandmarks), EntityLandmarks.Empty() внутри SeedTestLandmarks
+    // стирала бы только что зарегистрированного Домового без единого лога --
+    // он bManualRegistrationOnly, автоматический сев его не возвращает.
+    // Воспроизводим гонку напрямую: RegisterDomovoi зовётся ДО
+    // DispatchBeginPlay, не после (обычный порядок SpawnAndBeginPlay).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    // Та же изоляция, что уже SpawnAndBeginPlay применяет внутри себя --
+    // здесь используется не она (нужен контроль над порядком
+    // Register/DispatchBeginPlay), поэтому чистим стары́е менеджеры вручную.
+    for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+    {
+        if (AGridWorldManager* Stale = *It) { Stale->Destroy(); }
+    }
+
+    AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint HomeCell(4, 4);
+    Manager->RegisterDomovoi(HomeCell);
+    if (!TestNotNull(TEXT("Домовой зарегистрирован ДО InitializeCells (имитация гонки)"), Manager->FindLandmarkAt(HomeCell)))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    Manager->DispatchBeginPlay();   // InitializeCells -> SeedTestLandmarks должна проиграть гонку
+
+    const FEntityLandmark* Domovoi = Manager->FindLandmarkAt(HomeCell);
+    if (TestNotNull(TEXT("Домовой пережил SeedTestLandmarks -- InitializeCells не стёр его"), Domovoi))
+    {
+        TestEqual(TEXT("Это по-прежнему Домовой, не что-то другое"), Domovoi->EntityID, FName(TEXT("Домовой")));
+    }
 
     Manager->Destroy();
     return true;

@@ -16,6 +16,7 @@
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -65,6 +66,56 @@ bool FHerbalistAmbientEntity_GnilnikiStillManifestsAfterRefactor::RunTest(const 
     TestTrue(TEXT("TargetState.Corruption nudged up"), Cell->TargetState.Meta.Corruption > CorruptionBefore);
     TestTrue(TEXT("TargetState.Purity nudged down"), Cell->TargetState.Meta.Purity < PurityBefore);
 
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_GnilnikiRespectsGlobalHysteresisSetting,
+    "Herbalist.AmbientEntity.GnilnikiRespectsGlobalHysteresisSetting",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_GnilnikiRespectsGlobalHysteresisSetting::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05: Низший ранг (Гнильники и другие в AmbientEntityTypes.h)
+    // раньше читал СВОЙ отдельный Def.HysteresisMargin, а не общую
+    // UHerbalistSettings::EntityManifestationHysteresis, хотя её собственный
+    // комментарий прямо называет "Corruption у Гнильников" в числе
+    // потребителей. Оба дефолта совпадают (0.05f), поэтому баг был не виден,
+    // пока настройку не поменяли бы -- этот тест её меняет и проверяет, что
+    // Гнильники это чувствуют.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Bog;
+    Cell->bIsWater = false;
+    Cell->State.Meta.Corruption = 0.62f;   // выше порога 0.6, но не выше 0.6 + дефолтный запас 0.05
+    // Ржавые духи (тоже Bog, триггер -- низкая Stability) иначе тоже
+    // становятся eligible при обнулении общего запаса ниже и перехватывают
+    // клетку первыми по порядку реестра -- изолируемся от них высокой
+    // Stability, тот же приём, что уже применяют другие тесты этого файла
+    // для смежных Ambient-определений одного биома.
+    Cell->State.Meta.Stability = 1.0f;
+    Manager->SetGameClockSeconds(10.0f * 60.0f);   // середина Дня, та же изоляция от Рассвета, что и выше
+
+    UHerbalistSettings* Settings = GetMutableDefault<UHerbalistSettings>();
+    const float SavedMargin = Settings->EntityManifestationHysteresis;
+
+    Settings->EntityManifestationHysteresis = 0.1f;   // 0.62 < 0.6+0.1=0.7 -- не должно сработать
+    Manager->UpdateEntityManifestations(1.0f);
+    TestNotEqual(TEXT("Большой общий запас гистерезиса подавляет вход Гнильников"),
+        Cell->ManifestedEntityID, FName(TEXT("Гнильники")));
+
+    Settings->EntityManifestationHysteresis = 0.0f;   // 0.62 > 0.6+0=0.6 -- теперь должно сработать
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Нулевой общий запас гистерезиса пропускает Гнильников -- настройка реально читается"),
+        Cell->ManifestedEntityID, FName(TEXT("Гнильники")));
+
+    Settings->EntityManifestationHysteresis = SavedMargin;
     Manager->Destroy();
     return true;
 }

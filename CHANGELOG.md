@@ -8506,3 +8506,83 @@ snapshot и использовать его.
 `Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerSave.cpp`,
 `Core/World/GridWorldManagerCore.cpp`,
 `ProjectHerbalistTests/.../Tests/SaveSystemTest.cpp`, `ROADMAP.md`.
+
+## Бестиарий: четыре находки аудита закрыты (2026-09-05)
+
+Прямой запрос пользователя ("бестиарий") — последний из четырёх кластеров
+исходного аудита 2026-09-05. Все четыре находки — реальные баги, исправлены
+поведением.
+
+**1. Домовой/Легендарные существа воскресали в чанках, которые игрок уже
+покинул.** Низший ранг и per-клеточный Легендарный (Гнильники/Берегиня)
+уже гейтятся стримингом — живут внутри `ForEachActiveCell` и физически не
+обходят неактивные чанки (найдено и починено 2026-09-03 для СТОРОНЫ
+деактивации, `DespawnChunkEntitiesDestroysActorButKeepsID`). Основной ранг
+(Домовой/Полевик и т.п., обход `EntityLandmarks`) и Легендарный ранг по
+якорным клеткам (обход `LegendaryAnchors`) — фиксированные списки, не
+`ForEachActiveCell`: `SyncManifestedEntityActor` звался для них безусловно,
+независимо от чанков. Исправлено: оба вызова обёрнуты в `IsCellActive(*Cell)`
+(уже существующий, ранее нигде не переиспользованный в этом файле
+предикат). Сама ЛОГИКА проявления (bWasActive/Respect/гистерезис) НЕ
+гейтится — она путь-зависима и должна идти своим чередом даже вдали от
+игрока, тот же принцип, что уже применён к `ManifestedEntityID`,
+переживающему `DespawnChunkEntities`; гейтится только материализация
+актора.
+
+**2. Гонка `BeginPlay`: `SeedTestLandmarks` могла стереть только что
+зарегистрированного Домового без единого лога.** UE не гарантирует порядок
+`BeginPlay` между акторами уровня — если `AAlchemyTableActor::BeginPlay`
+(сам зовёт `RegisterDomovoi`) отрабатывает раньше `AGridWorldManager::
+BeginPlay` (`InitializeCells` → `SeedTestLandmarks`), голое
+`EntityLandmarks.Empty()` в начале `SeedTestLandmarks` стирало Домового
+(`bManualRegistrationOnly` — автоматический сев его не возвращает).
+Исправлено: `SeedTestLandmarks` теперь сохраняет уже зарегистрированные
+`bManualRegistrationOnly`-записи перед очисткой (и учитывает их клетки в
+`CellsUsed`, чтобы автосев не посадил на ту же клетку ещё одного "хозяина"
+того же биома).
+
+**3. `EntityManifestationHysteresis` не влиял на Низший ранг.** Единственный
+вызов `PassesHysteresisThreshold` для Ambient-определений (Гнильники и
+др.) читал `Def.HysteresisMargin` — отдельное per-определению поле
+`FAmbientEntityDefinition`, а не общую настройку
+`UHerbalistSettings::EntityManifestationHysteresis`, хотя комментарий у
+самой настройки прямо называет "Corruption у Гнильников" в числе
+потребителей; каждый ДРУГОЙ ранг (Берегиня/Основной/Легендарный) уже
+корректно читал общую настройку. Оба дефолта совпадают (0.05f), поэтому
+баг был невидим, пока настройку не поменяли бы в Project Settings.
+Исправлено: строка переведена на общий `HysteresisMargin`. `Def.
+HysteresisMargin` (поле `FAmbientEntityDefinition`) в коде теперь нигде не
+читается — оставлено как есть (не мёртвый в DataTable, потенциально
+заполнено по рядам), уборка не в фокусе этого захода.
+
+**4. `bWarmsCompanionItem` нигде не читался.** `HerbalistPlayerController::
+OfferForArtifact` резолвил Зеркальце/Клубочек по двум жёстко прописанным
+именам (`if (ArtID == "Зеркальце") ... else if (ArtID == "Клубочек") ...`),
+полностью игнорируя флаг `FArtifactDefinition::bWarmsCompanionItem` из
+`DT_Artifacts` — третий предмет-спутник, заведённый чистой правкой
+DataTable, молча ничего не получил бы. Полноценная генерализация
+(коллекция "предметов-спутников" вместо двух отдельных bool-полей
+`bHasMirror`/`bHasYarnBall` на контроллере) была бы дизайном под ещё не
+заданную задачу — сегодня третьего предмета не существует. Вместо этого
+флаг теперь СВЕРЯЕТСЯ: обе существующие ветки предупреждают в лог, если
+их имя не помечено `bWarmsCompanionItem` в DataTable, и добавлена третья
+ветка — предупреждение, если DataTable помечает флагом артефакт, которого
+здесь не опознают. Рассинхронизация данных и кода теперь видна в логе, а
+не тонет молча.
+
+**Итог:** 382 → 386 тестов, **386/386, два чистых прогона, ноль
+регрессий.** Новые тесты:
+`FHerbalistGridStreaming_LandmarkManifestationDoesNotSpawnActorOutsideActiveRadius`
+(GridStreamingTest.cpp), `FHerbalistLandmark_
+DomovoiSurvivesBeginPlayRaceWithAlchemyTable` (LandmarkTest.cpp,
+воспроизводит гонку напрямую — `RegisterDomovoi` до `DispatchBeginPlay`),
+`FHerbalistAmbientEntity_GnilnikiRespectsGlobalHysteresisSetting`
+(AmbientEntityTest.cpp, меняет настройку и проверяет, что Гнильники это
+чувствуют — изолирован от Ржавых духов той же клетки высокой Stability),
+`FHerbalistArtifact_CompanionItemsAreFlaggedInDataTable` (ArtifactTest.cpp,
+фиксирует инвариант, на который опирается новая сверка). Файлы:
+`Core/World/GridWorldManagerEntities.cpp`, `Player/HerbalistPlayerController.cpp`,
+`ProjectHerbalistTests/.../Tests/GridStreamingTest.cpp`,
+`ProjectHerbalistTests/.../Tests/LandmarkTest.cpp`,
+`ProjectHerbalistTests/.../Tests/AmbientEntityTest.cpp`,
+`ProjectHerbalistTests/.../Tests/ArtifactTest.cpp`, `ROADMAP.md`.

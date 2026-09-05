@@ -14,7 +14,9 @@
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Entities/HerbalistEntityActor.h"
+#include "Core/Entities/LandmarkTypes.h"
 #include "Core/Save/HerbalistSaveTypes.h"
+#include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -498,6 +500,69 @@ bool FHerbalistGridStreaming_DespawnChunkEntitiesDestroysActorButKeepsID::RunTes
     TestFalse(TEXT("Cell no longer references the destroyed actor"), Cell->ManifestedEntityActor.IsValid());
     TestEqual(TEXT("ManifestedEntityID survives despawn -- it's data, not presence"),
         Cell->ManifestedEntityID, FName(TEXT("TestSpirit")));
+
+    Manager->Destroy();
+    return true;
+}
+
+// Аудит 2026-09-05: тот же класс бага, что уже чинился 2026-09-03 выше
+// (DespawnChunkEntitiesDestroysActorButKeepsID) для СТОРОНЫ ДЕАКТИВАЦИИ, но
+// найденный теперь для СТОРОНЫ СПАВНА. Низший ранг/per-клеточный Легендарный
+// (Гнильники/Берегиня) уже гейтятся -- живут внутри ForEachActiveCell,
+// физически не обходят неактивные чанки. Основной ранг (Домовой/Полевик и
+// т.п., обход EntityLandmarks) и Легендарный ранг по якорным клеткам
+// (обход LegendaryAnchors) — фиксированные списки, не ForEachActiveCell:
+// SyncManifestedEntityActor звался для них безусловно, независимо от
+// чанков, поэтому Домовой мог воскреснуть в чанке, который игрок уже
+// покинул. Сама ЛОГИКА проявления (bWasActive/Respect/гистерезис) осталась
+// негейченной намеренно -- она путь-зависима и должна идти своим чередом
+// даже вдали от игрока (тот же принцип, что и у ManifestedEntityID,
+// переживающего DespawnChunkEntities); гейтится только материализация
+// актора.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_LandmarkManifestationDoesNotSpawnActorOutsideActiveRadius,
+    "Herbalist.GridStreaming.LandmarkManifestationDoesNotSpawnActorOutsideActiveRadius",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_LandmarkManifestationDoesNotSpawnActorOutsideActiveRadius::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(2, 2);
+    if (!TestNotNull(TEXT("Cell (2,2) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::ForestSteppe;
+    Cell->bIsWater = false;
+
+    // Respect уже высок -- тот же приём прямой установки, что уже
+    // LandmarkTest.cpp (Полевик благословляется при Respect >= 0.5).
+    FEntityLandmark Landmark;
+    Landmark.EntityID = FName(TEXT("Полевик"));
+    Landmark.Cell = FIntPoint(2, 2);
+    Landmark.Respect = 0.8f;
+    Manager->SetEntityLandmarks({ Landmark });
+
+    // Чанк 4 клетки, радиус 0 -- активен только "свой" чанк центра. Центр
+    // ДАЛЕКО от (2,2) -- клетка вне активного радиуса.
+    FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+    Manager->SetActiveChunkCentersForTests({ FIntPoint(50, 50) });
+
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestEqual(TEXT("ManifestedEntityID всё равно обновляется -- логика проявления не гейтится чанками"),
+        Cell->ManifestedEntityID, FName(TEXT("Полевик")));
+    TestFalse(TEXT("Но актор НЕ заспавнен -- клетка вне активного радиуса"),
+        Cell->ManifestedEntityActor.IsValid());
+
+    // Игрок подходит -- центр активности теперь накрывает (2,2) (чанк (0,0)
+    // при ChunkSize=4).
+    Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+    Manager->UpdateEntityManifestations(1.0f);
+
+    TestTrue(TEXT("Актор материализуется, как только чанк становится активным"),
+        Cell->ManifestedEntityActor.IsValid());
 
     Manager->Destroy();
     return true;

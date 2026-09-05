@@ -499,4 +499,34 @@ bool FHerbalistArtifact_InvisibilityCapGuaranteesLureRegardlessOfRoll::RunTest(c
     return true;
 }
 
+// Аудит 2026-09-05: bWarmsCompanionItem нигде в коде не читался --
+// HerbalistPlayerController::OfferForArtifact резолвил Зеркальце/Клубочек
+// по двум жёстко прописанным именам, полностью игнорируя сам флаг.
+// Третий предмет-спутник, заведённый чистой правкой DT_Artifacts, молча
+// ничего не получил бы. Теперь флаг СВЕРЯЕТСЯ (см. HerbalistPlayerController.cpp:
+// предупреждение в лог при рассинхронизации имени и флага) -- этот тест
+// фиксирует инвариант, на который эта сверка опирается: DT_Artifacts
+// действительно помечает оба существующих предмета-спутника флагом, а не
+// полагается на два голых имени без данных за ними.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_CompanionItemsAreFlaggedInDataTable,
+    "Herbalist.Artifact.CompanionItemsAreFlaggedInDataTable",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifact_CompanionItemsAreFlaggedInDataTable::RunTest(const FString& Parameters)
+{
+    const FArtifactDefinition* Mirror = FindArtifactDefinition(FName(TEXT("Зеркальце")));
+    if (TestNotNull(TEXT("Зеркальце found in DT_Artifacts"), Mirror))
+    {
+        TestTrue(TEXT("Зеркальце is flagged bWarmsCompanionItem"), Mirror->bWarmsCompanionItem);
+    }
+
+    const FArtifactDefinition* YarnBall = FindArtifactDefinition(FName(TEXT("Клубочек")));
+    if (TestNotNull(TEXT("Клубочек found in DT_Artifacts"), YarnBall))
+    {
+        TestTrue(TEXT("Клубочек is flagged bWarmsCompanionItem"), YarnBall->bWarmsCompanionItem);
+    }
+
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

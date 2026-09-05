@@ -419,15 +419,40 @@ float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
 
 void AGridWorldManager::SeedTestLandmarks()
 {
-    EntityLandmarks.Empty();
+    // Гонка BeginPlay (аудит 2026-09-05): UE не гарантирует порядок BeginPlay
+    // между акторами уровня -- если AAlchemyTableActor::BeginPlay (сам зовёт
+    // RegisterDomovoi) отрабатывает РАНЬШЕ AGridWorldManager::BeginPlay
+    // (InitializeCells -> SeedTestLandmarks), голое EntityLandmarks.Empty()
+    // ниже стёрло бы только что зарегистрированного Домового без единого
+    // лога -- он bManualRegistrationOnly, цикл ниже его обратно не
+    // добавляет (сеет только автоматических "хозяев" по биому). Сохраняем
+    // такие записи перед очисткой, не вычищаем их вслепую.
+    TArray<FEntityLandmark> PreservedManualLandmarks;
+    for (const FEntityLandmark& Existing : EntityLandmarks)
+    {
+        const FLandmarkDefinition* ExistingDef = FindLandmarkDefinition(Existing.EntityID);
+        if (ExistingDef && ExistingDef->bManualRegistrationOnly)
+        {
+            PreservedManualLandmarks.Add(Existing);
+        }
+    }
+
+    EntityLandmarks = PreservedManualLandmarks;
 
     // Один "хозяин" на биом мог занять первую попавшуюся клетку молча —
     // с 2026-08-29 несколько определений делят один биом (Тайга: Аука +
     // Дух Медведя; Широколиств. лес: Гуменник + Овинник; Смеш. лес: Боровик
     // + Луговой; Речная пойма: Бродницы) — CellsUsed следит,
     // чтобы каждый получил СВОЮ клетку, а не потерялся, заняв уже занятую
-    // (первый в реестре выигрывал бы её снова и снова).
+    // (первый в реестре выигрывал бы её снова и снова). Клетки, уже занятые
+    // сохранёнными вручную-регистрируемыми "хозяевами" (Домовой), тоже
+    // считаются занятыми -- иначе автоматический сев мог бы посадить на ту
+    // же клетку ЕЩЁ одного "хозяина" того же биома.
     TSet<FIntPoint> CellsUsed;
+    for (const FEntityLandmark& Preserved : PreservedManualLandmarks)
+    {
+        CellsUsed.Add(Preserved.Cell);
+    }
     for (const FLandmarkDefinition& Def : GetLandmarkDefinitions())
     {
         // Домовой и подобные (bManualRegistrationOnly) не сеются по биому —
@@ -719,7 +744,17 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 const float AxisValue = GetAmbientTriggerAxisValue(Cell, Def.TriggerAxis);
                 const float SignedValue     = Def.bTriggerAbove ?  AxisValue  : -AxisValue;
                 const float SignedThreshold = Def.bTriggerAbove ?  Threshold : -Threshold;
-                bEligible = PassesHysteresisThreshold(bWasActive, SignedValue, SignedThreshold, Def.HysteresisMargin);
+                // Общий запас гистерезиса (аудит 2026-09-05): раньше здесь
+                // читался Def.HysteresisMargin -- отдельное, per-определению
+                // поле FAmbientEntityDefinition, не EntityManifestationHysteresis,
+                // хотя комментарий у самой настройки прямо называет "Corruption
+                // у Гнильников" в числе потребителей. Каждый другой ранг
+                // (Берегиня/Основной/Легендарный, см. остальные вызовы
+                // PassesHysteresisThreshold в этом файле) уже читает общий
+                // HysteresisMargin ниже -- Низший был единственным исключением.
+                // Оба дефолта совпадают (0.05f), поэтому баг был не виден,
+                // пока настройку не поменяли бы в Project Settings.
+                bEligible = PassesHysteresisThreshold(bWasActive, SignedValue, SignedThreshold, HysteresisMargin);
             }
             if (Def.bRequiresNight)
             {
@@ -1128,7 +1163,22 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         {
             Delta.TargetStateNudges.Add(Landmark.Cell, NewTarget);
         }
-        SyncManifestedEntityActor(*Cell, Def ? Def->ActorClass : nullptr, ALandmarkEntityActor::StaticClass());
+
+        // Аудит 2026-09-05: в отличие от Низшего/Берегини выше (те живут
+        // внутри ForEachActiveCell и физически не обходят неактивные чанки),
+        // Основной ранг обходит EntityLandmarks — фиксированный список,
+        // безусловно, независимо от чанков. Логика выше (проявился/погас)
+        // сознательно НЕ гейтится активностью — она про "что должно
+        // проявиться", путь-зависимый гистерезис, который обязан идти своим
+        // чередом даже вдали от игрока (тот же принцип, что и у
+        // DespawnChunkEntities: ManifestedEntityID переживает деактивацию
+        // чанка). Гейтим только материализацию АКТОРА — без этой проверки
+        // Домовой/другие Основные существа воскресали бы в чанках, которые
+        // игрок уже покинул.
+        if (IsCellActive(*Cell))
+        {
+            SyncManifestedEntityActor(*Cell, Def ? Def->ActorClass : nullptr, ALandmarkEntityActor::StaticClass());
+        }
     }
 
     // ---- Легендарный (реестр LegendaryEntityTypes.h) — проход по якорным
@@ -1218,7 +1268,17 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             {
                 Delta.TargetStateNudges.Add(*Anchor, NewTarget);
             }
-            SyncManifestedEntityActor(*Cell, Def.ActorClass, ALegendaryEntityActor::StaticClass());
+
+            // Аудит 2026-09-05: тот же гейт, что уже добавлен у Основного
+            // ранга выше — Легендарный тоже обходит фиксированный список
+            // якорных клеток (LegendaryAnchors), не ForEachActiveCell,
+            // поэтому материализацию актора нужно гейтить явно, отдельно от
+            // самой логики проявления (та путь-зависима и должна идти своим
+            // чередом независимо от чанков).
+            if (IsCellActive(*Cell))
+            {
+                SyncManifestedEntityActor(*Cell, Def.ActorClass, ALegendaryEntityActor::StaticClass());
+            }
         }
     }
 

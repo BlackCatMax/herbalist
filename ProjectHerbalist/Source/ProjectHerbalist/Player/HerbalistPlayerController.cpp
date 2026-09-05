@@ -1353,13 +1353,38 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
     // bWarmsCompanionItem, комментарий у bHasMirror/bHasYarnBall в .h).
     // Прогретое состояние — отдельно, через AGridWorldManager::
     // IsArtifactWarmed, не здесь.
+    //
+    // Аудит 2026-09-05: bWarmsCompanionItem нигде не читался — третий
+    // предмет-спутник, заведённый чистой правкой DT_Artifacts
+    // (bWarmsCompanionItem=true на новой строке), молча ничего не получил
+    // бы: этот if/else закрыт на два жёстко прописанных имени, самого
+    // флага не касаясь. bHasMirror/bHasYarnBall — два отдельных bool-поля
+    // контроллера (используются UseMirror/UseYarnBall, сохраняются в
+    // HerbalistSaveTypes.h) — обобщать их в коллекцию ради гипотетического
+    // третьего предмета, которого сегодня не существует, было бы дизайном
+    // под ещё не заданную задачу. Вместо этого флаг теперь СВЕРЯЕТСЯ, а не
+    // просто упоминается в комментарии: рассинхронизация между DataTable и
+    // этим списком имён теперь видна в логе, а не тонет молча.
+    const FArtifactDefinition* Def = FindArtifactDefinition(ArtID);
     if (ArtID == FName(TEXT("Зеркальце")))
     {
         bHasMirror = true;
+        if (!Def || !Def->bWarmsCompanionItem)
+        {
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s выставляет bHasMirror, но bWarmsCompanionItem в DT_Artifacts не стоит -- данные разошлись с кодом"), *ArtifactID);
+        }
     }
     else if (ArtID == FName(TEXT("Клубочек")))
     {
         bHasYarnBall = true;
+        if (!Def || !Def->bWarmsCompanionItem)
+        {
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s выставляет bHasYarnBall, но bWarmsCompanionItem в DT_Artifacts не стоит -- данные разошлись с кодом"), *ArtifactID);
+        }
+    }
+    else if (Def && Def->bWarmsCompanionItem)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s помечен bWarmsCompanionItem в DT_Artifacts, но не опознан здесь -- нужна новая ветка для его флага-присутствия"), *ArtifactID);
     }
 
     // Настоящее инвентарное представление (2026-09-02) — см. комментарий
