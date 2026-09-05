@@ -79,11 +79,6 @@ void AGridWorldManager::Tick(float DeltaTime)
     // должны пережить сохранение/загрузку, а движковое время level-relative.
     GameClockSeconds += DeltaTime;
 
-    if (UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>())
-    {
-        Graph->StepSimulation(DeltaTime);
-    }
-
     // ========================================================================
     // ПАЙПЛАЙН НА ФИКСИРОВАННОМ ШАГЕ
     // Command Intake -> Snapshot -> Pipeline -> Delta -> World Apply выполняются
@@ -101,10 +96,33 @@ void AGridWorldManager::Tick(float DeltaTime)
     // всё время простоя одним шагом (точно, см. CatchUpActivatedChunks).
     CatchUpActivatedChunks();
 
+    // Аудит 2026-09-05 (тот же разрыв уже отмечен в архивном
+    // "PROJECT HERBALIST - REFACTORING PIPELINE 2.md:408"): Graph->StepSimulation
+    // раньше звался ОДИН РАЗ за Tick() сырым покадровым DeltaTime, ДО этого
+    // цикла — момент записи биомного графа в сетку (ApplyFieldsToGrid внутри
+    // InternalStep) зависел от того, СКОЛЬКО РЕАЛЬНОГО ВРЕМЕНИ прошло между
+    // кадрами, то есть от FPS, а не от числа уже отработанных шагов
+    // детерминированного пайплайна. BiomeGraphSubsystem::FixedTimeStep (0.2с,
+    // сознательно крупнее SimulationFixedTimeStep=0.05с — см. комментарий у
+    // объявления, темп биомного распространения НЕ уравнивается с темпом
+    // пайплайна) остаётся собственным, более редким шагом — меняется только
+    // ИСТОЧНИК времени, которым кормится его аккумулятор: теперь это ровно
+    // SimulationFixedTimeStep за каждую итерацию цикла ниже (детерминированное,
+    // привязанное к числу шагов пайплайна количество), а не сырой DeltaTime
+    // кадра — тот же приём "шаг, а не кадр", что уже применяет сам цикл ниже
+    // к RunSimulationStep().
+    UBiomeGraphSubsystem* Graph = GetWorld()->GetSubsystem<UBiomeGraphSubsystem>();
+
     SimulationTimeAccumulator += DeltaTime;
     while (SimulationTimeAccumulator >= SimulationFixedTimeStep)
     {
         SimulationTimeAccumulator -= SimulationFixedTimeStep;
+
+        if (Graph)
+        {
+            Graph->StepSimulation(SimulationFixedTimeStep);
+        }
+
         RunSimulationStep();
     }
 
