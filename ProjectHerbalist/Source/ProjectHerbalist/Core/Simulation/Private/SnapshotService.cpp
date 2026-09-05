@@ -30,14 +30,22 @@ namespace Simulation
 
     // Кэш, чтобы не гонять TActorIterator (перебор всех акторов уровня) на каждый
     // тик — CaptureWorld()/ApplyDeltaToWorld() вызываются 20 раз/сек. TWeakObjectPtr
-    // сам инвалидируется при смене уровня/уничтожении актора, поэтому явного
-    // сброса на BeginPlay не требуется (тот же паттерн, что уже в
-    // HerbalistPlayerController::FindWorldManager / BiomeGraphSubsystem::FindGridWorldManager).
+    // сам инвалидируется при уничтожении актора, но это НЕ то же самое, что
+    // "принадлежит правильному миру" (аудит 2026-09-05): в отличие от
+    // BiomeGraphSubsystem::FindGridWorldManager, который живёт в
+    // UWorldSubsystem и потому уже привязан к одному конкретному миру,
+    // это статическое поле уровня namespace — ОБЩЕЕ на весь процесс. Если в
+    // процессе одновременно существуют два мира (Editor + PIE — обычный
+    // случай при "Play in Editor" без Standalone), актор из мира A остаётся
+    // валидным (жив, не уничтожен) даже когда эта функция вызвана с миром B
+    // — без явной проверки Grid->GetWorld()==World кэш молча вернул бы
+    // GridWorldManager чужого мира. Проверяем принадлежность миру на каждый
+    // вызов вместо сброса по жизненному циклу (у namespace нет BeginPlay).
     static TWeakObjectPtr<AGridWorldManager> CachedGridWorldManager;
 
     static AGridWorldManager* FindGridWorldManager(UWorld* World)
     {
-        if (CachedGridWorldManager.IsValid())
+        if (CachedGridWorldManager.IsValid() && CachedGridWorldManager->GetWorld() == World)
         {
             return CachedGridWorldManager.Get();
         }

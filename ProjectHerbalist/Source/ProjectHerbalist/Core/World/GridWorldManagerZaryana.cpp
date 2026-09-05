@@ -37,7 +37,14 @@ void AGridWorldManager::UpdateMemoryFragments(float DeltaTime)
     const float CheckInterval = Settings ? Settings->MemoryFragmentStateCheckInterval : 5.0f;
     if (FragmentStateCheckAccumulator >= CheckInterval)
     {
-        FragmentStateCheckAccumulator = 0.0f;
+        // Вычитаем интервал, не обнуляем (аудит 2026-09-05) -- обнуление
+        // выбрасывает остаток накопленного времени, реальный интервал опроса
+        // становится >= CheckInterval и плывёт с кадровой частотой (окна
+        // "выдержано N секунд" внутри TrySpawnStateBasedFragment кормятся
+        // номинальным CheckInterval на КАЖДЫЙ вызов -- при обнулении вызовов
+        // становится меньше, чем должно быть за реальное игровое время,
+        // требуемая выдержка растянулась бы дольше заявленных N секунд).
+        FragmentStateCheckAccumulator -= CheckInterval;
         RecomputeGlobalPerceptionClarity();
         UpdateRosaSignal();
         TrySpawnStateBasedFragment();
@@ -209,9 +216,25 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     const float StabilityThreshold = Settings ? Settings->MemoryFragmentHighStabilityThreshold : 0.7f;
     const float TishinaLesaSustained = Settings ? Settings->TishinaLesaSustainedSeconds : 60.0f;
     const float OjidanieBuriSustained = Settings ? Settings->OjidanieBuriSustainedSeconds : 120.0f;
-    const bool bNeedQuiet = QuietDef && !CollectedFragmentIDs.Contains(QuietDef->ID);
     const bool bNeedTishina = TishinaDef && !CollectedFragmentIDs.Contains(TishinaDef->ID);
     const bool bNeedBuri = BuriDef && !CollectedFragmentIDs.Contains(BuriDef->ID);
+
+    // Утечка по аудиту 2026-09-05: пока bNeedTishina/bNeedBuri истинны, эти
+    // per-клеточные карты пополняются FindOrAdd на каждую подходящую по биому
+    // клетку на каждом опросе и никогда не уменьшаются -- как только
+    // соответствующий фрагмент собран, они больше не нужны НИКОГДА (флаг
+    // навсегда false), но без явной очистки продолжают занимать память до
+    // конца сессии. Очищаем один раз в момент перехода need->collected.
+    if (!bNeedTishina && TishinaLesaHoldSeconds.Num() > 0)
+    {
+        TishinaLesaHoldSeconds.Empty();
+    }
+    if (!bNeedBuri && OjidanieBuriHoldSeconds.Num() > 0)
+    {
+        OjidanieBuriHoldSeconds.Empty();
+    }
+
+    const bool bNeedQuiet = QuietDef && !CollectedFragmentIDs.Contains(QuietDef->ID);
     if (bNeedQuiet || bNeedTishina || bNeedBuri)
     {
         TArray<FIntPoint> EligibleCellsQuiet;
@@ -513,6 +536,24 @@ void AGridWorldManager::SeedRosaCorruptedCircle(const FIntPoint& Center)
     // §19.4a: "оно уже сделало то, зачем приходило"), не активный источник
     // порчи вроде Гнильников; клетка вправе естественно зарасти со временем
     // через RegenerateCellParameters, как и любой другой шрам мира.
+    //
+    // ЯВНОЕ ИСКЛЮЧЕНИЕ из Single-Writer (найдено аудитом 2026-09-05,
+    // задокументировано, не тихо оставлено): единственная точка записи в
+    // мир — ApplyStateDelta() — не умеет "только State, не TargetState".
+    // FStateDelta::WorldChanges бьёт по обоим сразу (см. ApplyStateDelta,
+    // GridWorldManagerCore.cpp — Cell->TargetState = NewCellData.State той
+    // же строкой, что и Cell->State), а TargetStateNudges бьёт только по
+    // TargetState — ни один существующий канал не даёт нужной здесь
+    // семантики "разовый прямой удар по State, цель релаксации не трогать".
+    // Заводить новый канал FStateDelta ради ЕДИНСТВЕННОГО вызова редкого
+    // нарративного события (круг вокруг Заряны, случается не чаще раза за
+    // прохождение — SetZaryanaCellIfUnset ставит клетку один раз и
+    // защищена собственной проверкой) — непропорциональная цена; прямая
+    // запись здесь остаётся, но как признанное, а не молчаливое отступление.
+    // Следствие: это изменение НЕ видно TraceReplay/трассировке — если
+    // когда-нибудь понадобится воспроизводимость именно этого события,
+    // придётся либо расширять FStateDelta, либо переносить сюда отдельный
+    // прогон трассировки.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const int32 Radius = Settings ? Settings->RosaCorruptedCircleRadius : 3;
     const float PeakDistortion = Settings ? Settings->RosaCorruptedCirclePeakDistortion : 0.5f;

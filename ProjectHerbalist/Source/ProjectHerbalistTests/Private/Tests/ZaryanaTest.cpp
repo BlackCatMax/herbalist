@@ -6,6 +6,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Zaryana/MemoryFragmentDefinitions.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -461,6 +462,40 @@ bool FHerbalistZaryana_BuyanGuardianPathGatedByClarityAndMolva::RunTest(const FS
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_StateCheckAccumulatorKeepsRemainderOnTrigger,
+    "Herbalist.Zaryana.StateCheckAccumulatorKeepsRemainderOnTrigger",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_StateCheckAccumulatorKeepsRemainderOnTrigger::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    if (!TestNotNull(TEXT("HerbalistSettings available"), Settings)) { Manager->Destroy(); return false; }
+    const float CheckInterval = Settings->MemoryFragmentStateCheckInterval;
+
+    // Дрейф по аудиту 2026-09-05: обнуление накопителя вместо вычитания
+    // CheckInterval выбрасывает остаток DeltaTime, реальный интервал опроса
+    // становится больше настроенного и плывёт с кадровой частотой. Шаг
+    // 0.6*CheckInterval не делит его нацело -- первый вызов копит 0.6*CI (не
+    // срабатывает), второй переваливает порог (1.2*CI): правильное
+    // поведение оставляет остаток 0.2*CI, ошибочное обнуляло бы его в 0.
+    Manager->UpdateMemoryFragments(CheckInterval * 0.6f);
+    TestEqual(TEXT("First sub-threshold poll simply accumulates"),
+        Manager->GetFragmentStateCheckAccumulatorForTest(), CheckInterval * 0.6f, 0.001f);
+
+    Manager->UpdateMemoryFragments(CheckInterval * 0.6f);
+    TestEqual(TEXT("Crossing the threshold subtracts CheckInterval, keeping the 0.2*CI remainder instead of discarding it"),
+        Manager->GetFragmentStateCheckAccumulatorForTest(), CheckInterval * 0.2f, 0.001f);
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_TishinaLesaSpawnsOnlyInTaiga,
     "Herbalist.Zaryana.TishinaLesaSpawnsOnlyInTaiga",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
@@ -696,6 +731,50 @@ bool FHerbalistZaryana_OjidanieBuriResetsPerCellAccumulatorOnDrop::RunTest(const
     Manager->TrySpawnStateBasedFragment();
     TestEqual(TEXT("Spawns only after a full fresh sustained window on this cell since the drop"),
         Manager->GetActiveFragmentDefinitionID(), FName(TEXT("OJIDANIE_BURI")));
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_HoldMapsAreClearedOnceFragmentsCollected,
+    "Herbalist.Zaryana.HoldMapsAreClearedOnceFragmentsCollected",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_HoldMapsAreClearedOnceFragmentsCollected::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // Утечка по аудиту 2026-09-05: пока TISHINA_LESA/OJIDANIE_BURI ещё не
+    // собраны, per-клеточные аккумуляторы копятся для КАЖДОЙ клетки
+    // соответствующего биома на каждом опросе (не только для подходящих
+    // сейчас клеток -- см. комментарий в TrySpawnStateBasedFragment), поэтому
+    // достаточно одного опроса, чтобы карты стали непустыми на дефолтной
+    // сетке, где клетки Тайги/Тундры уже есть.
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("NE_POKHVALILA")), FName(TEXT("NEUDOBNAYA_PRAVDA"))});
+
+    Manager->TrySpawnStateBasedFragment();
+    TestTrue(TEXT("Taiga hold map is non-empty after a poll while TISHINA_LESA is still needed"),
+        Manager->GetTishinaLesaHoldMapNum() > 0);
+    TestTrue(TEXT("Tundra hold map is non-empty after a poll while OJIDANIE_BURI is still needed"),
+        Manager->GetOjidanieBuriHoldMapNum() > 0);
+
+    // Собираем оба фрагмента -- соответствующие карты больше не нужны
+    // НИКОГДА (флаг "нужен" необратимо становится false) и должны
+    // очиститься на следующем же опросе, а не расти молча до конца сессии.
+    Manager->SetCollectedFragmentIDs({FName(TEXT("TIKHOE_MESTO")), FName(TEXT("PODNOSHENIE")),
+        FName(TEXT("KHLEB_SOL")), FName(TEXT("NE_POKHVALILA")), FName(TEXT("NEUDOBNAYA_PRAVDA")),
+        FName(TEXT("TISHINA_LESA")), FName(TEXT("OJIDANIE_BURI"))});
+
+    Manager->TrySpawnStateBasedFragment();
+    TestEqual(TEXT("Taiga hold map is cleared once TISHINA_LESA is collected"),
+        Manager->GetTishinaLesaHoldMapNum(), 0);
+    TestEqual(TEXT("Tundra hold map is cleared once OJIDANIE_BURI is collected"),
+        Manager->GetOjidanieBuriHoldMapNum(), 0);
 
     Manager->Destroy();
     return true;

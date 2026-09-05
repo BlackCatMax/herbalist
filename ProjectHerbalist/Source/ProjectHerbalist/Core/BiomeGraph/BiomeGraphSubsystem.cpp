@@ -45,7 +45,27 @@ void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
     {
         Nodes.Add(Entry.BiomeID, Entry.Node);
     }
-    Edges = Asset->Edges;
+
+    // Валидация рёбер (аудит 2026-09-05): PropagateWaves читает
+    // PrevMorok[Edge.FromBiome]/[Edge.ToBiome] через TMap::operator[]
+    // (FindChecked) -- ребро, ссылающееся на узел, которого нет среди
+    // Nodes (переименованный/удалённый узел в ассете, опечатка при
+    // импорте), рушило бы игру на первом же шаге графа вместо честного
+    // отказа при загрузке. Отбрасываем такие рёбра здесь, с явным логом,
+    // а не молча падаем пятью шагами глубже.
+    Edges.Reset();
+    Edges.Reserve(Asset->Edges.Num());
+    for (const FBiomeGraphEdge& Edge : Asset->Edges)
+    {
+        if (!Nodes.Contains(Edge.FromBiome) || !Nodes.Contains(Edge.ToBiome))
+        {
+            UE_LOG(LogHerbalistBiome, Error, TEXT("InitializeFromAsset: ребро %s -> %s ссылается на неизвестный узел, пропущено"),
+                *Edge.FromBiome.ToString(), *Edge.ToBiome.ToString());
+            continue;
+        }
+        Edges.Add(Edge);
+    }
+
     GlobalMorokDecay = Asset->GlobalMorokDecay;
     GlobalZaryanaDecay = Asset->GlobalZaryanaDecay;
     PotionCollapseThreshold = Asset->PotionCollapseThreshold;

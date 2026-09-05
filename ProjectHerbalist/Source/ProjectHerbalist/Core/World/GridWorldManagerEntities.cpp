@@ -579,7 +579,18 @@ void AGridWorldManager::SyncManifestedEntityActor(FGridCell& Cell, TSubclassOf<A
     const TSubclassOf<AHerbalistEntityActor> ClassToSpawn = RequestedClass ? RequestedClass : DefaultClass;
     // Позиция внутри формы биома (2026-09-02), не мёртвый центр клетки --
     // тот же приём, что уже SpawnResourcesInCell, см. GetSpawnPositionWithinBiome.
-    const FVector SpawnPos = GetSpawnPositionWithinBiome(Cell.X, Cell.Y, GetEntityManifestationJitterRadius(), WorldRNG);
+    // Локальный FRandomStream, не WorldRNG (аудит 2026-09-05, тот же класс
+    // бага, что уже исправлен у восприятия Травника в GridWorldManagerTick.cpp):
+    // это чисто визуальный джиттер актора-маркера сущности, не влияющий на
+    // состояние симуляции, но лишний расход WorldRNG здесь сдвигал бы все
+    // дальнейшие исходы симуляции в зависимости от того, произошло ли
+    // проявление именно в этом тике -- тот же принцип, что и остальные
+    // presentation-RNG в проекте (AlchemySlotWidget::PerceptionRng,
+    // HerbalistInventoryComponent::DecayRng, GridWorldManagerArtifacts.cpp).
+    // Сид от клетки+ID сущности -- стабилен между перезапусками при том же
+    // состоянии мира, но не завязан на разделяемый счётчик.
+    FRandomStream EntityJitterRng(20260905 + GetTypeHash(FIntPoint(Cell.X, Cell.Y)) + GetTypeHash(Cell.ManifestedEntityID));
+    const FVector SpawnPos = GetSpawnPositionWithinBiome(Cell.X, Cell.Y, GetEntityManifestationJitterRadius(), EntityJitterRng);
     AHerbalistEntityActor* NewActor = GetWorld()->SpawnActor<AHerbalistEntityActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
     if (NewActor)
     {

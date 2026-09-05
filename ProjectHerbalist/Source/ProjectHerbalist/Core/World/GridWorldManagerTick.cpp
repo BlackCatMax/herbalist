@@ -248,24 +248,45 @@ void AGridWorldManager::RunSimulationStep()
                             Produced.State.Meta.Distortion, Produced.State.Meta.Purity);
                     }
 
+                    const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
+
                     FJournalEntry Entry;
                     Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
                     Entry.IngredientID = Produced.IngredientID;
                     Entry.Count = Produced.Count;
                     // Искажённое состояние, замороженное сейчас — см. предупреждение
-                    // в JournalTypes.h. WorldRNG, не FMath:: — тот же класс бага
-                    // с недетерминированным ГПСЧ уже дважды находился и чинился
-                    // в этой сессии (спавн ресурсов, порча инвентаря).
-                    Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, WorldRNG, GlobalPerceptionClarity);
+                    // в JournalTypes.h. Найдено аудитом 2026-09-05 (сохранения/
+                    // капища/община): здесь всё ещё стоял WorldRNG, тот же класс
+                    // бага, что уже дважды чинился раньше в проекте (спавн
+                    // ресурсов, порча инвентаря) — комментарий утверждал, что
+                    // паттерн уже устранён, но именно это место осталось
+                    // непроверенным. Свой локальный сид (тот же приём, что уже
+                    // MirrorPerceptionRng/PerceptionRng/GridWorldManagerArtifacts.cpp) —
+                    // запись в журнал разовая, не перезапрашивается повторно,
+                    // поэтому не обязана быть воспроизводимой снаружи, но
+                    // обязана не трогать общий поток WorldRNG. Замешаны
+                    // ингредиент+клетка+игровое время — не голая константа,
+                    // иначе все записи журнала шумели бы одинаково.
+                    {
+                        FRandomStream JournalPerceptionRng(20260905 + GetTypeHash(Produced.IngredientID)
+                            + GetTypeHash(TargetCell) + FMath::RoundToInt(GameClockSeconds * 100.0f));
+                        Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, JournalPerceptionRng, GlobalPerceptionClarity);
+                    }
                     Entry.BrewOutcome = Produced.BrewOutcome;
-                    const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
                     Entry.Cell = TargetCell;
                     if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))
                     {
                         Entry.Biome = Cell->Biome;
                     }
                     Entry.bWasNight = IsNight();
-                    Entry.GameTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+                    // GameClockSeconds, не GetWorld()->GetTimeSeconds() (найдено
+                    // тем же аудитом 2026-09-05): часы уровня обнуляются при
+                    // перезапуске сессии, GameClockSeconds honestly переживает
+                    // сохранение/загрузку (см. тот же выбор уже сделанный для
+                    // фрагментов памяти, GridWorldManagerZaryana.cpp) — иначе
+                    // записи Harvest/Brew сортировались бы не по игровому
+                    // времени, а по тому, сколько работает текущий процесс.
+                    Entry.GameTimeSeconds = GameClockSeconds;
 
                     PC->JournalComponent->AddEntry(Entry);
                 }

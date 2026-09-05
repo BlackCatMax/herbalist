@@ -804,6 +804,18 @@ public:
     // здесь только forward-declared, полный тип нужен для вызова метода.
     FName GetActiveFragmentDefinitionID() const;
 
+    // Публично только для теста на утечку (аудит 2026-09-05): подтвердить,
+    // что per-клеточные аккумуляторы TishinaLesaHoldSeconds/OjidanieBuriHoldSeconds
+    // очищаются, как только соответствующий фрагмент собран, а не растут
+    // молча до конца сессии.
+    int32 GetTishinaLesaHoldMapNum() const { return TishinaLesaHoldSeconds.Num(); }
+    int32 GetOjidanieBuriHoldMapNum() const { return OjidanieBuriHoldSeconds.Num(); }
+
+    // Публично только для теста на дрейф (аудит 2026-09-05): подтвердить,
+    // что порог опроса UpdateMemoryFragments вычитает CheckInterval, а не
+    // обнуляет остаток накопленного DeltaTime.
+    float GetFragmentStateCheckAccumulatorForTest() const { return FragmentStateCheckAccumulator; }
+
     UFUNCTION(Exec, BlueprintCallable, Category = "Test")
     void ShowZaryanaStatus();
 
