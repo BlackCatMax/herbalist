@@ -9,6 +9,7 @@
 
 struct FInventorySnapshot;
 struct FStateDelta;
+struct FIngredientTableRow;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
 
@@ -48,6 +49,33 @@ enum class EStorageContainerType : uint8
     Cabinet,   // шкаф — лучше базовой линии, закрыт от пыли/вредителей, но комнатная температура/влажность
     Cellar,    // погреб — лучше шкафа, тёмный, прохладный, стабильная влажность
     Jar        // банка (герметичная) — лучшее хранение: почти нет доступа воздуха/влаги
+};
+
+// Станции обработки (2026-09-05, многоступенчатые зелья -- "Готовим обычное
+// зелье... Отстой... Варка... Фильтрация... Выпаривание", прямой запрос
+// пользователя) -- обобщение bool bIsDryingRack (было единственным полем
+// "этот инвентарь -- станция-процесс") под появление ещё двух типов станций.
+// Один enum на самом инвентаре, НЕ три параллельных bool (bIsSettlingStand/
+// bIsEvaporationStill) -- инвентарь физически может быть только ОДНОЙ
+// станцией одновременно, взаимоисключающие bool'ы позволили бы невалидное
+// состояние "сушилка И отстойник разом", enum делает его непредставимым.
+//
+// ВАЖНО: обобщается только "какая это станция" (ось конфигурации инвентаря),
+// НЕ конкретные таймеры/эффекты процессов -- у Сушки уже своя пара
+// bIsDried/DryingTimeRemainingSeconds на FInventoryItem, у Отстоя и
+// Выпаривания -- свои отдельные пары (bHasSettled/SettlingTimeRemainingSeconds,
+// bHasEvaporated/EvaporationTimeRemainingSeconds, HerbalistCoreTypes.h), не
+// один общий "универсальный процесс" -- тот же архитектурный принцип, что
+// уже держит три независимых набора полей у оберегов (WardExpiryGameSeconds
+// и аналоги, GridWorldManagerWards.cpp): похожие по форме, но разные по
+// формуле эффекта механики получают параллельные, не общие, поля.
+UENUM(BlueprintType)
+enum class EProcessingStationType : uint8
+{
+    None,             // обычный инвентарь/тара, TickComponent не трогает ни один из трёх процессов
+    DryingRack,       // сушилка -- см. довод у bIsDried/DryingTimeRemainingSeconds
+    SettlingStand,    // отстойник -- усиление доминирующей оси ценой Magnitude
+    EvaporationStill  // выпарной куб -- концентрация Magnitude/Potency ценой Distortion/Corruption
 };
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -124,24 +152,29 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool TryEquipContainer(FName IngredientID, EStorageContainerType GrantsType);
 
-    // Сушилка (DESIGN_Community_And_Homestead.md §2.2, "Хранилища" пункт 3,
-    // 2026-09-04) — станция-процесс, НЕ тип контейнера (EStorageContainerType
-    // остаётся отдельной осью, множитель тары не про сушку вовсе). Тот же
-    // приём, что уже ContainerType: плоское поле на самом компоненте,
-    // выставляется владельцем-актором (ADryingRackActor в конструкторе, тем
-    // же жестом, что AStorageContainer выставляет ContainerType=Basket) —
-    // не отдельный подкласс UActorComponent, инвентарь функционально тот же,
-    // просто с другим поведением TickComponent для предметов внутри него.
+    // Станция обработки (DESIGN_Community_And_Homestead.md §2.2, "Хранилища"
+    // пункт 3, 2026-09-04; обобщено на три типа 2026-09-05, см. довод у
+    // EProcessingStationType выше) — станция-процесс, НЕ тип контейнера
+    // (EStorageContainerType остаётся отдельной осью, множитель тары не про
+    // обработку вовсе). Тот же приём, что уже ContainerType: плоское поле на
+    // самом компоненте, выставляется владельцем-актором (ADryingRackActor/
+    // ASettlingStandActor/AEvaporationStillActor в конструкторе, тем же
+    // жестом, что AStorageContainer выставляет ContainerType=Basket) — не
+    // отдельный подкласс UActorComponent на каждый тип станции, инвентарь
+    // функционально тот же, просто с другим поведением TickComponent для
+    // предметов внутри него.
     //
-    // false (дефолт, обычный инвентарь/тара) — TickComponent не трогает
-    // DryingTimeRemainingSeconds предметов вовсе, ровно как до появления
-    // сушки. true — каждый нежидкий, ещё не высохший предмет в этом
-    // инвентаре взводит и досчитывает свой таймер (см. TickDryingItem
-    // ниже), пока физически лежит здесь (см. довод у
+    // None (дефолт, обычный инвентарь/тара) — TickComponent не трогает ни
+    // один из трёх процессов, ровно как до появления сушки. DryingRack/
+    // SettlingStand/EvaporationStill — соответствующий процесс взводит и
+    // досчитывает свой таймер на каждом подходящем предмете (см.
+    // TickDryingItem/TickSettlingItem/TickEvaporationItem ниже), пока
+    // предмет физически лежит здесь (см. довод у
     // FInventoryItem::DryingTimeRemainingSeconds — переложил в обычный
-    // карман, таймер замер на месте, не сброшен).
+    // карман, таймер замер на месте, не сброшен, тот же принцип у Отстоя/
+    // Выпаривания).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
-    bool bIsDryingRack = false;
+    EProcessingStationType StationType = EProcessingStationType::None;
 
 protected:
     UPROPERTY()
@@ -179,12 +212,89 @@ public:
     // вход, а не фильтрует сама).
     static bool TickDryingItem(FInventoryItem& Item, float DeltaTime, float DryingDurationSeconds);
 
+    // Резолвит длительность сушки ДЛЯ ОДНОГО предмета (2026-09-05, "процесс
+    // сушки у разных растений разный (длительность)", прямой запрос
+    // пользователя) -- приоритет у карточки: Row->DryingDurationSeconds,
+    // если он НЕ сентинел -1 (см. довод у FIngredientTableRow::
+    // DryingDurationSeconds). Row==nullptr (карточка не резолвится реестром)
+    // или сентинел -1 на резолвленной карточке -- оба падают на
+    // GlobalFallbackSeconds (UHerbalistSettings::DryingDurationSeconds).
+    // Чистая функция БЕЗ обращения к реестрам сама по себе -- принимает уже
+    // резолвленный Row (или nullptr), тот же приём границы, что уже
+    // TickDryingItem/ShouldConvertToPeregnoy выше: резолв самой карточки
+    // через IngredientRegistrySubsystem делает вызывающий TickComponent, эта
+    // функция только решает, какое из двух чисел использовать -- поэтому
+    // тестируема напрямую с рукописной FIngredientTableRow, без реестра/
+    // GameInstance.
+    static float ResolveDryingDurationSeconds(const FIngredientTableRow* Row, float GlobalFallbackSeconds);
+
     // Применяет FIngredientTableRow::DriedStateDelta к Meta предмета в
     // момент завершения сушки -- тот же приём клампа [0,1], что уже
     // ApplyDecayToItem применяет к Distortion/Corruption/Purity/Stability
     // (отдельная функция, не инлайн в TickComponent -- тестируема напрямую
     // без реестра/GameInstance, ровно как TickDryingItem выше).
     static void ApplyDriedStateDelta(FMeta& Meta, const FMeta& Delta);
+
+    // Отстой (2026-09-05) -- чистая функция таймера, ТОТ ЖЕ приём границы,
+    // что уже TickDryingItem: взводит SettlingTimeRemainingSeconds при
+    // первом вызове, иначе считает вниз; по достижении <=0 фиксирует
+    // bHasSettled=true и возвращает true (сигнал вызывающей стороне --
+    // "только что отстоялось, применяй ApplySettlingEffect"). Не проверяет
+    // bIsWater/StationType/IngredientID сама -- те же решения, что и у
+    // TickDryingItem, принимает вызывающая сторона (TickComponent).
+    static bool TickSettlingItem(FInventoryItem& Item, float DeltaTime, float SettlingDurationSeconds);
+
+    // Эффект завершённого Отстоя -- "усиление доминирующей оси Direction
+    // ценой Magnitude" (прямой запрос пользователя, см. довод у
+    // FInventoryItem::bHasSettled, HerbalistCoreTypes.h). Находит argmax
+    // среди Body/Mind/Spirit/Nature, прибавляет DominantAxisBoost, зовёт
+    // NormalizeSum() (остальные три оси просаживаются пропорционально сами,
+    // отдельно ничего вычитать не нужно), затем домножает Magnitude на
+    // MagnitudeLossFactor < 1.0 -- цена усиления, "10% силы уходит в
+    // осадок". Чистая функция от FRealState, тестируема напрямую.
+    static void ApplySettlingEffect(FRealState& State, float DominantAxisBoost, float MagnitudeLossFactor);
+
+    // Выпаривание (2026-09-05) -- тот же приём таймера, что TickSettlingItem
+    // выше, своя независимая пара полей (bHasEvaporated/
+    // EvaporationTimeRemainingSeconds).
+    static bool TickEvaporationItem(FInventoryItem& Item, float DeltaTime, float EvaporationDurationSeconds);
+
+    // Эффект завершённого Выпаривания -- "концентрация ценой риска" (прямой
+    // запрос пользователя): Magnitude и Potency растут (усиление), но
+    // Distortion И Corruption ОБА домножаются на тот же RiskMultiplier > 1.0
+    // -- концентрация не разбирает, что усиливать, грязь концентрируется
+    // вместе с силой. Min(..., 1.0f) на Magnitude вместо Clamp -- Magnitude
+    // не имеет нижней границы 0 как ось Meta, только верхний потолок 1.0
+    // (тот же приём, что уже ApplyDecayToItem::Purity/Stability используют
+    // Max, а Distortion/Corruption -- Min, в зависимости от направления).
+    static void ApplyEvaporationEffect(FRealState& State, float MagnitudeBoost, float PotencyBoost, float RiskMultiplier);
+
+    // Фильтрация (2026-09-05, прямой запрос пользователя: "4. Фильтрация" --
+    // ЕДИНСТВЕННЫЙ мгновенный шаг цепочки, без станции/таймера, см. довод в
+    // задаче) -- "чище, но слабее": Purity растёт, Distortion/Corruption
+    // падают, Potency падает как цена. Чистая функция клампа, тот же приём,
+    // что ApplyDriedStateDelta выше -- тестируема напрямую без реестра.
+    //
+    // НЕ терминальна отдельным bool-флагом (сознательное решение, см. довод
+    // у UHerbalistInventoryComponent::TryFilterPotion ниже) -- повторное
+    // применение разрешено и складывается, но самоограничено клампами [0,1]
+    // на каждой оси: предел раз за разом стремится к Purity=1/Distortion=0/
+    // Corruption=0/Potency=0 ("чистая, но безвкусная вода"), не к
+    // бесконечному росту показателей без цены.
+    static void ApplyFilterEffect(FMeta& Meta, float PurityBoost, float DistortionReduction, float CorruptionReduction, float PotencyLoss);
+
+    // Обёртка над ApplyFilterEffect для реального инвентаря игрока -- ТОТ ЖЕ
+    // приём поиска, что уже AHerbalistPlayerController::UsePotion
+    // (IndexOfByPredicate по первому предмету с IngredientID=="Potion" &&
+    // Count>0, не более сложный селектор, проект уже принял эту простоту).
+    // Живёт на компоненте, а не в Exec-обёртке контроллера (тот же
+    // архитектурный уровень, что уже TryEquipContainer выше) -- оперирует
+    // только собственным Items, читает пороги из UHerbalistSettings напрямую
+    // (GetDefault<>(), не требует GameInstance/реестра — та же граница
+    // доступности, что уже у ContainerType decay-множителей в
+    // TickComponent), поэтому тестируема без сборки мира.
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    bool TryFilterPotion();
 
 protected:
 

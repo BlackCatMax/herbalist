@@ -511,6 +511,13 @@ void AHerbalistPlayerController::UsePotion()
     InventoryComponent->RemoveItem(PotionIndex, 1);
 }
 
+void AHerbalistPlayerController::FilterPotion()
+{
+    if (!InventoryComponent) return;
+
+    InventoryComponent->TryFilterPotion();
+}
+
 // ============================================================================
 // ВЗАИМОДЕЙСТВИЕ
 // ============================================================================

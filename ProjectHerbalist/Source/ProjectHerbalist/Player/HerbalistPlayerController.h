@@ -116,7 +116,16 @@ public:
 
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();
-    
+
+    // Фильтрация (многоступенчатые зелья, 2026-09-05, прямой запрос
+    // пользователя: "4. Фильтрация" -- мгновенное действие, без станции в
+    // мире, в отличие от Отстоя/Выпаривания). Тонкая Exec-обёртка, тем же
+    // приёмом, что UsePotion выше -- вся логика (поиск предмета, эффект)
+    // живёт на UHerbalistInventoryComponent::TryFilterPotion, тестируема
+    // напрямую без контроллера/мира.
+    UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
+    void FilterPotion();
+
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Harvesting")
     bool CanHarvestActor(AActor* TargetActor) const;
 	

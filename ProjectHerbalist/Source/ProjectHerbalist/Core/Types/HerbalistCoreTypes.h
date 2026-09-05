@@ -609,6 +609,42 @@ struct PROJECTHERBALIST_API FInventoryItem
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     float DryingTimeRemainingSeconds = -1.0f;
 
+    // Отстой (2026-09-05, многоступенчатые зелья -- прямой запрос
+    // пользователя: "2. Отстой — процесс усиления доминирующей оси") --
+    // ТОТ ЖЕ сентинел-паттерн, что уже DryingTimeRemainingSeconds/bIsDried
+    // выше: -1 = не начато, взводится при первом тике внутри инвентаря
+    // ASettlingStandActor (EProcessingStationType::SettlingStand,
+    // HerbalistInventoryComponent.h) и считает вниз ТОЛЬКО пока предмет
+    // физически там лежит. Отдельная, независимая пара полей от Drying --
+    // проект уже держит параллельные наборы полей на похожие, но разные
+    // механики (три независимых набора у оберегов, GridWorldManagerWards.cpp),
+    // не один "универсальный процесс": Отстой усиливает доминирующую ось
+    // Direction ценой Magnitude, Сушка меняет Meta ценой ничего -- разная
+    // формула эффекта у каждого, обобщать таймер без обобщения эффекта
+    // означало бы делить код там, где он всё равно снова разойдётся.
+    //
+    // bHasSettled -- терминальный флаг, тем же принципом, что bIsDried:
+    // эффект применяется РОВНО ОДИН РАЗ (TickComponent проверяет этот флаг
+    // перед вызовом TickSettlingItem), повторный тик уже отстоявшегося
+    // зелья не удваивает усиление.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bHasSettled = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float SettlingTimeRemainingSeconds = -1.0f;
+
+    // Выпаривание (2026-09-05, тот же запрос -- "5. Выпаривание") -- тот же
+    // сентинел-паттерн, ещё одна независимая пара полей (см. довод у
+    // bHasSettled выше): концентрирует Magnitude/Potency ценой роста
+    // Distortion/Corruption (см. UHerbalistInventoryComponent::
+    // ApplyEvaporationEffect) -- третья, отдельная формула эффекта, третья
+    // отдельная пара полей, тот же принцип.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bHasEvaporated = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float EvaporationTimeRemainingSeconds = -1.0f;
+
     bool IsEmpty() const { return IngredientID.IsNone() || Count <= 0; }
     void Clear() { IngredientID = NAME_None; State = FRealState(); Count = 0; CreationTime = 0.0f; bSubjectToDecay = true; }
     bool IsValid() const { return !IngredientID.IsNone() && Count > 0; }

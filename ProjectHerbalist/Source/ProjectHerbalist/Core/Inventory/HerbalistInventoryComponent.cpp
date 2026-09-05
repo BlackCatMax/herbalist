@@ -8,6 +8,7 @@
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
+#include "Core/Data/IngredientTableRow.h"
 
 const FName UHerbalistInventoryComponent::PeregnoyIngredientID = FName(TEXT("Перегной"));
 
@@ -62,10 +63,43 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     const float RotPurityThreshold = Settings ? Settings->RotConversionPurityThreshold : 0.05f;
     const float RotDistortionThreshold = Settings ? Settings->RotConversionDistortionThreshold : 0.95f;
 
-    // Сушка (2026-09-04) -- значения читаются один раз на весь тик компонента,
-    // тем же приёмом, что и GlobalDecayRate/RotPurityThreshold выше.
-    const float DryingDuration = Settings ? Settings->DryingDurationSeconds : 480.0f;
+    // Сушка (2026-09-04) -- глобальный ФОЛБЭК читается один раз на весь тик
+    // компонента, тем же приёмом, что и GlobalDecayRate/RotPurityThreshold
+    // выше. Длительность конкретного предмета (карточка приоритетнее
+    // фолбэка, 2026-09-05) резолвится ниже, ВНУТРИ цикла по предметам --
+    // разным ингредиентам в одном инвентаре нужны разные числа, поэтому
+    // читать один раз здесь для всех уже нельзя, см. довод у
+    // FIngredientTableRow::DryingDurationSeconds.
+    const float GlobalDryingDurationFallback = Settings ? Settings->DryingDurationSeconds : 1920.0f;
     const float DriedDecayMultiplier = Settings ? Settings->DriedItemDecayMultiplier : 0.1f;
+
+    // Отстой/Выпаривание (2026-09-05, многоступенчатые зелья) -- значения
+    // читаются один раз на весь тик компонента, тем же приёмом, что и
+    // GlobalDryingDurationFallback выше: в отличие от сушки, эти два
+    // процесса не резолвят карточку (см. довод у StationType==Potion-гейта
+    // ниже -- эффект применяется только к готовому зелью, не к сырой траве,
+    // у зелий нет собственной строки DT_IngredientClass с индивидуальными
+    // числами).
+    const float SettlingDuration = Settings ? Settings->SettlingDurationSeconds : 960.0f;
+    const float SettlingDominantAxisBoost = Settings ? Settings->SettlingDominantAxisBoost : 0.15f;
+    const float SettlingMagnitudeLossFactor = Settings ? Settings->SettlingMagnitudeLossFactor : 0.9f;
+
+    const float EvaporationDuration = Settings ? Settings->EvaporationDurationSeconds : 1920.0f;
+    const float EvaporationMagnitudeBoost = Settings ? Settings->EvaporationMagnitudeBoost : 1.2f;
+    const float EvaporationPotencyBoost = Settings ? Settings->EvaporationPotencyBoost : 0.15f;
+    const float EvaporationRiskMultiplier = Settings ? Settings->EvaporationRiskMultiplier : 1.2f;
+
+    // "Potion" — тот же жёстко зашитый общий IngredientID готового зелья,
+    // что уже AHerbalistPlayerController::UsePotion/AlchemySlotWidget.cpp
+    // используют инлайн (не заводим новую именованную константу поверх уже
+    // устоявшегося в проекте приёма). Отстой/Выпаривание применяются ТОЛЬКО
+    // к готовым зельям (не к сырым травам/минералам) -- "усиление
+    // доминирующей оси"/"концентрация" описаны пользователем именно про
+    // готовый состав, у которого уже есть осмысленная доминанта из смешения
+    // нескольких ингредиентов; одиночная трава, случайно оказавшаяся на
+    // этих станциях, была бы всего лишь странно резонирующей с формулой,
+    // рассчитанной на другой случай.
+    static const FName PotionIngredientID(TEXT("Potion"));
 
     for (FInventoryItem& Item : Items)
     {
@@ -124,26 +158,54 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
                 }
             }
             // Сушилка (2026-09-04) -- только если этот КОНКРЕТНЫЙ инвентарь
-            // сейчас сушилка (bIsDryingRack), предмет не вода (сушат листья/
-            // корни/грибы, не воду) и ещё не высох. "else if", не отдельный
-            // if -- предмет, только что превратившийся в Перегной строкой
-            // выше, больше не тот ингредиент, которым был секунду назад, и
-            // сушить (взводить его же таймер) уже нечего в этом же тике.
-            else if (bIsDryingRack && !Item.bIsWater && !Item.bIsDried)
+            // сейчас сушилка (StationType==DryingRack, обобщено с bool
+            // bIsDryingRack 2026-09-05, см. довод у EProcessingStationType,
+            // HerbalistInventoryComponent.h), предмет не вода (сушат
+            // листья/корни/грибы, не воду) и ещё не высох. "else if", не
+            // отдельный if -- предмет, только что превратившийся в Перегной
+            // строкой выше, больше не тот ингредиент, которым был секунду
+            // назад, и сушить (взводить его же таймер) уже нечего в этом же
+            // тике.
+            else if (StationType == EProcessingStationType::DryingRack && !Item.bIsWater && !Item.bIsDried)
             {
-                if (TickDryingItem(Item, DecayUpdateInterval, DryingDuration))
+                // Приоритет карточки над глобальным фолбэком (2026-09-05,
+                // "процесс сушки у разных растений разный") -- резолв самой
+                // карточки здесь (обращение к реестру), решение "какое число
+                // использовать" -- в чистой ResolveDryingDurationSeconds.
+                const FIngredientTableRow* DryingRow = IngredientReg ? IngredientReg->GetRow(Item.IngredientID) : nullptr;
+                const float ItemDryingDuration = ResolveDryingDurationSeconds(DryingRow, GlobalDryingDurationFallback);
+
+                if (TickDryingItem(Item, DecayUpdateInterval, ItemDryingDuration))
                 {
                     // Только что досохло этим тиком -- честная дельта
                     // алхимических осей (если карточка её несёт, см. довод у
-                    // FIngredientTableRow::DriedStateDelta) требует реестра,
-                    // которого у чистой TickDryingItem нет и не должно быть.
-                    if (IngredientReg)
+                    // FIngredientTableRow::DriedStateDelta). DryingRow уже
+                    // резолвлен выше для длительности -- переиспользуем, не
+                    // ходим в реестр второй раз за тот же предмет.
+                    if (DryingRow)
                     {
-                        if (const FIngredientTableRow* Row = IngredientReg->GetRow(Item.IngredientID))
-                        {
-                            ApplyDriedStateDelta(Item.State.Meta, Row->DriedStateDelta);
-                        }
+                        ApplyDriedStateDelta(Item.State.Meta, DryingRow->DriedStateDelta);
                     }
+                }
+            }
+            // Отстойник (2026-09-05) -- только готовое зелье (см. довод у
+            // PotionIngredientID выше), ещё не отстоявшееся.
+            else if (StationType == EProcessingStationType::SettlingStand && !Item.bIsWater
+                && !Item.bHasSettled && Item.IngredientID == PotionIngredientID)
+            {
+                if (TickSettlingItem(Item, DecayUpdateInterval, SettlingDuration))
+                {
+                    ApplySettlingEffect(Item.State, SettlingDominantAxisBoost, SettlingMagnitudeLossFactor);
+                }
+            }
+            // Выпарной куб (2026-09-05) -- та же оговорка "только готовое
+            // зелье", ещё не выпаренное.
+            else if (StationType == EProcessingStationType::EvaporationStill && !Item.bIsWater
+                && !Item.bHasEvaporated && Item.IngredientID == PotionIngredientID)
+            {
+                if (TickEvaporationItem(Item, DecayUpdateInterval, EvaporationDuration))
+                {
+                    ApplyEvaporationEffect(Item.State, EvaporationMagnitudeBoost, EvaporationPotencyBoost, EvaporationRiskMultiplier);
                 }
             }
         }
@@ -176,6 +238,15 @@ bool UHerbalistInventoryComponent::TickDryingItem(FInventoryItem& Item, float De
     return false;
 }
 
+float UHerbalistInventoryComponent::ResolveDryingDurationSeconds(const FIngredientTableRow* Row, float GlobalFallbackSeconds)
+{
+    if (Row && Row->DryingDurationSeconds >= 0.0f)
+    {
+        return Row->DryingDurationSeconds;
+    }
+    return GlobalFallbackSeconds;
+}
+
 void UHerbalistInventoryComponent::ApplyDriedStateDelta(FMeta& Meta, const FMeta& Delta)
 {
     Meta.Distortion = FMath::Clamp(Meta.Distortion + Delta.Distortion, 0.0f, 1.0f);
@@ -184,6 +255,116 @@ void UHerbalistInventoryComponent::ApplyDriedStateDelta(FMeta& Meta, const FMeta
     Meta.Potency     = FMath::Clamp(Meta.Potency    + Delta.Potency,    0.0f, 1.0f);
     Meta.Resonance   = FMath::Clamp(Meta.Resonance  + Delta.Resonance,  0.0f, 1.0f);
     Meta.Corruption  = FMath::Clamp(Meta.Corruption + Delta.Corruption, 0.0f, 1.0f);
+}
+
+bool UHerbalistInventoryComponent::TickSettlingItem(FInventoryItem& Item, float DeltaTime, float SettlingDurationSeconds)
+{
+    if (Item.SettlingTimeRemainingSeconds < 0.0f)
+    {
+        // Первое попадание на отстойник -- взводим таймер, ничего не решаем
+        // этим же вызовом (тот же приём, что TickDryingItem).
+        Item.SettlingTimeRemainingSeconds = SettlingDurationSeconds;
+        return false;
+    }
+
+    Item.SettlingTimeRemainingSeconds -= DeltaTime;
+    if (Item.SettlingTimeRemainingSeconds <= 0.0f)
+    {
+        Item.SettlingTimeRemainingSeconds = 0.0f;
+        Item.bHasSettled = true;
+        return true;
+    }
+    return false;
+}
+
+void UHerbalistInventoryComponent::ApplySettlingEffect(FRealState& State, float DominantAxisBoost, float MagnitudeLossFactor)
+{
+    // argmax по четырём осям Direction -- при равенстве побеждает первая по
+    // порядку объявления (Body), тот же произвольный, но детерминированный
+    // порядок тай-брейка, что уже неявно есть у любого линейного сравнения
+    // в проекте (не важно какая из равных осей "доминирует", лишь бы
+    // предсказуемо).
+    float* Dominant = &State.Direction.Body;
+    if (State.Direction.Mind > *Dominant)   Dominant = &State.Direction.Mind;
+    if (State.Direction.Spirit > *Dominant) Dominant = &State.Direction.Spirit;
+    if (State.Direction.Nature > *Dominant) Dominant = &State.Direction.Nature;
+    *Dominant += DominantAxisBoost;
+
+    // Остальные три оси просаживаются пропорционально сами -- NormalizeSum()
+    // уже существует (HerbalistCoreTypes.h), отдельно вычитать не нужно
+    // (прямая инструкция задачи).
+    State.Direction.NormalizeSum();
+
+    // Цена: часть силы уходит в осадок.
+    State.Magnitude *= MagnitudeLossFactor;
+}
+
+bool UHerbalistInventoryComponent::TickEvaporationItem(FInventoryItem& Item, float DeltaTime, float EvaporationDurationSeconds)
+{
+    if (Item.EvaporationTimeRemainingSeconds < 0.0f)
+    {
+        Item.EvaporationTimeRemainingSeconds = EvaporationDurationSeconds;
+        return false;
+    }
+
+    Item.EvaporationTimeRemainingSeconds -= DeltaTime;
+    if (Item.EvaporationTimeRemainingSeconds <= 0.0f)
+    {
+        Item.EvaporationTimeRemainingSeconds = 0.0f;
+        Item.bHasEvaporated = true;
+        return true;
+    }
+    return false;
+}
+
+void UHerbalistInventoryComponent::ApplyEvaporationEffect(FRealState& State, float MagnitudeBoost, float PotencyBoost, float RiskMultiplier)
+{
+    // Усиление: Magnitude/Potency растут (Min/Clamp вместо простого
+    // умножения+прибавления -- обе оси имеют потолок 1.0, ApplyEvaporationEffect
+    // не должен вывести их за пределы, как и остальные Meta-функции проекта).
+    State.Magnitude = FMath::Min(State.Magnitude * MagnitudeBoost, 1.0f);
+    State.Meta.Potency = FMath::Clamp(State.Meta.Potency + PotencyBoost, 0.0f, 1.0f);
+
+    // Цена: концентрируется и грязь тоже -- тот же RiskMultiplier на ОБЕИХ
+    // осях порчи (прямая формулировка задачи: "концентрация не разбирает,
+    // что усиливать").
+    State.Meta.Distortion = FMath::Clamp(State.Meta.Distortion * RiskMultiplier, 0.0f, 1.0f);
+    State.Meta.Corruption = FMath::Clamp(State.Meta.Corruption * RiskMultiplier, 0.0f, 1.0f);
+}
+
+void UHerbalistInventoryComponent::ApplyFilterEffect(FMeta& Meta, float PurityBoost, float DistortionReduction, float CorruptionReduction, float PotencyLoss)
+{
+    Meta.Purity     = FMath::Clamp(Meta.Purity     + PurityBoost,          0.0f, 1.0f);
+    Meta.Distortion = FMath::Clamp(Meta.Distortion - DistortionReduction,  0.0f, 1.0f);
+    Meta.Corruption = FMath::Clamp(Meta.Corruption - CorruptionReduction,  0.0f, 1.0f);
+    // Цена: чище, но слабее -- реальный компромисс фильтрации/отжима.
+    Meta.Potency    = FMath::Clamp(Meta.Potency    - PotencyLoss,          0.0f, 1.0f);
+}
+
+bool UHerbalistInventoryComponent::TryFilterPotion()
+{
+    // Тот же простой селектор, что уже AHerbalistPlayerController::UsePotion
+    // -- первый предмет с IngredientID=="Potion" && Count>0, не более
+    // сложный выбор (проект уже принял эту простоту, прямая инструкция
+    // задачи "используй ТОТ ЖЕ приём").
+    const int32 PotionIndex = Items.IndexOfByPredicate([](const FInventoryItem& Item)
+    {
+        return Item.IngredientID == FName(TEXT("Potion")) && Item.Count > 0;
+    });
+    if (PotionIndex == INDEX_NONE)
+    {
+        return false;
+    }
+
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+    const float PurityBoost = Settings ? Settings->FilterPurityBoost : 0.15f;
+    const float DistortionReduction = Settings ? Settings->FilterDistortionReduction : 0.1f;
+    const float CorruptionReduction = Settings ? Settings->FilterCorruptionReduction : 0.1f;
+    const float PotencyLoss = Settings ? Settings->FilterPotencyLoss : 0.1f;
+
+    ApplyFilterEffect(Items[PotionIndex].State.Meta, PurityBoost, DistortionReduction, CorruptionReduction, PotencyLoss);
+    OnInventoryChanged.Broadcast();
+    return true;
 }
 
 bool UHerbalistInventoryComponent::TryEquipContainer(FName IngredientID, EStorageContainerType GrantsType)
@@ -420,6 +601,19 @@ bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, co
     // одном слоте два разных таймера одновременно -- оба варианта хуже,
     // чем просто не дать таким предметам разделить слот, пока сушка идёт.
     if (A.DryingTimeRemainingSeconds >= 0.0f || B.DryingTimeRemainingSeconds >= 0.0f) return false;
+
+    // Отстой/Выпаривание (2026-09-05) -- тот же довод и тот же приём, что
+    // bIsDried/DryingTimeRemainingSeconds выше: терминальный флаг различает
+    // алхимические сущности (отстоявшееся/выпаренное зелье уже не то же
+    // самое, чем было), а предмет, ещё не досчитавший свой таймер, не
+    // стекуется вовсе -- ни с другим "в процессе", ни с уже завершённым
+    // (у каждого свой независимый *TimeRemainingSeconds, MergeStack его не
+    // усредняет).
+    if (A.bHasSettled != B.bHasSettled) return false;
+    if (A.SettlingTimeRemainingSeconds >= 0.0f || B.SettlingTimeRemainingSeconds >= 0.0f) return false;
+
+    if (A.bHasEvaporated != B.bHasEvaporated) return false;
+    if (A.EvaporationTimeRemainingSeconds >= 0.0f || B.EvaporationTimeRemainingSeconds >= 0.0f) return false;
 
     return HerbalistCore::Math::AreStatesSimilar(A.State, B.State);
 }

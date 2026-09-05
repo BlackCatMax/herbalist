@@ -16,8 +16,9 @@ ADryingRackActor::ADryingRackActor()
         InventoryComponent->ContainerType = EStorageContainerType::None;
 
         // Единственное функциональное отличие сушилки от обычного сундука
-        // (AStorageContainer) -- см. довод в HerbalistInventoryComponent.h
-        // у bIsDryingRack.
-        InventoryComponent->bIsDryingRack = true;
+        // (AStorageContainer) -- см. довод в HerbalistInventoryComponent.h у
+        // EProcessingStationType (обобщено с bool bIsDryingRack 2026-09-05,
+        // когда появились ещё два типа станций -- Отстой/Выпаривание).
+        InventoryComponent->StationType = EProcessingStationType::DryingRack;
     }
 }
