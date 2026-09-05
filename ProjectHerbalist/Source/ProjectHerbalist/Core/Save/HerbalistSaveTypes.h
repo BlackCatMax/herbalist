@@ -20,6 +20,7 @@
 #include "Core/Journal/JournalTypes.h"
 #include "Core/Entities/ArtifactTypes.h"
 #include "Core/Shrine/ShrineTypes.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "HerbalistSaveTypes.generated.h"
 
 USTRUCT()
@@ -67,6 +68,39 @@ struct PROJECTHERBALIST_API FSavedCellState
     // обратно к вероятностному GetRandomResourceForNiche.
     UPROPERTY()
     FName PlantedSpeciesID = NAME_None;
+
+    // Аудит 2026-09-05: "дальние клетки повторно засеиваются в новой сессии,
+    // хотя были собраны" — GridWorldManagerCore.cpp::UpdateStreamingChunks
+    // решает, сеять ли ресурсы заново (SpawnResourcesInCell, случайный
+    // бросок) или поднимать сохранённый DormantResourceIDs-ростер, ИМЕННО
+    // по этому флагу. Без него он всегда false в новой сессии, и клетка,
+    // уже собранная/пересеянная игроком, при первой же активации чанка
+    // получает свежий случайный бросок вместо восстановленного из сейва
+    // (который ApplySaveCells к этому моменту уже честно применил).
+    UPROPERTY()
+    bool bResourcesSeeded = false;
+};
+
+// Домашние хранилища (DESIGN_Community_And_Homestead.md §2.2, 2026-09-04) —
+// аудит 2026-09-05: "и их содержимое не сохраняются вообще". AStorageContainer
+// нигде не отслеживается постоянным списком (ни на AGridWorldManager, ни на
+// контроллере) — единственный источник истины сейчас, как и у самого
+// BuildHomeStorage при проверке дубликатов, TActorIterator по миру. Позиция
+// не сохраняется отдельно: контейнер всегда пересоздаётся у ТЕКУЩЕЙ
+// клетки-якоря дома (AAlchemyTableActor), тем же путём, что и исходная
+// постройка (SpawnHomeStorageContainer) — сохранять её независимо незачем,
+// как и Shrine.Cell/позицию AAlchemyTableActor (контент уровня, не
+// рантайм-состояние).
+USTRUCT()
+struct PROJECTHERBALIST_API FSavedHomeStorage
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    EStorageContainerType ContainerType = EStorageContainerType::None;
+
+    UPROPERTY()
+    TArray<FInventoryItem> Items;
 };
 
 UCLASS()
@@ -75,6 +109,20 @@ class PROJECTHERBALIST_API UHerbalistSaveGame : public USaveGame
     GENERATED_BODY()
 
 public:
+    // Версия формата (аудит 2026-09-05: "версии сейва нет вовсе — некуда
+    // будет добавить миграцию, когда понадобится"). Начинается с 1 —
+    // текущий (v1) формат этого файла, а не "версия ещё не введена". Любое
+    // будущее структурное изменение (переименование/удаление поля, смена
+    // семантики) обязано инкрементировать это число и добавить ветку
+    // миграции в UHerbalistSaveSubsystem::LoadGame, а не молча ломать старые
+    // сохранения или полагаться на то, что новые UPROPERTY-поля тихо
+    // получат дефолт при десериализации старого файла (для добавленных
+    // полей это само по себе безопасно — именно поэтому все поля этого
+    // класса ниже уже имеют дефолтные значения; версия нужна для СЛУЧАЕВ
+    // ПОСЛОЖНЕЕ простого добавления поля).
+    UPROPERTY()
+    int32 SaveVersion = 1;
+
     UPROPERTY()
     int32 RngBaseSeed = 12345;
 
@@ -102,6 +150,11 @@ public:
 
     UPROPERTY()
     TArray<FShrine> Shrines;
+
+    // Домашние хранилища (аудит 2026-09-05) — см. подробный довод у
+    // FSavedHomeStorage выше.
+    UPROPERTY()
+    TArray<FSavedHomeStorage> HomeStorages;
 
     // Молва общины (DESIGN_Community_And_Homestead.md §1, 2026-08-31) — тот
     // же принцип, что Shrines/EntityLandmarks выше: растёт/падает только
@@ -193,6 +246,16 @@ public:
 
     UPROPERTY()
     TArray<FInventoryItem> InventoryItems;
+
+    // Экипированный переносной контейнер (аудит 2026-09-05: "эффект
+    // экипированного контейнера теряется между сессиями") — игровое решение
+    // игрока (EquipContainer), не деривация из инвентаря, тот же класс поля,
+    // что GardenPlots/Bases выше. BeginPlay контроллера сам выставляет
+    // Basket по умолчанию до вызова LoadGame() (см. подробный комментарий
+    // там) — этим полем LoadGame честно перекрывает тот дефолт, если игрок
+    // успел сменить контейнер до сохранения.
+    UPROPERTY()
+    EStorageContainerType PersonalContainerType = EStorageContainerType::Basket;
 
     UPROPERTY()
     TArray<FJournalEntry> JournalEntries;

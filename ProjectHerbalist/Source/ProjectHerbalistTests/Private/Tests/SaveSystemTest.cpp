@@ -18,9 +18,13 @@
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Resources/AHerbalistResourceActor.h"
+#include "Core/Storage/StorageContainer.h"
+#include "Core/Storage/AlchemyTableActor.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -156,6 +160,224 @@ bool FHerbalistSave_BiomeInfluencesWithZeroFieldsStaySparse::RunTest(const FStri
     TestEqual(TEXT("Zero-valued fields for every biome must not dirty the whole grid"),
         Manager->CaptureSaveCells().Num(), 0);
 
+    Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Аудит 2026-09-05, кластер "Сохранения" -- четыре находки ниже.
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_ApplyDoesNotDestroyNonGridSpawnedResourceActor,
+    "Herbalist.Save.ApplyDoesNotDestroyNonGridSpawnedResourceActor",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_ApplyDoesNotDestroyNonGridSpawnedResourceActor::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(6, 6);
+    if (!TestNotNull(TEXT("Cell exists"), Cell)) { Manager->Destroy(); return false; }
+
+    // Актор, поставленный PCG-графом напрямую (без Init()) -- bSpawnedByGrid
+    // остаётся false, тот же класс актора, что и настоящие PCG-расстановки
+    // (см. довод у AHerbalistResourceActor::WasSpawnedByGrid()).
+    AHerbalistResourceActor* PCGActor = World->SpawnActor<AHerbalistResourceActor>();
+    if (!TestNotNull(TEXT("PCG-style actor spawned"), PCGActor)) { Manager->Destroy(); return false; }
+    PCGActor->SetIngredientID(FName(TEXT("Ромашка")));
+    PCGActor->SetGridPosition(6, 6);
+    TestFalse(TEXT("Actor not spawned by grid (no Init() call)"), PCGActor->WasSpawnedByGrid());
+    Cell->ResourceActors.Add(PCGActor);
+
+    FSavedCellState Saved;
+    Saved.X = 6; Saved.Y = 6;
+    // ResourceIngredientIDs пуст -- имитируем "клетка собрана дочиста" на
+    // момент сейва.
+    Manager->ApplySaveCells({ Saved });
+
+    // Аудит 2026-09-05: раньше ApplySaveCells уничтожал ВСЁ в
+    // Cell->ResourceActors без проверки владения -- чужой (PCG) актор гибнул
+    // бы вместе со своими.
+    TestTrue(TEXT("PCG-owned actor survives ApplySaveCells (симуляция им не владеет)"), IsValid(PCGActor));
+
+    if (IsValid(PCGActor)) PCGActor->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_ApplyClearsStaleDormantResourceIDs,
+    "Herbalist.Save.ApplyClearsStaleDormantResourceIDs",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_ApplyClearsStaleDormantResourceIDs::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(7, 7);
+    if (!TestNotNull(TEXT("Cell exists"), Cell)) { Manager->Destroy(); return false; }
+
+    // Имитируем "живая сессия уже потикала стриминг ДО LoadGame" (загрузка
+    // не путешествует по уровням, см. UHerbalistSaveSubsystem::LoadGame) --
+    // в клетке остался устаревший DormantResourceIDs с ПРЕЖНЕЙ активности
+    // этой же сессии.
+    Cell->DormantResourceIDs.Add(FName(TEXT("Ромашка")));
+
+    FSavedCellState Saved;
+    Saved.X = 7; Saved.Y = 7;
+    Saved.ResourceIngredientIDs = { FName(TEXT("Зверобой")) };   // сейв говорит: только Зверобой
+
+    Manager->ApplySaveCells({ Saved });
+
+    // Аудит 2026-09-05: без явной очистки Ромашка осталась бы рядом -- при
+    // следующем уходе клетки в простой актуальный Зверобой добавился бы
+    // ВТОРЫМ элементом в тот же массив, дав дубликат при возврате игрока.
+    TestEqual(TEXT("Устаревший DormantResourceIDs с прошлой активности очищен, не слит с новым"),
+        Cell->DormantResourceIDs.Num(), 0);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_ResourcesSeededSurvivesCaptureAndApply,
+    "Herbalist.Save.ResourcesSeededSurvivesCaptureAndApply",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_ResourcesSeededSurvivesCaptureAndApply::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(8, 8);
+    if (!TestNotNull(TEXT("Cell exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->bResourcesSeeded = true;   // уже посещалась/собрана в "прошлой сессии"
+
+    // Помечаем клетку грязной тем же каналом, что и реальный пайплайн, чтобы
+    // она попала в CaptureSaveCells (та же схема, что и другие тесты файла).
+    FStateDelta Delta;
+    FGridCell Touched = *Cell;
+    Touched.State.Meta.Corruption = 0.5f;
+    Delta.WorldChanges.Add(FIntPoint(8, 8), Touched);
+    Manager->ApplyStateDelta(Delta);
+
+    const TArray<FSavedCellState> Captured = Manager->CaptureSaveCells();
+    const FSavedCellState* SavedForCell = Captured.FindByPredicate([](const FSavedCellState& S) { return S.X == 8 && S.Y == 8; });
+    if (!TestNotNull(TEXT("Cell (8,8) captured"), SavedForCell)) { Manager->Destroy(); return false; }
+    TestTrue(TEXT("bResourcesSeeded=true captured"), SavedForCell->bResourcesSeeded);
+
+    // "Свежая клетка новой сессии" -- bResourcesSeeded по умолчанию false.
+    Manager->GetCell(8, 8)->bResourcesSeeded = false;
+
+    Manager->ApplySaveCells(Captured);
+
+    // Аудит 2026-09-05: без восстановления этого поля клетка при первой же
+    // активации своего чанка получила бы СВЕЖИЙ случайный бросок вместо
+    // только что применённого выше ростера ресурсов.
+    TestTrue(TEXT("ApplySaveCells восстанавливает bResourcesSeeded, предотвращая новый случайный засев при активации чанка"),
+        Manager->GetCellConst(8, 8)->bResourcesSeeded);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_HomeStorageContentsSurviveCaptureAndRestore,
+    "Herbalist.Save.HomeStorageContentsSurviveCaptureAndRestore",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_HomeStorageContentsSurviveCaptureAndRestore::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    // Чистая база -- тот же приём изоляции, что уже HomeStorageTest.cpp
+    // (Destroy() не гарантирует немедленное удаление из TActorIterator в том
+    // же кадре, см. TestWorldHelpers.h).
+    for (TActorIterator<AStorageContainer> It(World); It; ++It)
+    {
+        if (AStorageContainer* Stale = *It) { Stale->Destroy(); }
+    }
+    for (TActorIterator<AAlchemyTableActor> It(World); It; ++It)
+    {
+        if (AAlchemyTableActor* Stale = *It) { Stale->Destroy(); }
+    }
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FVector TablePos = Manager->GetCellWorldPosition(4, 4);
+    AAlchemyTableActor* Table = World->SpawnActor<AAlchemyTableActor>(AAlchemyTableActor::StaticClass(), TablePos, FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Alchemy table spawned"), Table)) { Manager->Destroy(); return false; }
+    Table->DispatchBeginPlay();
+
+    AStorageContainer* Cellar = Manager->SpawnHomeStorageContainer(Table->GetGridCoords(), EStorageContainerType::Cellar);
+    if (!TestNotNull(TEXT("Cellar spawned"), Cellar) || !TestNotNull(TEXT("Cellar has inventory"), Cellar->InventoryComponent))
+    {
+        Table->Destroy(); Manager->Destroy(); return false;
+    }
+    FInventoryItem Herb;
+    Herb.IngredientID = FName(TEXT("Ромашка"));
+    Herb.Count = 5;
+    Cellar->InventoryComponent->AddItem(Herb, 5);
+
+    const TArray<FSavedHomeStorage> Captured = Manager->CaptureHomeStorages();
+    TestEqual(TEXT("Одно домашнее хранилище захвачено"), Captured.Num(), 1);
+    if (Captured.Num() == 1)
+    {
+        TestEqual(TEXT("Захваченный тип -- Погреб"), Captured[0].ContainerType, EStorageContainerType::Cellar);
+        TestEqual(TEXT("Захвачен один стек предметов"), Captured[0].Items.Num(), 1);
+        if (Captured[0].Items.Num() == 1)
+        {
+            TestEqual(TEXT("Захваченное количество"), Captured[0].Items[0].Count, 5);
+        }
+    }
+
+    // "Новая сессия" -- уничтожаем существующий Погреб, как было бы после
+    // рестарта игры (AStorageContainer нигде не отслеживается постоянным
+    // списком, единственный источник истины после рестарта -- сам сейв).
+    Cellar->Destroy();
+
+    Manager->RestoreHomeStorages(Captured);
+
+    auto CountCellarsAndVerify = [&](const TCHAR* Context) -> int32
+    {
+        int32 Count = 0;
+        for (TActorIterator<AStorageContainer> It(World); It; ++It)
+        {
+            AStorageContainer* Container = *It;
+            if (!Container || !Container->InventoryComponent) continue;
+            if (Container->InventoryComponent->ContainerType != EStorageContainerType::Cellar) continue;
+            ++Count;
+            TestEqual(FString::Printf(TEXT("%s: восстановленное хранилище содержит тот же один стек"), Context),
+                Container->InventoryComponent->GetItems().Num(), 1);
+            if (Container->InventoryComponent->GetItems().Num() == 1)
+            {
+                TestEqual(FString::Printf(TEXT("%s: восстановленное количество совпадает"), Context),
+                    Container->InventoryComponent->GetItems()[0].Count, 5);
+            }
+        }
+        return Count;
+    };
+
+    TestEqual(TEXT("Восстановлен ровно один Погреб"), CountCellarsAndVerify(TEXT("Первое восстановление")), 1);
+
+    // Повторный LoadGame в той же живой сессии (тот же путь, что уже
+    // ApplySaveCells поддерживает для клеток) не должен плодить дубликаты --
+    // RestoreHomeStorages обязана уничтожить уже существующие хранилища
+    // перед пересозданием.
+    Manager->RestoreHomeStorages(Captured);
+    TestEqual(TEXT("Повторное восстановление в той же сессии не плодит второй Погреб"), CountCellarsAndVerify(TEXT("Повторное восстановление")), 1);
+
+    Table->Destroy();
     Manager->Destroy();
     return true;
 }

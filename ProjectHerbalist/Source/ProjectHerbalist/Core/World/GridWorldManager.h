@@ -27,6 +27,7 @@ class AStorageContainer;
 struct FWorldSnapshot;
 struct FStateDelta;
 struct FSavedCellState;
+struct FSavedHomeStorage;
 enum class EStorageContainerType : uint8;
 
 UCLASS()
@@ -876,6 +877,17 @@ public:
     // ---- Сохранения (Core/Save/HerbalistSaveTypes.h) ----
     TArray<FSavedCellState> CaptureSaveCells() const;
     void ApplySaveCells(const TArray<FSavedCellState>& InCells);
+
+    // Домашние хранилища (аудит 2026-09-05: "и их содержимое не сохраняются
+    // вообще") — сами AStorageContainer нигде не отслеживаются постоянным
+    // списком (ни здесь, ни на контроллере, см. BuildHomeStorage/
+    // SpawnHomeStorageContainer выше): единственный источник истины —
+    // TActorIterator по миру, в точности как уже делает BuildHomeStorage
+    // при проверке "такой тип уже есть". Позиция не сохраняется отдельно —
+    // контейнер всегда пересоздаётся у ТЕКУЩЕЙ клетки-якоря дома
+    // (AAlchemyTableActor), той же логикой, что и исходный спавн.
+    TArray<FSavedHomeStorage> CaptureHomeStorages() const;
+    void RestoreHomeStorages(const TArray<FSavedHomeStorage>& InStorages);
 
     const TArray<FEntityLandmark>& GetEntityLandmarks() const { return EntityLandmarks; }
     void SetEntityLandmarks(const TArray<FEntityLandmark>& InLandmarks) { EntityLandmarks = InLandmarks; }

@@ -39,6 +39,10 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     UHerbalistSaveGame* Save = Cast<UHerbalistSaveGame>(UGameplayStatics::CreateSaveGameObject(UHerbalistSaveGame::StaticClass()));
     if (!Save) return false;
 
+    // SaveVersion уже 1 по дефолту UPROPERTY (см. HerbalistSaveTypes.h) —
+    // выставляем явно, чтобы будущая смена версии формата была одной
+    // видимой строкой здесь, а не тихим переносом дефолта.
+    Save->SaveVersion = 1;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
     Save->GridSizeY = WorldManager->GridSizeY;
@@ -60,10 +64,15 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->bBuyanReached = WorldManager->IsBuyanReached();
     Save->ChosenBuyanPath = WorldManager->GetChosenBuyanPath();
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
+    Save->HomeStorages = WorldManager->CaptureHomeStorages();
 
     if (AHerbalistPlayerController* PC = World ? Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()) : nullptr)
     {
-        if (PC->InventoryComponent) Save->InventoryItems = PC->InventoryComponent->GetItems();
+        if (PC->InventoryComponent)
+        {
+            Save->InventoryItems = PC->InventoryComponent->GetItems();
+            Save->PersonalContainerType = PC->InventoryComponent->ContainerType;
+        }
         if (PC->JournalComponent) Save->JournalEntries = PC->JournalComponent->GetEntries();
         Save->bHasMirror = PC->bHasMirror;
         Save->bHasYarnBall = PC->bHasYarnBall;
@@ -94,6 +103,19 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     if (!Save)
     {
         UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' failed to deserialize"), *Slot);
+        return false;
+    }
+
+    // Версия формата (аудит 2026-09-05, см. подробный довод у
+    // UHerbalistSaveGame::SaveVersion) — эта сборка понимает только v1.
+    // Файл НОВЕЕ, чем умеет читать текущий код (например, сохранённый более
+    // новой версией игры), отклоняется явно, а не десериализуется вслепую с
+    // риском тихо потерять/неверно истолковать поля, которых эта версия ещё
+    // не знает.
+    if (Save->SaveVersion > 1)
+    {
+        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (1), aborted"),
+            *Slot, Save->SaveVersion);
         return false;
     }
 
@@ -135,10 +157,15 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetChosenBuyanPath(Save->ChosenBuyanPath);
     WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));
     WorldManager->ApplySaveCells(Save->Cells);
+    WorldManager->RestoreHomeStorages(Save->HomeStorages);
 
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()))
     {
-        if (PC->InventoryComponent) PC->InventoryComponent->RestoreItems(Save->InventoryItems);
+        if (PC->InventoryComponent)
+        {
+            PC->InventoryComponent->RestoreItems(Save->InventoryItems);
+            PC->InventoryComponent->ContainerType = Save->PersonalContainerType;
+        }
         if (PC->JournalComponent) PC->JournalComponent->RestoreEntries(Save->JournalEntries);
         PC->bHasMirror = Save->bHasMirror;
         PC->bHasYarnBall = Save->bHasYarnBall;
