@@ -122,6 +122,86 @@ bool FHerbalistSave_ApplyRestoresEarlierSnapshot::RunTest(const FString& Paramet
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_ApplyRevertsCellsTouchedAfterSaveToBaseline,
+    "Herbalist.Save.ApplyRevertsCellsTouchedAfterSaveToBaseline",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_ApplyRevertsCellsTouchedAfterSaveToBaseline::RunTest(const FString& Parameters)
+{
+    // Аудит 2026-09-05, находка 7 ("загрузка не откатывает клетки, тронутые
+    // ПОСЛЕ момента сейва") -- решение пользователя: полноценный baseline на
+    // клетку (CellBaselines, снятый в InitializeCells), не тихое
+    // игнорирование. Сценарий: клетка ЧИСТАЯ на момент сейва (в самом сейве
+    // её нет) -> после сейва, без нового сохранения, её трогают -> загрузка
+    // старого сейва обязана откатить её к тому, чем она была ДО того, как
+    // её вообще коснулись -- не оставить пост-сейвовую правку как есть.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // Клетка (9,9) ещё ничем не тронута -- её текущий Corruption равен её
+    // же будущему baseline'у (снятому InitializeCells до этого теста).
+    const FGridCell* Untouched99 = Manager->GetCellConst(9, 9);
+    if (!TestNotNull(TEXT("Cell (9,9) exists"), Untouched99)) { Manager->Destroy(); return false; }
+    const float BaselineCorruption99 = Untouched99->State.Meta.Corruption;
+
+    // t0: трогаем ДРУГУЮ клетку (2,2) -- она попадёт в сейв, (9,9) в нём не
+    // будет вовсе (осталась чистой).
+    FStateDelta DeltaAtSave;
+    FGridCell CellAtSave;
+    if (const FGridCell* Original = Manager->GetCellConst(2, 2)) { CellAtSave = *Original; }
+    CellAtSave.State.Meta.Corruption = 0.4f;
+    DeltaAtSave.WorldChanges.Add(FIntPoint(2, 2), CellAtSave);
+    Manager->ApplyStateDelta(DeltaAtSave);
+
+    const TArray<FSavedCellState> Snapshot = Manager->CaptureSaveCells();
+    TestEqual(TEXT("Only (2,2) captured -- (9,9) still clean at save time"), Snapshot.Num(), 1);
+
+    // t1: игрок играет ДАЛЬШЕ без нового сохранения -- трогает именно (9,9),
+    // которой не было в сейве.
+    FGridCell CellAfterSave99;
+    if (const FGridCell* Live99 = Manager->GetCellConst(9, 9)) { CellAfterSave99 = *Live99; }
+    CellAfterSave99.State.Meta.Corruption = 0.99f;
+    FStateDelta DeltaAfterSave;
+    DeltaAfterSave.WorldChanges.Add(FIntPoint(9, 9), CellAfterSave99);
+    Manager->ApplyStateDelta(DeltaAfterSave);
+
+    if (const FGridCell* Live99 = Manager->GetCellConst(9, 9))
+    {
+        TestEqual(TEXT("Live (9,9) reflects post-save play before loading"), Live99->State.Meta.Corruption, 0.99f);
+    }
+
+    // "LoadGame" -- откатываем к сейву, где (9,9) ещё не встречается.
+    Manager->ApplySaveCells(Snapshot);
+
+    if (const FGridCell* Restored99 = Manager->GetCellConst(9, 9))
+    {
+        TestEqual(TEXT("(9,9), тронутая ПОСЛЕ сейва, откатилась к своему baseline'у, а не осталась на 0.99"),
+            Restored99->State.Meta.Corruption, BaselineCorruption99);
+    }
+    if (const FGridCell* Restored22 = Manager->GetCellConst(2, 2))
+    {
+        TestEqual(TEXT("(2,2), бывшая В сейве, по-прежнему восстановлена из него"),
+            Restored22->State.Meta.Corruption, 0.4f);
+    }
+
+    // DirtyCellIndices после загрузки должен равняться ровно набору сейва --
+    // (9,9) больше не "грязная" (откатилась до неотличимости от нетронутой).
+    const TArray<FSavedCellState> AfterLoad = Manager->CaptureSaveCells();
+    TestEqual(TEXT("После загрузки грязна снова только (2,2) -- (9,9) больше не отслеживается"),
+        AfterLoad.Num(), 1);
+    if (AfterLoad.Num() == 1)
+    {
+        TestEqual(TEXT("Единственная грязная клетка после загрузки -- (2,2)"), AfterLoad[0].X, 2);
+        TestEqual(TEXT("Единственная грязная клетка после загрузки -- (2,2)"), AfterLoad[0].Y, 2);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_BiomeInfluencesWithZeroFieldsStaySparse,
     "Herbalist.Save.BiomeInfluencesWithZeroFieldsStaySparse",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

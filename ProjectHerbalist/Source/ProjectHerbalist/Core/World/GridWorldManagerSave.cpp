@@ -15,6 +15,36 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
+FSavedCellState AGridWorldManager::CaptureCellState(const FGridCell& Cell)
+{
+    FSavedCellState Saved;
+    Saved.X = Cell.X;
+    Saved.Y = Cell.Y;
+    Saved.State = Cell.State;
+    Saved.TargetState = Cell.TargetState;
+    Saved.HarvestStress = Cell.HarvestStress;
+    Saved.Memory = Cell.Memory;
+    Saved.ManifestedEntityID = Cell.ManifestedEntityID;
+    Saved.bEternallyPure = Cell.bEternallyPure;
+    Saved.PlantedSpeciesID = Cell.PlantedSpeciesID;
+    Saved.bResourcesSeeded = Cell.bResourcesSeeded;
+
+    for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
+    {
+        if (ResourceActor.IsValid())
+        {
+            Saved.ResourceIngredientIDs.Add(ResourceActor->GetIngredientID());
+        }
+    }
+
+    // Спящие ресурсы неактивного чанка (2026-09-03, стриминг): актора нет,
+    // но растение есть -- без этой строки сохранение в момент, когда
+    // игрок далеко, стирало бы весь дальний мир начисто.
+    Saved.ResourceIngredientIDs.Append(Cell.DormantResourceIDs);
+
+    return Saved;
+}
+
 TArray<FSavedCellState> AGridWorldManager::CaptureSaveCells() const
 {
     // Только тронутые клетки (DirtyCellIndices), не вся сетка — тот же принцип,
@@ -26,41 +56,69 @@ TArray<FSavedCellState> AGridWorldManager::CaptureSaveCells() const
     for (int32 Index : DirtyCellIndices)
     {
         if (!Cells.IsValidIndex(Index)) continue;
-        const FGridCell& Cell = Cells[Index];
-
-        FSavedCellState Saved;
-        Saved.X = Cell.X;
-        Saved.Y = Cell.Y;
-        Saved.State = Cell.State;
-        Saved.TargetState = Cell.TargetState;
-        Saved.HarvestStress = Cell.HarvestStress;
-        Saved.Memory = Cell.Memory;
-        Saved.ManifestedEntityID = Cell.ManifestedEntityID;
-        Saved.bEternallyPure = Cell.bEternallyPure;
-        Saved.PlantedSpeciesID = Cell.PlantedSpeciesID;
-        Saved.bResourcesSeeded = Cell.bResourcesSeeded;
-
-        for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
-        {
-            if (ResourceActor.IsValid())
-            {
-                Saved.ResourceIngredientIDs.Add(ResourceActor->GetIngredientID());
-            }
-        }
-
-        // Спящие ресурсы неактивного чанка (2026-09-03, стриминг): актора нет,
-        // но растение есть -- без этой строки сохранение в момент, когда
-        // игрок далеко, стирало бы весь дальний мир начисто.
-        Saved.ResourceIngredientIDs.Append(Cell.DormantResourceIDs);
-
-        Result.Add(MoveTemp(Saved));
+        Result.Add(CaptureCellState(Cells[Index]));
     }
 
     return Result;
 }
 
+void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const FSavedCellState& Saved)
+{
+    Cell.State = Saved.State;
+    Cell.TargetState = Saved.TargetState;
+    Cell.HarvestStress = Saved.HarvestStress;
+    Cell.Memory = Saved.Memory;
+    Cell.ManifestedEntityID = Saved.ManifestedEntityID;
+    Cell.bEternallyPure = Saved.bEternallyPure;
+    Cell.PlantedSpeciesID = Saved.PlantedSpeciesID;
+
+    // Аудит 2026-09-05: без этого поля клетка, уже собранная/пересеянная
+    // в предыдущей сессии, при первой активации своего чанка получала бы
+    // СВЕЖИЙ случайный бросок (UpdateStreamingChunks проверяет именно
+    // bResourcesSeeded, чтобы решить "сеять заново" или "поднять
+    // сохранённый DormantResourceIDs-ростер") вместо только что
+    // применённого выше ростера — восстановленное состояние стиралось бы
+    // на первом же приближении игрока к этой клетке.
+    Cell.bResourcesSeeded = Saved.bResourcesSeeded;
+
+    // Заменяем ростер ресурсов на сохранённый, а не оставляем тот, что
+    // InitializeCells уже успела заспавнить броском кубика при BeginPlay —
+    // собранное игроком не должно молча вернуться после загрузки.
+    // WasSpawnedByGrid() (аудит 2026-09-05, тот же класс защиты, что уже
+    // UpdateStreamingChunks) -- чужие акторы (PCG-граф) сетке не
+    // принадлежат, их стримит сам World Partition; раньше эта проверка
+    // здесь отсутствовала, и загрузка могла уничтожить актор, который ей
+    // не принадлежит.
+    for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
+    {
+        if (ResourceActor.IsValid() && ResourceActor->WasSpawnedByGrid())
+        {
+            ResourceActor->Destroy();
+        }
+    }
+    Cell.ResourceActors.Empty();
+
+    // Аудит 2026-09-05: без явной очистки здесь ростер спящих ресурсов
+    // этой ЖЕ ЖИВОЙ сессии (загрузка "не путешествует по уровням",
+    // см. UHerbalistSaveSubsystem::LoadGame — WorldManager мог уже
+    // потикать стриминг ДО вызова LoadGame) остаётся рядом с только что
+    // заспавненными ниже актуальными акторами. Когда чанк снова уйдёт в
+    // простой, UpdateStreamingChunks ДОБАВИТ их ID в этот же массив, не
+    // заменит — итог: растительность дублируется на каждый цикл
+    // сейв/стриминг.
+    Cell.DormantResourceIDs.Empty();
+
+    for (FName IngredientID : Saved.ResourceIngredientIDs)
+    {
+        SpawnResourceActor(IngredientID, Cell.X, Cell.Y);
+    }
+}
+
 void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
 {
+    TSet<int32> SavedIndices;
+    SavedIndices.Reserve(InCells.Num());
+
     for (const FSavedCellState& Saved : InCells)
     {
         FGridCell* Cell = GetCell(Saved.X, Saved.Y);
@@ -70,61 +128,38 @@ void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
             continue;
         }
 
-        Cell->State = Saved.State;
-        Cell->TargetState = Saved.TargetState;
-        Cell->HarvestStress = Saved.HarvestStress;
-        Cell->Memory = Saved.Memory;
-        Cell->ManifestedEntityID = Saved.ManifestedEntityID;
-        Cell->bEternallyPure = Saved.bEternallyPure;
-        Cell->PlantedSpeciesID = Saved.PlantedSpeciesID;
-
-        // Аудит 2026-09-05: без этого поля клетка, уже собранная/пересеянная
-        // в предыдущей сессии, при первой активации своего чанка получала бы
-        // СВЕЖИЙ случайный бросок (UpdateStreamingChunks проверяет именно
-        // bResourcesSeeded, чтобы решить "сеять заново" или "поднять
-        // сохранённый DormantResourceIDs-ростер") вместо только что
-        // применённого выше ростера — восстановленное состояние стиралось бы
-        // на первом же приближении игрока к этой клетке.
-        Cell->bResourcesSeeded = Saved.bResourcesSeeded;
-
-        // Re-mark: DirtyCellIndices живёт только в памяти этой сессии и не
-        // сохраняется само по себе. Без этого следующий SaveGame сразу после
-        // LoadGame потерял бы всё только что восстановленное, кроме клеток,
-        // тронутых заново после загрузки.
-        MarkCellDirty(Saved.X, Saved.Y);
-
-        // Заменяем ростер ресурсов на сохранённый, а не оставляем тот, что
-        // InitializeCells уже успела заспавнить броском кубика при BeginPlay —
-        // собранное игроком не должно молча вернуться после загрузки.
-        // WasSpawnedByGrid() (аудит 2026-09-05, тот же класс защиты, что уже
-        // UpdateStreamingChunks) -- чужие акторы (PCG-граф) сетке не
-        // принадлежат, их стримит сам World Partition; раньше эта проверка
-        // здесь отсутствовала, и загрузка могла уничтожить актор, который ей
-        // не принадлежит.
-        for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell->ResourceActors)
-        {
-            if (ResourceActor.IsValid() && ResourceActor->WasSpawnedByGrid())
-            {
-                ResourceActor->Destroy();
-            }
-        }
-        Cell->ResourceActors.Empty();
-
-        // Аудит 2026-09-05: без явной очистки здесь ростер спящих ресурсов
-        // этой ЖЕ ЖИВОЙ сессии (загрузка "не путешествует по уровням",
-        // см. UHerbalistSaveSubsystem::LoadGame — WorldManager мог уже
-        // потикать стриминг ДО вызова LoadGame) остаётся рядом с только что
-        // заспавненными ниже актуальными акторами. Когда чанк снова уйдёт в
-        // простой, UpdateStreamingChunks ДОБАВИТ их ID в этот же массив, не
-        // заменит — итог: растительность дублируется на каждый цикл
-        // сейв/стриминг.
-        Cell->DormantResourceIDs.Empty();
-
-        for (FName IngredientID : Saved.ResourceIngredientIDs)
-        {
-            SpawnResourceActor(IngredientID, Saved.X, Saved.Y);
-        }
+        SavedIndices.Add(GetCellIndex(Saved.X, Saved.Y));
+        ApplyCellStateAndRespawnResources(*Cell, Saved);
     }
+
+    // Откат клеток, тронутых ПОСЛЕ момента сейва (аудит 2026-09-05, решение
+    // пользователя: полноценный baseline на клетку, не тихое игнорирование).
+    // DirtyCellIndices — монотонный набор (только .Add(), никогда не
+    // очищается, см. довод у объявления в GridWorldManager.h): если клетка
+    // грязная СЕЙЧАС, но отсутствует в самом сейве, значит на МОМЕНТ
+    // сохранения она ещё ни разу не была тронута — то есть в точности
+    // равнялась CellBaselines[Index], снятому в InitializeCells до единого
+    // действия игрока. Это не приближение, а точный факт: единственные пути
+    // пометить клетку грязной (ApplyStateDelta/OnResourceCollected/
+    // StartResourceRegrowth/проявление сущностей/Заряна/перья Жар-птицы)
+    // все явно происходят ПОСЛЕ момента, когда клетка перестаёт совпадать с
+    // детерминированной генерацией — активация чанка стримингом сама по
+    // себе клетку не пачкает (комментарий у OnResourceCollected: "исходный
+    // бросок... безопасно переигрывается заново из RngBaseSeed").
+    for (int32 Index : DirtyCellIndices)
+    {
+        if (SavedIndices.Contains(Index)) continue;
+        if (!Cells.IsValidIndex(Index) || !CellBaselines.IsValidIndex(Index)) continue;
+
+        ApplyCellStateAndRespawnResources(Cells[Index], CellBaselines[Index]);
+    }
+
+    // DirtyCellIndices живёт только в памяти этой сессии и не сохраняется
+    // само по себе — приравниваем его РОВНО к набору сейва (не объединяем с
+    // тем, что было до загрузки): те же правила, что были бы у свежей
+    // сессии, загрузившей этот же сейв с нуля. Дальнейшая игра после
+    // загрузки продолжит помечать клетки как обычно поверх этого набора.
+    DirtyCellIndices = MoveTemp(SavedIndices);
 }
 
 TArray<FSavedHomeStorage> AGridWorldManager::CaptureHomeStorages() const

@@ -15,6 +15,13 @@
 #include "Core/Zaryana/MemoryFragmentTypes.h"
 #include "Core/Entities/ArtifactTypes.h"
 #include "Core/Alchemy/RitualTypes.h"
+// Полное определение, не форвард-декларация (аудит 2026-09-05, CellBaselines
+// ниже): TArray<FSavedCellState> — данные-член по значению, его конструктору/
+// деструктору (в т.ч. авто-сгенерированному UHT в GridWorldManager.gen.cpp)
+// нужен полный тип в КАЖДОЙ единице трансляции, включающей этот заголовок,
+// не только в GridWorldManagerSave.cpp/GridWorldManagerCore.cpp. Циклической
+// зависимости нет — HerbalistSaveTypes.h ничего не включает из этого файла.
+#include "Core/Save/HerbalistSaveTypes.h"
 #include "GridWorldManager.generated.h"
 
 class AHerbalistResourceActor;
@@ -26,9 +33,6 @@ class ABiomeRegionVolume;
 class AStorageContainer;
 struct FWorldSnapshot;
 struct FStateDelta;
-struct FSavedCellState;
-struct FSavedHomeStorage;
-enum class EStorageContainerType : uint8;
 
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
@@ -1197,6 +1201,19 @@ protected:
     // сверять на выходе "а не совпало ли снова с базой ровно".
     TSet<int32> DirtyCellIndices;
 
+    // Baseline на клетку (аудит 2026-09-05, решение пользователя: полноценный
+    // откат вместо тихого игнорирования). Снимок КАЖДОЙ клетки сразу после
+    // InitializeCells — до единого тика симуляции, до единого игрового
+    // действия. Параллельный Cells по индексу (Y*GridSizeX+X), не сохраняется
+    // сам по себе: как и Biome/вода, это чистая функция RngBaseSeed +
+    // расставленных на уровне ABiomeRegionVolume, пересчитывается заново при
+    // каждом InitializeCells. Используется ТОЛЬКО в ApplySaveCells — клетка,
+    // грязная СЕЙЧАС, но отсутствующая в самом сейве, по построению
+    // DirtyCellIndices (см. довод там же) была нетронутой на момент
+    // сохранения, то есть равнялась ровно этому снимку — не сохранённое
+    // "среднее", а буквально то, чем была клетка, пока её не тронули.
+    TArray<FSavedCellState> CellBaselines;
+
     UPROPERTY()
     TObjectPtr<UPerceptionComponent> PerceptionComponent;
 
@@ -1360,6 +1377,21 @@ protected:
     void MarkCellDirty(int32 X, int32 Y) { DirtyCellIndices.Add(Y * GridSizeX + X); }
 
     inline int32 GetCellIndex(int32 X, int32 Y) const { return Y * GridSizeX + X; }
+
+    // Общая точка записи FSavedCellState в живую клетку — используется и
+    // обычным восстановлением из сейва (ApplySaveCells), и откатом клеток,
+    // тронутых после сейва, к CellBaselines (аудит 2026-09-05). Определение —
+    // GridWorldManagerSave.cpp.
+    void ApplyCellStateAndRespawnResources(FGridCell& Cell, const FSavedCellState& Saved);
+
+    // Обратная операция: снимок клетки в FSavedCellState (X/Y/State/
+    // TargetState/HarvestStress/Memory/ManifestedEntityID/bEternallyPure/
+    // PlantedSpeciesID/bResourcesSeeded/ResourceIngredientIDs). Общая для
+    // CaptureSaveCells (реальный сейв, GridWorldManagerSave.cpp) и
+    // InitializeCells (CellBaselines, GridWorldManagerCore.cpp) — одна
+    // формула, не две разные копии одной идеи. Static — чистая функция от
+    // параметра, this не трогает.
+    static FSavedCellState CaptureCellState(const FGridCell& Cell);
 
 private:
     FTraceRingBuffer TraceBuffer;

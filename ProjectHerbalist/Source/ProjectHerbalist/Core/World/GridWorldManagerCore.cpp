@@ -12,6 +12,7 @@
 #include "Core/Types/BiomeRow.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
+#include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/World/BiomeRegionVolume.h"
 #include "Core/World/WaterRegionVolume.h"
 #include "Player/HerbalistPlayerController.h"
@@ -1270,6 +1271,21 @@ void AGridWorldManager::InitializeCells()
     // авто-расстановка тестовых клеток-обиталищ.
     SeedTestLandmarks();
     SeedLegendaryAnchors();
+
+    // Baseline на клетку (аудит 2026-09-05, решение пользователя: полноценный
+    // откат при загрузке вместо тихого игнорирования пост-сейвовых правок).
+    // Снимаем ПРЯМО ЗДЕСЬ -- после биома/воды/высот/начального ростера
+    // ресурсов (или его отсутствия при включённом стриминге), но ДО
+    // SetActorTickEnabled(true) ниже: ни один тик симуляции, ни одно
+    // действие игрока ещё не могли ничего сдвинуть. SeedTestLandmarks/
+    // SeedLegendaryAnchors выше не трогают Cell.ManifestedEntityID (это
+    // поле пишет только UpdateEntityManifestations, тикового происхождения,
+    // см. GridWorldManagerEntities.cpp) -- порядок относительно них не важен.
+    CellBaselines.SetNum(TotalCells);
+    for (int32 Index = 0; Index < TotalCells; ++Index)
+    {
+        CellBaselines[Index] = CaptureCellState(Cells[Index]);
+    }
 
     SetActorTickEnabled(true);
 }
