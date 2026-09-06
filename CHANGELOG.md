@@ -9978,3 +9978,42 @@ ROADMAP.md): сам фикс останавливает "весь мир тле�
 `Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerCore.cpp`,
 `ProjectHerbalistTests/.../Tests/BiomeGraphIntegrationTest.cpp`,
 `ProjectHerbalistTests/.../Tests/GridCorruptionAutoReportTest.cpp` (новый).
+
+## Повторный аудит "со всеми зависимостями" (2026-09-06)
+
+Прямой запрос пользователя сразу после фикса MorokField выше. Три
+параллельных целевых прохода (фоновые агенты), каждый нацелен на
+конкретный, уже подтверждённый практикой класс бага (не общее чтение
+кода) — подробный разбор всех находок, включая проверенные-и-признанные-
+осознанными, в `AUDIT_AND_REFACTORING_PLAN.md §8`. Здесь — только то, что
+реально починено.
+
+**`Memory.Instability`/`AxisDrift` не масштабировались на DeltaTime**
+(`BiomeGraphSubsystem.cpp::UpdateMemories`) — тот же баг класса, что
+`MorokField` парой строк выше в ТОЙ ЖЕ функции; собственный комментарий
+фикса MorokField ошибочно поручился, что эти две строки уже корректны
+(проверил только наличие decay, не его масштабируемость). `AxisDrift`
+реально влияет на брожение зелий (`PipelineV2.cpp:670-673`). Новые
+`InstabilityDecay=0.025`/`AxisDriftDecay=0.1` (`BiomeGraphAsset.h`)
+посчитаны обратно из старых голых 0.995/0.98 при боевом `FixedTimeStep=0.2с`
+— баланс не меняется, чинится только масштабируемость на случай другого
+шага.
+
+**`ActivateSolovey`/`ApplyKalinovMostFightCost` не метили клетки
+грязными** (`GridWorldManagerPOI.cpp`) — обе пишут `Cell.State` напрямую
+(тот же осознанный тип исключения, что уже есть у `SeedRosaCorruptedCircle`),
+но без единого `MarkCellDirty`. Поскольку `CaptureSaveCells()`
+сериализует только `DirtyCellIndices`, AoE-порча от Соловья-разбойника и
+цена "Боя" у Калинова моста тихо терялись при следующем save/load —
+клетка откатывалась к базовому состоянию, будто событие не происходило.
+Починено добавлением `MarkCellDirty` в обе функции.
+
+**Итог:** 450 → 452 теста (+1 на поведенческую эквивалентность
+Instability/AxisDrift decay, +1 новый `KalinovMostFightCostSurvivesSaveLoad`;
+`ActivateSolovey`-тест расширен проверкой `CaptureSaveCells` без роста
+счётчика), **452/452, два чистых прогона, ноль регрессий**. Файлы:
+`Core/BiomeGraph/BiomeGraphAsset.h`,
+`Core/BiomeGraph/BiomeGraphSubsystem.h/.cpp`,
+`Core/World/GridWorldManagerPOI.cpp`,
+`ProjectHerbalistTests/.../Tests/BiomeGraphIntegrationTest.cpp`,
+`ProjectHerbalistTests/.../Tests/POITest.cpp`.

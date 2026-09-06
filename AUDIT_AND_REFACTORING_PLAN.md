@@ -815,3 +815,106 @@ Magnitude-ось на самом деле. Для всех существ ДО �
 2 в §7.1) и трогает общий цикл релаксации, которым пользуются несколько
 других систем — blast radius непропорционален пользе сверх того, что уже
 дал тактический фикс.
+
+## 8. Аудит 2026-09-06 — по мотивам живого PIE-бага, "со всеми зависимостями"
+
+Запрошен пользователем отдельно ("ещё раз аудит кода, желательно со всеми
+зависимостями") сразу после того, как реальный PIE-тест пользователя на
+`L_Playtest` вскрыл и мы починили баг того же семейства, что уже ловился
+здесь раньше (§1.1, §7): `UBiomeGraphSubsystem::MorokField`/`ZaryanaField`
+(`Core/BiomeGraph/BiomeGraphSubsystem.cpp`) накапливались контуром с
+положительной обратной связью (`PropagateWaves` → `ApplyBiomeInfluences` →
+`Cell.State.Distortion` → `GetBiomeSamples` → обратно в `MorokField`) без
+единого тормоза — `GlobalMorokDecay`/`GlobalZaryanaDecay` существовали, но
+применялись только к побочному `Memory.*History`, не к самому полю
+(см. `CHANGELOG.md`, коммит `e0fcb41`). Метод в этот раз — не чтение по
+памяти, а три параллельных целевых прохода (фоновые агенты), каждый нацелен
+на конкретный, уже подтверждённый практикой класс бага, плюс личная
+перепроверка каждой находки перед действием.
+
+### 8.1 `Memory.Instability`/`AxisDrift` — тот же баг класса, что и MorokField, в той же функции — ✅ ПОЧИНЕНО
+
+`Core/BiomeGraph/BiomeGraphSubsystem.cpp`, `UpdateMemories` — ровно две
+строки ниже фикса MorokField/ZaryanaField:
+
+```cpp
+Node.Memory.Instability = FMath::Clamp(Node.Memory.Instability * 0.995f, 0.f, 1.f);
+Node.Memory.AxisDrift *= 0.98f;
+```
+
+Голые множители ЗА ШАГ, без домножения на `StepDeltaTime` — та же болезнь,
+что уже чинилась в §1.1 (`GnilnikiNudgeRate`) и §1.2 (`Memory.HistoryPurity`).
+При боевом `FixedTimeStep=0.2с` эффект сейчас не виден (константы уже
+подобраны под этот конкретный шаг), но decay молча меняется, если
+`FixedTimeStep` когда-нибудь поменяют — то же дремлющее свойство, что уже
+описано у сиблингов в §1. Ирония: коммит, чинивший MorokField в этой же
+функции, лично проверил эти две строки и **ошибочно решил, что они уже
+корректны** ("Instability/AxisDrift ниже уже decay'ятся") — проверил только
+факт наличия decay, не его масштабируемость.
+
+`AxisDrift` — не косметика: читается в `PipelineV2.cpp:670-673`
+("Biome Context Injection"), сдвигает оси `Direction.Body/Mind/Spirit/Nature`
+у каждого применённого зелья. `Instability` — не читается нигде в `Core/`
+(мёртвое, но безопасно мёртвое поле, см. также §8.3).
+
+**Правка:** новые `InstabilityDecay=0.025`/`AxisDriftDecay=0.1`
+(`BiomeGraphAsset.h`, тот же паттерн, что `GlobalMorokDecay`), посчитаны
+ОБРАТНО из старых 0.995/0.98 при `FixedTimeStep=0.2с` — баланс на практике
+не меняется, чинится только масштабируемость. Тест
+`Herbalist.BiomeGraph.InstabilityAndAxisDriftDecayMatchesPreFixBehaviorAtDefaultStep`
+подтверждает поведенческую эквивалентность на одном шаге.
+
+### 8.2 `ActivateSolovey`/`ApplyKalinovMostFightCost` не метят клетки грязными — ✅ ПОЧИНЕНО
+
+`Core/World/GridWorldManagerPOI.cpp` — обе функции пишут
+`Cell.State.Meta.Purity`/`Stability` напрямую (в обход `ApplyStateDelta`,
+то же исключение, что уже осознанно сделано и задокументировано у
+`SeedRosaCorruptedCircle`, `GridWorldManagerZaryana.cpp:544-561`), но **без
+единого `MarkCellDirty`** и без комментария, признающего исключение. Прямое
+следствие: `CaptureSaveCells()` сериализует только `DirtyCellIndices`
+(§7.1) — AoE-порча от Соловья-разбойника и цена "Боя" у Калинова моста
+тихо терялись при следующем save/load, откатывая клетку к базовому
+состоянию, будто событие не происходило вовсе. В отличие от §7 (лог-порча
+из-за неверного условия), здесь `MarkCellDirty` не вызывался вовсе — не
+"слишком часто", а "никогда".
+
+**Правка:** добавлен `MarkCellDirty(Cell.X, Cell.Y)` в обе функции, с
+явным комментарием (по образцу `SeedRosaCorruptedCircle`) о том, что это
+Single-Writer-исключение. Тесты
+`Herbalist.POI.ActivateSoloveyAppliesAoECorruptionOnceThenNoOps` (расширен)
+и новый `Herbalist.POI.KalinovMostFightCostSurvivesSaveLoad` проверяют
+`CaptureSaveCells()` напрямую.
+
+### 8.3 Проверено и НЕ являются багами (зафиксировано, чтобы не перепроверять заново)
+
+- **`FEnvironment::Fertility`** (`HerbalistCoreTypes.h`) — растёт от
+  удобрения (`GridWorldManagerCore.cpp:1656`), не читается НИГДЕ в коде.
+  Уже задокументировано самим проектом как осознанно не подключённое
+  (`GridWorldManagerEntities.cpp:257-259`, комментарий про отложенный
+  зимний эффект) — мёртвое, но безопасно мёртвое поле, тот же класс, что
+  `Memory.Instability` выше. Не чинилось — решение уже принято раньше.
+- **`FAcquiredArtifact::Warmth`** (`ArtifactTypes.h`) — растёт монотонно,
+  без сброса при неудаче; явно задокументировано как решение 2026-09-02
+  ("Warmth не сбрасывается неудачей", `HerbalistSettings.h:1134-1144`) —
+  постоянная необратимая прогрессия, тот же класс явления, что и ниже.
+- **`GlobalPerceptionClarity`/`ClarityAnchor`** (Заряна,
+  `GridWorldManagerZaryana.cpp`) — `Clarity = max(Anchor, Anchor+Response)`
+  структурно не даёт отклику среды утянуть прояснение НИЖЕ уже
+  заработанного якоря — явно закомментированное намерение (постоянная
+  прогрессия), не оверсайт.
+- **`SeedRosaCorruptedCircle`** (`GridWorldManagerZaryana.cpp:544-583`) —
+  уже осознанное, задокументированное Single-Writer-исключение с
+  `MarkCellDirty`; не тот же пробел, что §8.2.
+- **`RegenerateCellParameters`** — второй легитимный писатель `Cell.State`
+  вне `ApplyStateDelta`, явно задокументирован как таковой (комментарий
+  у `GridWorldManagerCore.cpp:2217-2218`), всегда метит грязным.
+- **Циклы обратной связи BiomeGraph↔Grid через Легендарных существ и
+  PipelineV2** (§8.1 `AxisDrift`, чтение `MorokField` для проявления
+  Злых сущностей) — оба контура теперь гасятся тем же фиксом §8.1, что и
+  сам `MorokField`; отдельного действия не требуют.
+
+**Итог прохода:** 450 → 452 теста, **452/452, два чистых прогона, ноль
+регрессий**. Три находки категории "нужно чинить" (все из §8.1-8.2, MorokField
+из §0 этого же дня в CHANGELOG.md), четыре проверены и признаны
+осознанными решениями (§8.3) — задокументированы здесь, чтобы следующий
+проход аудита не тратил на них время заново.

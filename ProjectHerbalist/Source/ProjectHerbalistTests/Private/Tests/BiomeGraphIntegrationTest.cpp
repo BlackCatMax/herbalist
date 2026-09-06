@@ -354,4 +354,77 @@ bool FHerbalistBiomeGraph_MorokFieldDecaysOverTimeWithoutInput::RunTest(const FS
     return true;
 }
 
+// Тот же баг класса, что MorokField выше, найден фоновым аудитом сразу
+// вслед за его фиксом (2026-09-06): Memory.Instability/AxisDrift decay'ились
+// голыми множителями за ШАГ (0.995f/0.98f) без домножения на StepDeltaTime.
+// Instability/AxisDrift, в отличие от MorokField/ZaryanaField, НЕ трогаются
+// ни RecalculateFieldsFromGrid, ни PropagateWaves, ни ApplyFieldsToGrid --
+// единственный писатель декея это UpdateMemories, поэтому изоляция не
+// нужна вовсе, тест проще предыдущего. Проверяем поведенческую
+// эквивалентность на боевом FixedTimeStep (0.2с, BiomeGraphAsset.h):
+// InstabilityDecay=0.025/AxisDriftDecay=0.1 посчитаны ОБРАТНО из старых
+// констант именно так, чтобы баланс не изменился -- один шаг должен дать
+// ТЕ ЖЕ 0.995/0.98, что и до фикса.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_InstabilityAndAxisDriftDecayMatchesPreFixBehaviorAtDefaultStep,
+    "Herbalist.BiomeGraph.InstabilityAndAxisDriftDecayMatchesPreFixBehaviorAtDefaultStep",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeGraph_InstabilityAndAxisDriftDecayMatchesPreFixBehaviorAtDefaultStep::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!TestNotNull(TEXT("UBiomeGraphSubsystem present"), Graph))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+    if (!TestNotNull(TEXT("DA_BiomeGraph asset loads"), Asset))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Graph->InitializeFromAsset(Asset);
+    if (!TestTrue(TEXT("BiomeGraphSubsystem reports initialized"), Graph->IsInitialized()))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    if (!TestTrue(TEXT("Graph has at least one node"), Graph->GetNodes().Num() > 0))
+    {
+        Graph->Deinitialize();
+        Manager->Destroy();
+        return false;
+    }
+    const FName TargetBiomeID = Graph->GetNodes().CreateConstIterator()->Key;
+
+    FBiomeGraphNode* Node = Graph->GetMutableNode(TargetBiomeID);
+    Node->Memory.Instability = 1.0f;
+    Node->Memory.AxisDrift = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
+
+    // Один шаг FixedTimeStep (0.2с) -- не 50, здесь важна ТОЧНАЯ поведенческая
+    // эквивалентность одного шага, не долгая тенденция.
+    Graph->ForceStep();
+
+    const FBiomeGraphNode* Result = Graph->GetNode(TargetBiomeID);
+    if (TestNotNull(TEXT("Target node still exists"), Result))
+    {
+        TestTrue(FString::Printf(TEXT("Instability matches pre-fix 0.995 factor (got %.5f, expected ~0.995)"), Result->Memory.Instability),
+            FMath::IsNearlyEqual(Result->Memory.Instability, 0.995f, 0.001f));
+        TestTrue(FString::Printf(TEXT("AxisDrift.X matches pre-fix 0.98 factor (got %.5f, expected ~0.98)"), Result->Memory.AxisDrift.X),
+            FMath::IsNearlyEqual(Result->Memory.AxisDrift.X, 0.98f, 0.001f));
+    }
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

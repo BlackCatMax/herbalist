@@ -231,6 +231,12 @@ bool AGridWorldManager::ActivateSolovey()
 
         Cell.State.Meta.Purity = FMath::Clamp(Cell.State.Meta.Purity - Burst, 0.0f, 1.0f);
         Cell.State.Meta.Stability = FMath::Clamp(Cell.State.Meta.Stability - Burst, 0.0f, 1.0f);
+        // Найдено фоновым аудитом (2026-09-06): прямая запись в Cell.State в
+        // обход ApplyStateDelta без MarkCellDirty означает, что CaptureSaveCells
+        // (сериализует только DirtyCellIndices) тихо теряет этот AoE-эффект --
+        // после save/load клетка откатывается к базовому состоянию, будто
+        // Соловей не срабатывал вовсе.
+        MarkCellDirty(Cell.X, Cell.Y);
     }
 
     bSoloveyTriggered = true;
@@ -256,6 +262,10 @@ void AGridWorldManager::ApplyKalinovMostFightCost(const FIntPoint& Cell)
 
     GridCell->State.Meta.Purity = FMath::Clamp(GridCell->State.Meta.Purity - Cost, 0.0f, 1.0f);
     GridCell->State.Meta.Stability = FMath::Clamp(GridCell->State.Meta.Stability - Cost, 0.0f, 1.0f);
+    // Тот же пробел, что у ActivateSolovey выше (найдено тем же фоновым
+    // аудитом, 2026-09-06) -- без этого цена "Боя" у Калинова моста тихо
+    // терялась при следующем save/load.
+    MarkCellDirty(Cell.X, Cell.Y);
 
     UE_LOG(LogHerbalistWorld, Log, TEXT("[KalinovMost] Fight chosen at (%d,%d): Purity/Stability cost %.2f"),
         Cell.X, Cell.Y, Cost);

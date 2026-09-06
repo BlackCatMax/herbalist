@@ -149,6 +149,19 @@ bool FHerbalistPOI_ActivateSoloveyAppliesAoECorruptionOnceThenNoOps::RunTest(con
     TestTrue(TEXT("Stability at the POI cell dropped"), Cell->State.Meta.Stability < 0.8f);
     TestEqual(TEXT("Purity far outside the radius is untouched"), FarCell->State.Meta.Purity, 0.8f);
 
+    // Найдено фоновым аудитом (2026-09-06): ActivateSolovey писал в
+    // Cell.State напрямую, в обход ApplyStateDelta, без единого
+    // MarkCellDirty -- CaptureSaveCells (сериализует только
+    // DirtyCellIndices) тихо теряла эффект, откатывая клетку к базовому
+    // состоянию после save/load. Регрессия ровно на добавленный
+    // MarkCellDirty в GridWorldManagerPOI.cpp.
+    const TArray<FSavedCellState> SavedCells = Manager->CaptureSaveCells();
+    const bool bPOICellIsDirty = SavedCells.ContainsByPredicate([&](const FSavedCellState& Saved)
+    {
+        return Saved.X == Solovey.X && Saved.Y == Solovey.Y;
+    });
+    TestTrue(TEXT("The corrupted POI cell is marked dirty and survives save/load"), bPOICellIsDirty);
+
     const float PurityAfterFirstTrigger = Cell->State.Meta.Purity;
     TestFalse(TEXT("Second activation is a no-op (already triggered)"), Manager->ActivateSolovey());
     TestEqual(TEXT("Purity unchanged by the no-op second activation"), Cell->State.Meta.Purity, PurityAfterFirstTrigger);
@@ -181,6 +194,44 @@ bool FHerbalistPOI_ActivateSoloveyUnderWardConcealmentSkipsCorruption::RunTest(c
     TestTrue(TEXT("Passing under concealment still marks the site handled"), Manager->ActivateSolovey());
     TestTrue(TEXT("Marked triggered even though nothing was corrupted"), Manager->IsSoloveyTriggered());
     TestEqual(TEXT("Purity untouched -- concealment prevented the AoE burst"), Cell->State.Meta.Purity, 0.8f);
+
+    Manager->Destroy();
+    return true;
+}
+
+// Найдено фоновым аудитом (2026-09-06): тот же пробел, что у ActivateSolovey
+// выше -- ApplyKalinovMostFightCost писал в Cell.State напрямую, без
+// MarkCellDirty, и цена "Боя" тихо терялась при следующем save/load.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_KalinovMostFightCostSurvivesSaveLoad,
+    "Herbalist.POI.KalinovMostFightCostSurvivesSaveLoad",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_KalinovMostFightCostSurvivesSaveLoad::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint TargetCoord(4, 4);
+    FGridCell* Cell = Manager->GetCell(TargetCoord.X, TargetCoord.Y);
+    if (!TestNotNull(TEXT("Target cell exists"), Cell)) { Manager->Destroy(); return false; }
+
+    Cell->State.Meta.Purity = 0.8f;
+    Cell->State.Meta.Stability = 0.8f;
+
+    Manager->ApplyKalinovMostFightCost(TargetCoord);
+
+    TestTrue(TEXT("Purity dropped by the fight cost"), Cell->State.Meta.Purity < 0.8f);
+    TestTrue(TEXT("Stability dropped by the fight cost"), Cell->State.Meta.Stability < 0.8f);
+
+    const TArray<FSavedCellState> SavedCells = Manager->CaptureSaveCells();
+    const bool bCellIsDirty = SavedCells.ContainsByPredicate([&](const FSavedCellState& Saved)
+    {
+        return Saved.X == TargetCoord.X && Saved.Y == TargetCoord.Y;
+    });
+    TestTrue(TEXT("The cell paying the fight cost is marked dirty and survives save/load"), bCellIsDirty);
 
     Manager->Destroy();
     return true;

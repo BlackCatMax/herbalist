@@ -68,6 +68,8 @@ void UBiomeGraphSubsystem::InitializeFromAsset(UBiomeGraphAsset* Asset)
 
     GlobalMorokDecay = Asset->GlobalMorokDecay;
     GlobalZaryanaDecay = Asset->GlobalZaryanaDecay;
+    InstabilityDecay = Asset->InstabilityDecay;
+    AxisDriftDecay = Asset->AxisDriftDecay;
     PotionCollapseThreshold = Asset->PotionCollapseThreshold;
     BiomeCollapseThreshold = Asset->BiomeCollapseThreshold;
     FixedTimeStep = Asset->FixedTimeStep;
@@ -334,8 +336,14 @@ void UBiomeGraphSubsystem::UpdateMemories(float StepDeltaTime)
 
         Node.Memory.MorokHistory = FMath::Clamp(Node.Memory.MorokHistory * (1.f - GlobalMorokDecay * StepDeltaTime), 0.f, 1.f);
         Node.Memory.ZaryanaHistory = FMath::Clamp(Node.Memory.ZaryanaHistory * (1.f - GlobalZaryanaDecay * StepDeltaTime), 0.f, 1.f);
-        Node.Memory.Instability = FMath::Clamp(Node.Memory.Instability * 0.995f, 0.f, 1.f);
-        Node.Memory.AxisDrift *= 0.98f;
+        // Тот же баг класса "голый множитель за шаг, без StepDeltaTime", что
+        // выше -- найдено фоновым аудитом сразу вслед за фиксом MorokField/
+        // ZaryanaField (2026-09-06). Числа InstabilityDecay/AxisDriftDecay
+        // (BiomeGraphAsset.h) посчитаны обратно из старых 0.995f/0.98f при
+        // боевом FixedTimeStep=0.2с -- баланс на практике не меняется,
+        // чинится только масштабируемость при другом шаге.
+        Node.Memory.Instability = FMath::Clamp(Node.Memory.Instability * (1.f - InstabilityDecay * StepDeltaTime), 0.f, 1.f);
+        Node.Memory.AxisDrift *= (1.f - AxisDriftDecay * StepDeltaTime);
         Node.Memory.AxisDrift.X = FMath::Clamp(Node.Memory.AxisDrift.X, 0.f, 1.f);
         Node.Memory.AxisDrift.Y = FMath::Clamp(Node.Memory.AxisDrift.Y, 0.f, 1.f);
         Node.Memory.AxisDrift.Z = FMath::Clamp(Node.Memory.AxisDrift.Z, 0.f, 1.f);

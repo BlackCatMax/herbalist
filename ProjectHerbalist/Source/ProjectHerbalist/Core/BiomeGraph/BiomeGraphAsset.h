@@ -25,6 +25,20 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Simulation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float GlobalZaryanaDecay = 0.005f;
 
+    // Затухание Memory.Instability/AxisDrift (2026-09-06, аудит на аудит --
+    // найдено фоновым агентом сразу после фикса GlobalMorokDecay в этом же
+    // UpdateMemories: обе строки ниже decay'ились голыми множителями за ШАГ
+    // (0.995f/0.98f), без домножения на StepDeltaTime, той же болезнью, что
+    // уже была у MorokField/GnilnikiNudgeRate/HistoryPurity выше по проекту.
+    // Значения посчитаны ОБРАТНО из старых констант при боевом FixedTimeStep
+    // (0.2с), чтобы фикс не менял текущий баланс, только чинил
+    // масштабируемость: (1-0.995)/0.2=0.025, (1-0.98)/0.2=0.1.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Simulation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float InstabilityDecay = 0.025f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome Graph|Simulation", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float AxisDriftDecay = 0.1f;
+
     // Порог Bifurcation ОДНОЙ ВАРКИ (05_Systems.md, Collapse/Purification) —
     // переименовано из CollapseThreshold: старое имя не говорило, что это
     // порог именно зелья, а не биома, хотя это два разных по масштабу и
