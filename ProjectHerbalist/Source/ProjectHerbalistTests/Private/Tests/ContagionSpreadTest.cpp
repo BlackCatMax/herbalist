@@ -127,4 +127,57 @@ bool FHerbalistContagion_NonDegradingCellDoesNotSpread::RunTest(const FString& P
     return true;
 }
 
+// GetGridCorruptionReport (2026-09-06, найдено по PIE-логу пользователя:
+// "после трёх сборов и долгого времени испортилась вся сетка"). Заражение
+// само по себе уже проверено выше на одном шаге/одном соседе;
+// GetSelectedCellInfo (правый клик) проверяет одну клетку за раз -- этого
+// не хватает, чтобы одним логом отследить, докатилась ли волна заражения
+// до всей сетки. Отчёт по всей сетке разом -- новый консольный инструмент
+// именно для этого случая.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistContagion_GridReportCountsDegradingCellsAcrossWholeGrid,
+    "Herbalist.Contagion.GridReportCountsDegradingCellsAcrossWholeGrid",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistContagion_GridReportCountsDegradingCellsAcrossWholeGrid::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    // Дефолтная сетка -- 20x20=400 (AGridWorldManager::GridSizeX/Y), тот же
+    // размер, что и у остальных тестов этого файла через SpawnAndBeginPlay.
+    const FString CleanReport = Manager->GetGridCorruptionReport();
+    TestTrue(FString::Printf(TEXT("Clean grid reports its real size (got '%s')"), *CleanReport),
+        CleanReport.Contains(TEXT("400 cells")));
+    TestTrue(FString::Printf(TEXT("Clean grid reports zero degrading cells (got '%s')"), *CleanReport),
+        CleanReport.Contains(TEXT("0 degrading")));
+
+    // Заражаем ровно две клетки -- считаем, что отчёт видит именно их, не
+    // все 400 и не ноль.
+    FGridCell* First = Manager->GetCell(5, 5);
+    FGridCell* Second = Manager->GetCell(5, 4);
+    if (!TestNotNull(TEXT("First cell exists"), First) || !TestNotNull(TEXT("Second cell exists"), Second))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    First->Memory.bDegrading = true;
+    First->State.Meta.Distortion = 1.0f;
+    Second->Memory.bDegrading = true;
+    Second->State.Meta.Distortion = 1.0f;
+
+    const FString InfectedReport = Manager->GetGridCorruptionReport();
+    TestTrue(FString::Printf(TEXT("Infected grid still reports its real size (got '%s')"), *InfectedReport),
+        InfectedReport.Contains(TEXT("400 cells")));
+    TestTrue(FString::Printf(TEXT("Infected grid counts exactly two degrading cells (got '%s')"), *InfectedReport),
+        InfectedReport.Contains(TEXT("2 degrading")));
+    TestTrue(FString::Printf(TEXT("Infected grid reports the max Distortion the two cells were set to (got '%s')"), *InfectedReport),
+        InfectedReport.Contains(TEXT("max=1.000")));
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

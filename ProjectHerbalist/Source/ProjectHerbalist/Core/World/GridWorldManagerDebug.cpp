@@ -84,6 +84,32 @@ FString AGridWorldManager::GetSelectedCellInfo() const
         *KurganStr);
 }
 
+FString AGridWorldManager::GetGridCorruptionReport() const
+{
+    if (Cells.Num() == 0) return TEXT("Grid empty");
+
+    int32 DegradingCount = 0;
+    float MinDistortion = 1.0f;
+    float MaxDistortion = 0.0f;
+    double DistortionSum = 0.0;
+
+    for (const FGridCell& Cell : Cells)
+    {
+        if (Cell.Memory.bDegrading) ++DegradingCount;
+        const float Distortion = Cell.State.Meta.Distortion;
+        MinDistortion = FMath::Min(MinDistortion, Distortion);
+        MaxDistortion = FMath::Max(MaxDistortion, Distortion);
+        DistortionSum += Distortion;
+    }
+
+    const float AvgDistortion = static_cast<float>(DistortionSum / Cells.Num());
+    const float DegradingPercent = 100.0f * DegradingCount / Cells.Num();
+
+    return FString::Printf(
+        TEXT("%d cells, %d degrading (%.1f%%), Distortion avg=%.3f min=%.3f max=%.3f"),
+        Cells.Num(), DegradingCount, DegradingPercent, AvgDistortion, MinDistortion, MaxDistortion);
+}
+
 void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& ResourceName, float& RegrowthTimer, float& Distortion, float& HarvestStress)
 {
     X = SelectedX;

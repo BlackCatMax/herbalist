@@ -111,9 +111,17 @@ public:
     // так же, как молчал бы неработающий сбор.
     UFUNCTION(Exec)
     void HarvestHere();
-	
+
 	UFUNCTION(Exec)
 	void TestNewHarvest(int32 X, int32 Y, FName IngredientID);
+
+    // Сводка "разрастания поганых мест" по всей сетке (2026-09-06, найдено
+    // по PIE-логу пользователя -- вся тестовая карта испортилась после
+    // трёх сборов и долгого времени). GetSelectedCellInfo (правый клик)
+    // проверяет одну клетку за раз -- недостаточно, чтобы отследить волну
+    // заражения по 400 клеткам одним снимком лога.
+    UFUNCTION(Exec)
+    void ReportGridCorruption();
 
     UFUNCTION(Exec, BlueprintCallable, Category = "Alchemy")
     void UsePotion();

@@ -415,6 +415,17 @@ void AHerbalistPlayerController::OnRightClick()
     }
 }
 
+void AHerbalistPlayerController::ReportGridCorruption()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ReportGridCorruption: GridWorldManager не найден"));
+        return;
+    }
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("Grid corruption: %s"), *WorldManager->GetGridCorruptionReport());
+}
+
 // ============================================================================
 // ИНВЕНТАРЬ
 // ============================================================================

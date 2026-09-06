@@ -457,6 +457,15 @@ public:
     void SelectCell(int32 X, int32 Y);
     FString GetSelectedCellInfo() const;
 
+    // Сводка "разрастания поганых мест" по ВСЕЙ сетке разом (2026-09-06,
+    // найдено по PIE-логу пользователя: "после трёх сборов и долгого
+    // времени испортилась вся сетка") — GetSelectedCellInfo проверяет одну
+    // клетку за раз, для наблюдения за волной заражения по 400 клеткам
+    // пришлось бы кликать по каждой. Один вызов из консоли даёт снимок,
+    // достаточный, чтобы отличить "заражение расползается" от чего-то
+    // ещё по одному только логу, без визуального осмотра карты.
+    FString GetGridCorruptionReport() const;
+
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void GetSelectedCellInfoBP(int32& X, int32& Y, FString& ResourceName, float& RegrowthTimer, float& Distortion, float& HarvestStress);
 

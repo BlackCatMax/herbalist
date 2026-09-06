@@ -9869,3 +9869,44 @@ headless-автотест этой сессии; там намеренно не�
 `ProjectHerbalistTests/.../Commandlets/PlaytestMapCreateCommandlet.h/.cpp`
 (новый), `ProjectHerbalistTests/.../Tests/BiomeRegionVolumeTest.cpp`,
 `ProjectHerbalist/Content/Maps/L_Playtest.umap` (новый).
+
+## Инструмент наблюдения за "разрастанием поганых мест" в масштабе всей сетки (2026-09-06)
+
+Пользователь построил ландшафт под `L_Playtest` и играл в PIE: три сбора,
+потом оставил сессию открытой на длительное реальное время — "испортилась
+вся сетка". По коду это ожидаемо: уже существующее заражение соседей
+(`ContagionSpreadTest.cpp`, DECISIONS_LOG 2026-08-30, "разрастание поганых
+мест") толкает TargetState четырёх прямых соседей клетки, пока та держится
+в испорченном полюсе (`Cell.Memory.bDegrading`, вход при Corruption>0.85,
+выход <0.65 — `BiomeDegradeCenterCorruption`/`BiomeDegradeMargin`,
+`HerbalistSettings.h`), и как только сосед сам пересекает тот же порог, он
+начинает заражать СВОИХ соседей — цепная реакция без встроенного предела,
+кроме активного вмешательства игрока (капище/плакун-трава/понижение
+Corruption вручную). Существующие тесты проверяют это ровно на одном шаге
+и одном прямом соседе (`GridWorldManagerCore.cpp:2013-2052`) — ни один не
+гонял сценарий на весь грид на протяжении многих тиков, поэтому масштаб
+("вся сетка целиком") никогда раньше не наблюдался и не был явно решён.
+
+Не фикс — сначала нужен способ ПОДТВЕРДИТЬ гипотезу логами, не просто
+поверить коду. `GetSelectedCellInfo` (правый клик) печатает одну клетку за
+раз — непригодно для снимка состояния 400 клеток разом. Добавлен
+`AGridWorldManager::GetGridCorruptionReport()` (`GridWorldManagerDebug.cpp`,
+рядом с `GetSelectedCellInfo`) — одна строка на всю сетку: общее число
+клеток, сколько в испорченном полюсе, avg/min/max Distortion. Консольная
+Exec-команда `ReportGridCorruption` на `AHerbalistPlayerController` —
+тот же паттерн, что уже `HarvestHere`/`Cell info` — печатает отчёт в
+`LogHerbalistPlayer` одним вызовом из консоли, без похода по 400 клеткам
+вручную.
+
+Открытый вопрос пользователю (не решён в этот заход, продолжение
+разговора): является ли "весь грид может стать полностью испорченным без
+единого действия игрока за достаточное время" ожидаемым риском/ставкой
+жанра (folk-horror "мир умирает, если за ним не следить"), или нужен
+предел/затухание — решение намеренно оставлено пользователю, не угадано.
+
+**Итог:** 445 → 446 тестов
+(`Herbalist.Contagion.GridReportCountsDegradingCellsAcrossWholeGrid`),
+**446/446, два чистых прогона, ноль регрессий**. Файлы:
+`Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerDebug.cpp`,
+`Player/HerbalistPlayerController.h/.cpp`,
+`ProjectHerbalistTests/.../Tests/ContagionSpreadTest.cpp`.
