@@ -51,6 +51,13 @@ void AAlchemyTableActor::BeginPlay()
             // Роса Заряны (19_Rosa_Signal.md §19.2) — дефолт "рядом с домом",
             // не перезаписывает явную расстановку левел-дизайнером.
             WorldManager->SetZaryanaCellIfUnset(GridCoords);
+
+            // Явный лог точной клетки (2026-09-07, прямой запрос пользователя
+            // после подозрения "порча идёт от стола") -- координаты стола
+            // раньше нигде не печатались напрямую, приходилось выводить их из
+            // мировых координат в комментарии коммандлета. Теперь видно
+            // однозначно, без пересчёта вручную.
+            UE_LOG(LogHerbalistAlchemy, Log, TEXT("AlchemyTableActor stands on cell (%d,%d)"), GridCoords.X, GridCoords.Y);
         }
         else
         {

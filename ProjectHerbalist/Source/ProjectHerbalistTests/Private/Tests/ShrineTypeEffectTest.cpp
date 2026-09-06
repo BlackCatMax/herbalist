@@ -249,8 +249,8 @@ bool FHerbalistShrineType_StoneDampensMorokInfluence::RunTest(const FString& Par
     TMap<FName, float> MorokFields, ZaryanaFields;
     MorokFields.Add(FBiomeDefaults::BiomeTypeToName(EBiomeType::Steppe), 0.5f);
 
-    Baseline->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f);
-    WithShrine->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f);
+    Baseline->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 1.0f);
+    WithShrine->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 1.0f);
 
     TestTrue(TEXT("Stone shrine at full Restoration lets through less Distortion than no shrine"),
         ShrineCell->TargetState.Meta.Distortion < BaselineCell->TargetState.Meta.Distortion);

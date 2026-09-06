@@ -235,7 +235,7 @@ bool FHerbalistSave_BiomeInfluencesWithZeroFieldsStaySparse::RunTest(const FStri
         MorokFields.Add(BiomeID, 0.0f);
         ZaryanaFields.Add(BiomeID, 0.0f);
     }
-    Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f);
+    Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 0.2f);
 
     TestEqual(TEXT("Zero-valued fields for every biome must not dirty the whole grid"),
         Manager->CaptureSaveCells().Num(), 0);

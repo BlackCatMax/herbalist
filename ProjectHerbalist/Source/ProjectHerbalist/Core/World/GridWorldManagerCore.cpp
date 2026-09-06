@@ -777,7 +777,8 @@ TMap<FName, FVector> AGridWorldManager::GetBiomeCenters() const
 
 void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFields,
                                              const TMap<FName, float>& ZaryanaFields,
-                                             float GlobalScale)
+                                             float GlobalScale,
+                                             float DeltaTime)
 {
     // Единственный писатель в состояние клеток — ApplyStateDelta(). BiomeGraph не
     // мутирует Cells напрямую, а собирает Delta.TargetStateNudges, точно как Pipeline
@@ -793,42 +794,63 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
     // IsCellActive-фильтр внутри) — правка того же дня: при активном
     // радиусе в несколько чанков полный skip-scan 250 000 клеток каждый
     // тик обходился на два порядка дороже, чем реальная работа под ним.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+
     ForEachActiveCell([&](FGridCell& Cell)
     {
+        // Испорченный полюс бистабильности управляет Distortion/Corruption/
+        // Purity/Stability САМ (02_GDD/12_Biome_Change.md §12.10: "выход
+        // только прямым действием игрока") — если бы "дырявое ведро" ниже
+        // продолжало тянуть значение к своему равновесию поверх этого, оно
+        // подрывало бы ровно то свойство, ради которого полюс существует.
+        // Тот же принцип, что уже исключает bEternallyPure из этой функции.
+        if (Cell.Memory.bDegrading) return;
+
         FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
         FRealState NewTarget = Cell.TargetState;
         bool bChanged = false;
 
-        // 1. Влияние Морока (увеличивает Distortion). ApplyFieldsToGrid
-        // (BiomeGraphSubsystem.cpp) всегда кладёт запись в MorokFields для
-        // КАЖДОГО узла графа, включая нулевые поля — значит "if (MorokField)"
-        // (есть ли запись) было равносильно "всегда", а не "поле реально
-        // что-то сдвигает". На каждом шаге симуляции (StepSimulation тикается
-        // из Tick(), не редкое событие) это метило ВСЮ сетку грязной с первых
-        // секунд сессии — обесценивая липкий DirtyCellIndices, вокруг
-        // которого построена вся система сохранений (AUDIT_AND_REFACTORING_PLAN.md
-        // §7.1, подтверждено автотестом Herbalist.Save.BiomeInfluencesWithZeroFieldsStaySparse).
-        // Правка: сравниваем итог с уже стоящим TargetState, метим грязной
-        // только при реальном изменении.
+        // Дефолт СОБСТВЕННОГО биома клетки — точка отсчёта для декея ниже,
+        // не абсолютный ноль. Болото и так по природе на Distortion=0.70
+        // (04_Compendium/Биомы/Болото.md) — декей должен возвращать именно
+        // туда, а не к нулю, иначе биом бы "очищался" от своей собственной
+        // природы одним лишь течением времени безо всякого Морока.
+        const FRealState BiomeDefault = FBiomeDefaults::GetDefaultState(Cell.Biome);
+
+        // 1. Влияние Морока на Distortion -- "дырявое ведро" (2026-09-07,
+        // прямое решение пользователя после найденного вживую бага: раньше
+        // это было непрерывное сложение MorokField*0.1 каждый шаг, без
+        // единого вычитания -- растило Distortion к потолку 1.0 без единой
+        // внешней причины, вопреки канону "Distortion — устойчивый уровень
+        // биома, не накопитель", §12.10). ApplyFieldsToGrid всегда кладёт
+        // запись в MorokFields для КАЖДОГО узла графа, включая нулевые поля —
+        // значит "if (MorokField)" (есть ли запись) равносильно "всегда", не
+        // "поле реально что-то сдвигает". Правка: сравниваем итог с уже
+        // стоящим TargetState, метим грязной только при реальном изменении
+        // (AUDIT_AND_REFACTORING_PLAN.md §7.1).
         const float* MorokField = MorokFields.Find(BiomeID);
         if (MorokField)
         {
-            float MorokInfluence = *MorokField * 0.1f * GlobalScale;
+            float PushRate = Settings ? Settings->MorokDistortionPushRate : 0.01f;
+            const float DecayRate = Settings ? Settings->MorokDistortionDecayRate : 0.01f;
 
             // Эффект 3, Каменное (Стрибог, §15.5): "не пускает Морок" — глушит
             // вклад MorokField в локальный Distortion на (1 − 0.4×Restoration),
-            // только в радиусе капища.
-            const UHerbalistSettings* ShrineSettings = GetHerbalistSettings();
+            // только в радиусе капища. Гасит только PUSH, декей к дефолту
+            // биома капище не касается -- оно "не пускает новое", не "чистит
+            // накопленное" (тот же принцип уже явно у ShrineStoneMorokDampening).
             const FShrine* DominantShrine = Shrines.Num() > 0
-                ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineSettings ? ShrineSettings->ShrineInfluenceRadius : 3)
+                ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3)
                 : nullptr;
             if (DominantShrine && DominantShrine->Type == EShrineType::Stone && DominantShrine->Restoration > 0.0f)
             {
-                const float Dampening = ShrineSettings ? ShrineSettings->ShrineStoneMorokDampening : 0.4f;
-                MorokInfluence *= (1.0f - FMath::Clamp(Dampening * DominantShrine->Restoration, 0.0f, 1.0f));
+                const float Dampening = Settings ? Settings->ShrineStoneMorokDampening : 0.4f;
+                PushRate *= (1.0f - FMath::Clamp(Dampening * DominantShrine->Restoration, 0.0f, 1.0f));
             }
 
-            const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + MorokInfluence, 0.f, 1.f);
+            const float Deviation = NewTarget.Meta.Distortion - BiomeDefault.Meta.Distortion;
+            const float NewDeviation = Deviation + (*MorokField * PushRate * GlobalScale - DecayRate * Deviation) * DeltaTime;
+            const float NewDistortion = FMath::Clamp(BiomeDefault.Meta.Distortion + NewDeviation, 0.f, 1.f);
             if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
             {
                 NewTarget.Meta.Distortion = NewDistortion;
@@ -836,13 +858,22 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             }
         }
 
-        // 2. Влияние Заряны (повышает Stability и Purity) — та же поправка.
+        // 2. Влияние Заряны на Stability/Purity — то же "дырявое ведро",
+        // декей к дефолту биома вместо накопления к единице.
         const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
         if (ZaryanaField)
         {
-            const float ZaryanaInfluence = *ZaryanaField * 0.05f * GlobalScale;
-            const float NewStability = FMath::Clamp(NewTarget.Meta.Stability + ZaryanaInfluence, 0.f, 1.f);
-            const float NewPurity    = FMath::Clamp(NewTarget.Meta.Purity    + ZaryanaInfluence * 0.5f, 0.f, 1.f);
+            const float PushRate = Settings ? Settings->ZaryanaEffectPushRate : 0.01f;
+            const float DecayRate = Settings ? Settings->ZaryanaEffectDecayRate : 0.01f;
+
+            const float StabilityDeviation = NewTarget.Meta.Stability - BiomeDefault.Meta.Stability;
+            const float NewStabilityDeviation = StabilityDeviation + (*ZaryanaField * PushRate * GlobalScale - DecayRate * StabilityDeviation) * DeltaTime;
+            const float NewStability = FMath::Clamp(BiomeDefault.Meta.Stability + NewStabilityDeviation, 0.f, 1.f);
+
+            const float PurityDeviation = NewTarget.Meta.Purity - BiomeDefault.Meta.Purity;
+            const float NewPurityDeviation = PurityDeviation + (*ZaryanaField * PushRate * 0.5f * GlobalScale - DecayRate * PurityDeviation) * DeltaTime;
+            const float NewPurity = FMath::Clamp(BiomeDefault.Meta.Purity + NewPurityDeviation, 0.f, 1.f);
+
             if (!FMath::IsNearlyEqual(NewStability, NewTarget.Meta.Stability, KINDA_SMALL_NUMBER) ||
                 !FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER))
             {

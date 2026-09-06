@@ -97,6 +97,6 @@ protected:
     void InternalStep(float StepDeltaTime);
     void RecalculateFieldsFromGrid(AGridWorldManager* Grid);
     void PropagateWaves(AGridWorldManager* Grid);
-    void ApplyFieldsToGrid(AGridWorldManager* Grid);
+    void ApplyFieldsToGrid(AGridWorldManager* Grid, float StepDeltaTime);
     void UpdateMemories(float StepDeltaTime);
 };

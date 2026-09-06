@@ -487,7 +487,7 @@ public:
     // ---- Биомы ----
     TArray<FGridBiomeSample> GetBiomeSamples() const;
     TMap<FName, FVector> GetBiomeCenters() const;
-    void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale);
+    void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale, float DeltaTime);
 
     // ---- Ресурсы ----
     void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);

@@ -904,6 +904,38 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Biome|Bistability", meta = (ClampMin = "0.0"))
     float ContagionSpreadRate = 0.01f;
 
+    // Влияние биом-графа на Distortion/Stability/Purity клетки, "дырявое
+    // ведро" (2026-09-07, прямое решение пользователя после найденного
+    // вживую бага: непрерывное сложение MorokField*0.1 в Distortion каждый
+    // шаг растило клетку к потолку 1.0 без единой внешней причины, вопреки
+    // канону "Distortion — устойчивый уровень биома, не накопитель",
+    // 02_GDD/12_Biome_Change.md §12.10). Считается не от абсолютного нуля,
+    // а от СОБСТВЕННОГО дефолта биома (FBiomeDefaults::GetDefaultState) —
+    // Болото и так по природе на 0.70, декей возвращает именно к этому
+    // значению, не к нулю. Отношение Push/Decay = 1.0 у обеих пар ниже —
+    // при MorokField=1.0 отклонение от дефолта в пределе стремится к
+    // (1.0 - дефолт биома), не выше; сознательно НЕ выбрано другое
+    // отношение за неимением дизайн-сигнала для иного потолка. Приостановлен
+    // для клеток в испорченном полюсе (Cell.Memory.bDegrading) — тот полюс
+    // уже управляется отдельно бистабильностью выше, и его "уйти можно
+    // только действием игрока" (§12.10) было бы подорвано, если бы этот
+    // декей тихо тянул его обратно.
+    UPROPERTY(config, EditAnywhere, Category = "Biome|MorokAmbient", meta = (ClampMin = "0.0"))
+    float MorokDistortionPushRate = 0.01f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Biome|MorokAmbient", meta = (ClampMin = "0.0"))
+    float MorokDistortionDecayRate = 0.01f;
+
+    // Тот же приём, что MorokDistortionPushRate/DecayRate выше, для
+    // ZaryanaField -> Stability/Purity (та же ветка ApplyBiomeInfluences,
+    // тот же баг класса — Stability/Purity раньше складывались без предела
+    // в другую сторону).
+    UPROPERTY(config, EditAnywhere, Category = "Biome|MorokAmbient", meta = (ClampMin = "0.0"))
+    float ZaryanaEffectPushRate = 0.01f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Biome|MorokAmbient", meta = (ClampMin = "0.0"))
+    float ZaryanaEffectDecayRate = 0.01f;
+
     // --- Капища (02_GDD/15_Cycles_And_Shrines.md §15.5) ---
     // Вклад в Restoration от применения зелья прямо на клетку капища:
     // OfferingGain × (Purity − Corruption) результата. Комментарий поправлен

@@ -430,7 +430,7 @@ bool FHerbalistSystemInteraction_MaximumStackDoesNotBreak::RunTest(const FString
         // Диффузия биом-графа -- та же клетка Тайги, каждый тик, как и
         // остальные три писателя ниже. GlobalScale=1.0, тот же дефолт, что
         // использует сама подсистема без модификаторов Заряны игрока.
-        Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f);
+        Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 1.0f);
         Manager->RegenerateCellParameters(1.0f);
         Manager->UpdateEntityManifestations(1.0f);
 

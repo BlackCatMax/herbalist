@@ -150,7 +150,7 @@ void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
 
     RecalculateFieldsFromGrid(Grid);
     PropagateWaves(Grid);
-    ApplyFieldsToGrid(Grid);
+    ApplyFieldsToGrid(Grid, StepDeltaTime);
     UpdateMemories(StepDeltaTime);
 
     CenterCacheTimer += StepDeltaTime;
@@ -315,7 +315,7 @@ void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
     UE_LOG(LogHerbalistBiome, VeryVerbose, TEXT("PropagateWaves completed"));
 }
 
-void UBiomeGraphSubsystem::ApplyFieldsToGrid(AGridWorldManager* Grid)
+void UBiomeGraphSubsystem::ApplyFieldsToGrid(AGridWorldManager* Grid, float StepDeltaTime)
 {
     if (!Grid) return;
 
@@ -326,7 +326,7 @@ void UBiomeGraphSubsystem::ApplyFieldsToGrid(AGridWorldManager* Grid)
         ZaryanaFields.Add(Pair.Key, Pair.Value.ZaryanaField);
     }
 
-    Grid->ApplyBiomeInfluences(MorokFields, ZaryanaFields, GlobalInfluenceScale);
+    Grid->ApplyBiomeInfluences(MorokFields, ZaryanaFields, GlobalInfluenceScale, StepDeltaTime);
 
     UE_LOG(LogHerbalistBiome, VeryVerbose, TEXT("ApplyFieldsToGrid completed"));
 }
