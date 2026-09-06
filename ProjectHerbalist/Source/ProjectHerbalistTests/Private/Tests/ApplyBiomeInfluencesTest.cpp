@@ -12,8 +12,15 @@
 // Herbalist.ShrineType.StoneDampensMorokInfluence уже проверяют смежные
 // свойства (нулевые поля не метят грязным / капище глушит PUSH) -- здесь
 // три новых теста ровно на саму механику "дырявого ведра": равновесие
-// ниже потолка, декей к СОБСТВЕННОМУ дефолту биома (не к нулю), и
-// остановка для клеток в испорченном полюсе бистабильности.
+// ниже потолка, декей к нулю при отсутствии Морока, и остановка для
+// клеток в испорченном полюсе бистабильности. Сохранение ХАРАКТЕРА биома
+// (Болото держится у своих честных 0.70) -- НЕ забота этой функции в
+// изоляции, это свойство всей связки с RecalculateFieldsFromGrid на
+// уровне многошаговой симуляции (первая версия правки этого файла
+// пыталась сделать это здесь через "BiomeDefault + MorokField" -- оказалось
+// двойным счётом и снова открыло неограниченный рост, см. правку в
+// GridWorldManagerCore.cpp; настоящая проверка сохранения характера биома
+// теперь в BiomeGraphIntegrationTest.cpp).
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Types/BiomeTypes.h"
@@ -29,7 +36,12 @@
 // аналитической проверки формулы, не нужно гонять до сходимости: результат
 // после ОДНОГО шага полностью детерминирован по Push/Decay из
 // HerbalistSettings (дефолты 0.01/0.01, если проект не переопределил их
-// в конфиге).
+// в конфиге). Цель — САМ MorokField, не "BiomeDefault + MorokField"
+// (первая версия этого теста и самой правки, 2026-09-07, была на битой
+// формуле — см. правку в GridWorldManagerCore.cpp и комментарий у
+// MorokDistortionPushRate в HerbalistSettings.h: MorokField уже сам
+// сходится к среднему Distortion клеток биома, отдельно прикладывать
+// дефолт биома здесь означало бы удвоенный счёт одной и той же величины).
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistApplyBiomeInfluences_MorokPushesDistortionTowardEquilibriumNotCeiling,
     "Herbalist.ApplyBiomeInfluences.MorokPushesDistortionTowardEquilibriumNotCeiling",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
@@ -47,8 +59,7 @@ bool FHerbalistApplyBiomeInfluences_MorokPushesDistortionTowardEquilibriumNotCei
 
     Cell->Biome = EBiomeType::MixedForest;
     Cell->Memory.bDegrading = false;
-    const float BiomeDefaultDistortion = FBiomeDefaults::GetDefaultState(EBiomeType::MixedForest).Meta.Distortion;
-    Cell->TargetState.Meta.Distortion = BiomeDefaultDistortion;   // старт ровно на дефолте -- Deviation=0
+    Cell->TargetState.Meta.Distortion = 0.0f;
 
     TMap<FName, float> MorokFields = { { FBiomeDefaults::BiomeTypeToName(EBiomeType::MixedForest), 0.3f } };
     TMap<FName, float> ZaryanaFields;
@@ -57,11 +68,11 @@ bool FHerbalistApplyBiomeInfluences_MorokPushesDistortionTowardEquilibriumNotCei
     Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, DeltaTime);
 
     // Аналитическое предсказание при дефолтных PushRate=DecayRate=0.01
-    // (HerbalistSettings.h): Deviation' = Deviation + (Morok*Push - Decay*Deviation)*dt.
-    // При Deviation=0 стартово: Deviation' = Morok*Push*dt = 0.3*0.01*1.0 = 0.003.
-    const float ExpectedDistortion = BiomeDefaultDistortion + 0.3f * 0.01f * DeltaTime;
-    TestTrue(FString::Printf(TEXT("Distortion moved toward equilibrium set by MorokField, not toward 1.0 (got %.5f, expected %.5f, biome default %.3f)"),
-        Cell->TargetState.Meta.Distortion, ExpectedDistortion, BiomeDefaultDistortion),
+    // (HerbalistSettings.h): D' = D + (Morok*Push - Decay*D)*dt.
+    // При D=0 стартово: D' = Morok*Push*dt = 0.3*0.01*1.0 = 0.003.
+    const float ExpectedDistortion = 0.3f * 0.01f * DeltaTime;
+    TestTrue(FString::Printf(TEXT("Distortion moved toward equilibrium set by MorokField, not toward 1.0 (got %.5f, expected %.5f)"),
+        Cell->TargetState.Meta.Distortion, ExpectedDistortion),
         FMath::IsNearlyEqual(Cell->TargetState.Meta.Distortion, ExpectedDistortion, 0.0001f));
     TestTrue(TEXT("A single step with moderate MorokField does not snap Distortion anywhere near the 1.0 ceiling"),
         Cell->TargetState.Meta.Distortion < 0.5f);
@@ -70,15 +81,18 @@ bool FHerbalistApplyBiomeInfluences_MorokPushesDistortionTowardEquilibriumNotCei
     return true;
 }
 
-// Декей возвращает к СОБСТВЕННОМУ дефолту биома, не к абсолютному нулю --
-// иначе Болото (дефолт Distortion=0.70) "очищалось" бы от своей природы
-// одним лишь течением времени без единого Морока, что противоречит его
-// собственной карточке компендиума.
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistApplyBiomeInfluences_ZeroMorokDecaysTowardBiomeDefaultNotZero,
-    "Herbalist.ApplyBiomeInfluences.ZeroMorokDecaysTowardBiomeDefaultNotZero",
+// Ноль в MorokField честно тянет Distortion к нулю (не к дефолту биома) --
+// сам по себе ApplyBiomeInfluences больше НЕ отвечает за сохранение
+// характера биома, это делает связка с RecalculateFieldsFromGrid на
+// уровне всей симуляции (см. новый интеграционный тест ниже в
+// BiomeGraphIntegrationTest.cpp -- он проверяет именно то, что не
+// проверяет этот юнит-тест: что биом реально держится у своего дефолта
+// в живом, многошаговом прогоне).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistApplyBiomeInfluences_ZeroMorokDecaysDistortionTowardZero,
+    "Herbalist.ApplyBiomeInfluences.ZeroMorokDecaysDistortionTowardZero",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistApplyBiomeInfluences_ZeroMorokDecaysTowardBiomeDefaultNotZero::RunTest(const FString& Parameters)
+bool FHerbalistApplyBiomeInfluences_ZeroMorokDecaysDistortionTowardZero::RunTest(const FString& Parameters)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
@@ -91,22 +105,17 @@ bool FHerbalistApplyBiomeInfluences_ZeroMorokDecaysTowardBiomeDefaultNotZero::Ru
 
     Cell->Biome = EBiomeType::Bog;
     Cell->Memory.bDegrading = false;
-    const float BiomeDefaultDistortion = FBiomeDefaults::GetDefaultState(EBiomeType::Bog).Meta.Distortion;
-    // Искусственно выше дефолта -- имитирует остаточное возбуждение без
-    // текущего внешнего давления (MorokField=0 ниже).
-    Cell->TargetState.Meta.Distortion = FMath::Min(BiomeDefaultDistortion + 0.2f, 1.0f);
+    Cell->TargetState.Meta.Distortion = 0.9f;
 
     TMap<FName, float> MorokFields = { { FBiomeDefaults::BiomeTypeToName(EBiomeType::Bog), 0.0f } };
     TMap<FName, float> ZaryanaFields;
 
     Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 1.0f);
 
-    TestTrue(FString::Printf(TEXT("Distortion decayed back down, not stayed elevated (got %.4f, was %.4f)"),
-        Cell->TargetState.Meta.Distortion, BiomeDefaultDistortion + 0.2f),
-        Cell->TargetState.Meta.Distortion < BiomeDefaultDistortion + 0.2f);
-    TestTrue(FString::Printf(TEXT("Distortion did not overshoot below the biome's own default (got %.4f, default %.4f)"),
-        Cell->TargetState.Meta.Distortion, BiomeDefaultDistortion),
-        Cell->TargetState.Meta.Distortion >= BiomeDefaultDistortion - KINDA_SMALL_NUMBER);
+    const float ExpectedDistortion = 0.9f - 0.01f * 0.9f * 1.0f;   // D - Decay*D*dt
+    TestTrue(FString::Printf(TEXT("Distortion decayed toward zero as MorokField dictates (got %.4f, expected %.4f)"),
+        Cell->TargetState.Meta.Distortion, ExpectedDistortion),
+        FMath::IsNearlyEqual(Cell->TargetState.Meta.Distortion, ExpectedDistortion, 0.0001f));
 
     Manager->Destroy();
     return true;

@@ -810,13 +810,6 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         FRealState NewTarget = Cell.TargetState;
         bool bChanged = false;
 
-        // Дефолт СОБСТВЕННОГО биома клетки — точка отсчёта для декея ниже,
-        // не абсолютный ноль. Болото и так по природе на Distortion=0.70
-        // (04_Compendium/Биомы/Болото.md) — декей должен возвращать именно
-        // туда, а не к нулю, иначе биом бы "очищался" от своей собственной
-        // природы одним лишь течением времени безо всякого Морока.
-        const FRealState BiomeDefault = FBiomeDefaults::GetDefaultState(Cell.Biome);
-
         // 1. Влияние Морока на Distortion -- "дырявое ведро" (2026-09-07,
         // прямое решение пользователя после найденного вживую бага: раньше
         // это было непрерывное сложение MorokField*0.1 каждый шаг, без
@@ -828,6 +821,25 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         // "поле реально что-то сдвигает". Правка: сравниваем итог с уже
         // стоящим TargetState, метим грязной только при реальном изменении
         // (AUDIT_AND_REFACTORING_PLAN.md §7.1).
+        //
+        // Декей ведёт К САМОМУ MorokField, НЕ к "BiomeDefault + MorokField"
+        // (первая версия этой правки, 2026-09-07, оказалась битой -- найдено
+        // по PIE-логу пользователя: рост Distortion не остановился вовсе,
+        // той же скоростью, что и до фикса). Причина: MorokField УЖЕ сам по
+        // себе на той же шкале, что Distortion -- RecalculateFieldsFromGrid
+        // (BiomeGraphSubsystem.cpp) тянет его к среднему Distortion клеток
+        // биома. Добавление BiomeDefault ПОВЕРХ этого было двойным счётом
+        // одной и той же величины: MorokField сходится к ~BiomeDefault, а
+        // цель клетки тогда становилась ~2×BiomeDefault -- и этот раздутый
+        // результат немедленно поднимал средний Distortion биома, откуда
+        // RecalculateFieldsFromGrid тянул MorokField ещё выше -- тот же
+        // класс замкнутого контура с положительной обратной связью, что
+        // вчера чинился в PropagateWaves, просто на соседнем стыке
+        // конвейера. Цель без BiomeDefault -- честная неподвижная точка:
+        // если Distortion==MorokField у всех клеток биома разом, среднее
+        // по сетке равно MorokField, и RecalculateFieldsFromGrid ничего не
+        // сдвигает -- рост возможен только если что-то РЕАЛЬНОЕ (контагион,
+        // варка) сдвинет хоть одну клетку первым.
         const float* MorokField = MorokFields.Find(BiomeID);
         if (MorokField)
         {
@@ -836,9 +848,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
 
             // Эффект 3, Каменное (Стрибог, §15.5): "не пускает Морок" — глушит
             // вклад MorokField в локальный Distortion на (1 − 0.4×Restoration),
-            // только в радиусе капища. Гасит только PUSH, декей к дефолту
-            // биома капище не касается -- оно "не пускает новое", не "чистит
-            // накопленное" (тот же принцип уже явно у ShrineStoneMorokDampening).
+            // только в радиусе капища.
             const FShrine* DominantShrine = Shrines.Num() > 0
                 ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3)
                 : nullptr;
@@ -848,9 +858,10 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
                 PushRate *= (1.0f - FMath::Clamp(Dampening * DominantShrine->Restoration, 0.0f, 1.0f));
             }
 
-            const float Deviation = NewTarget.Meta.Distortion - BiomeDefault.Meta.Distortion;
-            const float NewDeviation = Deviation + (*MorokField * PushRate * GlobalScale - DecayRate * Deviation) * DeltaTime;
-            const float NewDistortion = FMath::Clamp(BiomeDefault.Meta.Distortion + NewDeviation, 0.f, 1.f);
+            const float CurrentDistortion = NewTarget.Meta.Distortion;
+            const float NewDistortion = FMath::Clamp(
+                CurrentDistortion + (*MorokField * PushRate * GlobalScale - DecayRate * CurrentDistortion) * DeltaTime,
+                0.f, 1.f);
             if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
             {
                 NewTarget.Meta.Distortion = NewDistortion;
@@ -858,21 +869,23 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             }
         }
 
-        // 2. Влияние Заряны на Stability/Purity — то же "дырявое ведро",
-        // декей к дефолту биома вместо накопления к единице.
+        // 2. Влияние Заряны на Stability/Purity — то же "дырявое ведро" к
+        // самому ZaryanaField, тот же довод, что у Distortion выше.
         const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
         if (ZaryanaField)
         {
             const float PushRate = Settings ? Settings->ZaryanaEffectPushRate : 0.01f;
             const float DecayRate = Settings ? Settings->ZaryanaEffectDecayRate : 0.01f;
 
-            const float StabilityDeviation = NewTarget.Meta.Stability - BiomeDefault.Meta.Stability;
-            const float NewStabilityDeviation = StabilityDeviation + (*ZaryanaField * PushRate * GlobalScale - DecayRate * StabilityDeviation) * DeltaTime;
-            const float NewStability = FMath::Clamp(BiomeDefault.Meta.Stability + NewStabilityDeviation, 0.f, 1.f);
+            const float CurrentStability = NewTarget.Meta.Stability;
+            const float NewStability = FMath::Clamp(
+                CurrentStability + (*ZaryanaField * PushRate * GlobalScale - DecayRate * CurrentStability) * DeltaTime,
+                0.f, 1.f);
 
-            const float PurityDeviation = NewTarget.Meta.Purity - BiomeDefault.Meta.Purity;
-            const float NewPurityDeviation = PurityDeviation + (*ZaryanaField * PushRate * 0.5f * GlobalScale - DecayRate * PurityDeviation) * DeltaTime;
-            const float NewPurity = FMath::Clamp(BiomeDefault.Meta.Purity + NewPurityDeviation, 0.f, 1.f);
+            const float CurrentPurity = NewTarget.Meta.Purity;
+            const float NewPurity = FMath::Clamp(
+                CurrentPurity + (*ZaryanaField * PushRate * 0.5f * GlobalScale - DecayRate * CurrentPurity) * DeltaTime,
+                0.f, 1.f);
 
             if (!FMath::IsNearlyEqual(NewStability, NewTarget.Meta.Stability, KINDA_SMALL_NUMBER) ||
                 !FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER))

@@ -533,4 +533,129 @@ bool FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes::RunTe
     return true;
 }
 
+// Регрессия на две ЛОЖНЫЕ починки подряд, обе прошедшие изолированные
+// юнит-тесты, но не остановившие рост на практике (2026-09-07, найдено
+// пользователем через ReportGridCorruption на реальном PIE: скорость роста
+// avg Distortion не менялась ни после фикса PropagateWaves, ни после
+// первой версии "дырявого ведра" в ApplyBiomeInfluences -- та вторая
+// версия декеила Distortion к "BiomeDefault + MorokField", что было
+// двойным счётом: MorokField УЖЕ сам сходится к среднему Distortion клеток
+// биома через RecalculateFieldsFromGrid, добавление дефолта поверх
+// открывало новый контур положительной обратной связи через ЭТУ функцию
+// вместо PropagateWaves). Ни `MorokFieldDecaysOverTimeWithoutInput` (один
+// шаг, соседи занулены), ни любой из тестов ApplyBiomeInfluencesTest.cpp
+// (юнит-стиль, руками собранные поля) не гоняют настоящий Tick() достаточно
+// долго, чтобы поймать контур через RecalculateFieldsFromGrid -- именно
+// такой тест здесь.
+//
+// Проверяем СХОДИМОСТЬ, не конкретное число: делим прогон на два равных
+// окна по 3000 шагов (по 0.1с = 300 симулированных секунд каждое, итого
+// 600с -- 6 постоянных времени декея по умолчанию, ~99.75% сходимости).
+// Если система реально стабилизируется, прирост во втором окне должен
+// быть заметно МЕНЬШЕ прироста в первом. Если баг всё ещё жив (как в обеих
+// предыдущих "починках"), прирост будет примерно ОДИНАКОВЫМ в обоих окнах
+// (линейный, не замедляющийся рост) -- ровно то, что показал реальный
+// PIE-лог пользователя.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_AmbientDistortionStabilizesOverLongRealTimeWithoutExternalInput,
+    "Herbalist.BiomeGraph.AmbientDistortionStabilizesOverLongRealTimeWithoutExternalInput",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeGraph_AmbientDistortionStabilizesOverLongRealTimeWithoutExternalInput::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!TestNotNull(TEXT("UBiomeGraphSubsystem present"), Graph))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+    if (!TestNotNull(TEXT("DA_BiomeGraph asset loads"), Asset))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Graph->InitializeFromAsset(Asset);
+    if (!TestTrue(TEXT("BiomeGraphSubsystem reports initialized"), Graph->IsInitialized()))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // Тот же приём, что RealTickKeepsDirtyCellsSparse выше -- остаёмся
+    // внутри окна Дня, не пересекая Рассвет/Закат/Ночь/Зиму. Отдельно —
+    // Полудница (§15.2, GridWorldManagerEntities.cpp:207-228): короткий
+    // (~2 мин) легитимный всплеск Distortion в Степи/Лесостепи в середине
+    // Дня. При GameDayMinutes=32 (дефолт) это окно приходится на игровые
+    // секунды [720, 840] -- первая версия этого теста стартовала с 600с и
+    // задевала его, из-за чего окно 1 включало реальный, ожидаемый всплеск
+    // и тест ошибочно принимал легитимное событие за незатухающий рост.
+    // 400с..680с гарантированно вне Рассвета (кончается на 360с) и
+    // Полудницы (начинается на 720с) — запас по 40с с обеих сторон.
+    Manager->SetGameClockSeconds(400.0f);
+
+    // В этом editor-тестовом окружении FBiomeDefaults::GetDefaultState
+    // отдаёт нули (BiomeDataTable недоступна вне полноценной игровой сессии,
+    // найдено эмпирически при первой версии этого теста) -- клетки стартуют
+    // с Distortion=0. Без осмысленного возмущения тест был бы бессодержателен
+    // (нечему сходиться). Взводим MorokField узлов вручную -- имитирует
+    // "что-то уже взбудоражило биом" и даёт реальную, измеримую динамику
+    // сходимости клеток к этому уровню.
+    for (const auto& Pair : Graph->GetNodes())
+    {
+        if (FBiomeGraphNode* Node = Graph->GetMutableNode(Pair.Key))
+        {
+            Node->MorokField = 0.3f;
+        }
+    }
+
+    auto ComputeAvgDistortion = [Manager]() -> double
+    {
+        double Sum = 0.0;
+        int32 Count = 0;
+        Manager->ForEachCell([&](const FGridCell& Cell)
+        {
+            Sum += Cell.State.Meta.Distortion;
+            ++Count;
+        });
+        return Count > 0 ? Sum / Count : 0.0;
+    };
+
+    // Два окна по 140с (1.5 постоянных времени декея по умолчанию, 0.01/сек
+    // -> τ=100с) -- у настоящего затухающего процесса прирост во втором
+    // окне должен упасть примерно до e^-1.4≈25% от прироста в первом.
+    // Итого 280с, заканчиваем на 680с -- с запасом до Полудницы (720с).
+    const double AvgStart = ComputeAvgDistortion();
+    for (int32 Step = 0; Step < 1400; ++Step)
+    {
+        Manager->Tick(0.1f);
+    }
+    const double AvgAfterWindow1 = ComputeAvgDistortion();
+    for (int32 Step = 0; Step < 1400; ++Step)
+    {
+        Manager->Tick(0.1f);
+    }
+    const double AvgAfterWindow2 = ComputeAvgDistortion();
+
+    const double GrowthWindow1 = FMath::Abs(AvgAfterWindow1 - AvgStart);
+    const double GrowthWindow2 = FMath::Abs(AvgAfterWindow2 - AvgAfterWindow1);
+
+    TestTrue(FString::Printf(TEXT("Ambient Distortion growth decelerates over 280 simulated seconds without any player action (window1 growth=%.5f, window2 growth=%.5f, avg %.4f -> %.4f -> %.4f) -- a live bug would show near-equal or accelerating growth instead"),
+        GrowthWindow1, GrowthWindow2, AvgStart, AvgAfterWindow1, AvgAfterWindow2),
+        GrowthWindow2 < GrowthWindow1 * 0.5 || GrowthWindow1 < 0.001);
+
+    TestTrue(FString::Printf(TEXT("Grid has not saturated toward the ceiling from pure ambient pressure (avg=%.4f)"), AvgAfterWindow2),
+        AvgAfterWindow2 < 0.9);
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
