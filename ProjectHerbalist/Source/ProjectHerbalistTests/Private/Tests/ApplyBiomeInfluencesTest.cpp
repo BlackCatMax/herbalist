@@ -27,6 +27,8 @@
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "Engine/DataTable.h"
+#include "UObject/UObjectGlobals.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -164,6 +166,93 @@ bool FHerbalistApplyBiomeInfluences_SkipsCellsInTheDegradingBistablePole::RunTes
         Cell->TargetState.Meta.Stability, 0.0f);
 
     Manager->Destroy();
+    return true;
+}
+
+// Ради чего затевалась правка "а" (2026-09-07, выбор пользователя):
+// Purity/Stability обязаны возвращаться к дефолтам СВОЕГО биома, а не к
+// f(Distortion), как было до неё (MATH_REFERENCE.md §6.2, замер: Тайга
+// теряла Purity 0.70 -> 0.55 за 300с и шла к 0.375).
+//
+// Тест ОБЯЗАН поднять настоящую DT_BiomeDefaults: в обычном тестовом
+// окружении её никто не грузит (это делает только GameMode), дефолты биомов
+// нулевые, и тогда "отклонение от дефолта" численно неотличимо от
+// "абсолютного значения" -- проверять было бы нечего. Таблица ставится в
+// глобальный static (FBiomeDefaults::SetBiomeTable), поэтому в конце
+// ОБЯЗАТЕЛЬНО возвращается обратно в nullptr: иначе остальные 9 тестов,
+// написанные против нулевых дефолтов, начнут падать в зависимости от
+// порядка выполнения (проверено -- падают ровно так).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistApplyBiomeInfluences_PurityReturnsToItsOwnBiomeDefault,
+    "Herbalist.ApplyBiomeInfluences.PurityReturnsToItsOwnBiomeDefault",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistApplyBiomeInfluences_PurityReturnsToItsOwnBiomeDefault::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults"));
+    if (!TestNotNull(TEXT("DT_BiomeDefaults loads"), BiomeTable)) return false;
+    FBiomeDefaults::SetBiomeTable(BiomeTable);
+
+    const float DefaultPurity = FBiomeDefaults::GetDefaultState(EBiomeType::Taiga).Meta.Purity;
+    if (!TestTrue(TEXT("Real biome table is in effect (Taiga Purity is not the zeroed stub)"), DefaultPurity > 0.5f))
+    {
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager))
+    {
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell exists"), Cell))
+    {
+        Manager->Destroy();
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    // Клетку "испортили" по Purity гораздо ниже её природы -- ровно тот
+    // случай, который до правки НЕ восстанавливался (уезжал ещё ниже, к
+    // 0.5*(1-Distortion)).
+    Cell->Biome = EBiomeType::Taiga;
+    Cell->Memory.bDegrading = false;
+    Cell->TargetState.Meta.Purity = 0.3f;
+
+    // Поле Заряны в покое -- ноль (биом в своей природе, возмущения нет).
+    TMap<FName, float> MorokFields;
+    TMap<FName, float> ZaryanaFields = { { FBiomeDefaults::BiomeTypeToName(EBiomeType::Taiga), 0.0f } };
+
+    // 300 симулированных секунд шагами графа (0.2с): при декее 0.01/с
+    // отклонение должно ужаться примерно в e^-3 ≈ 20 раз.
+    for (int32 Step = 0; Step < 1500; ++Step)
+    {
+        Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 0.2f);
+    }
+
+    // Мёртвая зона сторожа разреженности (замерена этим же тестом,
+    // MATH_REFERENCE.md §6.4): запись в TargetState пропускается, пока шаг
+    // меньше KINDA_SMALL_NUMBER, а шаг равен |отклонение|·Decay·dt. Значит
+    // восстановление останавливается на |отклонение| ≈ 1e-4/(0.01·0.2) =
+    // 0.05 -- ровно это и наблюдается (0.3 -> 0.65 при дефолте 0.70).
+    // Это свойство защиты §7.1, общее для обеих веток, а не изъян правки.
+    const float DeadZone = 0.06f;   // 0.05 замеренных + запас на float
+    const float Recovered = Cell->TargetState.Meta.Purity;
+    TestTrue(FString::Printf(TEXT("Purity climbed back toward its OWN biome default (0.3 -> %.4f, default %.4f) instead of sinking toward f(Distortion)"),
+        Recovered, DefaultPurity),
+        Recovered > DefaultPurity - DeadZone);
+    TestTrue(FString::Printf(TEXT("Purity did not overshoot past the biome default (got %.4f, default %.4f)"),
+        Recovered, DefaultPurity),
+        Recovered <= DefaultPurity + KINDA_SMALL_NUMBER);
+
+    Manager->Destroy();
+    // Обязательный возврат глобального состояния -- см. довод у заголовка.
+    FBiomeDefaults::SetBiomeTable(nullptr);
     return true;
 }
 

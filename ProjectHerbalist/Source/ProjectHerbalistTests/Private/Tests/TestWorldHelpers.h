@@ -19,6 +19,8 @@
 #include "CoreMinimal.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/BiomeRegionVolume.h"
+#include "Core/Types/BiomeTypes.h"
+#include "Engine/DataTable.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
 #include "Player/HerbalistPlayerController.h"
@@ -49,10 +51,37 @@ namespace
     // остальных хелперов этого файла: тест получает предсказуемый мир,
     // не то, что случайно лежит на уровне. Region->Destroy() — только в
     // этом одноразовом headless-процессе, .umap на диске не трогается.
+    // Таблица биомов (2026-09-07). FBiomeDefaults::GetDefaultState читает
+    // static-указатель, который выставляет ТОЛЬКО
+    // AProjectHerbalistGameModeBase::BeginPlay — в editor-мире автотеста его
+    // нет, поэтому до этой правки ВСЕ тесты видели дефолты биомов нулевыми
+    // (найдено 2026-09-07 при ревизии математики: зонд показал
+    // "biome default Distortion=0.00000" вместо честных 0.25-0.70). Тесты от
+    // этого не падали — они просто проверяли математику на нулевых
+    // константах, что заметно слабее. Тот же путь, что у GameMode.
+    void EnsureBiomeTableLoaded()
+    {
+        static bool bTried = false;
+        if (bTried) return;
+        bTried = true;
+        if (UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults")))
+        {
+            FBiomeDefaults::SetBiomeTable(BiomeTable);
+        }
+    }
+
     AGridWorldManager* SpawnAndBeginPlay(UWorld* World, const TArray<AActor*>& KeepRegions = {})
     {
         if (!World) return nullptr;
 
+        // ВНИМАНИЕ (2026-09-07): EnsureBiomeTableLoaded() здесь НЕ вызывается
+        // намеренно. Включение реальной таблицы биомов роняет 9 существующих
+        // тестов -- они писались против нулевых дефолтов и проверяют
+        // поведение, которого при настоящих данных нет (какое существо
+        // проявится, останется ли сетка разреженной при нулевых полях).
+        // Это отдельная, немаленькая работа с дизайн-суждением по каждому
+        // случаю, а не хвост текущей правки -- заведено отдельным пунктом в
+        // ROADMAP.md и MATH_REFERENCE.md §8.
         for (TActorIterator<ABiomeRegionVolume> It(World); It; ++It)
         {
             ABiomeRegionVolume* Region = *It;

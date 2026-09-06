@@ -750,7 +750,26 @@ TArray<FGridBiomeSample> AGridWorldManager::GetBiomeSamples() const
         FGridBiomeSample Sample;
         Sample.BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
         Sample.MorokValue = Cell.State.Meta.Distortion;
-        Sample.ZaryanaValue = 1.f - Cell.State.Meta.Distortion;
+
+        // Заряна как ОТКЛОНЕНИЕ Stability от дефолта биома (2026-09-07,
+        // выбор пользователя, вариант "а" из ROADMAP.md; было
+        // `1 - Distortion`). Прежнее определение делало Заряну зеркалом
+        // Морока, а не самостоятельной величиной, и ветка Заряны в
+        // ApplyBiomeInfluences тянула Purity/Stability к f(Distortion)
+        // безотносительно их собственных дефолтов: Тайга с природным
+        // Purity 0.8 уезжала к 0.375 без единой внешней причины
+        // (замер: 0.70 -> 0.55 за 300с, MATH_REFERENCE.md §6.2).
+        //
+        // Знаковое отклонение, не абсолютный уровень: ноль означает "биом
+        // в своей природе", плюс/минус -- насколько его увели от неё. Тогда
+        // затухание поля (UpdateMemories) означает возврат к дефолту биома,
+        // а не сползание к нулю. Читается и применяется в ОДНОЙ системе
+        // отсчёта (см. ApplyBiomeInfluences) -- ровно то, чего не хватало
+        // сломанной правке 2026-09-07 по Distortion (двойной счёт).
+        const FRealState BiomeDefault = Cell.bIsWater
+            ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
+            : FBiomeDefaults::GetDefaultState(Cell.Biome);
+        Sample.ZaryanaValue = Cell.State.Meta.Stability - BiomeDefault.Meta.Stability;
         Samples.Add(Sample);
     }
     return Samples;
@@ -869,23 +888,37 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             }
         }
 
-        // 2. Влияние Заряны на Stability/Purity — то же "дырявое ведро" к
-        // самому ZaryanaField, тот же довод, что у Distortion выше.
+        // 2. Влияние Заряны на Stability/Purity -- "дырявое ведро" по
+        // ОТКЛОНЕНИЮ от дефолта биома (2026-09-07, выбор пользователя,
+        // вариант "а"). ZaryanaField теперь тоже отклонение
+        // (GetBiomeSamples выше), то есть читается и применяется в одной
+        // системе отсчёта -- двойного счёта, погубившего аналогичную
+        // правку по Distortion, здесь нет.
+        //
+        // Равновесие: StabilityDeviation -> ZaryanaField (вес 1.0),
+        // PurityDeviation -> 0.5*ZaryanaField (тот же относительный вес,
+        // что был до правки). Затухание ZaryanaField в ноль означает
+        // возврат обеих осей к дефолтам СВОЕГО биома -- Тайга остаётся
+        // Тайгой, а не уезжает к f(Distortion), как было раньше.
         const float* ZaryanaField = ZaryanaFields.Find(BiomeID);
         if (ZaryanaField)
         {
             const float PushRate = Settings ? Settings->ZaryanaEffectPushRate : 0.01f;
             const float DecayRate = Settings ? Settings->ZaryanaEffectDecayRate : 0.01f;
 
-            const float CurrentStability = NewTarget.Meta.Stability;
-            const float NewStability = FMath::Clamp(
-                CurrentStability + (*ZaryanaField * PushRate * GlobalScale - DecayRate * CurrentStability) * DeltaTime,
-                0.f, 1.f);
+            const FRealState BiomeDefault = Cell.bIsWater
+                ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
+                : FBiomeDefaults::GetDefaultState(Cell.Biome);
 
-            const float CurrentPurity = NewTarget.Meta.Purity;
-            const float NewPurity = FMath::Clamp(
-                CurrentPurity + (*ZaryanaField * PushRate * 0.5f * GlobalScale - DecayRate * CurrentPurity) * DeltaTime,
-                0.f, 1.f);
+            const float StabilityDeviation = NewTarget.Meta.Stability - BiomeDefault.Meta.Stability;
+            const float NewStabilityDeviation = StabilityDeviation
+                + (*ZaryanaField * PushRate * GlobalScale - DecayRate * StabilityDeviation) * DeltaTime;
+            const float NewStability = FMath::Clamp(BiomeDefault.Meta.Stability + NewStabilityDeviation, 0.f, 1.f);
+
+            const float PurityDeviation = NewTarget.Meta.Purity - BiomeDefault.Meta.Purity;
+            const float NewPurityDeviation = PurityDeviation
+                + (*ZaryanaField * PushRate * 0.5f * GlobalScale - DecayRate * PurityDeviation) * DeltaTime;
+            const float NewPurity = FMath::Clamp(BiomeDefault.Meta.Purity + NewPurityDeviation, 0.f, 1.f);
 
             if (!FMath::IsNearlyEqual(NewStability, NewTarget.Meta.Stability, KINDA_SMALL_NUMBER) ||
                 !FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER))

@@ -197,10 +197,15 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
             // соседей, добавленный PropagateWaves на предыдущем шаге, стирается
             // здесь же на следующем шаге, и поле не может по-настоящему
             // распространяться дальше одного узла за раз (см. аудит математики).
+            // ZaryanaField -- ЗНАКОВОЕ отклонение Stability от дефолта биома
+            // (2026-09-07, см. GetBiomeSamples): диапазон [-1,1], не [0,1].
+            // Прежний кламп в [0,1] срезал бы всю отрицательную половину --
+            // "биом хуже своей природы" стало бы неотличимо от "ровно в своей
+            // природе". MorokField остаётся абсолютным уровнем в [0,1].
             const float GridAvgMorok = FMath::Clamp(MorokSum[BiomeID] / Count, 0.f, 1.f);
-            const float GridAvgZaryana = FMath::Clamp(ZaryanaSum[BiomeID] / Count, 0.f, 1.f);
+            const float GridAvgZaryana = FMath::Clamp(ZaryanaSum[BiomeID] / Count, -1.f, 1.f);
             Pair.Value.MorokField = FMath::Clamp(FMath::Lerp(Pair.Value.MorokField, GridAvgMorok, GridBlendFactor), 0.f, 1.f);
-            Pair.Value.ZaryanaField = FMath::Clamp(FMath::Lerp(Pair.Value.ZaryanaField, GridAvgZaryana, GridBlendFactor), 0.f, 1.f);
+            Pair.Value.ZaryanaField = FMath::Clamp(FMath::Lerp(Pair.Value.ZaryanaField, GridAvgZaryana, GridBlendFactor), -1.f, 1.f);
         }
     }
 
@@ -253,7 +258,8 @@ void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
     for (const auto& Pair : Nodes)
     {
         PrevMorok.Add(Pair.Key, FMath::Clamp(Pair.Value.MorokField, 0.f, 1.f));
-        PrevZaryana.Add(Pair.Key, FMath::Clamp(Pair.Value.ZaryanaField, 0.f, 1.f));
+        // Заряна знаковая (отклонение от дефолта биома, 2026-09-07) -- [-1,1].
+        PrevZaryana.Add(Pair.Key, FMath::Clamp(Pair.Value.ZaryanaField, -1.f, 1.f));
     }
 
     TMap<FName, float> DeltaMorok, DeltaZaryana;
@@ -309,7 +315,7 @@ void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
     for (auto& Pair : Nodes)
     {
         Pair.Value.MorokField = FMath::Clamp(PrevMorok[Pair.Key] + DeltaMorok[Pair.Key], 0.f, 1.f);
-        Pair.Value.ZaryanaField = FMath::Clamp(PrevZaryana[Pair.Key] + DeltaZaryana[Pair.Key], 0.f, 1.f);
+        Pair.Value.ZaryanaField = FMath::Clamp(PrevZaryana[Pair.Key] + DeltaZaryana[Pair.Key], -1.f, 1.f);
     }
 
     UE_LOG(LogHerbalistBiome, VeryVerbose, TEXT("PropagateWaves completed"));
@@ -353,7 +359,9 @@ void UBiomeGraphSubsystem::UpdateMemories(float StepDeltaTime)
         // Instability/AxisDrift ниже уже decay'ятся. Та же формула, что уже
         // у Memory.*History -- новых чисел не вводится.
         Node.MorokField = FMath::Clamp(Node.MorokField * (1.f - GlobalMorokDecay * StepDeltaTime), 0.f, 1.f);
-        Node.ZaryanaField = FMath::Clamp(Node.ZaryanaField * (1.f - GlobalZaryanaDecay * StepDeltaTime), 0.f, 1.f);
+        // Знаковое поле (отклонение) -- множительное затухание тянет его к
+        // нулю с ЛЮБОЙ стороны, то есть возвращает биом к его дефолту.
+        Node.ZaryanaField = FMath::Clamp(Node.ZaryanaField * (1.f - GlobalZaryanaDecay * StepDeltaTime), -1.f, 1.f);
 
         Node.Memory.MorokHistory = FMath::Clamp(Node.Memory.MorokHistory * (1.f - GlobalMorokDecay * StepDeltaTime), 0.f, 1.f);
         Node.Memory.ZaryanaHistory = FMath::Clamp(Node.Memory.ZaryanaHistory * (1.f - GlobalZaryanaDecay * StepDeltaTime), 0.f, 1.f);

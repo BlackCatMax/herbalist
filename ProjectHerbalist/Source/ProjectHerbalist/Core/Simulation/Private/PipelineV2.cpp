@@ -664,7 +664,18 @@ namespace Simulation
         if (BiomeCtx)
         {
             EffectiveMorok = FMath::Clamp(BiomeCtx->MorokField * BiomeCtx->MorokAffinity, 0.f, 1.f);
-            EffectiveZaryana = FMath::Clamp(BiomeCtx->ZaryanaField * BiomeCtx->ZaryanaAffinity, 0.f, 1.f);
+
+            // "Насколько место благоприятно для варки" -- берём (1 - Морок),
+            // а НЕ ZaryanaField (2026-09-07). До этой даты ZaryanaField и был
+            // ровно `1 - Distortion`, то есть эта строка читала именно
+            // "чистоту места"; теперь ZaryanaField сменил смысл на знаковое
+            // ОТКЛОНЕНИЕ Stability от дефолта биома (GridWorldManagerCore.cpp::
+            // GetBiomeSamples, вариант "а" по выбору пользователя), и прямое
+            // чтение поля здесь тихо изменило бы баланс варки: в покое
+            // отклонение равно нулю, и место перестало бы давать привычную
+            // надбавку к Stability/Purity. Явное (1 - MorokField) сохраняет
+            // прежнее поведение варки при новом смысле поля.
+            EffectiveZaryana = FMath::Clamp((1.f - BiomeCtx->MorokField) * BiomeCtx->ZaryanaAffinity, 0.f, 1.f);
 
             const float DriftStrength = Settings ? Settings->BiomeAxisDriftWeight : 0.1f;
             Result.Direction.Body   = FMath::Max(0.f, Result.Direction.Body   + (BiomeCtx->AxisDrift.X - 0.25f) * DriftStrength);
