@@ -232,10 +232,15 @@ public:
     // Зарегистрировать клетку как грядку сада с пристройкой NicheName
     // (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31; шестая ниша Cave
     // добавлена 2026-09-04) — "mycelium"/"cellar"/"pond"/"sunny"/"shade"/
-    // "cave", "none" снимает регистрацию. v1:
-    // тот же приём, что SetGatheringTool — консоль вместо физической
-    // постройки-актора, сам механизм (AGridWorldManager::GardenPlots →
-    // GetRandomResourceForNiche) работает уже сейчас.
+    // "cave", "none" снимает регистрацию (всегда бесплатно — забросить
+    // грядку не постройка). v1: тот же приём, что SetGatheringTool —
+    // консоль вместо физической постройки-актора, сам механизм
+    // (AGridWorldManager::GardenPlots → GetRandomResourceForNiche) работает
+    // уже сейчас. Экономика ("мягкая прокачка" §2.2/§2.4, 2026-09-06) —
+    // тот же приём, что уже BuildHomeStorage: материал константой кода
+    // (GardenNicheUnlockTypes.h, черновые числа, решение пользователя
+    // "потом изменим") одним стеком + порог Molva (Пещера — без порога
+    // Molva вовсе, личная постройка).
     UFUNCTION(Exec)
     void SetGardenPlot(int32 X, int32 Y, FString NicheName);
 

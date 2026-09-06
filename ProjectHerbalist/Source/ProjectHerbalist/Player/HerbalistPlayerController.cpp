@@ -8,6 +8,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/World/GardenNicheUnlockTypes.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -907,7 +908,76 @@ void AHerbalistPlayerController::SetGardenPlot(int32 X, int32 Y, FString NicheNa
         return;
     }
 
-    Manager->RegisterGardenPlot(FIntPoint(X, Y), Niche);
+    const FIntPoint Cell(X, Y);
+
+    // "none" снимает регистрацию -- забросить грядку не постройка, всегда
+    // бесплатно, тот же принцип, что RegisterGardenPlot уже применяет сама
+    // (Niche==None -> GardenPlots.Remove).
+    if (Niche == EGardenNiche::None)
+    {
+        Manager->RegisterGardenPlot(Cell, Niche);
+        return;
+    }
+
+    if (!Manager->GetCell(X, Y))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: no cell at (%d,%d)"), X, Y);
+        return;
+    }
+
+    // Уже построена ровно эта пристройка на этой клетке -- отказ, не тихий
+    // повторный бесплатный no-op и не повторное списание материала за то
+    // же самое (тот же принцип, что уже BuildHomeStorage отказывает
+    // дубликату хранилища).
+    if (Manager->GardenPlots.FindRef(Cell) == Niche)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: this niche is already built at (%d,%d)"), X, Y);
+        return;
+    }
+
+    // Экономика "мягкой прокачки" (§2.2/§2.4, 2026-09-06) -- тот же приём,
+    // что уже BuildHomeStorage: материал константой кода (не резолв через
+    // IngredientRegistrySubsystem), одним стеком, плюс порог Molva (Пещера
+    // -- MinMolva=-1.0f, порога нет вовсе, см. GardenNicheUnlockTypes.h).
+    const FGardenNicheUnlockCost* Cost = FindGardenNicheUnlockCost(Niche);
+    if (!Cost)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: no unlock recipe for niche %d"), (int32)Niche);
+        return;
+    }
+
+    if (Manager->Molva < Cost->MinMolva)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: Molva %.2f below threshold %.2f, refused"),
+            Manager->Molva, Cost->MinMolva);
+        return;
+    }
+
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: no inventory component"));
+        return;
+    }
+
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    int32 FoundIndex = INDEX_NONE;
+    for (int32 i = 0; i < CurrentItems.Num(); ++i)
+    {
+        if (CurrentItems[i].IngredientID == Cost->MaterialIngredientID && CurrentItems[i].Count >= Cost->MaterialCount)
+        {
+            FoundIndex = i;
+            break;
+        }
+    }
+    if (FoundIndex == INDEX_NONE)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGardenPlot: needs %d '%s' in a single stack, not enough"),
+            Cost->MaterialCount, *Cost->MaterialIngredientID.ToString());
+        return;
+    }
+
+    Manager->RegisterGardenPlot(Cell, Niche);
+    InventoryComponent->RemoveItem(FoundIndex, Cost->MaterialCount);
 }
 
 void AHerbalistPlayerController::PlantSeed(int32 X, int32 Y, FString IngredientID)

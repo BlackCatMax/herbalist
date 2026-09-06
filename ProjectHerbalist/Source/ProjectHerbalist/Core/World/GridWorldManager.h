@@ -390,8 +390,14 @@ public:
     // целиком, см. IngredientRegistrySubsystem::GetRandomResourceForNiche).
     // v1: регистрируется Exec-командой (SetGardenPlot на PlayerController),
     // не физической постройкой-актором — тот же принцип, что и у
-    // CurrentGatheringTool: сам механизм работает уже сейчас, экономика/
-    // визуал пристроек — отдельный, ещё не реализованный проход.
+    // CurrentGatheringTool: сам механизм работает уже сейчас, визуал
+    // пристроек — отдельный, ещё не реализованный проход (уровень/актор,
+    // не логика). Экономика (материалы + Molva) закрыта 2026-09-06 —
+    // см. GardenNicheUnlockTypes.h, гейт проверяется в
+    // AHerbalistPlayerController::SetGardenPlot ДО этого вызова
+    // (RegisterGardenPlot сама остаётся честным, непроверяющим сеттером
+    // мирового состояния — тот же принцип границы, что уже у ActivateWard/
+    // PlantSeed: инвентарный/Molva-гейт в контроллере, состояние здесь).
     UPROPERTY()
     TMap<FIntPoint, EGardenNiche> GardenPlots;
 
