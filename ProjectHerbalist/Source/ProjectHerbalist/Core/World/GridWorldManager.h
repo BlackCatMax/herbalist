@@ -15,6 +15,7 @@
 #include "Core/Zaryana/MemoryFragmentTypes.h"
 #include "Core/Entities/ArtifactTypes.h"
 #include "Core/Alchemy/RitualTypes.h"
+#include "Core/World/POITypes.h"
 // Полное определение, не форвард-декларация (аудит 2026-09-05, CellBaselines
 // ниже): TArray<FSavedCellState> — данные-член по значению, его конструктору/
 // деструктору (в т.ч. авто-сгенерированному UHT в GridWorldManager.gen.cpp)
@@ -1246,6 +1247,62 @@ public:
     const TMap<FIntPoint, FName>& GetKurganSites() const { return KurganSites; }
     void SetKurganSites(const TMap<FIntPoint, FName>& InSites) { KurganSites = InSites; }
 
+    // ---- Точки интереса, §4 (см. POITypes.h за общим доводом) ----
+    // Общая точка входа сева -- сеет курганы (без изменения их поведения),
+    // затем по одной клетке на оставшиеся виды, тем же детерминированным
+    // WorldRNG-проходом, что уже SeedKurganSites, каждый раз исключая уже
+    // занятые предыдущими видами клетки (GridWorldManagerPOI.cpp).
+    UFUNCTION(Exec)
+    void SeedPointsOfInterest();
+
+    // Тотем (§4.2, Збручский идол как "похожий, но не тот же" объект,
+    // решение 2026-09-06) -- запрос-только точка, ничего не грантит и не
+    // меняет State клетки. Нижний ярус читается по Distortion клетки,
+    // верхний -- виден только при высокой Purity клетки (см. довод у
+    // GetTotemRevealText, GridWorldManagerPOI.cpp). Средний ярус ("состояние
+    // игрока") НЕ реализован -- в проекте нет структуры, хранящей
+    // собственное FRealState героя отдельно от клеток (см. тот же довод,
+    // тем же честным пробелом, что уже Гнёздово-район у Курганов, §4.3) --
+    // ROADMAP держит это открытым, не молчаливым упрощением.
+    FIntPoint GetTotemSite() const { return TotemSite; }
+    void SetTotemSite(const FIntPoint& InSite) { TotemSite = InSite; }
+    FString GetTotemRevealText() const;
+
+    // Светлояр (§4.5) -- прямой потребитель уже существующей
+    // GlobalPerceptionClarity, ничего нового не считает: город виден/слышен
+    // выше BuyanGuardianClarityThreshold (тот же порог "высокой Clarity",
+    // что уже гейтит стража Буяна -- Светлояр самим документом назван
+    // "прямым предком Буяна в миниатюре", один и тот же порог, не два
+    // рассинхронизированных числа с одинаковым смыслом).
+    FIntPoint GetSvetloyarSite() const { return SvetloyarSite; }
+    void SetSvetloyarSite(const FIntPoint& InSite) { SvetloyarSite = InSite; }
+    bool IsSvetloyarVisible() const;
+
+    // Горюч-камень (§4.5) -- архетип "упрямого камня", не буквальный
+    // Синь-камень Плещеева озера: то имя уже занято ward-кристаллом яруса 2
+    // (RitualTypes.h::ZakatnayaOpushka), коллизия найдена и разведена
+    // 2026-09-06 (решение пользователя: новый Landmark получает другое имя).
+    // Аномально высокое сопротивление сдвигу TargetState -- множитель,
+    // применяемый ТОЛЬКО к клетке этой точки при релаксации
+    // (GridWorldManagerCore.cpp, см. довод у GoryuchKamenResistance рядом с
+    // применением).
+    FIntPoint GetGoryuchKamenSite() const { return GoryuchKamenSite; }
+    void SetGoryuchKamenSite(const FIntPoint& InSite) { GoryuchKamenSite = InSite; }
+
+    // Соловей-разбойник (§4.4) -- одноразовая (за заход) AoE-порча
+    // Purity/Stability по площади при активации, если игрок не прошёл под
+    // прикрытием одолень-травы (IsWardConcealmentActive у его клетки -- тот
+    // же оберег, что уже даёт "скрытие" от бестиария, здесь просто другая
+    // угроза читает тот же флаг). "Усмирение" плакун-травой -- НЕ отдельный
+    // механизм: обычное Apply зелья на клетку точки той же формулой лечит
+    // её Meta, что и любую другую клетку, специального отслеживания не
+    // требуется.
+    FIntPoint GetSoloveySite() const { return SoloveySite; }
+    void SetSoloveySite(const FIntPoint& InSite) { SoloveySite = InSite; }
+    bool IsSoloveyTriggered() const { return bSoloveyTriggered; }
+    void SetSoloveyTriggered(bool bTriggered) { bSoloveyTriggered = bTriggered; }
+    bool ActivateSolovey();
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -1442,6 +1499,19 @@ protected:
     // 2026-09-06) -- см. SeedKurganSites/LootKurgan выше. Персистентна
     // (Save/Load): разграбленный курган не должен "возрождаться" при загрузке.
     TMap<FIntPoint, FName> KurganSites;
+
+    // ---- Точки интереса, §4 (см. POITypes.h) -- по одной клетке на вид,
+    // FIntPoint(-1,-1) значит "не размещена" (та же сигнальная величина,
+    // что уже ZaryanaCell/InvisibilityCapCenter/WardConcealmentCenter выше
+    // в этом файле, не новая придуманная). Персистентны (Save/Load) --
+    // детерминированный сев зависит от порядка вызовов WorldRNG, повторный
+    // сев при загрузке дал бы другие клетки, если что-то ещё в
+    // InitializeCells успело измениться между сохранением и загрузкой.
+    FIntPoint TotemSite = FIntPoint(-1, -1);
+    FIntPoint SvetloyarSite = FIntPoint(-1, -1);
+    FIntPoint GoryuchKamenSite = FIntPoint(-1, -1);
+    FIntPoint SoloveySite = FIntPoint(-1, -1);
+    bool bSoloveyTriggered = false;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

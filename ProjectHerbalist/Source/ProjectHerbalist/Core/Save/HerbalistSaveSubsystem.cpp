@@ -70,6 +70,13 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->bSilverWardActive = WorldManager->IsSilverWardActive();
     Save->KurganSites = WorldManager->GetKurganSites();
 
+    // Точки интереса, §4 (2026-09-06) -- см. довод у полей в HerbalistSaveTypes.h.
+    Save->TotemSite = WorldManager->GetTotemSite();
+    Save->SvetloyarSite = WorldManager->GetSvetloyarSite();
+    Save->GoryuchKamenSite = WorldManager->GetGoryuchKamenSite();
+    Save->SoloveySite = WorldManager->GetSoloveySite();
+    Save->bSoloveyTriggered = WorldManager->IsSoloveyTriggered();
+
     // Биомный граф (AUDIT_AND_REFACTORING_PLAN.md §7.1, 2026-09-06) —
     // отсутствие графа в мире (тестовое окружение без DA_BiomeGraph) не
     // повод отказывать сохранению целиком, GetNodes() просто пуст.
@@ -183,6 +190,15 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->RestoreTieredWards(Save->TieredWards);
     WorldManager->SetSilverWardActive(Save->bSilverWardActive);
     WorldManager->SetKurganSites(Save->KurganSites);
+
+    // Точки интереса, §4 (2026-09-06) -- сейв без этих полей (старее этого
+    // прохода) даёт FIntPoint(-1,-1)/false по дефолту UPROPERTY, то же самое,
+    // что "точка ещё не сеялась" -- ничего специально не проверяем.
+    WorldManager->SetTotemSite(Save->TotemSite);
+    WorldManager->SetSvetloyarSite(Save->SvetloyarSite);
+    WorldManager->SetGoryuchKamenSite(Save->GoryuchKamenSite);
+    WorldManager->SetSoloveySite(Save->SoloveySite);
+    WorldManager->SetSoloveyTriggered(Save->bSoloveyTriggered);
 
     // Биомный граф (AUDIT_AND_REFACTORING_PLAN.md §7.1, 2026-09-06) —
     // RestoreNodeFieldState сам не трогает узлы, отсутствующие в сейве

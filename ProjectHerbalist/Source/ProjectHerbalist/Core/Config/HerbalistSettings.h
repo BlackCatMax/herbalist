@@ -1291,6 +1291,53 @@ public:
     // Corruption выше — симметричная плата за симметричную выгоду.
     UPROPERTY(config, EditAnywhere, Category = "Alchemy|Filtering", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float FilterPotencyLoss = 0.1f;
+
+    // --- Точки интереса (DESIGN_Brewing_Situations_And_Lore.md §4, 2026-09-06,
+    // прямой запрос пользователя "проработаем POI") ---
+
+    // Тотем (§4.2) — верхний ярус (небо/боги) виден только при высокой
+    // Purity клетки. Отдельное поле, не переиспользование
+    // ArtifactHonestPurityThreshold напрямую — тот порог о честности
+    // подношения Фонарю, семантически другая вещь, хотя то же число: обе
+    // читаются как "0.6 — общепринятая в проекте граница высокой Purity"
+    // (тот же порядок, что и GnilnikiCorruptionThreshold=0.6 для
+    // противоположного полюса). Черновое число.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float TotemUpperTierPurityThreshold = 0.6f;
+
+    // Светлояр (§4.5) — город виден/слышен выше этого порога
+    // GlobalPerceptionClarity. Отдельное поле со значением
+    // BuyanGuardianClarityThreshold (0.7) — документ сам называет Светлояр
+    // "прямым предком Буяна в миниатюре", тот же смысл "высокая Clarity
+    // открывает защищённое место", не два случайно совпавших числа.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float SvetloyarVisibilityClarityThreshold = 0.7f;
+
+    // Горюч-камень (§4.5, архетип "упрямого камня" — имя разведено с
+    // ward-кристаллом Синь-камень яруса 2, см. довод у
+    // AGridWorldManager::GoryuchKamenSite) — множитель, которым гасится
+    // ЛЮБОЙ нудж TargetState на клетке этой точки (0.5 = вдвое слабее
+    // обычного, ни ноль/полный иммунитет, ни отсутствие эффекта — "камень
+    // упрям, но не абсолютен", буквальный смысл фольклора "выходил сам", не
+    // "ничего не брало"). Черновое число, нет измеренных данных для калибровки.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float GoryuchKamenShiftResistance = 0.5f;
+
+    // Соловей-разбойник (§4.4) — AoE-порча Purity/Stability при активации
+    // без прикрытия одолень-травы (IsWardConcealmentActive). Радиус того же
+    // порядка, что ShrineInfluenceRadius (3) — площадной эффект в
+    // несколько клеток, не одна и не полсетки; отдельное поле, чтобы
+    // балансировка капищ и Соловья не были случайно связаны одним числом.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0"))
+    int32 SoloveyCorruptionRadius = 3;
+
+    // Величина порчи Purity/Stability за срабатывание — заметно меньше
+    // PotionOverdosePenalty (0.5): это фоновая угроза места, не прямая
+    // расплата за собственную ошибку игрока с зельем, тот же принцип
+    // "слабее прямого наказания", что уже разводит WardMorokReductionAmount
+    // от NightPerceptionDistortionBonus. Черновое число.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float SoloveyCorruptionBurst = 0.3f;
 };
 
 // PROJECTHERBALIST_API добавлен 2026-09-04 (обнаружено при линковке

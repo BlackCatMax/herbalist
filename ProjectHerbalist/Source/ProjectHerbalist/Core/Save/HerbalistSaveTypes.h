@@ -257,6 +257,29 @@ public:
     UPROPERTY()
     TMap<FName, FBiomeGraphNode> BiomeGraphNodes;
 
+    // Точки интереса, §4 (2026-09-06, см. POITypes.h) — сохранены как
+    // конкретные координаты, не пересеиваются при загрузке: детерминированный
+    // сев зависит от порядка вызовов WorldRNG внутри InitializeCells, а к
+    // моменту загрузки WorldRNG уже другой (сдвинут прошедшей сессией) — тот
+    // же довод, что уже у KurganSites выше про "молча воскрешать". Соловей
+    // хранит ещё и bSoloveyTriggered — единственный из новых POI с
+    // одноразовым игровым эффектом, требующим отдельного флага, не только
+    // координаты.
+    UPROPERTY()
+    FIntPoint TotemSite = FIntPoint(-1, -1);
+
+    UPROPERTY()
+    FIntPoint SvetloyarSite = FIntPoint(-1, -1);
+
+    UPROPERTY()
+    FIntPoint GoryuchKamenSite = FIntPoint(-1, -1);
+
+    UPROPERTY()
+    FIntPoint SoloveySite = FIntPoint(-1, -1);
+
+    UPROPERTY()
+    bool bSoloveyTriggered = false;
+
     // Заряна (обсуждение в сессии 2026-08-24) — Clarity/Буян/собранные ID
     // растут медленно и редко, ровно то, что должно переживать сохранение.
     UPROPERTY()
