@@ -248,19 +248,22 @@ bool FHerbalistBiomeGraph_RestoreNodeFieldStateIgnoresUnknownBiomes::RunTest(con
 // Изолируем декей от остального конвейера: перекрашиваем ВСЕ клетки сетки
 // в биом, отличный от целевого (Tundra) -- у целевого узла (Bog) в
 // RecalculateFieldsFromGrid тогда Count==0, ветка "if (Count > 0)" не
-// трогает MorokField вовсе. Одного зануления других узлов ОДИН РАЗ перед
-// циклом оказалось недостаточно (найдено эмпирически, отладочным логом
-// по стадиям конвейера): в DA_BiomeGraph есть двустороннее ребро
-// Bog<->Floodplain (leak=0.15) -- уже на первом шаге Bog утекает в
-// Floodplain через PropagateWaves, а на следующем шаге та же утечка
-// возвращается ОБРАТНО в Bog тем же ребром и откатывает его к потолку
-// 1.0 быстрее, чем декей успевает его утянуть вниз (получили ровно
-// зафиксированные 0.998 на каждом шаге -- декей реально применялся, но
-// сразу же перекрывался откатом через соседа). Поэтому все ОСТАЛЬНЫЕ узлы
-// зануляются ЗАНОВО после каждого шага -- утечка Bog->сосед этому шагу не
-// мешает, а вот сосед->Bog на СЛЕДУЮЩЕМ шаге больше не проходит, потому
-// что сосед снова на нуле к моменту, когда PropagateWaves его читает.
-// Без фикса из UpdateMemories поле не изменилось бы вовсе за все 50 шагов.
+// трогает MorokField вовсе. Все ОСТАЛЬНЫЕ узлы занулены -- входящих рёбер
+// в Bog в этом шаге нет вовсе (PrevMorok соседа = 0).
+//
+// Пересмотрено 2026-09-06 (после перевода PropagateWaves на настоящую
+// консервативную диффузию, прямое решение пользователя): раньше Bog с
+// занулёнными соседями терял только декей, потому что старый код НИЧЕГО
+// не вычитал у источника -- собственные исходящие рёбра Bog ничего ему не
+// стоили. Теперь, когда FromBiome честно теряет ровно то, что получает
+// ToBiome, у Bog с его СОБСТЕННЫМ ненулевым исходящим ребром (Bog->Floodplain,
+// leak=0.15) появляется РЕАЛЬНАЯ, ожидаемая убыль от диффузии -- сосед на
+// нуле не отправляет ничего ВХОДЯЩЕГО, но сам Bog всё равно ОТПРАВЛЯЕТ
+// часть своего значения наружу. Это не баг теста и не баг фикса -- это
+// именно то поведение, которое пользователь и просил ("рост в принципе
+// невозможен без внешнего источника" подразумевает и честную убыль по
+// исходящим рёбрам). Ожидаемое значение считается аналитически из реальных
+// рёбер ассета, не захардкожено -- тест переживёт правку данных графа.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_MorokFieldDecaysOverTimeWithoutInput,
     "Herbalist.BiomeGraph.MorokFieldDecaysOverTimeWithoutInput",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
@@ -323,30 +326,29 @@ bool FHerbalistBiomeGraph_MorokFieldDecaysOverTimeWithoutInput::RunTest(const FS
         }
     }
 
-    // 50 шагов * FixedTimeStep (0.2с, BiomeGraphAsset.h) = 10 симулированных
-    // секунд. Ожидаемое затухание при GlobalMorokDecay=0.01:
-    // 1.0 * (1 - 0.01*0.2)^50 ≈ 0.905.
-    for (int32 Step = 0; Step < 50; ++Step)
+    // Аналитическое ожидание одного шага: диффузия честно списывает с Bog
+    // сумму leak по ВСЕМ его исходящим рёбрам (соседи на нуле, входящих
+    // нет), затем декей. Никаких шрайнов в тестовом мире нет -- демпинг
+    // границ капищ (ShrineBorderLeakDampening) не участвует.
+    float TotalOutgoingLeak = 0.0f;
+    for (const FBiomeGraphEdge& Edge : Graph->GetEdges())
     {
-        Graph->ForceStep();
-
-        for (const auto& Pair : Graph->GetNodes())
+        if (Edge.FromBiome == TargetBiomeID)
         {
-            if (Pair.Key == TargetBiomeID) continue;
-            if (FBiomeGraphNode* Node = Graph->GetMutableNode(Pair.Key))
-            {
-                Node->MorokField = 0.0f;
-            }
+            TotalOutgoingLeak += Edge.MorokLeak * Asset->GlobalInfluenceScale;
         }
     }
+    const float ExpectedAfterDiffusion = FMath::Clamp(1.0f - TotalOutgoingLeak, 0.0f, 1.0f);
+    const float ExpectedFinal = ExpectedAfterDiffusion * (1.0f - Asset->GlobalMorokDecay * Asset->FixedTimeStep);
+
+    Graph->ForceStep();
 
     const FBiomeGraphNode* Result = Graph->GetNode(TargetBiomeID);
     if (TestNotNull(TEXT("Target node still exists"), Result))
     {
-        TestTrue(FString::Printf(TEXT("MorokField decayed measurably from 1.0 (got %.4f, expected ~0.905)"), Result->MorokField),
-            Result->MorokField < 0.95f);
-        TestTrue(FString::Printf(TEXT("MorokField did not swing implausibly low (got %.4f)"), Result->MorokField),
-            Result->MorokField > 0.85f);
+        TestTrue(FString::Printf(TEXT("MorokField matches analytical diffusion+decay prediction (got %.5f, expected %.5f, outgoing leak %.3f)"),
+            Result->MorokField, ExpectedFinal, TotalOutgoingLeak),
+            FMath::IsNearlyEqual(Result->MorokField, ExpectedFinal, 0.001f));
     }
 
     Graph->Deinitialize();
@@ -421,6 +423,110 @@ bool FHerbalistBiomeGraph_InstabilityAndAxisDriftDecayMatchesPreFixBehaviorAtDef
         TestTrue(FString::Printf(TEXT("AxisDrift.X matches pre-fix 0.98 factor (got %.5f, expected ~0.98)"), Result->Memory.AxisDrift.X),
             FMath::IsNearlyEqual(Result->Memory.AxisDrift.X, 0.98f, 0.001f));
     }
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
+// Диффузия вместо аддитивного копирования (2026-09-06, прямое решение
+// пользователя после найденного вживую бага: пара узлов с рёбрами в обе
+// стороны, например Bog<->Floodplain, неограниченно раздувала друг друга,
+// декей на порядок слабее утечки). Раньше PropagateWaves добавлял поток
+// получателю, ничего не вычитая у источника -- суммарный Морок по всему
+// графу рос сам собой на каждом шаге без единого внешнего события.
+//
+// Проверяем инвариант напрямую: сумма MorokField по ВСЕМ узлам после
+// одного полного шага должна отличаться от суммы ДО шага РОВНО на декей
+// (GlobalMorokDecay, тот же множитель, что уже у Memory.*History) -- если
+// диффузия хоть немного "рождает" или "теряет" Морок сама по себе,
+// сумма разойдётся с этим предсказанием. RecalculateFieldsFromGrid
+// нейтрализован отдельно: перед шагом каждая клетка сетки получает ТО ЖЕ
+// Distortion, что уже стоит в её узле -- блендинг к среднему по сетке
+// тогда не двигает поле (Lerp(V,V,x)=V), остаётся ровно диффузия+декей.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes,
+    "Herbalist.BiomeGraph.PropagateWavesConservesTotalMorokAcrossAllNodes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!TestNotNull(TEXT("UBiomeGraphSubsystem present"), Graph))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+    if (!TestNotNull(TEXT("DA_BiomeGraph asset loads"), Asset))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Graph->InitializeFromAsset(Asset);
+    if (!TestTrue(TEXT("BiomeGraphSubsystem reports initialized"), Graph->IsInitialized()))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // Раскраска -- каждому узлу своё отдельное, ненулевое значение
+    // (0.1, 0.2, 0.3...), чтобы реально нагрузить рёбра во всех
+    // направлениях разом, не только один сосед на нуле.
+    int32 Index = 0;
+    for (const auto& Pair : Graph->GetNodes())
+    {
+        if (FBiomeGraphNode* Node = Graph->GetMutableNode(Pair.Key))
+        {
+            Node->MorokField = FMath::Fmod(0.1f * (Index + 1), 0.9f) + 0.05f;
+        }
+        ++Index;
+    }
+
+    // Нейтрализуем RecalculateFieldsFromGrid -- каждая клетка получает
+    // Distortion, равный текущему полю ЕЁ СОБСТВЕННОГО биома.
+    for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
+    {
+        for (int32 X = 0; X < Manager->GridSizeX; ++X)
+        {
+            FGridCell* Cell = Manager->GetCell(X, Y);
+            if (!Cell) continue;
+            const FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
+            if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
+            {
+                Cell->State.Meta.Distortion = Node->MorokField;
+            }
+        }
+    }
+
+    double TotalBefore = 0.0;
+    for (const auto& Pair : Graph->GetNodes())
+    {
+        TotalBefore += Pair.Value.MorokField;
+    }
+
+    Graph->ForceStep();
+
+    double TotalAfter = 0.0;
+    for (const auto& Pair : Graph->GetNodes())
+    {
+        TotalAfter += Pair.Value.MorokField;
+    }
+
+    // Единственная легитимная убыль за один шаг -- декей, тот же множитель,
+    // что уже используется в UpdateMemories для Memory.MorokHistory.
+    const double ExpectedFactor = 1.0 - static_cast<double>(Asset->GlobalMorokDecay) * static_cast<double>(Asset->FixedTimeStep);
+    const double ExpectedTotal = TotalBefore * ExpectedFactor;
+
+    TestTrue(FString::Printf(TEXT("Total MorokField after diffusion+decay matches pure-decay prediction (got %.6f, expected %.6f, before %.6f)"),
+        TotalAfter, ExpectedTotal, TotalBefore),
+        FMath::IsNearlyEqual(TotalAfter, ExpectedTotal, 0.001));
 
     Graph->Deinitialize();
     Manager->Destroy();

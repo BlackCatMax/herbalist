@@ -267,10 +267,26 @@ void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
     TMap<FName, TMap<FName, float>> BorderDamping;
     CollectBorderShrineDamping(Grid, Settings ? Settings->ShrineBorderLeakDampening : 0.5f, BorderDamping);
 
+    // Настоящая диффузия, не аддитивное копирование (2026-09-06, прямое
+    // решение пользователя после найденного вживую бага: два узла с
+    // рёбрами в обе стороны, например Bog<->Floodplain, гарантированно
+    // раздували друг друга к потолку 1.0 -- декей (см. UpdateMemories) на
+    // порядок слабее утечки и не мог этому помешать). Раньше `ToBiome`
+    // получал вклад, а `FromBiome` НИЧЕГО не терял -- значение клонировалось,
+    // не перемещалось, поэтому суммарный Морок по всему графу рос сам
+    // собой на каждом шаге даже без единого игрового события. Теперь
+    // поток вычитается из источника ровно в том же размере, что
+    // добавляется получателю -- сумма MorokField/ZaryanaField по ВСЕМ
+    // узлам разом теперь консервативна относительно этой функции: взяться
+    // больше Мороку, чем было, отсюда попросту неоткуда, расти можно
+    // только через реальный внешний источник (RecordFootprint — сбор/
+    // варка игрока) или RecalculateFieldsFromGrid (честно читает то, что
+    // уже реально изменилось в клетках по другим причинам), не из самой
+    // диффузии.
     for (const FBiomeGraphEdge& Edge : Edges)
     {
-        float SourceMorok = PrevMorok[Edge.FromBiome];
-        float SourceZaryana = PrevZaryana[Edge.FromBiome];
+        const float SourceMorok = PrevMorok[Edge.FromBiome];
+        const float SourceZaryana = PrevZaryana[Edge.FromBiome];
 
         float EffectiveMorokLeak = Edge.MorokLeak;
         if (const TMap<FName, float>* FromDamping = BorderDamping.Find(Edge.FromBiome))
@@ -281,8 +297,13 @@ void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
             }
         }
 
-        DeltaMorok[Edge.ToBiome] += SourceMorok * EffectiveMorokLeak * GlobalInfluenceScale;
-        DeltaZaryana[Edge.ToBiome] += SourceZaryana * Edge.ZaryanaFlow * GlobalInfluenceScale;
+        const float MorokFlow = SourceMorok * EffectiveMorokLeak * GlobalInfluenceScale;
+        const float ZaryanaFlowAmount = SourceZaryana * Edge.ZaryanaFlow * GlobalInfluenceScale;
+
+        DeltaMorok[Edge.ToBiome] += MorokFlow;
+        DeltaMorok[Edge.FromBiome] -= MorokFlow;
+        DeltaZaryana[Edge.ToBiome] += ZaryanaFlowAmount;
+        DeltaZaryana[Edge.FromBiome] -= ZaryanaFlowAmount;
     }
 
     for (auto& Pair : Nodes)

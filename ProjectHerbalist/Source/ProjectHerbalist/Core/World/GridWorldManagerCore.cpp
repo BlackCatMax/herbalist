@@ -1686,7 +1686,7 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     ++Cell.PendingRegrowthCount;
 
     FTimerHandle TimerHandle;
-    GetWorldTimerManager().SetTimer(TimerHandle, [this, &Cell]()
+    GetWorldTimerManager().SetTimer(TimerHandle, [this, &Cell, RegrowthTime]()
     {
         --Cell.PendingRegrowthCount;
 
@@ -1715,6 +1715,17 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
             // переигрывается заново из RngBaseSeed), это отросшее — не то же
             // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
             MarkCellDirty(Cell.X, Cell.Y);
+
+            // Найдено 2026-09-06 (прямой запрос пользователя: "проверь что с
+            // отрастанием ресурсов") -- реальный спавн логируется только на
+            // Verbose (SpawnResourceActor, невидим по умолчанию), а таймер по
+            // умолчанию 420с (7 минут) -- ни разу не подтверждалось видимым
+            // логом, что отрастание вообще срабатывает. Одна строка на Log,
+            // именно на факт УСПЕШНОГО отрастания (не на попытку -- ранние
+            // return выше уже покрыты собственными путями, спамить на каждую
+            // клетку сетки при обычной игре не должно).
+            UE_LOG(LogHerbalistWorld, Log, TEXT("[Regrowth] Cell (%d,%d) regrew a resource after %.0fs"),
+                Cell.X, Cell.Y, RegrowthTime);
         }
     }, RegrowthTime, false);
 }
