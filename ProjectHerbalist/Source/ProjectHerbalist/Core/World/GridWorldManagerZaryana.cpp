@@ -428,10 +428,14 @@ void AGridWorldManager::CheckBuyanCondition()
 
     if (Cells.Num() == 0) return;
 
+    // Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1, 2026-09-06)
+    // — Буян измеряет Distance_итог (с историей Coherence), не голый
+    // снимок: мир, добравшийся до тех же чисел через согласованные варки,
+    // должен быть заметно ближе к порогу, чем тот же мир через хаос.
     float SumDistance = 0.0f;
     for (const FGridCell& Cell : Cells)
     {
-        SumDistance += HerbalistCore::Math::Distance(Cell.State, FAlatyr::S0);
+        SumDistance += HerbalistCore::Math::DistanceWithHistory(Cell.State, Cell.Memory.AverageCoherence);
     }
     const float AvgDistance = SumDistance / Cells.Num();
 

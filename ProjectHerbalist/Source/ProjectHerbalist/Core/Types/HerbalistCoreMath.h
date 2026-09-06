@@ -53,6 +53,25 @@ namespace HerbalistCore::Math
                           + dPur*dPur + dPot*dPot + dRes*dRes + dCor*dCor);
     }
 
+    // Distance_итог — метрика мира с историей, не только снимок
+    // (15_Cycles_And_Shrines.md §15.5.1, реализовано 2026-09-06, прямой
+    // запрос пользователя). 11_Intent_Evolution §11.5: "Intent становится
+    // инструментом управления расстоянием до Алатыря" — метрика обязана
+    // учитывать не только текущие числа клетки, но и то, КАК она к ним
+    // пришла (та же путь-зависимость, что уже требует 09_Entities §9.3,
+    // см. META_AUDIT.md §5). Два места с одинаковым State могут быть на
+    // разном Distance_итог от S0 — если оно достигнуто согласованными
+    // варками (AverageCoherence=1), штрафа нет; если тем же хаосом
+    // (AverageCoherence=0), расстояние удваивается. Множитель ограничен
+    // [1,2] явным клампом — AverageCoherence сама по себе не гарантированно
+    // лежит строго в [0,1] (EffectiveIntent.Coherence, из которого она
+    // копится, клампится по месту вычисления, а не здесь).
+    inline float DistanceWithHistory(const FRealState& State, float AverageCoherence)
+    {
+        const float CoherencePenalty = FMath::Clamp(2.0f - AverageCoherence, 1.0f, 2.0f);
+        return Distance(State, FAlatyr::S0) * CoherencePenalty;
+    }
+
     // Триггер Шмитта: порог входа выше порога выхода на 2×Margin, чтобы Value,
     // колеблющееся у самой границы Threshold, не переключало bCurrentlyActive
     // каждый тик. Раньше жил локально в GridWorldManagerEntities.cpp (проявление

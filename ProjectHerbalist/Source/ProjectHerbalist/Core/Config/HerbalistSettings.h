@@ -965,6 +965,19 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ShrineCoherenceBonus = 0.15f;
 
+    // Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1, 2026-09-06)
+    // — скорость, с которой Memory.AverageCoherence клетки подтягивается к
+    // Coherence каждого нового применённого на неё зелья:
+    // AverageCoherence = Lerp(AverageCoherence, NewCoherence, Alpha).
+    // Дискретная EMA по СОБЫТИЯМ применения, не по игровому времени (варки
+    // случаются редко и неравномерно, "среднее Coherence варок" — про сами
+    // варки, не про непрерывный тик). Черновое число: заметно ниже 0.5 —
+    // единственная неудачная/дурная варка не должна мгновенно перечеркнуть
+    // долгую историю согласованных, тот же принцип постепенности, что уже
+    // у ClarityResponseLerpRate (Zaryana), просто по событиям, не по секундам.
+    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float CoherenceHistoryEmaAlpha = 0.25f;
+
     // --- Типоспецифичные бонусы капищ (эффект 3, §15.5 "Типы капищ",
     // реализовано 2026-08-29 вместе с лорной привязкой к богам, см.
     // 15_Cycles_And_Shrines.md) — числа взяты дословно из таблицы шести

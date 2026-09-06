@@ -1094,6 +1094,15 @@ namespace Simulation
             OverdoseSettings ? OverdoseSettings->PotionOverdoseThreshold : 0.75f,
             OverdoseSettings ? OverdoseSettings->PotionOverdosePenalty : 0.5f);
 
+        // Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1,
+        // 2026-09-06) — только реальное применение НА КЛЕТКУ пишет в
+        // историю (крафт в инвентарь выше по функции уже вернулся, той
+        // ветки клетка вообще не касается). EffectiveIntent.Coherence —
+        // финальное значение ПОСЛЕ бонусов капища/оберегов/межбиомности
+        // выше, ровно "Coherence этой варки", не сырой ComputeIntentCoherence.
+        const float CoherenceAlpha = ShrineSettings ? ShrineSettings->CoherenceHistoryEmaAlpha : 0.25f;
+        Modified.Memory.AverageCoherence = FMath::Lerp(TargetCell->Memory.AverageCoherence, EffectiveIntent.Coherence, CoherenceAlpha);
+
         Modified.HarvestStress = FMath::Clamp(TargetCell->HarvestStress + 0.2f, 0.f, 1.f);
         OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
 

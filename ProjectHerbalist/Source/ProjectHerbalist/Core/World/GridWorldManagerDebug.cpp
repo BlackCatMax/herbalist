@@ -57,7 +57,10 @@ FString AGridWorldManager::GetSelectedCellInfo() const
     // Distance(S_real, S0) — раньше был написан и не подключён ни к чему
     // (META_AUDIT §1.4). Первый живой потребитель: отладочная строка
     // выделенной клетки. Не нормализовано в [0,1] — см. HerbalistCoreMath.h.
-    const float DistanceToS0 = HerbalistCore::Math::Distance(Cell->State, FAlatyr::S0);
+    // Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1, 2026-09-06) —
+    // тот же Distance_итог, что и у условия Буяна (CheckBuyanCondition),
+    // не голый снимок State.
+    const float DistanceToS0 = HerbalistCore::Math::DistanceWithHistory(Cell->State, Cell->Memory.AverageCoherence);
 
     // Курган (§2.3/§4.3, 2026-09-06) — единственный способ обнаружить место
     // без визуального актора на уровне (v1 консольный, тот же принцип, что

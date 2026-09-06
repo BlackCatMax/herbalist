@@ -1214,4 +1214,103 @@ bool FPipelineV2ApplyIgnoresCallerCoherenceTest::RunTest(const FString& Paramete
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1, 2026-09-06) --
+// применение НА КЛЕТКУ обязано подтянуть Memory.AverageCoherence к
+// EffectiveIntent.Coherence этой варки (EMA, HerbalistSettings::
+// CoherenceHistoryEmaAlpha). MakeTargetCell не трогает Memory -- дефолт
+// FMemoryState::AverageCoherence=1.0 (см. довод у объявления поля:
+// нейтральный "нет истории", не 0.0).
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyToCellUpdatesAverageCoherenceTest,
+    "ProjectHerbalist.PipelineV2.ApplyToCellUpdatesAverageCoherence",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyToCellUpdatesAverageCoherenceTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+    TArray<FInventoryItem> Ingredients = { MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f), MakeWater(0.5f, 0.4f) };
+
+    FRandomStream Rng(11);
+    FStateDelta Delta = RunApply(Ingredients, /*bIsCrafting*/ false, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap);
+
+    const FGridCell* Modified = Delta.WorldChanges.Find(FIntPoint(5, 5));
+    if (!TestNotNull(TEXT("WorldChanges contains target cell"), Modified)) return false;
+
+    // Реальная варка почти никогда не даёт Coherence ровно 1.0 -- EMA-блендинг
+    // к нему от дефолтного 1.0 обязан хоть немного сдвинуть значение вниз.
+    TestTrue(TEXT("AverageCoherence moved away from the untouched-cell default of 1.0"),
+        Modified->Memory.AverageCoherence < 1.0f - KINDA_SMALL_NUMBER);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyToCellPreservesOldAverageCoherenceAsEmaBase,
+    "ProjectHerbalist.PipelineV2.ApplyToCellPreservesOldAverageCoherenceAsEmaBase",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyToCellPreservesOldAverageCoherenceAsEmaBase::RunTest(const FString& Parameters)
+{
+    // Не перезапись, а блендинг: клетка с уже накопленной низкой историей
+    // (0.1) не должна ни остаться на месте, ни мгновенно прыгнуть к новому
+    // значению -- EMA с Alpha<1 обязан оставить след старого значения.
+    FGridCell Cell = MakeTargetCell(5, 5);
+    Cell.Memory.AverageCoherence = 0.1f;
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), Cell);
+    FBiomeSnapshot BiomeSnap;
+    TArray<FInventoryItem> Ingredients = { MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f), MakeWater(0.5f, 0.4f) };
+
+    FRandomStream Rng(11);
+    FStateDelta Delta = RunApply(Ingredients, /*bIsCrafting*/ false, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap);
+
+    const FGridCell* Modified = Delta.WorldChanges.Find(FIntPoint(5, 5));
+    if (!TestNotNull(TEXT("WorldChanges contains target cell"), Modified)) return false;
+
+    TestTrue(TEXT("New AverageCoherence is not the untouched old value (0.1) -- it moved"),
+        !FMath::IsNearlyEqual(Modified->Memory.AverageCoherence, 0.1f, 0.001f));
+    TestTrue(TEXT("New AverageCoherence is not a full jump to 1.0 -- old history still weighs in"),
+        Modified->Memory.AverageCoherence < 1.0f - KINDA_SMALL_NUMBER);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyShrineBonusRaisesAverageCoherenceMoreThanWithout,
+    "ProjectHerbalist.PipelineV2.ApplyShrineBonusRaisesAverageCoherenceMoreThanWithout",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyShrineBonusRaisesAverageCoherenceMoreThanWithout::RunTest(const FString& Parameters)
+{
+    // Тот же сетап, что уже ApplyShrineCoherenceBonus выше в этом файле --
+    // капище поднимает EffectiveIntent.Coherence, значит и итоговый
+    // AverageCoherence обязан оказаться выше, чем без капища, с той же
+    // стартовой историей (дефолт 1.0) и теми же ингредиентами/сидом.
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+    TArray<FInventoryItem> Ingredients = { MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f), MakeWater(0.5f, 0.4f) };
+
+    FRandomStream RngNoShrine(3);
+    FStateDelta NoShrineDelta = RunApply(Ingredients, /*bIsCrafting*/ false, FIntPoint(5, 5), RngNoShrine, WorldSnap, BiomeSnap);
+
+    FWorldSnapshot WorldSnapWithShrine = WorldSnap;
+    FShrine S;
+    S.Cell = FIntPoint(5, 5);
+    S.Type = EShrineType::Ancestral;
+    S.Restoration = 0.9f;
+    WorldSnapWithShrine.Shrines.Add(S);
+
+    FRandomStream RngWithShrine(3);
+    FStateDelta ShrineDelta = RunApply(Ingredients, /*bIsCrafting*/ false, FIntPoint(5, 5), RngWithShrine, WorldSnapWithShrine, BiomeSnap);
+
+    const FGridCell* NoShrineModified = NoShrineDelta.WorldChanges.Find(FIntPoint(5, 5));
+    const FGridCell* ShrineModified = ShrineDelta.WorldChanges.Find(FIntPoint(5, 5));
+    if (!TestNotNull(TEXT("No-shrine cell modified"), NoShrineModified) || !TestNotNull(TEXT("Shrine cell modified"), ShrineModified))
+        return false;
+
+    TestTrue(TEXT("Shrine's Coherence bonus lands as a higher AverageCoherence than without it"),
+        ShrineModified->Memory.AverageCoherence > NoShrineModified->Memory.AverageCoherence + KINDA_SMALL_NUMBER);
+    return true;
+}
+
 #endif

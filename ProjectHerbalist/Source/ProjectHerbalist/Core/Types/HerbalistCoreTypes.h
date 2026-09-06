@@ -280,6 +280,20 @@ struct PROJECTHERBALIST_API FMemoryState
     // не работает). См. RegenerateCellParameters (GridWorldManagerCore.cpp).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
     bool bDegrading = false;
+
+    // Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1, 2026-09-06,
+    // прямой запрос "реализуем") — экспоненциально затухающее среднее
+    // Coherence варок, применённых к этой клетке (не крафта в инвентарь —
+    // тот не трогает клетку вовсе). Обновляется PipelineV2::ProcessApplyCommand
+    // при каждом реальном применении зелья на клетку, см.
+    // HerbalistSettings::CoherenceHistoryEmaAlpha за скоростью затухания.
+    // Дефолт 1.0 (не 0.0!) — нейтральный "нет истории, не судим" для клеток,
+    // которых ещё не касалась ни одна варка: с дефолтом 0.0 подавляющее
+    // большинство никогда не тронутой карты читалось бы так, будто оно
+    // "пришло к своим числам через хаос", хотя к нему просто ещё не
+    // прикасались — не то же самое.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Memory")
+    float AverageCoherence = 1.0f;
 };
 
 USTRUCT(BlueprintType)

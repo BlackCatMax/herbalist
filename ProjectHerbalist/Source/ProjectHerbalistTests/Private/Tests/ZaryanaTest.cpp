@@ -194,6 +194,76 @@ bool FHerbalistZaryana_BuyanRequiresBothWorldStateAndShrines::RunTest(const FStr
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_BuyanConditionRespectsAverageCoherenceHistory,
+    "Herbalist.Zaryana.BuyanConditionRespectsAverageCoherenceHistory",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_BuyanConditionRespectsAverageCoherenceHistory::RunTest(const FString& Parameters)
+{
+    // Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1, 2026-09-06)
+    // -- Буян обязан читать Distance_итог (с историей Coherence), не голый
+    // снимок State: один и тот же мир должен быть недостижим при плохой
+    // истории (AverageCoherence=0, штраф x2) и достижим при хорошей
+    // (AverageCoherence=1, дефолт, без штрафа) -- то же State в обоих случаях.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    auto SetupWorld = [](AGridWorldManager* Manager)
+    {
+        Manager->RegisterShrine(FIntPoint(0, 0), EShrineType::Ancestral);
+        if (FShrine* Shrine = Manager->FindShrineAt(FIntPoint(0, 0)))
+        {
+            Shrine->Restoration = 0.9f;
+        }
+        // Каждая клетка ВСЕЙ сетки -- на удалении ~0.3 от S0 по одной оси
+        // (Purity), не ровно в нём: BuyanAverageDistanceThreshold=0.5 по
+        // умолчанию должен пропустить x1 (0.3 < 0.5) и отсечь x2 (0.6 > 0.5).
+        // Оставлять хоть одну клетку на дефолтных (далёких от S0) значениях
+        // держало бы AvgDistance высоким независимо от истории -- вся сетка
+        // обязана быть близка к S0, иначе тест не изолирует именно множитель.
+        for (int32 X = 0; X < Manager->GridSizeX; ++X)
+        {
+            for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
+            {
+                if (FGridCell* Cell = Manager->GetCell(X, Y))
+                {
+                    Cell->State = FAlatyr::S0;
+                    Cell->State.Meta.Purity = 0.7f;
+                }
+            }
+        }
+    };
+
+    AGridWorldManager* GoodHistory = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Good-history manager spawned"), GoodHistory)) return false;
+    SetupWorld(GoodHistory);
+    // Memory.AverageCoherence остаётся на дефолте 1.0 -- ни одна варка не
+    // трогала эти клетки, "нет истории" читается как отсутствие штрафа.
+    GoodHistory->CheckBuyanCondition();
+    TestTrue(TEXT("Buyan reached with default (untouched) coherence history -- no penalty"), GoodHistory->IsBuyanReached());
+    GoodHistory->Destroy();
+
+    AGridWorldManager* BadHistory = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Bad-history manager spawned"), BadHistory)) return false;
+    SetupWorld(BadHistory);
+    for (int32 X = 0; X < BadHistory->GridSizeX; ++X)
+    {
+        for (int32 Y = 0; Y < BadHistory->GridSizeY; ++Y)
+        {
+            if (FGridCell* Cell = BadHistory->GetCell(X, Y))
+            {
+                Cell->Memory.AverageCoherence = 0.0f;
+            }
+        }
+    }
+    BadHistory->CheckBuyanCondition();
+    TestFalse(TEXT("Same raw State, but chaotic history (AverageCoherence=0) doubles distance past the threshold"),
+        BadHistory->IsBuyanReached());
+    BadHistory->Destroy();
+
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_RosaFallsBackToS0WhenCellUnset,
     "Herbalist.Zaryana.RosaFallsBackToS0WhenCellUnset",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

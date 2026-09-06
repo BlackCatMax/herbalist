@@ -9086,3 +9086,88 @@ Molva/материала.
 покрыто через глоссарий, отдельной правки не требует.
 
 Без изменений кода, тесты не запускались.
+
+## Два решения пользователя по открытым пунктам ROADMAP (2026-09-06)
+
+- **Тотем (Збручский идол)** — решено тащить как "похожий, но не тот же"
+  объект, не буквальную географическую находку (`DESIGN_Brewing_Situations_
+  And_Lore.md §4.2`). Не реализовано в коде — POI-система под тотемы ещё не
+  заведена (единственный существующий POI-механизм — курганы), ждёт своей
+  очереди.
+- **"Момент сюжетной передачи даров Аграфены"** — снято из ROADMAP как
+  основанное на устаревшей предпосылке: пользователь напомнил, что Зеркальце/
+  Клубочек уже переведены на путь честной/обманной добычи через Легендарных
+  сущностей (`TryAcquireArtifact`, ревизия "Ending and artifacts" 2026-09-01/02),
+  не выдаются Аграфеной вовсе (в коде нет ни одного упоминания этого имени,
+  проверено грепом) — отдельной "сцены вручения" никогда не требовалось.
+
+Без изменений кода, тесты не запускались.
+
+## Метрика мира с историей: Distance_итог = Distance × (2 − AverageCoherence) (2026-09-06)
+
+Прямой запрос пользователя ("реализуем") — `15_Cycles_And_Shrines.md
+§15.5.1`, спроектировано ещё 2026-08-23, не реализовано с тех пор
+(`11_Intent_Evolution §11.5`: "Intent становится инструментом управления
+расстоянием до Алатыря" — метрика обязана учитывать не только текущие
+числа клетки, но и то, КАК она к ним пришла).
+
+Разведка перед реализацией нашла, что спецификация сама неточна: "та же
+математическая форма, что уже есть у `Memory.AccumulatedDistortion`/
+`HistoryPurity`" — на деле `AccumulatedDistortion` это плоская синхронизация
+(`= S.Meta.Distortion`, не EMA), а `HistoryPurity` вовсе мёртвое поле, нигде
+не читается и не пишется (тот же класс находки, что уже был у `Toxicity`/
+`Moisture` в записи выше). Реализовано с нуля по образцу ближайшего
+реального прецедента затухающего среднего в проекте — `ClarityResponseLerpRate`
+(Zaryana), только по дискретным событиям варки, не по игровому времени.
+
+**Реализовано:**
+- Новое поле `FMemoryState::AverageCoherence` (`HerbalistCoreTypes.h`),
+  дефолт **1.0**, не 0.0 — "нет истории, не судим": с дефолтом 0.0
+  подавляющее большинство никогда не тронутой карты читалось бы так, будто
+  пришло к своим числам через хаос, хотя к нему просто ещё не прикасались.
+- `HerbalistCore::Math::DistanceWithHistory(State, AverageCoherence)`
+  (`HerbalistCoreMath.h`) — `Distance(State, S0) × Clamp(2−AverageCoherence, 1, 2)`,
+  множитель ограничен явным клампом, не доверяясь диапазону
+  `AverageCoherence` самого по себе.
+- `PipelineV2::ProcessApplyCommand` — только реальное применение НА КЛЕТКУ
+  (не крафт в инвентарь, тот клетку не трогает) обновляет
+  `Modified.Memory.AverageCoherence = Lerp(TargetCell->Memory.AverageCoherence,
+  EffectiveIntent.Coherence, CoherenceHistoryEmaAlpha)` — `EffectiveIntent.Coherence`
+  берётся ПОСЛЕ бонусов капища/оберегов/межбиомности (реальная "Coherence
+  этой варки"), не сырой `ComputeIntentCoherence`. Новая настройка
+  `CoherenceHistoryEmaAlpha=0.25` (`HerbalistSettings.h`, категория
+  Shrines) — черновое число, заметно ниже 0.5: одна неудачная варка не
+  должна мгновенно перечеркнуть долгую согласованную историю.
+- Два реальных потребителя переведены с голого `Distance` на
+  `DistanceWithHistory`: `AGridWorldManager::CheckBuyanCondition`
+  (`GridWorldManagerZaryana.cpp`) и `GetSelectedCellInfo`
+  (`GridWorldManagerDebug.cpp`). Не тронуты: `IngredientRegistrySubsystem.cpp`
+  (другая пара состояний, не S0), сравнение `Distance(TargetState,S0)` с
+  `Distance(State,S0)` в `RegenerateCellParameters` (инвариантно под
+  одинаковым множителем на обеих сторонах сравнения — трогать незачем),
+  `UpdateRosaSignal`/Чёрная роса Заряны (детектор ИЗМЕНЕНИЯ между двумя
+  опросами одной клетки, своя откалиброванная чувствительность, не
+  абсолютная "метрика мира" — решение не расширять на неё формулу без
+  отдельного повода).
+
+**Тестирование:** новый `WorldDistanceMetricTest.cpp` (4 теста на чистую
+функцию — полная когерентность не штрафует, нулевая ровно удваивает,
+множитель зажат в [1,2] даже за пределами [0,1] у входа, путь-зависимость
+при одинаковом State). `PipelineV2ApplyTest.cpp` (+3 теста — обновление
+EMA от дефолта, блендинг сохраняет след старой истории, а не перезаписывает
+её, капище поднимает итоговый `AverageCoherence`). `ZaryanaTest.cpp` (+1 —
+`CheckBuyanCondition` достижим при дефолтной истории и недостижим при
+той же сырой `State`, но нулевой `AverageCoherence`, на полной сетке 20×20,
+не только части клеток).
+
+**Итог:** 407 → 415 тестов, **415/415, два чистых прогона, ноль
+регрессий.** Файлы: `Core/Types/HerbalistCoreTypes.h`,
+`Core/Types/HerbalistCoreMath.h`, `Core/Config/HerbalistSettings.h`,
+`Core/Simulation/Private/PipelineV2.cpp`,
+`Core/World/GridWorldManagerZaryana.cpp`,
+`Core/World/GridWorldManagerDebug.cpp`,
+`ProjectHerbalistTests/.../Tests/WorldDistanceMetricTest.cpp` (новый),
+`ProjectHerbalistTests/.../Tests/PipelineV2ApplyTest.cpp`,
+`ProjectHerbalistTests/.../Tests/ZaryanaTest.cpp`,
+`herbalist_docs/Herbalist_Vault/03_Technical/Current/Core_Current.md`,
+`ROADMAP.md`.

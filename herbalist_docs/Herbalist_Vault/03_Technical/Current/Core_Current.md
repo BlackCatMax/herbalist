@@ -108,7 +108,21 @@ S0 — предельно согласованное, предельно пол�
 по всем шести Meta-осям). Реальная роль сегодня — недостижимый ориентир
 прогрессии: `HerbalistCore::Math::Distance(State, FAlatyr::S0)` (не
 нормализовано в [0,1]) используется в `GetSelectedCellInfo`
-(`GridWorldManagerDebug.cpp`) и метрике мира Заряны/Буяна. Сбор берёт базу
+(`GridWorldManagerDebug.cpp`) и метрике мира Заряны/Буяна.
+
+**Метрика мира с историей** (`15_Cycles_And_Shrines.md §15.5.1`,
+2026-09-06) — `GetSelectedCellInfo`/`CheckBuyanCondition` больше не читают
+голый `Distance` напрямую, а `HerbalistCore::Math::DistanceWithHistory(State,
+AverageCoherence) = Distance(State, S0) × Clamp(2 − AverageCoherence, 1, 2)`.
+`FMemoryState::AverageCoherence` (дефолт 1.0 — "нет истории, не судим") —
+EMA по событиям применения зелья на клетку (не крафта), обновляется в
+`PipelineV2::ProcessApplyCommand`:
+`Memory.AverageCoherence = Lerp(Memory.AverageCoherence, EffectiveIntent.Coherence,
+HerbalistSettings::CoherenceHistoryEmaAlpha)`. Путь-зависимость: два места с
+одинаковым `State` могут читаться на разном расстоянии от S0 в зависимости
+от того, согласованными или хаотичными варками они к этому состоянию пришли.
+
+Сбор берёт базу
 из `IngredientTableRow::BaseState`/биома клетки (`GenerateHarvestResult`,
 `PipelineV2.cpp`), не из S0.
 
