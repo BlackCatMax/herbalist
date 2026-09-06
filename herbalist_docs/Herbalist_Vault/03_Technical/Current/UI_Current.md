@@ -106,9 +106,12 @@ v1-выбор проекта, не пробел). История — `CHANGELOG.
 
 - Сад/сбор: `SetGardenPlot`, `PlantSeed`, `SetHarvestIntent`,
   `SetGatheringTool`, `ApplyFertilizer`.
-- Обереги/артефакты: `ActivateWard`, `EquipSilverWard`, `LootKurgan`,
+- Обереги/артефакты: `ActivateWard`, `EquipSilverWard`,
   `UseInvisibilityCap`, `UseYouthApple`, `UseComb`, `UseMirror`, `UseYarnBall`,
   `AcquireFeather`+`Use*Feather`.
+- Точки интереса: курганы теперь физический `AKurganActor` (подбирается
+  через `IInteractable`/`InteractAction`, не Exec — DECISIONS_LOG.md
+  решение №5, 2026-09-06), `PayKalinovMostToll` (Калинов мост, Сделка).
 - Хранилища: `EquipContainer`, `BuildHomeStorage`.
 - Община: `TalkTo`, `ChooseDialogueBranch`, `OfferToCommunity`,
   `TradeWithCommunity`, `FoundBase`.
