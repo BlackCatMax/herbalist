@@ -91,7 +91,8 @@ namespace
         const FIntPoint& TargetCell, FRandomStream& Rng,
         const FWorldSnapshot& WorldSnap, const FBiomeSnapshot& BiomeSnap, float CallerCoherence = 0.f,
         EMoonPhase MoonPhase = EMoonPhase::NewMoon, bool bWardBrewBoostActive = false,
-        int32 DistinctIngredientBiomeCount = 1, float TieredBrewBoostStrength = 0.f)
+        int32 DistinctIngredientBiomeCount = 1, float TieredBrewBoostStrength = 0.f,
+        bool bTargetIsGoryuchKamen = false)
     {
         FInventorySnapshot InvSnap;
         FCommandBatch CmdBatch;
@@ -114,6 +115,11 @@ namespace
         // тем же путём, что и AGridWorldManager::ApplyAlchemyResult делает из
         // настоящих FInventoryItem::SourceBiome + TieredBrewBoostHomeBiomes.
         Entry.Apply.TieredBrewBoostStrength = TieredBrewBoostStrength;
+        // Горюч-камень (§4.5, 2026-09-06) -- тот же принцип, что и
+        // остальные "резолвится вне Pipeline" поля выше: тест кладёт
+        // готовый bool напрямую, тем же путём, что и
+        // AGridWorldManager::ApplyAlchemyResult вне теста.
+        Entry.Apply.bTargetIsGoryuchKamen = bTargetIsGoryuchKamen;
         CmdBatch.AddCommand(Entry);
         return Simulation::ExecutePipeline(WorldSnap, InvSnap, BiomeSnap, CmdBatch, Rng);
     }
@@ -1310,6 +1316,81 @@ bool FPipelineV2ApplyShrineBonusRaisesAverageCoherenceMoreThanWithout::RunTest(c
 
     TestTrue(TEXT("Shrine's Coherence bonus lands as a higher AverageCoherence than without it"),
         ShrineModified->Memory.AverageCoherence > NoShrineModified->Memory.AverageCoherence + KINDA_SMALL_NUMBER);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Горюч-камень (§4.5, "ни зельем очищения, ни зельем порчи его не сдвинуть",
+// компендиум "Места_силы/Горюч-камень.md", 2026-09-06) -- ни очень чистое,
+// ни очень испорченное зелье не должно оставить клетку в OutDelta.WorldChanges
+// вовсе, когда bTargetIsGoryuchKamen=true.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyGoryuchKamenResistsPurifyingPotionTest,
+    "ProjectHerbalist.PipelineV2.ApplyGoryuchKamenResistsPurifyingPotion",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyGoryuchKamenResistsPurifyingPotionTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Очень чистое зелье -- высокая Purity/Stability, низкая Distortion/Corruption.
+    TArray<FInventoryItem> PurifyingIngredients = { MakeIngredient(TEXT("Herb"), 0.9f, 0.05f, 0.95f, 0.95f), MakeWater(0.5f, 0.9f) };
+    FRandomStream Rng(7);
+    FStateDelta Delta = RunApply(PurifyingIngredients, /*bIsCrafting*/ false, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false,
+        /*DistinctIngredientBiomeCount*/ 1, /*TieredBrewBoostStrength*/ 0.f, /*bTargetIsGoryuchKamen*/ true);
+
+    TestNull(TEXT("Purifying potion leaves no world change on the stone's cell"), Delta.WorldChanges.Find(FIntPoint(5, 5)));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyGoryuchKamenResistsCorruptingPotionTest,
+    "ProjectHerbalist.PipelineV2.ApplyGoryuchKamenResistsCorruptingPotion",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyGoryuchKamenResistsCorruptingPotionTest::RunTest(const FString& Parameters)
+{
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    // Очень испорченное зелье -- высокая Distortion/Corruption, низкая Purity/Stability.
+    TArray<FInventoryItem> CorruptingIngredients = { MakeIngredient(TEXT("Herb"), 0.9f, 0.95f, 0.05f, 0.05f, 0.f, 0.f, 0.9f), MakeWater(0.5f, 0.1f) };
+    FRandomStream Rng(11);
+    FStateDelta Delta = RunApply(CorruptingIngredients, /*bIsCrafting*/ false, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false,
+        /*DistinctIngredientBiomeCount*/ 1, /*TieredBrewBoostStrength*/ 0.f, /*bTargetIsGoryuchKamen*/ true);
+
+    TestNull(TEXT("Corrupting potion leaves no world change on the stone's cell"), Delta.WorldChanges.Find(FIntPoint(5, 5)));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPipelineV2ApplyGoryuchKamenStillConsumesIngredientsTest,
+    "ProjectHerbalist.PipelineV2.ApplyGoryuchKamenStillConsumesIngredients",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPipelineV2ApplyGoryuchKamenStillConsumesIngredientsTest::RunTest(const FString& Parameters)
+{
+    // "Цена реальна, эффект -- нет" (довод у FApplyCommand::bTargetIsGoryuchKamen):
+    // ингредиенты списываются из инвентаря как обычно, только клетка не меняется.
+    FWorldSnapshot WorldSnap;
+    WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
+    FBiomeSnapshot BiomeSnap;
+
+    TArray<FInventoryItem> Ingredients = { MakeIngredient(TEXT("Herb"), 0.6f, 0.3f, 0.4f, 0.4f), MakeWater(0.5f, 0.4f) };
+    FRandomStream Rng(13);
+    FStateDelta Delta = RunApply(Ingredients, /*bIsCrafting*/ false, FIntPoint(5, 5), Rng, WorldSnap, BiomeSnap,
+        /*CallerCoherence*/ 0.f, EMoonPhase::NewMoon, /*bWardBrewBoostActive*/ false,
+        /*DistinctIngredientBiomeCount*/ 1, /*TieredBrewBoostStrength*/ 0.f, /*bTargetIsGoryuchKamen*/ true);
+
+    int32 RemoveOps = 0;
+    for (const FInventoryOperation& Op : Delta.InventoryOps)
+    {
+        if (Op.OpType == EInventoryOpType::Remove) ++RemoveOps;
+    }
+    TestEqual(TEXT("Both ingredients still removed from inventory"), RemoveOps, Ingredients.Num());
     return true;
 }
 

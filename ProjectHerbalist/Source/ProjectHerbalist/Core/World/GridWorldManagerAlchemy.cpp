@@ -29,6 +29,17 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     // Оберег BrewBoost (Громовая стрела, §2.4, 2026-09-04) -- тот же приём,
     // что и bBifurcationCharmActive выше: резолвится здесь, не в Pipeline.
     Cmd.Apply.bWardBrewBoostActive = IsWardBrewBoostActive();
+    // Горюч-камень (§4.5, DESIGN_POI_Art_And_LevelDesign.md §3, 2026-09-06)
+    // -- тот же принцип "резолвится здесь, не в Pipeline", что и остальные
+    // модификаторы выше. Явная проверка на (-1,-1) -- точка не размещена
+    // (например, тест зовёт этот путь напрямую до SeedPointsOfInterest) --
+    // не даёт (-1,-1)-цели (если такая вообще возможна) ложно совпасть с
+    // "не размещённым" сентинелом.
+    Cmd.Apply.bTargetIsGoryuchKamen = (GoryuchKamenSite != FIntPoint(-1, -1)) && (Cmd.Apply.TargetCell == GoryuchKamenSite);
+    if (Cmd.Apply.bTargetIsGoryuchKamen)
+    {
+        ++GoryuchKamenApplyAttemptCount;
+    }
     // Межбиомная варка (§2.4, прямой запрос пользователя, 2026-09-04) -- тот
     // же принцип "резолвится здесь, не в Pipeline", что и остальные модификаторы
     // выше: считаем число РАЗНЫХ FInventoryItem::SourceBiome среди не-водных

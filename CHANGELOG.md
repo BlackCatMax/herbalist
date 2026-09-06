@@ -9443,3 +9443,86 @@ GoryuchKamenRelaxesTowardTargetStateSlowerThanAnOrdinaryCell` (та же
 `ProjectHerbalistTests/.../Tests/LandmarkTest.cpp`, `ROADMAP.md`. POI §4
 закрыт целиком (кроме уже задокументированных честных пробелов: Тотем —
 средний ярус, Сделка — предмет, актор/визуал для всех пяти).
+
+## POI: визуал-логика юнита 1 — Горюч-камень (Apply-иммунитет), Тотем (средний ярус), три актора (2026-09-06)
+
+Продолжение по итогам отдельной геймдизайн/арт-сессии (Cowork):
+`DESIGN_POI_Art_And_LevelDesign.md` (визуал/левел-дизайн/звук поверх уже
+реализованной механики §4) и шесть карточек компендиума
+(`04_Compendium/Места_силы/`) закоммичены отдельно как чистый контент.
+Этот коммит — первая часть кодовой реализации по инструкции: две новые
+механики (Горюч-камень, средний ярус Тотема) + визуал-логика/акторы-хуки
+для Тотема/Светлояра/Горюч-камня.
+
+**Горюч-камень — пересмотр механики.** Юнит 2/2 предыдущего захода дал
+Горюч-камню симметричный множитель СКОРОСТИ релаксации (`CellDeltaRegen`
+и т.д.) — клетка медленнее следует за `TargetState`, но потенциально всё
+же меняется. Новые тексты (карточка компендиума: "ни зельем очищения, ни
+зельем порчи его не сдвинуть... глухим стуком и ничем больше"; дизайн-
+документ: тот же императив) требуют более сильной гарантии — TargetState
+**не меняется вовсе**. `FApplyCommand::bTargetIsGoryuchKamen` (тот же
+принцип "резолвится вне Pipeline", что и `bWardBrewBoostActive`/
+`bBifurcationCharmActive`) — `AGridWorldManager::ApplyAlchemyResult`
+сравнивает `TargetCell` с `GoryuchKamenSite` до постановки команды в
+очередь; `ProcessApplyCommand` (PipelineV2.cpp) при этом флаге не
+добавляет клетку в `OutDelta.WorldChanges` вовсе — ни `State`, ни
+`Memory.AverageCoherence`, ни `HarvestStress`. Ингредиенты по-прежнему
+списываются (строка 1019, до проверки) и Footprint по-прежнему пишется в
+биом-граф (широкая система влияния места видит попытку, сам камень —
+нет) — "цена реальна, эффект — нет". Прежний множитель скорости релаксации
+(`GoryuchKamenShiftResistance`) НЕ убран — он всё ещё честно описывает
+устойчивость клетки к ambient-влияниям (контагион/гистерезис), которые
+Apply-иммунитет не перекрывает; два дополняющих друг друга механизма, не
+конкурирующих.
+
+**Тотем — средний ярус.** Честный пробел юнита 1/2 ("нет структуры для
+состояния игрока отдельно от клеток") закрыт решением из дизайн-документа:
+средний ярус читается по уже существующей Молве (`AGridWorldManager::
+Molva`), не по новой структуре — "не про самого героя отдельно, а про то,
+как община относится к его присутствию здесь". Новый
+`IsTotemMiddleTierVisible()` (порог `TotemMiddleTierMolvaThreshold=0.5`,
+то же число, что уже `BuyanGuardianMolvaThreshold` — общепринятая в
+проекте граница "высокой Молвы"), подключён и к `GetTotemRevealText`.
+
+**Три визуал-актора** (`Core/World/POIActors.h/.cpp`, новый файл) —
+`APOI_Totem`/`APOI_Svetloyar`/`APOI_GoryuchKamen`, тот же паттерн, что уже
+`AMemoryFragmentActor`/`AShrineActor`: код не хардкодит меши/материалы/
+звук, каждый визуальный хук помечен `// TODO: заменить на финальный арт`.
+Спавнятся сами `SeedPointsOfInterest` в уже выбранной координате (`GetWorld
+()->SpawnActor` + `GetCellWorldPosition`), не размещаются вручную —
+курганы/Тотем/Светлояр/Горюч-камень все детерминированно сеются кодом, не
+левел-дизайнером, в отличие от капищ. Тотем: три компонента-меша,
+`LowerTierIntensity`/`bMiddleTierVisible`/`bUpperTierVisible` опрашиваются
+в `Tick`. Светлояр: новый `GetSvetloyarSoundTier()` на менеджере (не внутри
+актора — тестируется без спавна) делит диапазон Clarity выше порога
+видимости на три уровня ("дальний звон / звон+пение / вспышка купола+хор",
+дизайн-документ §2), актор просто читает готовое число. Горюч-камень:
+`GoryuchKamenApplyAttemptCount` (новый счётчик на менеджере, растёт при
+каждом резолве `bTargetIsGoryuchKamen`) — актору больше нечего поллить в
+`State` (клетка не меняется), `Tick` детектит рост счётчика и зовёт
+`BlueprintImplementableEvent OnThud()` для будущего звука.
+
+**Тестирование:** три новых теста `ProjectHerbalist.PipelineV2.
+ApplyGoryuchKamenResists{Purifying,Corrupting}Potion`/
+`ApplyGoryuchKamenStillConsumesIngredients` (через `RunApply` с новым
+опциональным параметром `bTargetIsGoryuchKamen`); `Herbalist.POI.
+TotemMiddleTierVisibilityFollowsMolva`; `Herbalist.POI.
+SvetloyarSoundTierStepsWithClarity` (все 4 уровня); `Herbalist.POI.
+SeedingSpawnsOneVisualActorPerPOI` — считает актор-ДЕЛЬТУ до/после
+`SpawnAndBeginPlay`, не абсолютное число: акторы-визуалы не владеются
+`AGridWorldManager` и не удаляются вместе с ним, повторные `SpawnAndBeginPlay`
+в других тестах этого же файла делят один персистентный editor-мир и
+оставляют в нём свои экземпляры (тот же класс проблемы, что уже решает
+явный `Deinitialize()` у `UBiomeGraphSubsystem` — здесь решён подсчётом
+дельты вместо явной очистки, точечно для одного теста).
+
+**Итог:** 430 → 433 теста, **433/433, два чистых прогона, ноль
+регрессий.** Файлы: `Core/Simulation/Public/CommandTypes.h`,
+`Core/Simulation/Private/PipelineV2.cpp`, `Core/World/GridWorldManager.h`,
+`Core/World/GridWorldManagerAlchemy.cpp`, `Core/World/GridWorldManagerPOI.cpp`,
+`Core/World/POIActors.h/.cpp` (новые), `Core/Config/HerbalistSettings.h`,
+`ProjectHerbalistTests/.../Tests/PipelineV2ApplyTest.cpp`,
+`ProjectHerbalistTests/.../Tests/POITest.cpp`, `ROADMAP.md`. Продолжение
+(Соловей — усмирение плакун-травой/постоянная зона/терминология "Морок",
+Калинов мост — цена артефактом, Курганы — физический подбор + связи с
+DECISIONS_LOG №2/№4) — следующими коммитами этой же сессии.

@@ -121,6 +121,19 @@ struct FApplyCommand
     // эту величину базовый WardBrewBoostCoherenceBonus -- переиспользует
     // существующую силу надбавки как базу, не изобретает вторую константу.
     float TieredBrewBoostStrength = 0.0f;
+
+    // Горюч-камень (DESIGN_POI_Art_And_LevelDesign.md §3, компендиум
+    // "04_Compendium/Места_силы/Горюч-камень.md", 2026-09-06) -- тот же
+    // принцип "резолвится вне Pipeline", что и bWardBrewBoostActive/
+    // bBifurcationCharmActive выше: вызывающая сторона
+    // (AGridWorldManager::ApplyAlchemyResult) сравнивает TargetCell с
+    // GoryuchKamenSite ДО постановки команды в очередь -- Pipeline не знает
+    // про конкретные POI координаты, только про уже вычисленный факт.
+    // "Ни зельем очищения, ни зельем порчи его не сдвинуть" (карточка
+    // компендиума) -- ProcessApplyCommand читает этот флаг и не трогает
+    // State/Memory клетки вовсе, хотя ингредиенты уже списаны (см. довод у
+    // самой ветки, PipelineV2.cpp).
+    bool bTargetIsGoryuchKamen = false;
 };
 
 // S – сбор ресурса (Harvest)

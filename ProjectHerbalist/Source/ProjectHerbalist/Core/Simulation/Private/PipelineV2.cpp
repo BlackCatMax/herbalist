@@ -1085,6 +1085,22 @@ namespace Simulation
             return;
         }
 
+        // Горюч-камень (§4.5, компендиум "Места_силы/Горюч-камень.md",
+        // 2026-09-06) -- "ни зельем очищения, ни зельем порчи его не
+        // сдвинуть... камень отвечает на оба одинаково, глухим стуком и
+        // ничем больше". Ингредиенты уже списаны выше (строка 1019), а
+        // Footprint (строка 1033) уже посчитан в биом-граф до этой проверки
+        // и НЕ отменяется -- широкая система влияния места видит попытку,
+        // сам камень-цель нет, это две разные вещи. Клетка просто не
+        // добавляется в OutDelta.WorldChanges вовсе -- ни State, ни
+        // Memory.AverageCoherence, ни HarvestStress не меняются.
+        if (Cmd.bTargetIsGoryuchKamen)
+        {
+            UE_LOG(LogHerbalistSimulation, Log, TEXT("Applied potion to Goryuch-Kamen at (%d,%d): stone answers with a dull thud, nothing changes"),
+                Cmd.TargetCell.X, Cmd.TargetCell.Y);
+            return;
+        }
+
         FGridCell Modified = *TargetCell;
         Modified.State = PotionState;
 

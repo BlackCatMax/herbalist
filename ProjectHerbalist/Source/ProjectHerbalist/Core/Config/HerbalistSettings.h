@@ -1305,6 +1305,15 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float TotemUpperTierPurityThreshold = 0.6f;
 
+    // Тотем, средний ярус (DESIGN_POI_Art_And_LevelDesign.md, "открытые
+    // вопросы — решения", 2026-09-06) — "средний ярус читается по Молве...
+    // не про самого героя отдельно, а про то, как община относится к его
+    // присутствию здесь". Отдельное поле со значением
+    // BuyanGuardianMolvaThreshold (0.5) — та же граница "высокой Молвы",
+    // что уже гейтит стража Буяна, не два случайно совпавших числа.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+    float TotemMiddleTierMolvaThreshold = 0.5f;
+
     // Светлояр (§4.5) — город виден/слышен выше этого порога
     // GlobalPerceptionClarity. Отдельное поле со значением
     // BuyanGuardianClarityThreshold (0.7) — документ сам называет Светлояр

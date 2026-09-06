@@ -7,9 +7,11 @@
 // Соловей.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/World/POIActors.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -223,6 +225,97 @@ bool FHerbalistPOI_GoryuchKamenRelaxesTowardTargetStateSlowerThanAnOrdinaryCell:
     TestTrue(TEXT("GoryuchKamen cell also moved, just less"), StoneCell->State.Meta.Purity > 0.0f);
     TestTrue(TEXT("GoryuchKamen resists the shift -- moves less than an ordinary cell in the same step"),
         StoneCell->State.Meta.Purity < OrdinaryCell->State.Meta.Purity);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_TotemMiddleTierVisibilityFollowsMolva,
+    "Herbalist.POI.TotemMiddleTierVisibilityFollowsMolva",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_TotemMiddleTierVisibilityFollowsMolva::RunTest(const FString& Parameters)
+{
+    // Средний ярус (DESIGN_POI_Art_And_LevelDesign.md, "открытые вопросы —
+    // решения", 2026-09-06) -- читается по Молве, закрывает честный пробел
+    // юнита 1/2 (не было структуры для "состояния игрока").
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->Molva = 0.2f;
+    TestFalse(TEXT("Below threshold: middle tier hidden"), Manager->IsTotemMiddleTierVisible());
+
+    Manager->Molva = 0.9f;
+    TestTrue(TEXT("Above threshold: middle tier visible"), Manager->IsTotemMiddleTierVisible());
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_SvetloyarSoundTierStepsWithClarity,
+    "Herbalist.POI.SvetloyarSoundTierStepsWithClarity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_SvetloyarSoundTierStepsWithClarity::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    Manager->SetGlobalPerceptionClarity(0.5f);
+    TestEqual(TEXT("Below visibility threshold: tier 0 (mute)"), Manager->GetSvetloyarSoundTier(), 0);
+
+    Manager->SetGlobalPerceptionClarity(0.75f);
+    TestEqual(TEXT("Just above threshold: tier 1 (far bell)"), Manager->GetSvetloyarSoundTier(), 1);
+
+    Manager->SetGlobalPerceptionClarity(0.9f);
+    TestEqual(TEXT("Mid-range: tier 2 (bell + singing)"), Manager->GetSvetloyarSoundTier(), 2);
+
+    Manager->SetGlobalPerceptionClarity(1.0f);
+    TestEqual(TEXT("Near-max Clarity: tier 3 (dome flash + choir)"), Manager->GetSvetloyarSoundTier(), 3);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_SeedingSpawnsOneVisualActorPerPOI,
+    "Herbalist.POI.SeedingSpawnsOneVisualActorPerPOI",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_SeedingSpawnsOneVisualActorPerPOI::RunTest(const FString& Parameters)
+{
+    // DESIGN_POI_Art_And_LevelDesign.md, 2026-09-06 -- SeedPointsOfInterest
+    // теперь спавнит акторы-заглушки, не только резолвит координаты.
+    // Считаем ДЕЛЬТУ до/после, не абсолютное число -- тесты этого же файла
+    // делят один персистентный editor-мир (тот же класс проблемы, что уже
+    // решает явный Deinitialize() у UBiomeGraphSubsystem в других тестах),
+    // и каждый ранее отработавший SpawnAndBeginPlay мог оставить в мире
+    // свои собственные Totem/Svetloyar/GoryuchKamen -- эти акторы не
+    // владеются AGridWorldManager и не удаляются вместе с ним.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    int32 TotemBefore = 0, SvetloyarBefore = 0, GoryuchKamenBefore = 0;
+    for (TActorIterator<APOI_Totem> It(World); It; ++It) ++TotemBefore;
+    for (TActorIterator<APOI_Svetloyar> It(World); It; ++It) ++SvetloyarBefore;
+    for (TActorIterator<APOI_GoryuchKamen> It(World); It; ++It) ++GoryuchKamenBefore;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    int32 TotemAfter = 0, SvetloyarAfter = 0, GoryuchKamenAfter = 0;
+    for (TActorIterator<APOI_Totem> It(World); It; ++It) ++TotemAfter;
+    for (TActorIterator<APOI_Svetloyar> It(World); It; ++It) ++SvetloyarAfter;
+    for (TActorIterator<APOI_GoryuchKamen> It(World); It; ++It) ++GoryuchKamenAfter;
+
+    TestEqual(TEXT("Exactly one new Totem actor spawned"), TotemAfter - TotemBefore, 1);
+    TestEqual(TEXT("Exactly one new Svetloyar actor spawned"), SvetloyarAfter - SvetloyarBefore, 1);
+    TestEqual(TEXT("Exactly one new GoryuchKamen actor spawned"), GoryuchKamenAfter - GoryuchKamenBefore, 1);
 
     Manager->Destroy();
     return true;

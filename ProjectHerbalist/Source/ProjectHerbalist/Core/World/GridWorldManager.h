@@ -1274,6 +1274,14 @@ public:
     void SetTotemSite(const FIntPoint& InSite) { TotemSite = InSite; }
     FString GetTotemRevealText() const;
 
+    // Средний ярус (DESIGN_POI_Art_And_LevelDesign.md, "открытые вопросы —
+    // решения", 2026-09-06) -- читается по Молве (уже существующий
+    // continuous field, Molva), не по отдельному "состоянию игрока": та
+    // самая структура, которой не хватало для честной реализации этого
+    // яруса раньше (юнит 1/2), закрыта переиспользованием уже существующей
+    // общинной переменной, не новой.
+    bool IsTotemMiddleTierVisible() const;
+
     // Светлояр (§4.5) -- прямой потребитель уже существующей
     // GlobalPerceptionClarity, ничего нового не считает: город виден/слышен
     // выше BuyanGuardianClarityThreshold (тот же порог "высокой Clarity",
@@ -1283,6 +1291,16 @@ public:
     FIntPoint GetSvetloyarSite() const { return SvetloyarSite; }
     void SetSvetloyarSite(const FIntPoint& InSite) { SvetloyarSite = InSite; }
     bool IsSvetloyarVisible() const;
+
+    // Три звуковых уровня ПОВЕРХ самого порога видимости (DESIGN_POI_Art_
+    // And_LevelDesign.md §2: "дальний звон / звон+пение / вспышка купола +
+    // хор", 2026-09-06) -- 0, пока IsSvetloyarVisible()==false; иначе 1/2/3
+    // по тому, сколько из оставшегося диапазона Clarity (от порога
+    // видимости до 1.0) уже пройдено. Вынесено на менеджер, а не оставлено
+    // внутри APOI_Svetloyar::Tick -- тот же довод, что и у остальных
+    // POI-запросов (IsSvetloyarVisible/GetTotemRevealText): актор только
+    // читает уже посчитанный факт, логика тестируется без спавна актора.
+    int32 GetSvetloyarSoundTier() const;
 
     // Горюч-камень (§4.5) -- архетип "упрямого камня", не буквальный
     // Синь-камень Плещеева озера: то имя уже занято ward-кристаллом яруса 2
@@ -1294,6 +1312,16 @@ public:
     // применением).
     FIntPoint GetGoryuchKamenSite() const { return GoryuchKamenSite; }
     void SetGoryuchKamenSite(const FIntPoint& InSite) { GoryuchKamenSite = InSite; }
+
+    // Счётчик попыток применить зелье к Горюч-камню (DESIGN_POI_Art_And_
+    // LevelDesign.md §3: "звук глухого удара, без видимого следствия
+    // после") -- сама клетка не меняется, поэтому актору нечего поллить в
+    // Tick, кроме этого счётчика. Растёт в ApplyAlchemyResult
+    // (GridWorldManagerAlchemy.cpp) каждый раз, когда
+    // FApplyCommand::bTargetIsGoryuchKamen резолвится в true -- НЕ
+    // персистентен (сессионный счётчик, не игровой факт), сброс между
+    // сохранениями не нужен.
+    int32 GetGoryuchKamenApplyAttemptCount() const { return GoryuchKamenApplyAttemptCount; }
 
     // Соловей-разбойник (§4.4) -- одноразовая (за заход) AoE-порча
     // Purity/Stability по площади при активации, если игрок не прошёл под
@@ -1535,6 +1563,7 @@ protected:
     FIntPoint SoloveySite = FIntPoint(-1, -1);
     bool bSoloveyTriggered = false;
     FIntPoint KalinovMostSite = FIntPoint(-1, -1);
+    int32 GoryuchKamenApplyAttemptCount = 0;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

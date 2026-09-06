@@ -7,6 +7,7 @@
 // вида точки.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/World/POIActors.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -67,13 +68,49 @@ void AGridWorldManager::SeedPointsOfInterest()
     }
 
     TotemSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (TotemSite != FIntPoint(-1, -1)) Occupied.Add(TotemSite);
+    if (TotemSite != FIntPoint(-1, -1))
+    {
+        Occupied.Add(TotemSite);
+        // Актор-визуал (DESIGN_POI_Art_And_LevelDesign.md §1, 2026-09-06) --
+        // спавнится самим менеджером в уже выбранной клетке, не размещается
+        // вручную (в отличие от AShrineActor).
+        if (UWorld* World = GetWorld())
+        {
+            if (APOI_Totem* TotemActor = World->SpawnActor<APOI_Totem>(APOI_Totem::StaticClass(),
+                GetCellWorldPosition(TotemSite.X, TotemSite.Y), FRotator::ZeroRotator))
+            {
+                TotemActor->Init(this, TotemSite.X, TotemSite.Y);
+            }
+        }
+    }
 
     SvetloyarSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (SvetloyarSite != FIntPoint(-1, -1)) Occupied.Add(SvetloyarSite);
+    if (SvetloyarSite != FIntPoint(-1, -1))
+    {
+        Occupied.Add(SvetloyarSite);
+        if (UWorld* World = GetWorld())
+        {
+            if (APOI_Svetloyar* SvetloyarActor = World->SpawnActor<APOI_Svetloyar>(APOI_Svetloyar::StaticClass(),
+                GetCellWorldPosition(SvetloyarSite.X, SvetloyarSite.Y), FRotator::ZeroRotator))
+            {
+                SvetloyarActor->Init(this, SvetloyarSite.X, SvetloyarSite.Y);
+            }
+        }
+    }
 
     GoryuchKamenSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (GoryuchKamenSite != FIntPoint(-1, -1)) Occupied.Add(GoryuchKamenSite);
+    if (GoryuchKamenSite != FIntPoint(-1, -1))
+    {
+        Occupied.Add(GoryuchKamenSite);
+        if (UWorld* World = GetWorld())
+        {
+            if (APOI_GoryuchKamen* StoneActor = World->SpawnActor<APOI_GoryuchKamen>(APOI_GoryuchKamen::StaticClass(),
+                GetCellWorldPosition(GoryuchKamenSite.X, GoryuchKamenSite.Y), FRotator::ZeroRotator))
+            {
+                StoneActor->Init(this, GoryuchKamenSite.X, GoryuchKamenSite.Y);
+            }
+        }
+    }
 
     SoloveySite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
     if (SoloveySite != FIntPoint(-1, -1)) Occupied.Add(SoloveySite);
@@ -103,12 +140,19 @@ FString AGridWorldManager::GetTotemRevealText() const
     if (!Cell) return TEXT("Тотем не найден на этой карте.");
 
     // Нижний ярус (подземное божество / Навь, §4.2) — всегда читается,
-    // прямое попадание в Distortion места. Средний ярус ("состояние
-    // игрока") НЕ реализован -- см. довод у GetTotemSite/SetTotemSite в
-    // GridWorldManager.h, честный пробел, не молчаливое упрощение.
+    // прямое попадание в Distortion места.
     const float Distortion = Cell->State.Meta.Distortion;
     FString Result = FString::Printf(TEXT("Нижний ярус (подземное божество, Навь): Distortion места %.2f -- %s."),
         Distortion, Distortion >= 0.5f ? TEXT("лик искажён, черты плывут") : TEXT("лик читается ясно"));
+
+    // Средний ярус — Молва (DESIGN_POI_Art_And_LevelDesign.md, юнит 2,
+    // 2026-09-06). Закрывает честный пробел юнита 1/2 (не было структуры
+    // для "состояния игрока") переиспользованием уже существующей общинной
+    // переменной, не новой.
+    if (IsTotemMiddleTierVisible())
+    {
+        Result += TEXT(" Средний ярус (люди, взявшиеся за руки) виден -- община держится за это место.");
+    }
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float PurityThreshold = Settings ? Settings->TotemUpperTierPurityThreshold : 0.6f;
@@ -120,6 +164,13 @@ FString AGridWorldManager::GetTotemRevealText() const
     return Result;
 }
 
+bool AGridWorldManager::IsTotemMiddleTierVisible() const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Threshold = Settings ? Settings->TotemMiddleTierMolvaThreshold : 0.5f;
+    return Molva >= Threshold;
+}
+
 bool AGridWorldManager::IsSvetloyarVisible() const
 {
     if (SvetloyarSite == FIntPoint(-1, -1)) return false;
@@ -127,6 +178,17 @@ bool AGridWorldManager::IsSvetloyarVisible() const
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float Threshold = Settings ? Settings->SvetloyarVisibilityClarityThreshold : 0.7f;
     return GlobalPerceptionClarity >= Threshold;
+}
+
+int32 AGridWorldManager::GetSvetloyarSoundTier() const
+{
+    if (!IsSvetloyarVisible()) return 0;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float BaseThreshold = Settings ? Settings->SvetloyarVisibilityClarityThreshold : 0.7f;
+    const float Range = FMath::Max(1.0f - BaseThreshold, KINDA_SMALL_NUMBER);
+    const float T = FMath::Clamp((GlobalPerceptionClarity - BaseThreshold) / Range, 0.0f, 1.0f);
+    return (T >= 0.95f) ? 3 : (T >= 0.5f) ? 2 : 1;
 }
 
 bool AGridWorldManager::ActivateSolovey()
