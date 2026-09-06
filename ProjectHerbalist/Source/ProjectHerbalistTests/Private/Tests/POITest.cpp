@@ -321,4 +321,76 @@ bool FHerbalistPOI_SeedingSpawnsOneVisualActorPerPOI::RunTest(const FString& Par
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_ApplyingPlakunTravaToSoloveyCalmsItPermanently,
+    "Herbalist.POI.ApplyingPlakunTravaToSoloveyCalmsItPermanently",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_ApplyingPlakunTravaToSoloveyCalmsItPermanently::RunTest(const FString& Parameters)
+{
+    // §4.4, DESIGN_POI_Art_And_LevelDesign.md §4, 2026-09-06 -- "riv_11" --
+    // реальный RowName Плакун-травы в живой DT_IngredientClass (проверено
+    // точечным запросом таблицы, не по устаревшему CSV-экспорту).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint Solovey = Manager->GetSoloveySite();
+    TestFalse(TEXT("Sanity: not calmed yet"), Manager->IsSoloveyCalmed());
+
+    FInventoryItem Plakun;
+    Plakun.IngredientID = FName(TEXT("riv_11"));
+    Manager->ApplyAlchemyResult(Solovey.X, Solovey.Y, { Plakun }, FIntent());
+
+    TestTrue(TEXT("Calmed after applying Плакун-трава to its cell"), Manager->IsSoloveyCalmed());
+
+    // Усмирён -- даже первый (никогда не пройденный) контакт теперь безопасен.
+    FGridCell* Cell = Manager->GetCell(Solovey.X, Solovey.Y);
+    if (TestNotNull(TEXT("Solovey cell exists"), Cell))
+    {
+        Cell->State.Meta.Purity = 0.8f;
+        TestTrue(TEXT("ActivateSolovey succeeds harmlessly once calmed"), Manager->ActivateSolovey());
+        TestEqual(TEXT("Purity untouched -- calmed, no Morok"), Cell->State.Meta.Purity, 0.8f);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_SoloveyAmbientZoneCapsPurityUntilCalmed,
+    "Herbalist.POI.SoloveyAmbientZoneCapsPurityUntilCalmed",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_SoloveyAmbientZoneCapsPurityUntilCalmed::RunTest(const FString& Parameters)
+{
+    // Постоянная зона порчи (DESIGN_POI_Art_And_LevelDesign.md §4:
+    // "постоянный, не разовый признак") -- потолок TargetState.Meta.Purity
+    // в радиусе, снят навсегда после усмирения.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint Solovey = Manager->GetSoloveySite();
+    FGridCell* Cell = Manager->GetCell(Solovey.X, Solovey.Y);
+    if (!TestNotNull(TEXT("Solovey cell exists"), Cell)) { Manager->Destroy(); return false; }
+
+    Cell->TargetState.Meta.Purity = 0.95f;
+    Manager->RegenerateCellParameters(1.0f);
+    TestTrue(TEXT("TargetState.Purity capped down to the ambient ceiling"), Cell->TargetState.Meta.Purity <= 0.5f + KINDA_SMALL_NUMBER);
+
+    FInventoryItem Plakun;
+    Plakun.IngredientID = FName(TEXT("riv_11"));
+    Manager->ApplyAlchemyResult(Solovey.X, Solovey.Y, { Plakun }, FIntent());
+
+    Cell->TargetState.Meta.Purity = 0.95f;
+    Manager->RegenerateCellParameters(1.0f);
+    TestEqual(TEXT("Once calmed, TargetState.Purity is no longer capped"), Cell->TargetState.Meta.Purity, 0.95f);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

@@ -76,6 +76,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->GoryuchKamenSite = WorldManager->GetGoryuchKamenSite();
     Save->SoloveySite = WorldManager->GetSoloveySite();
     Save->bSoloveyTriggered = WorldManager->IsSoloveyTriggered();
+    Save->bSoloveyCalmed = WorldManager->IsSoloveyCalmed();
     Save->KalinovMostSite = WorldManager->GetKalinovMostSite();
 
     // Биомный граф (AUDIT_AND_REFACTORING_PLAN.md §7.1, 2026-09-06) —
@@ -200,6 +201,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetGoryuchKamenSite(Save->GoryuchKamenSite);
     WorldManager->SetSoloveySite(Save->SoloveySite);
     WorldManager->SetSoloveyTriggered(Save->bSoloveyTriggered);
+    WorldManager->SetSoloveyCalmed(Save->bSoloveyCalmed);
     WorldManager->SetKalinovMostSite(Save->KalinovMostSite);
 
     // Биомный граф (AUDIT_AND_REFACTORING_PLAN.md §7.1, 2026-09-06) —

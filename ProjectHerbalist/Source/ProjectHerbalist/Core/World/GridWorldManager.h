@@ -1337,6 +1337,17 @@ public:
     void SetSoloveyTriggered(bool bTriggered) { bSoloveyTriggered = bTriggered; }
     bool ActivateSolovey();
 
+    // Усмирение плакун-травой (§4.4, DESIGN_POI_Art_And_LevelDesign.md §4,
+    // 2026-09-06) — снимает угрозу НАВСЕГДА, отдельно от bSoloveyTriggered
+    // (тот про "уже сработал один раз", этот про "больше никогда не
+    // сработает"): игрок может усмирить Соловья, ни разу не пройдя мимо.
+    // Резолвится вне Pipeline (AGridWorldManager::ApplyAlchemyResult
+    // проверяет ингредиент riv_11 при TargetCell==SoloveySite), тот же
+    // принцип, что и у bTargetIsGoryuchKamen.
+    bool IsSoloveyCalmed() const { return bSoloveyCalmed; }
+    void SetSoloveyCalmed(bool bCalmed) { bSoloveyCalmed = bCalmed; }
+    void CalmSolovey();
+
     // Калинов мост / Трёхглавый Змей (§4.4) -- в отличие от остальных POI
     // выше, само взаимодействие НЕ живёт здесь: это Landmark (см.
     // RegisterZmeyGorynych) + диалог (DT_Dialogue, ЗмейГорыныч), доступный
@@ -1562,6 +1573,7 @@ protected:
     FIntPoint GoryuchKamenSite = FIntPoint(-1, -1);
     FIntPoint SoloveySite = FIntPoint(-1, -1);
     bool bSoloveyTriggered = false;
+    bool bSoloveyCalmed = false;
     FIntPoint KalinovMostSite = FIntPoint(-1, -1);
     int32 GoryuchKamenApplyAttemptCount = 0;
 

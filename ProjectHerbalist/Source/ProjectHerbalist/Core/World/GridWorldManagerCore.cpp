@@ -2089,6 +2089,28 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
             DirectionRateMultiplier *= Resistance;
         }
 
+        // Соловей-разбойник, постоянная зона порчи (§4.4, DESIGN_POI_Art_
+        // And_LevelDesign.md §4, 2026-09-06) — "земля... визибельно
+        // порченая... постоянный, не разовый признак". Потолок
+        // TargetState.Meta.Purity в радиусе точки, пока не усмирён
+        // (bSoloveyCalmed) плакун-травой — не растущий нудж, просто снимает
+        // TargetState обратно к потолку, если он выше; сравнение перед
+        // записью, тот же §7.1 паттерн, что у контагиона выше в этой функции.
+        if (SoloveySite != FIntPoint(-1, -1) && !bSoloveyCalmed)
+        {
+            const int32 SoloveyRadius = Settings ? Settings->SoloveyCorruptionRadius : 3;
+            const int32 SoloveyDist = FMath::Max(FMath::Abs(Cell.X - SoloveySite.X), FMath::Abs(Cell.Y - SoloveySite.Y));
+            if (SoloveyDist <= SoloveyRadius)
+            {
+                const float Ceiling = Settings ? Settings->SoloveyAmbientPurityCeiling : 0.5f;
+                if (Cell.TargetState.Meta.Purity > Ceiling)
+                {
+                    Cell.TargetState.Meta.Purity = Ceiling;
+                    MarkCellDirty(Cell.X, Cell.Y);
+                }
+            }
+        }
+
         // 1. Отклонение по Meta + Magnitude — единым шагом на все семь осей
         // вместо прежних четырёх. bChanged нужен только для раннего выхода
         // из релаксации Direction ниже, спад HarvestStress идёт независимо.

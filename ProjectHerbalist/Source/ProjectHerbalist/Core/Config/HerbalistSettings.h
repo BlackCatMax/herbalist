@@ -1348,6 +1348,17 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float SoloveyCorruptionBurst = 0.3f;
 
+    // Постоянная зона порчи вокруг дуба (DESIGN_POI_Art_And_LevelDesign.md
+    // §4, "Земля... в широком радиусе визибельно порченая... постоянный,
+    // не разовый признак", 2026-09-06) -- потолок TargetState.Meta.Purity
+    // (тем же радиусом SoloveyCorruptionRadius), не убывающий нудж: место
+    // держится на этом уровне порчи ПОСТОЯННО, пока Соловей не усмирён
+    // (bSoloveyCalmed), не портится сильнее с каждым тиком. Отдельное поле
+    // от SoloveyCorruptionBurst -- разовый удар и постоянный фон это две
+    // разные величины по смыслу, не обязаны совпадать числом. Черновое.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float SoloveyAmbientPurityCeiling = 0.5f;
+
     // Калинов мост / Трёхглавый Змей (§4.4) — цена ветки "Бой" в диалоге
     // (FDialogueBranch::bIsKalinovMostFight): удар по Purity/Stability
     // клетки Змея. Тот же порядок, что SoloveyCorruptionBurst — сознательно

@@ -280,6 +280,11 @@ public:
     UPROPERTY()
     bool bSoloveyTriggered = false;
 
+    // Усмирение плакун-травой (§4.4, 2026-09-06) -- отдельно от
+    // bSoloveyTriggered, см. довод у AGridWorldManager::CalmSolovey.
+    UPROPERTY()
+    bool bSoloveyCalmed = false;
+
     // Калинов мост / Трёхглавый Змей — координата сохраняется для сева
     // (юнит 2/2), сам Landmark (ЗмейГорыныч) уже сохраняется отдельно
     // через EntityLandmarks выше в этом файле, не задвоено здесь.

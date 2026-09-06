@@ -194,21 +194,32 @@ int32 AGridWorldManager::GetSvetloyarSoundTier() const
 bool AGridWorldManager::ActivateSolovey()
 {
     if (SoloveySite == FIntPoint(-1, -1)) return false;
+
+    // Усмирён плакун-травой (§4.4, 2026-09-06) -- проверяется ПЕРЕД
+    // bSoloveyTriggered: игрок мог усмирить Соловья, ни разу не пройдя
+    // мимо (CalmSolovey не требует контакта), первый же проход тогда
+    // обязан быть безопасным, не только повторный.
+    if (bSoloveyCalmed) return true;
     if (bSoloveyTriggered) return false;
 
     // Оберег ДО контакта (одолень-трава, §4.4) -- та же
     // IsWardConcealmentActive(Cell), что уже даёт "скрытие" от бестиария;
     // здесь просто другая угроза читает тот же флаг/радиус. Проход под
-    // прикрытием засчитывается без порчи -- точка отмечается пройденной,
+    // прикрытием засчитывается без Морока -- точка отмечается пройденной,
     // повторно не сработает.
     if (IsWardConcealmentActive(SoloveySite))
     {
         bSoloveyTriggered = true;
-        UE_LOG(LogHerbalistWorld, Log, TEXT("[Solovey] Passed at (%d,%d) under одолень-трава concealment -- no corruption"),
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[Solovey] Passed at (%d,%d) under одолень-трава concealment -- no Morok"),
             SoloveySite.X, SoloveySite.Y);
         return true;
     }
 
+    // Морок (DECISIONS_LOG.md §1: "локальный, временный акт искажения
+    // восприятия... здесь и сейчас") -- разовая AoE-порча Purity/Stability
+    // при контакте, ровно тот учебниковый случай, для которого термин
+    // закреплён: локальная (радиус вокруг точки), временная (один тик, не
+    // устойчивое состояние региона), не Навь.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const int32 Radius = Settings ? Settings->SoloveyCorruptionRadius : 3;
     const float Burst = Settings ? Settings->SoloveyCorruptionBurst : 0.3f;
@@ -223,9 +234,16 @@ bool AGridWorldManager::ActivateSolovey()
     }
 
     bSoloveyTriggered = true;
-    UE_LOG(LogHerbalistWorld, Log, TEXT("[Solovey] Triggered at (%d,%d): AoE corruption radius %d, burst %.2f"),
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Solovey] Morok triggered at (%d,%d): AoE Purity/Stability radius %d, burst %.2f"),
         SoloveySite.X, SoloveySite.Y, Radius, Burst);
     return true;
+}
+
+void AGridWorldManager::CalmSolovey()
+{
+    if (bSoloveyCalmed) return;
+    bSoloveyCalmed = true;
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Solovey] Calmed permanently by плакун-трава -- Morok will never trigger again"));
 }
 
 void AGridWorldManager::ApplyKalinovMostFightCost(const FIntPoint& Cell)

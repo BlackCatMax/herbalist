@@ -40,6 +40,25 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     {
         ++GoryuchKamenApplyAttemptCount;
     }
+    // Плакун-трава -- усмирение Соловья насовсем (§4.4, DESIGN_POI_Art_And_
+    // LevelDesign.md §4, 2026-09-06). "riv_11" -- реальный RowName живой
+    // DT_IngredientClass для Плакун-травы (проверено точечным запросом
+    // таблицы, а не по устаревшему CSV-экспорту -- у ботанических карточек
+    // RowName короткий код, не кириллическое имя, в отличие от курганных
+    // находок). Резолвится здесь, вне Pipeline: обычное применение зелья
+    // на клетку Соловья идёт своим чередом (Purity/Stability считаются как
+    // у любой клетки), усмирение -- независимый побочный эффект поверх.
+    if (SoloveySite != FIntPoint(-1, -1) && Cmd.Apply.TargetCell == SoloveySite)
+    {
+        for (const FInventoryItem& Ing : Ingredients)
+        {
+            if (Ing.IngredientID == FName(TEXT("riv_11")))
+            {
+                CalmSolovey();
+                break;
+            }
+        }
+    }
     // Межбиомная варка (§2.4, прямой запрос пользователя, 2026-09-04) -- тот
     // же принцип "резолвится здесь, не в Pipeline", что и остальные модификаторы
     // выше: считаем число РАЗНЫХ FInventoryItem::SourceBiome среди не-водных
