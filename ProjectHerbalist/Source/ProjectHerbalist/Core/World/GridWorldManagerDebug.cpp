@@ -110,6 +110,11 @@ FString AGridWorldManager::GetGridCorruptionReport() const
         Cells.Num(), DegradingCount, DegradingPercent, AvgDistortion, MinDistortion, MaxDistortion);
 }
 
+bool AGridWorldManager::IsGridCorruptionAutoReportScheduled() const
+{
+    return GetWorldTimerManager().IsTimerActive(GridCorruptionReportTimerHandle);
+}
+
 void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& ResourceName, float& RegrowthTimer, float& Distortion, float& HarvestStress)
 {
     X = SelectedX;

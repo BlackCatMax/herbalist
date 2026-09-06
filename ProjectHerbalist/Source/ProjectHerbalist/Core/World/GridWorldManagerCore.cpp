@@ -882,6 +882,24 @@ void AGridWorldManager::BeginPlay()
     {
         InitializeCells();
     }
+
+    // Автоснимок GetGridCorruptionReport() (2026-09-06) -- см. довод у
+    // GridCorruptionReportTimerHandle в заголовке. GridCorruptionReportIntervalSeconds<=0
+    // выключает его совсем (EditAnywhere -- на случай, если периодический
+    // лог когда-нибудь понадобится реже/чаще или не понадобится вовсе).
+    if (GridCorruptionReportIntervalSeconds > 0.0f)
+    {
+        GetWorldTimerManager().SetTimer(GridCorruptionReportTimerHandle, [this]()
+        {
+            UE_LOG(LogHerbalistWorld, Log, TEXT("Grid corruption (auto): %s"), *GetGridCorruptionReport());
+        }, GridCorruptionReportIntervalSeconds, true);
+    }
+}
+
+void AGridWorldManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    GetWorldTimerManager().ClearTimer(GridCorruptionReportTimerHandle);
+    Super::EndPlay(EndPlayReason);
 }
 
 // ============================================================================

@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "TimerManager.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Math/RandomStream.h"
@@ -59,6 +60,7 @@ public:
 
     // ---- Жизненный цикл ----
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void Tick(float DeltaTime) override;
 
     // ---- Инициализация ----
@@ -95,6 +97,19 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     float CellHeight = 10.0f;
+
+    // Автоматический периодический снимок GetGridCorruptionReport() в лог
+    // (2026-09-06, прямой запрос пользователя: "мне останется только
+    // инициировать пару сборов и ждать", вместо ручного ReportGridCorruption
+    // каждый раз). <=0 выключает его совсем -- на случай, если понадобится
+    // реже/чаще или совсем не понадобится в обычной игре.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    float GridCorruptionReportIntervalSeconds = 30.0f;
+
+    // Тестовая видимость без обхода приватного API (тот же принцип, что и у
+    // SpawnOneResourceInCell выше) -- подтверждает, что таймер реально
+    // запланирован/остановлен, не просто что код скомпилировался.
+    bool IsGridCorruptionAutoReportScheduled() const;
 
     // Базовый сид для детерминированного пайплайна (Simulation::ExecutePipeline).
     // Не используется для процедурной генерации мира (см. WorldRNG) — по сиду
@@ -1416,6 +1431,12 @@ protected:
     // ---- Данные мира ----
     TArray<FGridCell> Cells;
     FRandomStream WorldRNG;
+
+    // Хэндл таймера GridCorruptionReportIntervalSeconds выше -- остановлен в
+    // EndPlay, без этого таймер на уничтоженном акторе мог бы выстрелить в
+    // persistent editor-мире между автотестами (та же причина, что уже
+    // чистит менеджеры прежних тестов в TestWorldHelpers.h::SpawnAndBeginPlay).
+    FTimerHandle GridCorruptionReportTimerHandle;
 
     // ---- Ландшафт и кеш высот ----
     UPROPERTY()

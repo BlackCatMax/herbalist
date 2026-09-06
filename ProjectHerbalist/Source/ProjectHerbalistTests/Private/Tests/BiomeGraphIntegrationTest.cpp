@@ -234,4 +234,124 @@ bool FHerbalistBiomeGraph_RestoreNodeFieldStateIgnoresUnknownBiomes::RunTest(con
     return true;
 }
 
+// Баг (2026-09-06, найдено по PIE-логу пользователя: "после трёх сборов и
+// долгого времени испортилась вся сетка" -- ReportGridCorruption показал
+// Distortion, растущий по ВСЕЙ сетке разом чисто от времени, при нуле
+// реально сработавших заражений соседей). PropagateWaves складывал
+// MorokField/ZaryanaField с вкладом соседних узлов без единого вычитания,
+// ApplyBiomeInfluences складывал поле в TargetState.Distortion клеток без
+// единого вычитания -- замкнутый контур с положительной обратной связью и
+// без тормоза. GlobalMorokDecay/GlobalZaryanaDecay уже существовали, но
+// применялись только к Memory.*History, не к самому полю. Регрессия ровно
+// на добавленные строки в UpdateMemories.
+//
+// Изолируем декей от остального конвейера: перекрашиваем ВСЕ клетки сетки
+// в биом, отличный от целевого (Tundra) -- у целевого узла (Bog) в
+// RecalculateFieldsFromGrid тогда Count==0, ветка "if (Count > 0)" не
+// трогает MorokField вовсе. Одного зануления других узлов ОДИН РАЗ перед
+// циклом оказалось недостаточно (найдено эмпирически, отладочным логом
+// по стадиям конвейера): в DA_BiomeGraph есть двустороннее ребро
+// Bog<->Floodplain (leak=0.15) -- уже на первом шаге Bog утекает в
+// Floodplain через PropagateWaves, а на следующем шаге та же утечка
+// возвращается ОБРАТНО в Bog тем же ребром и откатывает его к потолку
+// 1.0 быстрее, чем декей успевает его утянуть вниз (получили ровно
+// зафиксированные 0.998 на каждом шаге -- декей реально применялся, но
+// сразу же перекрывался откатом через соседа). Поэтому все ОСТАЛЬНЫЕ узлы
+// зануляются ЗАНОВО после каждого шага -- утечка Bog->сосед этому шагу не
+// мешает, а вот сосед->Bog на СЛЕДУЮЩЕМ шаге больше не проходит, потому
+// что сосед снова на нуле к моменту, когда PropagateWaves его читает.
+// Без фикса из UpdateMemories поле не изменилось бы вовсе за все 50 шагов.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_MorokFieldDecaysOverTimeWithoutInput,
+    "Herbalist.BiomeGraph.MorokFieldDecaysOverTimeWithoutInput",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeGraph_MorokFieldDecaysOverTimeWithoutInput::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!TestNotNull(TEXT("UBiomeGraphSubsystem present"), Graph))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+    if (!TestNotNull(TEXT("DA_BiomeGraph asset loads"), Asset))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Graph->InitializeFromAsset(Asset);
+    if (!TestTrue(TEXT("BiomeGraphSubsystem reports initialized"), Graph->IsInitialized()))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    const FName TargetBiomeID(TEXT("Bog"));
+    if (!TestTrue(TEXT("Graph has a Bog node"), Graph->GetNodes().Contains(TargetBiomeID)))
+    {
+        Graph->Deinitialize();
+        Manager->Destroy();
+        return false;
+    }
+
+    for (const auto& Pair : Graph->GetNodes())
+    {
+        if (FBiomeGraphNode* Node = Graph->GetMutableNode(Pair.Key))
+        {
+            Node->MorokField = 0.0f;
+        }
+    }
+    Graph->GetMutableNode(TargetBiomeID)->MorokField = 1.0f;
+
+    // Ни одна клетка не заявляет Bog -- RecalculateFieldsFromGrid видит
+    // Count==0 для него и оставляет MorokField нетронутым своей веткой.
+    for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
+    {
+        for (int32 X = 0; X < Manager->GridSizeX; ++X)
+        {
+            if (FGridCell* Cell = Manager->GetCell(X, Y))
+            {
+                Cell->Biome = EBiomeType::Tundra;
+            }
+        }
+    }
+
+    // 50 шагов * FixedTimeStep (0.2с, BiomeGraphAsset.h) = 10 симулированных
+    // секунд. Ожидаемое затухание при GlobalMorokDecay=0.01:
+    // 1.0 * (1 - 0.01*0.2)^50 ≈ 0.905.
+    for (int32 Step = 0; Step < 50; ++Step)
+    {
+        Graph->ForceStep();
+
+        for (const auto& Pair : Graph->GetNodes())
+        {
+            if (Pair.Key == TargetBiomeID) continue;
+            if (FBiomeGraphNode* Node = Graph->GetMutableNode(Pair.Key))
+            {
+                Node->MorokField = 0.0f;
+            }
+        }
+    }
+
+    const FBiomeGraphNode* Result = Graph->GetNode(TargetBiomeID);
+    if (TestNotNull(TEXT("Target node still exists"), Result))
+    {
+        TestTrue(FString::Printf(TEXT("MorokField decayed measurably from 1.0 (got %.4f, expected ~0.905)"), Result->MorokField),
+            Result->MorokField < 0.95f);
+        TestTrue(FString::Printf(TEXT("MorokField did not swing implausibly low (got %.4f)"), Result->MorokField),
+            Result->MorokField > 0.85f);
+    }
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

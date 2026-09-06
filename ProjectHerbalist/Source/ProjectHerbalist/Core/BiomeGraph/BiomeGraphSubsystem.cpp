@@ -313,6 +313,25 @@ void UBiomeGraphSubsystem::UpdateMemories(float StepDeltaTime)
     for (auto& Pair : Nodes)
     {
         FBiomeGraphNode& Node = Pair.Value;
+
+        // Баг (2026-09-06, найдено по PIE-логу пользователя: "после трёх
+        // сборов и долгого времени испортилась вся сетка" -- ReportGridCorruption
+        // показал Distortion, растущий по ВСЕЙ сетке разом чисто от времени,
+        // при нуле реально сработавших заражений соседей). PropagateWaves
+        // выше только СКЛАДЫВАЕТ MorokField/ZaryanaField с вкладом соседних
+        // узлов (без единого вычитания), а ApplyBiomeInfluences
+        // (GridWorldManagerCore.cpp) складывает поле в TargetState.Distortion
+        // клеток -- замкнутый контур с положительной обратной связью
+        // (GetBiomeSamples читает Cell.State.Distortion обратно как
+        // MorokValue) и без единого тормоза. GlobalMorokDecay/GlobalZaryanaDecay
+        // уже существовали, но применялись только к отдельному Memory.*History,
+        // не к самому MorokField/ZaryanaField, который реально толкает сетку --
+        // единственные два поля этой структуры без затухания, при том что
+        // Instability/AxisDrift ниже уже decay'ятся. Та же формула, что уже
+        // у Memory.*History -- новых чисел не вводится.
+        Node.MorokField = FMath::Clamp(Node.MorokField * (1.f - GlobalMorokDecay * StepDeltaTime), 0.f, 1.f);
+        Node.ZaryanaField = FMath::Clamp(Node.ZaryanaField * (1.f - GlobalZaryanaDecay * StepDeltaTime), 0.f, 1.f);
+
         Node.Memory.MorokHistory = FMath::Clamp(Node.Memory.MorokHistory * (1.f - GlobalMorokDecay * StepDeltaTime), 0.f, 1.f);
         Node.Memory.ZaryanaHistory = FMath::Clamp(Node.Memory.ZaryanaHistory * (1.f - GlobalZaryanaDecay * StepDeltaTime), 0.f, 1.f);
         Node.Memory.Instability = FMath::Clamp(Node.Memory.Instability * 0.995f, 0.f, 1.f);
