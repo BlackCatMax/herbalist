@@ -6,11 +6,25 @@
 // PlayerController/мира, тем же приёмом, что GetLandmarkDefinitions уже
 // тестируется опосредованно через LandmarkTest.cpp, но здесь у самого
 // движка (фильтрация веток по гейту) прежде не было ни одного теста.
+//
+// Символическое подношение (2026-09-06) — единственное исключение из
+// принципа выше: сам эффект (Respect += Gain) живёт в
+// AHerbalistPlayerController::ChooseDialogueBranch, не в данных дерева,
+// поэтому его регрессия ниже требует полного DispatchBeginPlay-мира (тот
+// же приём, что уже ArtifactInventoryTest.cpp/GardenNicheUnlockTest.cpp) —
+// файл получил WITH_EDITOR в гварде ради этого одного теста.
 
 #include "Core/Dialogue/HerbalistDialogueTypes.h"
+#include "Core/World/GridWorldManager.h"
+#include "Core/Config/HerbalistSettings.h"
+#include "Player/HerbalistPlayerController.h"
 #include "Misc/AutomationTest.h"
+#include "Editor.h"
+#include "Engine/World.h"
 
-#if WITH_AUTOMATION_TESTS
+#if WITH_AUTOMATION_TESTS && WITH_EDITOR
+
+#include "TestWorldHelpers.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDialogue_DomovoiDefinitionExists,
     "Herbalist.Dialogue.DomovoiDefinitionExists",
@@ -89,4 +103,69 @@ bool FHerbalistDialogue_GoodStandingBranchLeadsToItsOwnNode::RunTest(const FStri
     return true;
 }
 
-#endif // WITH_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDialogue_MilkOfferingBranchIsFlaggedSymbolic,
+    "Herbalist.Dialogue.MilkOfferingBranchIsFlaggedSymbolic",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDialogue_MilkOfferingBranchIsFlaggedSymbolic::RunTest(const FString& Parameters)
+{
+    // Регрессия на DomovoiMilkOfferingPatchCommandlet (2026-09-06, решение
+    // пользователя: бесплатный символический жест) -- "Оставить у печи
+    // блюдце молока" обязана нести bIsSymbolicOffering=true в живой
+    // DT_Dialogue, иначе AHerbalistPlayerController::ChooseDialogueBranch
+    // молча не даст никакого эффекта, как и было до этой находки.
+    const FDialogueDefinition* Def = FindDialogueDefinition(FName(TEXT("Домовой")));
+    if (!TestNotNull(TEXT("Домовой dialogue found"), Def)) return false;
+    const FDialogueNode* Home = FindDialogueNode(*Def, FName(TEXT("Home")));
+    if (!TestNotNull(TEXT("Home node found"), Home)) return false;
+
+    const FDialogueBranch* OfferBranch = nullptr;
+    for (const FDialogueBranch& Branch : Home->Branches)
+    {
+        if (Branch.ActionText.ToString() == TEXT("Оставить у печи блюдце молока")) OfferBranch = &Branch;
+    }
+    if (!TestNotNull(TEXT("Milk-offering branch exists"), OfferBranch)) return false;
+
+    TestTrue(TEXT("Milk-offering branch is flagged as a symbolic offering"), OfferBranch->bIsSymbolicOffering);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDialogue_ChoosingSymbolicOfferingBranchRaisesRespect,
+    "Herbalist.Dialogue.ChoosingSymbolicOfferingBranchRaisesRespect",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDialogue_ChoosingSymbolicOfferingBranchRaisesRespect::RunTest(const FString& Parameters)
+{
+    // Решение пользователя 2026-09-06: бесплатный символический жест
+    // ("оставить у печи блюдце молока") сам по себе -- подношение, без
+    // предмета. Реальный эффект (Respect += SymbolicOfferingRespectGain)
+    // живёт в ChooseDialogueBranch, не в данных дерева -- нужен полный мир.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+
+    Manager->RegisterDomovoi(FIntPoint(3, 3));
+    FEntityLandmark* Landmark = Manager->FindLandmarkAt(FIntPoint(3, 3));
+    if (!TestNotNull(TEXT("Домовой registered"), Landmark)) { Manager->Destroy(); PC->Destroy(); return false; }
+    const float RespectBefore = Landmark->Respect;
+
+    PC->TalkTo(3, 3);
+    // "Оставить у печи блюдце молока" -- MinGate=-1/MaxGate=1, всегда
+    // первая доступная ветка независимо от текущего Respect.
+    PC->ChooseDialogueBranch(0);
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float ExpectedGain = Settings ? Settings->SymbolicOfferingRespectGain : 0.03f;
+    TestTrue(TEXT("Respect rose by roughly SymbolicOfferingRespectGain"),
+        FMath::IsNearlyEqual(Landmark->Respect, RespectBefore + ExpectedGain, 0.0005f));
+
+    Manager->Destroy();
+    PC->Destroy();
+    return true;
+}
+
+#endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

@@ -9171,3 +9171,50 @@ EMA от дефолта, блендинг сохраняет след старо
 `ProjectHerbalistTests/.../Tests/ZaryanaTest.cpp`,
 `herbalist_docs/Herbalist_Vault/03_Technical/Current/Core_Current.md`,
 `ROADMAP.md`.
+
+## Диалог "блюдце молока": бесплатное символическое подношение (2026-09-06)
+
+Прямой запрос пользователя — закрыт открытый пункт ROADMAP: ветка "Оставить
+у печи блюдце молока" (Домовой) не имела игрового эффекта, хотя
+`DESIGN_Community_And_Homestead.md §1` называет подношение действием,
+которым диалог завершается. Решение пользователя: **бесплатный
+символический акт**, без предмета — в игре нет молочных/животноводческих
+ингредиентов вовсе, заводить один ради единственной реплики означало бы
+придумывать игровую основу под неё.
+
+**Реализовано:** новое поле `FDialogueBranch::bIsSymbolicOffering`
+(`HerbalistDialogueTypes.h`) — данные дерева сами говорят, какая ветка
+является подношением, не хардкод по конкретному `ActionText`/`EntityID` в
+коде контроллера. `AHerbalistPlayerController::ChooseDialogueBranch`
+поднимает `Respect` собеседника на фиксированное
+`UHerbalistSettings::SymbolicOfferingRespectGain` (0.03 — тот же порядок
+величины, что уже откалиброван `MolvaOfferingGain` для "одного честного
+жеста" в экономике общины) при выборе такой ветки, ДО разрешения
+`NextNodeID` — сам факт выбора уже есть подношение, независимо от того, чем
+разговор продолжится дальше. Не второй, конкурирующий канал изменения
+Respect — тот же принцип "Respect меняется только через подношение"
+(решение 2026-08-29), просто подношение без материального компонента.
+
+Живой `DT_Dialogue` уже существовал (создан `DialogueCreateCommandlet`,
+который сам идемпотентен только в сторону "ничего не делать, если таблица
+есть") — новый `DomovoiMilkOfferingPatchCommandlet` (`-run=
+DomovoiMilkOfferingPatch`) точечно патчит уже существующий ряд "Домовой"
+(находит узел "Home", ветку по `ActionText`, выставляет флаг), тот же
+`FindRow`-приём, что и у остальных Patch-коммандлетов проекта.
+`DialogueCreateCommandlet.cpp` тоже обновлён (для честной пересборки с
+нуля, если таблица когда-нибудь будет удалена).
+
+**Тестирование:** `Herbalist.Dialogue.MilkOfferingBranchIsFlaggedSymbolic`
+(данные живой таблицы несут флаг) и
+`Herbalist.Dialogue.ChoosingSymbolicOfferingBranchRaisesRespect`
+(end-to-end через `TalkTo`/`ChooseDialogueBranch` на полном
+`DispatchBeginPlay`-мире — единственный тест в `DialogueTest.cpp`,
+которому потребовался редакторский мир, файл получил `WITH_EDITOR` в
+гварде ради него).
+
+**Итог:** 415 → 417 тестов, **417/417, два чистых прогона, ноль
+регрессий.** Файлы: `Core/Dialogue/HerbalistDialogueTypes.h`,
+`Core/Config/HerbalistSettings.h`, `Player/HerbalistPlayerController.cpp`,
+`ProjectHerbalistTests/.../Commandlets/DomovoiMilkOfferingPatchCommandlet.h/.cpp`
+(новый), `ProjectHerbalistTests/.../Commandlets/DialogueCreateCommandlet.cpp`,
+`ProjectHerbalistTests/.../Tests/DialogueTest.cpp`, `ROADMAP.md`.

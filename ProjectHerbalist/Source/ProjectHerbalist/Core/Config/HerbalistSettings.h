@@ -352,6 +352,19 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Storage", meta = (ClampMin = "1", ClampMax = "9"))
     int32 HomeStorageMaterialCount = 3;
 
+    // --- Диалоги: символическое подношение (2026-09-06, "оставить у печи
+    // блюдце молока", DESIGN_Community_And_Homestead.md §1) --- решение
+    // пользователя: бесплатный жест, без предмета, для поддержания (не
+    // резкого подъёма) репутации у хозяина места. Черновое число того же
+    // порядка, что MolvaOfferingGain=0.03 -- "величина одного честного
+    // жеста" уже откалибрована в проекте на примере общины, здесь та же
+    // величина применена к Respect конкретного хозяина через
+    // FDialogueBranch::bIsSymbolicOffering (AHerbalistPlayerController::
+    // ChooseDialogueBranch), не через обычный Apply-канал подношения (нет
+    // предмета, который нёс бы Purity/Corruption).
+    UPROPERTY(config, EditAnywhere, Category = "Dialogue", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float SymbolicOfferingRespectGain = 0.03f;
+
     // --- Сушка (DESIGN_Community_And_Homestead.md §2.2, "Хранилища" пункт 3,
     // 2026-09-04) --- Единственный из трёх кусков "Хранилищ" оформленный как
     // РАСТЯНУТЫЙ ВО ВРЕМЕНИ ПРОЦЕСС, не мгновенное действие (в отличие от

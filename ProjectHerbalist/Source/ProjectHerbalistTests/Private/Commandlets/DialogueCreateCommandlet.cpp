@@ -31,6 +31,10 @@ namespace
             Offer.ActionText = FText::FromString(TEXT("Оставить у печи блюдце молока"));
             Offer.MinGate = -1.0f; Offer.MaxGate = 1.0f;
             Offer.NextNodeID = NAME_None;
+            // Символическое подношение (2026-09-06, решение пользователя:
+            // бесплатный жест, без предмета) -- см. довод у
+            // FDialogueBranch::bIsSymbolicOffering.
+            Offer.bIsSymbolicOffering = true;
             Home.Branches.Add(Offer);
 
             FDialogueBranch Good;

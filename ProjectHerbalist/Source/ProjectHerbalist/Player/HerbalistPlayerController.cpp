@@ -751,7 +751,7 @@ void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
     }
 
     AGridWorldManager* Grid = FindWorldManager();
-    const FEntityLandmark* Landmark = Grid ? Grid->FindLandmarkAt(CurrentDialogueCell) : nullptr;
+    FEntityLandmark* Landmark = Grid ? Grid->FindLandmarkAt(CurrentDialogueCell) : nullptr;
     const FDialogueDefinition* Def = FindDialogueDefinition(CurrentDialogueID);
     const FDialogueNode* Node = Def ? FindDialogueNode(*Def, CurrentDialogueNodeID) : nullptr;
     if (!Landmark || !Def || !Node)
@@ -766,6 +766,20 @@ void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("ChooseDialogueBranch: %d is not a valid branch (0..%d)"), BranchIndex, Available.Num() - 1);
         return;
+    }
+
+    // Символическое подношение (2026-09-06, "оставить у печи блюдце
+    // молока") -- бесплатный жест без предмета, см. довод у
+    // FDialogueBranch::bIsSymbolicOffering. Respect меняется тут же, до
+    // разрешения NextNodeID -- сам выбор ветки уже и есть подношение,
+    // независимо от того, чем разговор продолжится/закончится дальше.
+    if (Available[BranchIndex]->bIsSymbolicOffering)
+    {
+        const UHerbalistSettings* DialogueSettings = GetHerbalistSettings();
+        const float Gain = DialogueSettings ? DialogueSettings->SymbolicOfferingRespectGain : 0.03f;
+        Landmark->Respect = FMath::Clamp(Landmark->Respect + Gain, -1.0f, 1.0f);
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("[Talk:%s] Symbolic offering: Respect += %.3f (now %.3f)"),
+            *CurrentDialogueID.ToString(), Gain, Landmark->Respect);
     }
 
     const FName NextNodeID = Available[BranchIndex]->NextNodeID;
