@@ -18,6 +18,7 @@
 // презентационно-атмосферный слой, а не игровая причинность.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Entities/LegendaryAnchorMarkerActor.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Entities/LandmarkTypes.h"
@@ -557,6 +558,18 @@ void AGridWorldManager::SeedLegendaryAnchors()
             CellsUsed.Add(Coord);
             UE_LOG(LogHerbalistWorld, Log, TEXT("[Entities] Seeded legendary anchor %s at (%d,%d)"),
                 *Def.EntityID.ToString(), Coord.X, Coord.Y);
+
+            // Постоянный маркер якоря (Архетип 3, DESIGN_Entity_Actors_Art.md,
+            // 2026-09-06) -- отдельно от транзитного ALegendaryEntityActor,
+            // см. довод у LegendaryAnchorMarkerActor.h.
+            if (UWorld* World = GetWorld())
+            {
+                if (ALegendaryAnchorMarkerActor* Marker = World->SpawnActor<ALegendaryAnchorMarkerActor>(
+                    ALegendaryAnchorMarkerActor::StaticClass(), GetCellWorldPosition(Coord.X, Coord.Y), FRotator::ZeroRotator))
+                {
+                    Marker->Init(Def.EntityID, Coord);
+                }
+            }
             break;
         }
     }

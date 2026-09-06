@@ -12,6 +12,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Simulation/Private/PerceptionService.h"
+#include "Core/Entities/LegendaryEntityActor.h"
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -197,6 +198,20 @@ bool AGridWorldManager::TryLureSwampTsarWithPotion(const FIntPoint& Cell, const 
         UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Lure potion at (%d,%d) unconvincing, PerceivedPurity=%.2f"),
             Cell.X, Cell.Y, PerceivedPurity);
         return true;
+    }
+
+    // Болотный царь, флагман (DESIGN_Entity_Actors_Art.md §4.4, 2026-09-06):
+    // "водная гладь идёт кругами... признак, что Царь услышал и отвлёкся
+    // на приманку" -- убедительная приманка сама по себе, независимо от
+    // исхода броска ниже (Anchor уже проверен на существование строкой
+    // выше через IsLegendaryManifested, актор на его клетке гарантированно
+    // жив в этот момент).
+    if (FGridCell* AnchorCellPtr = GetCell(Anchor->X, Anchor->Y))
+    {
+        if (ALegendaryEntityActor* TsarActor = Cast<ALegendaryEntityActor>(AnchorCellPtr->ManifestedEntityActor.Get()))
+        {
+            TsarActor->OnNoticedByBait();
+        }
     }
 
     // Шапка-невидимка (§21.3, "необязательный ускоритель, не ключ") --

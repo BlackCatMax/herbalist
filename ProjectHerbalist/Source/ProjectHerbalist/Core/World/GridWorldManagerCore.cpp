@@ -4,6 +4,7 @@
 #include "LandscapeProxy.h"
 #include "Engine/OverlapResult.h"
 #include "Core/Entities/HerbalistEntityActor.h"
+#include "Core/World/HomesteadMarkerActor.h"
 #include "EngineUtils.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
@@ -1538,13 +1539,46 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
 
 void AGridWorldManager::RegisterGardenPlot(const FIntPoint& Cell, EGardenNiche Niche)
 {
+    // Маркер-актор "Обставления" (ROADMAP.md, 2026-09-06) — найден по
+    // клетке+виду через TActorIterator, тот же приём, что уже
+    // AHerbalistPlayerController::BuildHomeStorage использует против
+    // дублей. Не отдельная TMap-привязка клетка->актор -- клеток с
+    // пристройкой физически мало (садовые грядки), линейный поиск дешевле
+    // лишней книги учёта.
+    AHomesteadMarkerActor* Existing = nullptr;
+    if (UWorld* World = GetWorld())
+    {
+        for (TActorIterator<AHomesteadMarkerActor> It(World); It; ++It)
+        {
+            if (It->GetKind() == EHomesteadMarkerKind::GardenPristroyka && It->GetGridCell() == Cell)
+            {
+                Existing = *It;
+                break;
+            }
+        }
+    }
+
     if (Niche == EGardenNiche::None)
     {
         GardenPlots.Remove(Cell);
+        if (Existing) Existing->Destroy();
         UE_LOG(LogHerbalistWorld, Log, TEXT("[Garden] Plot at (%d,%d) cleared"), Cell.X, Cell.Y);
         return;
     }
+
     GardenPlots.Add(Cell, Niche);
+    if (Existing)
+    {
+        Existing->SetNiche(Niche);
+    }
+    else if (UWorld* World = GetWorld())
+    {
+        if (AHomesteadMarkerActor* Marker = World->SpawnActor<AHomesteadMarkerActor>(
+            AHomesteadMarkerActor::StaticClass(), GetCellWorldPosition(Cell.X, Cell.Y), FRotator::ZeroRotator))
+        {
+            Marker->Init(Cell, EHomesteadMarkerKind::GardenPristroyka, Niche);
+        }
+    }
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Garden] Plot at (%d,%d) set to niche %d"), Cell.X, Cell.Y, (int32)Niche);
 }
 

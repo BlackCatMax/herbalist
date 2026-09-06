@@ -16,7 +16,10 @@
 #include "Core/Entities/AmbientEntityActor.h"
 #include "Core/Entities/LandmarkEntityActor.h"
 #include "Core/Entities/LegendaryEntityActor.h"
+#include "Core/Entities/LegendaryAnchorMarkerActor.h"
 #include "Core/Entities/LegendaryEntityTypes.h"
+#include "Core/Entities/ArtifactTypes.h"
+#include "EngineUtils.h"
 #include "Core/Interaction/Interactable.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Storage/AlchemyTableActor.h"
@@ -118,6 +121,60 @@ bool FHerbalistEntityActor_LandmarkManifestationSpawnsActor::RunTest(const FStri
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistEntityActor_LandmarkActorTicksRespectThreshold,
+    "Herbalist.EntityActor.LandmarkActorTicksRespectThreshold",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistEntityActor_LandmarkActorTicksRespectThreshold::RunTest(const FString& Parameters)
+{
+    // Архетип 2 (DESIGN_Entity_Actors_Art.md, 2026-09-06): "появление
+    // силуэта... при пересечении порога Respect в любую сторону" -- те же
+    // 0.5/-0.3, что уже гейтят bless/curse в UpdateEntityManifestations.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(3, 3);
+    if (!TestNotNull(TEXT("Cell (3,3) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::ForestSteppe;
+    Cell->bIsWater = false;
+
+    FEntityLandmark Landmark;
+    Landmark.EntityID = FName(TEXT("Полевик"));
+    Landmark.Cell = FIntPoint(3, 3);
+    Landmark.Respect = 0.8f;   // выше порога благословения (0.5)
+    Manager->SetEntityLandmarks({ Landmark });
+    Manager->UpdateEntityManifestations(1.0f);
+
+    ALandmarkEntityActor* Spawned = Cast<ALandmarkEntityActor>(Cell->ManifestedEntityActor.Get());
+    if (!TestNotNull(TEXT("Landmark-tier actor spawned"), Spawned)) { Manager->Destroy(); return false; }
+
+    // Tick -- protected в самом классе, но public на AActor (переобъявление
+    // доступа в производном классе не сужает его через указатель БАЗОВОГО
+    // типа) -- тот же вызов, что уже делает движок изнутри своего
+    // тик-менеджера, не обход инкапсуляции.
+    AActor* AsActor = Spawned;
+    AsActor->Tick(0.1f);
+
+    TestTrue(TEXT("High Respect: bIsCurrentlyBlessed true after Tick"), Spawned->bIsCurrentlyBlessed);
+    TestFalse(TEXT("High Respect: bIsCurrentlyCursed false"), Spawned->bIsCurrentlyCursed);
+
+    // Respect падает в нейтральную зону -- оба флага должны снова стать false.
+    FEntityLandmark* MutableLandmark = Manager->FindLandmarkAt(FIntPoint(3, 3));
+    if (TestNotNull(TEXT("Landmark still findable"), MutableLandmark))
+    {
+        MutableLandmark->Respect = 0.0f;
+        AsActor->Tick(0.1f);
+        TestFalse(TEXT("Neutral Respect: bIsCurrentlyBlessed cleared"), Spawned->bIsCurrentlyBlessed);
+        TestFalse(TEXT("Neutral Respect: bIsCurrentlyCursed still false"), Spawned->bIsCurrentlyCursed);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 namespace
 {
     UBiomeGraphSubsystem* InitGraphForEntityActorTest(UWorld* World)
@@ -182,6 +239,72 @@ bool FHerbalistEntityActor_LegendaryManifestationSpawnsActor::RunTest(const FStr
     }
 
     Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistEntityActor_LegendaryActorExposesAcquiredViaDeception,
+    "Herbalist.EntityActor.LegendaryActorExposesAcquiredViaDeception",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistEntityActor_LegendaryActorExposesAcquiredViaDeception::RunTest(const FString& Parameters)
+{
+    // Баба-Яга, флагман (DESIGN_Entity_Actors_Art.md §4.4) -- generic-запрос
+    // по ArtifactID, не хардкодит конкретную пару существо-артефакт в C++
+    // (см. довод у LegendaryEntityActor.h).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    FAcquiredArtifact Cap;
+    Cap.ArtifactID = FName(TEXT("Шапка-невидимка"));
+    Cap.bAcquiredViaDeception = true;
+    Manager->SetAcquiredArtifacts({ Cap });
+
+    ALegendaryEntityActor* Actor = World->SpawnActor<ALegendaryEntityActor>();
+    if (!TestNotNull(TEXT("Actor spawned"), Actor)) { Manager->Destroy(); return false; }
+    Actor->Init(FName(TEXT("Баба-Яга")), FIntPoint(0, 0), Manager);
+
+    bool bFound = false;
+    const bool bDeception = Actor->WasAcquiredViaDeception(FName(TEXT("Шапка-невидимка")), bFound);
+    TestTrue(TEXT("Artifact found"), bFound);
+    TestTrue(TEXT("Reflects bAcquiredViaDeception=true"), bDeception);
+
+    bool bFoundUnknown = true;
+    Actor->WasAcquiredViaDeception(FName(TEXT("НиктоТакойНеДобыт")), bFoundUnknown);
+    TestFalse(TEXT("Unacquired artifact: bOutFound=false"), bFoundUnknown);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistEntityActor_LegendaryAnchorMarkersSpawnPermanently,
+    "Herbalist.EntityActor.LegendaryAnchorMarkersSpawnPermanently",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistEntityActor_LegendaryAnchorMarkersSpawnPermanently::RunTest(const FString& Parameters)
+{
+    // Архетип 3: "постоянный слабый маркер на клетке-якоре, даже когда
+    // эффект неактивен" -- ALegendaryAnchorMarkerActor спавнится сам
+    // SeedLegendaryAnchors, не зависит от того, проявлено ли сейчас
+    // что-либо на этой клетке (в отличие от транзитного ALegendaryEntityActor).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    int32 Before = 0;
+    for (TActorIterator<ALegendaryAnchorMarkerActor> It(World); It; ++It) ++Before;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    int32 After = 0;
+    for (TActorIterator<ALegendaryAnchorMarkerActor> It(World); It; ++It) ++After;
+
+    TestEqual(TEXT("One new anchor marker per seeded Legendary anchor"),
+        After - Before, Manager->GetLegendaryAnchors().Num());
+
     Manager->Destroy();
     return true;
 }

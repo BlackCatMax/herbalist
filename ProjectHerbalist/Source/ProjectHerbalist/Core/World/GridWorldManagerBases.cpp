@@ -20,6 +20,7 @@
 //   компендиума.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/World/HomesteadMarkerActor.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "ProjectHerbalist.h"
@@ -58,6 +59,18 @@ void AGridWorldManager::RegisterBase(const FIntPoint& Cell)
     NewBase.Biome = Center->Biome;
     Bases.Add(NewBase);
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Base] Founded at (%d,%d), biome=%d"), Cell.X, Cell.Y, (int32)Center->Biome);
+
+    // Маркер-актор "Обставления" (ROADMAP.md, 2026-09-06) -- база не может
+    // быть зарегистрирована дважды (проверка выше), поэтому здесь только
+    // спавн, без find-or-update ветки, что уже есть у RegisterGardenPlot.
+    if (UWorld* World = GetWorld())
+    {
+        if (AHomesteadMarkerActor* Marker = World->SpawnActor<AHomesteadMarkerActor>(
+            AHomesteadMarkerActor::StaticClass(), GetCellWorldPosition(Cell.X, Cell.Y), FRotator::ZeroRotator))
+        {
+            Marker->Init(Cell, EHomesteadMarkerKind::Base);
+        }
+    }
 }
 
 bool AGridWorldManager::IsValidBrewingLocation(const FIntPoint& Cell) const

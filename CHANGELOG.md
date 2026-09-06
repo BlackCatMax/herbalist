@@ -9700,3 +9700,100 @@ InteractingWithPickupActorGrantsItemAndClearsSite` (подбор снимает 
 завершает инструкцию Cowork по визуал-логике/левел-дизайн-хукам/новым
 механикам POI целиком (§4 закрыт, включая честные пробелы, задокументированные
 явно, не молчаливые).
+
+## Порог готовности к работе в редакторе: визуал-хуки сущностей + маркеры Обставления (2026-09-06)
+
+Прямой запрос пользователя: определить порог, когда пора переходить от
+кода к работе в редакторе, и закрыть его целиком, а не частично. Разбор
+`ROADMAP.md`/кода показал ядро игры готовым к передаче в контент почти
+целиком (персонаж/HUD/звук/Буян/Ultra Dynamic Sky-мост/JournalWidget —
+уже сейчас чистая контентная задача без единого недостающего C++-крючка),
+кроме двух реальных разрывов: визуал проявления сущностей (`DESIGN_
+Entity_Actors_Art.md`, только что полученный от Cowork) и "Обставление"
+(постройки прокачки).
+
+**Проявление сущностей.** Базовые акторы всех трёх рангов
+(`AHerbalistEntityActor` + `AAmbientEntityActor`/`ALandmarkEntityActor`/
+`ALegendaryEntityActor`) существовали с 2026-08-30, но были полностью
+инертны — ни одного `Tick`, ни одного крючка для контента. Реализованы
+Архетип 2 и Архетип 3 (Архетип 1, амбиентный, оказался уже структурно
+полон — существующий spawn/destroy-цикл сам по себе даёт "появляется/
+исчезает там же, где меняется `ManifestedEntityID`", десатурация в
+радиусе клетки — отдельный, уже задокументированный пункт "PCG/
+материалы", не эта задача):
+
+- **`ALandmarkEntityActor::Tick`** — опрашивает `Respect` через уже
+  существующий `GetLandmark()`, `BlueprintImplementableEvent
+  OnRespectThresholdCrossed(bBlessed, bCursed)` срабатывает на
+  пересечении порогов 0.5/-0.3 — те же самые, что уже гейтят bless/curse-
+  нудж в `UpdateEntityManifestations`, не новые числа: силуэт должен
+  появляться ровно тогда, когда меняется механический статус хозяина.
+  Состояние продублировано в публичные `bIsCurrentlyBlessed`/
+  `bIsCurrentlyCursed` (не только событие) — Blueprint может опросить
+  напрямую, не только реагировать.
+- **`ALegendaryEntityActor`** — `BlueprintImplementableEvent
+  OnManifestationBurst()` вызывается из `BeginPlay` (момент спавна этого
+  актора и есть момент срабатывания триггера — `SyncManifestedEntityActor`
+  создаёт его именно тогда). Новый `ALegendaryAnchorMarkerActor`
+  (`Core/Entities/LegendaryAnchorMarkerActor.h`) — постоянный маркер,
+  спавнится `SeedLegendaryAnchors` один раз на якорь, живёт независимо от
+  транзитного `ALegendaryEntityActor` (тот существует только пока
+  проявление активно) — закрывает "маркер виден даже когда эффект
+  неактивен" отдельным, а не совмещённым актором.
+- **Баба-Яга** (флагман) — `WasAcquiredViaDeception(ArtifactID, bOutFound)`
+  на `ALegendaryEntityActor`: generic-запрос к `AcquiredArtifacts`, не
+  хардкодит пару "Баба-Яга"/"Шапка-невидимка" в C++ — конкретную пару
+  знает Blueprint-наследник, тем же принципом архитектуры, что уже
+  описан в комментарии `HerbalistEntityActor.h` ("визуал — Blueprint-
+  наследники поверх них").
+- **Болотный царь** (флагман) — `OnNoticedByBait()` вызывается из
+  `AGridWorldManager::TryLureSwampTsarWithPotion` на убедительной
+  приманке (`PerceivedPurity >= HonestThreshold`), НЕЗАВИСИМО от исхода
+  последующего броска — "услышал и отвлёкся" происходит из-за самой
+  приманки, не из-за успешной кражи.
+- Остальные 9 флагманов документа сознательно НЕ получили штучного C++ —
+  их отличия чисто художественные (цвет партикла, форма VFX, выбор
+  звука), читаются из уже вынесенных архетипных данных
+  (`EntityID`/`GridCell`/пороги выше) в Blueprint, отдельной игровой
+  логики не требуют. Зафиксировано в `ROADMAP.md` явно, не молчаливым
+  пробелом.
+
+**"Обставление".** Найдено при разведке: домашнее хранилище уже имело
+физический актор (`AStorageContainer`, `AGridWorldManager::
+SpawnHomeStorageContainer`) — просто не задокументировано раньше в
+`ROADMAP.md` как готовое. Пристройка сада и база теперь тоже получили
+маркер (`AHomesteadMarkerActor`, `Core/World/HomesteadMarkerActor.h`,
+`EHomesteadMarkerKind::GardenPristroyka`/`Base`) — спавнится сам
+`RegisterGardenPlot`/`RegisterBase`, найден-или-обновлён через
+`TActorIterator` при смене ниши на той же клетке (тот же приём против
+дублей, что уже `AHerbalistPlayerController::BuildHomeStorage`), не
+пересоздаётся заново. Честно зафиксированный узкий пробел: маркер
+спавнится только при живой регистрации в ЭТОЙ сессии, не при
+восстановлении из сейва (`LoadGame` присваивает `GardenPlots`/`Bases`
+напрямую, без прохода по акторам) — механика уже загруженных построек
+работает корректно, страдает только видимость до их повторной
+регистрации.
+
+**Тестирование:** `Herbalist.EntityActor.LandmarkActorTicksRespectThreshold`
+(вызывает `Tick` через `AActor*`-апкаст — переобъявление доступа в
+производном классе не сужает его через указатель БАЗОВОГО типа, тот же
+вызов, что уже делает движок изнутри тик-менеджера), `Herbalist.EntityActor.
+LegendaryActorExposesAcquiredViaDeception`, `Herbalist.EntityActor.
+LegendaryAnchorMarkersSpawnPermanently` (дельта-подсчёт, тот же приём,
+что уже POI-акторы), `Herbalist.Homestead.
+RegisteringGardenPlotSpawnsAndUpdatesMarker` (спавн + обновление на месте
++ уничтожение при снятии), `Herbalist.Homestead.RegisteringBaseSpawnsMarker`.
+
+**Итог:** 439 → 444 теста, **444/444, два чистых прогона, ноль
+регрессий.** Файлы: `Core/Entities/LandmarkEntityActor.h/.cpp`,
+`Core/Entities/LegendaryEntityActor.h/.cpp`,
+`Core/Entities/LegendaryAnchorMarkerActor.h/.cpp` (новые),
+`Core/World/HomesteadMarkerActor.h/.cpp` (новые),
+`Core/World/GridWorldManagerEntities.cpp`, `Core/World/GridWorldManagerCore.cpp`,
+`Core/World/GridWorldManagerBases.cpp`, `Core/World/GridWorldManagerArtifacts.cpp`,
+`ProjectHerbalistTests/.../Tests/EntityActorTest.cpp`,
+`ProjectHerbalistTests/.../Tests/HomesteadMarkerActorTest.cpp` (новый),
+`ROADMAP.md`. С этим коммитом проект пересекает заявленный порог: все
+пункты "Контент/редактор" в ROADMAP.md либо уже чистая контентная задача,
+либо (Обставление) содержат явно задокументированный узкий пробел, не
+скрытую невозможность начать работу в редакторе.
