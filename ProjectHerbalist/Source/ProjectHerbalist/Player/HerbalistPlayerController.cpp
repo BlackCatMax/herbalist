@@ -782,6 +782,15 @@ void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
             *CurrentDialogueID.ToString(), Gain, Landmark->Respect);
     }
 
+    // Калинов мост / Трёхглавый Змей (§4.4, 2026-09-06) -- та же точка
+    // приложения, что символическое подношение выше: ветка "Бой" бьёт по
+    // Purity/Stability клетки самого Змея (CurrentDialogueCell), см. довод
+    // у FDialogueBranch::bIsKalinovMostFight.
+    if (Available[BranchIndex]->bIsKalinovMostFight)
+    {
+        Grid->ApplyKalinovMostFightCost(CurrentDialogueCell);
+    }
+
     const FName NextNodeID = Available[BranchIndex]->NextNodeID;
     if (NextNodeID.IsNone())
     {

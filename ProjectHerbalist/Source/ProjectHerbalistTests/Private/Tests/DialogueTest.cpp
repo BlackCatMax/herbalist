@@ -168,4 +168,74 @@ bool FHerbalistDialogue_ChoosingSymbolicOfferingBranchRaisesRespect::RunTest(con
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDialogue_ZmeyGorynychDefinitionHasFightAndDealBranches,
+    "Herbalist.Dialogue.ZmeyGorynychDefinitionHasFightAndDealBranches",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDialogue_ZmeyGorynychDefinitionHasFightAndDealBranches::RunTest(const FString& Parameters)
+{
+    // Регрессия на KalinovMostDialogueAppendCommandlet (§4.4, 2026-09-06) --
+    // без этого ряда в живой DT_Dialogue AHerbalistPlayerController::TalkTo
+    // молча откажет ("has no dialogue tree yet"), а не упадёт.
+    const FDialogueDefinition* Def = FindDialogueDefinition(FName(TEXT("ЗмейГорыныч")));
+    if (!TestNotNull(TEXT("ЗмейГорыныч has a registered dialogue"), Def)) return false;
+
+    const FDialogueNode* Start = FindDialogueNode(*Def, Def->StartNodeID);
+    if (!TestNotNull(TEXT("Start node resolves"), Start)) return false;
+
+    TestEqual(TEXT("Exactly two branches: Fight and Deal"), Start->Branches.Num(), 2);
+
+    bool bHasFight = false, bHasDeal = false;
+    for (const FDialogueBranch& Branch : Start->Branches)
+    {
+        if (Branch.bIsKalinovMostFight) bHasFight = true;
+        else bHasDeal = true;
+    }
+    TestTrue(TEXT("One branch is flagged as the fight"), bHasFight);
+    TestTrue(TEXT("The other branch is the (costless-in-code) deal"), bHasDeal);
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDialogue_ChoosingKalinovMostFightBranchCostsPurityAndStability,
+    "Herbalist.Dialogue.ChoosingKalinovMostFightBranchCostsPurityAndStability",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDialogue_ChoosingKalinovMostFightBranchCostsPurityAndStability::RunTest(const FString& Parameters)
+{
+    // Решение пользователя 2026-09-06: "бой или сделка" через уже
+    // существующую диалоговую систему, не через боевую систему, которой в
+    // проекте нет. Ветка "Бой" бьёт по Purity/Stability клетки Змея, эффект
+    // живёт в ChooseDialogueBranch -- нужен полный мир, тот же приём, что
+    // уже FHerbalistDialogue_ChoosingSymbolicOfferingBranchRaisesRespect.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+
+    Manager->RegisterZmeyGorynych(FIntPoint(4, 4));
+    FGridCell* Cell = Manager->GetCell(4, 4);
+    if (!TestNotNull(TEXT("Cell (4,4) exists"), Cell)) { Manager->Destroy(); PC->Destroy(); return false; }
+    Cell->State.Meta.Purity = 0.8f;
+    Cell->State.Meta.Stability = 0.8f;
+
+    PC->TalkTo(4, 4);
+    // "Вступить в бой со Змеем" -- MinGate=-1/MaxGate=1, первая ветка узла.
+    PC->ChooseDialogueBranch(0);
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float ExpectedCost = Settings ? Settings->KalinovMostFightCost : 0.3f;
+    TestTrue(TEXT("Purity dropped by roughly KalinovMostFightCost"),
+        FMath::IsNearlyEqual(Cell->State.Meta.Purity, 0.8f - ExpectedCost, 0.0005f));
+    TestTrue(TEXT("Stability dropped by roughly KalinovMostFightCost"),
+        FMath::IsNearlyEqual(Cell->State.Meta.Stability, 0.8f - ExpectedCost, 0.0005f));
+
+    Manager->Destroy();
+    PC->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

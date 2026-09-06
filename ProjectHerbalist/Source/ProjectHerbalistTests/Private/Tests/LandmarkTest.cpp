@@ -263,8 +263,17 @@ bool FHerbalistLandmark_SeedTestLandmarksGivesEachDefinitionADistinctCell::RunTe
     {
         if (!Def.bManualRegistrationOnly) ++ExpectedSeededCount;
     }
+
+    // Калинов мост / ЗмейГорыныч (§4.4, 2026-09-06) -- в отличие от
+    // Домового, регистрируется НЕ актором игрока, а самим
+    // SeedPointsOfInterest (GridWorldManagerPOI.cpp), который отрабатывает
+    // безусловно при каждой InitializeCells, ДО SpawnAndBeginPlay здесь
+    // успевает вернуть управление -- ЗмейГорыныч гарантированно уже в
+    // EntityLandmarks к этой точке, +1 к ожидаемому счёту. У него нет
+    // FLandmarkDefinition вовсе (не "хозяин" с непрерывным Bless/Curse,
+    // только якорь для диалога), поэтому цикл выше его не видит.
     TestEqual(TEXT("Every biome-matched definition found a matching-biome cell in the default grid"),
-        Landmarks.Num(), ExpectedSeededCount);
+        Landmarks.Num(), ExpectedSeededCount + 1);
 
     Manager->Destroy();
     return true;

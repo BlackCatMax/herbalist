@@ -9364,3 +9364,82 @@ Stability в радиусе (не дальше), второй вызов — no-
 Продолжение (Калинов мост/Соловей-разбойник как диалог, Горюч-камень —
 подключение сопротивления к релаксации) — юнит 2/2, следующим коммитом
 этой же сессии.
+
+## POI, юнит 2/2: Калинов мост как диалог, сопротивление Горюч-камня, сев не давит "хозяев" (2026-09-06)
+
+Прямое продолжение юнита 1/2 в тот же заход. Три пункта.
+
+**Калинов мост / Трёхглавый Змей** (§4.4) — решение пользователя:
+"диалоговый выбор" через уже существующую систему, не боевая система,
+которой в проекте нет вовсе. `FDialogueBranch::bIsKalinovMostFight` — тот
+же класс спец-флага, что уже `bIsSymbolicOffering` (2026-09-06, юнит с
+Домовым): одна ветка узла несёт эффект сверх обычного перехода. Ветка
+"Бой" (`AHerbalistPlayerController::ChooseDialogueBranch` →
+`AGridWorldManager::ApplyKalinovMostFightCost`) бьёт по Purity/Stability
+клетки Змея на `KalinovMostFightCost` (0.3, черновое). Ветка "Сделка"
+сознательно НЕ резолвит предмет — тот же класс честного пробела, что уже у
+`ActivateWard`/`TradeWithCommunity` (`IngredientRegistrySubsystem`
+недоступен из `ChooseDialogueBranch`, ROADMAP.md). Змей — новый
+`AGridWorldManager::RegisterZmeyGorynych` (тот же идемпотентный приём, что
+`RegisterDomovoi`), регистрируется САМ `SeedPointsOfInterest`, не актором
+игрока — не "хозяин" дома, точка на карте. Намеренно БЕЗ строки в
+`DT_Landmarks`: без `FLandmarkDefinition` "отсутствие определения — молчаливый
+no-op" (уже существующий гейт `UpdateEntityManifestations`) сам по себе даёт
+"без непрерывного Bless/Curse", ровно то поведение, которое нужно для
+одноразовой встречи, без лишнего ряда данных. Новый
+`KalinovMostDialogueAppendCommandlet` (`-run=KalinovMostDialogueAppend`)
+добавил ряд "ЗмейГорыныч" в живую `DT_Dialogue`, тем же приёмом, что уже
+`DomovoiMilkOfferingPatchCommandlet` для патча; `DialogueCreateCommandlet.cpp`
+обновлён той же записью для честной пересборки таблицы с нуля.
+
+**Горюч-камень** — сопротивление сдвигу `TargetState` подключено к
+`RegenerateCellParameters` (`GridWorldManagerCore.cpp`) в ту же точку, что
+уже модуляция капища (`CellDeltaRegen`/`StabilityDeltaRegen`/
+`DirectionRateMultiplier`), но множитель СИММЕТРИЧЕН (не различает "к S0"
+или "от S0", в отличие от капища) и применяется только к одной конкретной
+клетке — контагион/гистерезис по-прежнему пишут в её `TargetState` как
+обычно, `GoryuchKamenShiftResistance` (0.5) гасит только скорость, с
+которой `State` за ней угонится. Не тот класс риска, что полная миграция
+Morok/Zaryana на read-time оверлей (ROADMAP.md, "Архитектурный долг") —
+общий цикл релаксации не тронут, добавлена одна локальная проверка.
+
+**Найдена и закрыта попутная находка**: `SeedPointsOfInterest` (юнит 1/2)
+исключал коллизии только между самими POI/курганами — НЕ учитывал клетки,
+уже занятые "хозяевами"-по-биому (`SeedTestLandmarks`) и Легендарными
+якорями (`SeedLegendaryAnchors`), хотя оба сеются раньше в той же
+`InitializeCells`. Для Змея это вдвойне хуже обычной POI-коллизии: занятая
+клетка означала бы ВТОРОЙ, недостижимый `EntityLandmark` на месте уже
+существующего "хозяина" (`FindLandmarkAt` вернул бы первый по порядку
+добавления, не второй). Найдено регрессией существующего теста
+`Herbalist.Landmark.SeedTestLandmarksGivesEachDefinitionADistinctCell` —
+не new-написанным тестом, обычным прогоном после реализации. Починено:
+`Occupied` в `SeedPointsOfInterest` теперь строится и из
+`EntityLandmarks`, и из `LegendaryAnchors`, не только из `KurganSites`.
+Тот же существующий тест обновлён (`ExpectedSeededCount + 1`) — ЗмейГорыныч
+теперь безусловно регистрируется до точки, где тест снимает список,
+поведение изменилось законно, не тихая порча теста ради зелёной галочки.
+
+**Тестирование:** `Herbalist.Dialogue.ZmeyGorynychDefinitionHasFightAndDealBranches`
+(живая `DT_Dialogue` несёт ровно две ветки, одна помечена
+`bIsKalinovMostFight`), `Herbalist.Dialogue.
+ChoosingKalinovMostFightBranchCostsPurityAndStability` (end-to-end через
+`TalkTo`/`ChooseDialogueBranch`, тот же приём, что уже тест символического
+подношения), `Herbalist.POI.
+GoryuchKamenRelaxesTowardTargetStateSlowerThanAnOrdinaryCell` (та же
+стартовая девиация на клетке Горюч-камня и обычной клетке, после
+`RegenerateCellParameters` первая продвинулась заметно меньше).
+
+**Итог:** 424 → 427 тестов, **427/427, два чистых прогона, ноль
+регрессий** (включая починенную регрессию существующего теста, пойманную
+до коммита, не после). Файлы: `Core/Dialogue/HerbalistDialogueTypes.h`,
+`Core/Config/HerbalistSettings.h`, `Core/World/GridWorldManager.h`,
+`Core/World/GridWorldManagerCore.cpp`, `Core/World/GridWorldManagerEntities.cpp`,
+`Core/World/GridWorldManagerPOI.cpp`, `Core/Save/HerbalistSaveTypes.h`,
+`Core/Save/HerbalistSaveSubsystem.cpp`, `Player/HerbalistPlayerController.cpp`,
+`ProjectHerbalistTests/.../Commandlets/KalinovMostDialogueAppendCommandlet.h/.cpp`
+(новый), `ProjectHerbalistTests/.../Commandlets/DialogueCreateCommandlet.cpp`,
+`ProjectHerbalistTests/.../Tests/DialogueTest.cpp`,
+`ProjectHerbalistTests/.../Tests/POITest.cpp`,
+`ProjectHerbalistTests/.../Tests/LandmarkTest.cpp`, `ROADMAP.md`. POI §4
+закрыт целиком (кроме уже задокументированных честных пробелов: Тотем —
+средний ярус, Сделка — предмет, актор/визуал для всех пяти).

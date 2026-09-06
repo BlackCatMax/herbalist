@@ -184,4 +184,48 @@ bool FHerbalistPOI_ActivateSoloveyUnderWardConcealmentSkipsCorruption::RunTest(c
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_GoryuchKamenRelaxesTowardTargetStateSlowerThanAnOrdinaryCell,
+    "Herbalist.POI.GoryuchKamenRelaxesTowardTargetStateSlowerThanAnOrdinaryCell",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_GoryuchKamenRelaxesTowardTargetStateSlowerThanAnOrdinaryCell::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint GoryuchKamen = Manager->GetGoryuchKamenSite();
+    FGridCell* StoneCell = Manager->GetCell(GoryuchKamen.X, GoryuchKamen.Y);
+    if (!TestNotNull(TEXT("GoryuchKamen cell exists"), StoneCell)) { Manager->Destroy(); return false; }
+
+    // Обычная клетка вдали от точки, с той же самой стартовой девиацией --
+    // Corruption/Distortion держим низкими и равными State=TargetState, чтобы
+    // не задеть гистерезис деградации (DegradeCenter=0.75), сравниваем чистое
+    // MoveToward-затухание Purity.
+    const FIntPoint FarCoord = (FMath::Abs(GoryuchKamen.X - 0) > 1 || FMath::Abs(GoryuchKamen.Y - 0) > 1) ? FIntPoint(0, 0) : FIntPoint(19, 19);
+    FGridCell* OrdinaryCell = Manager->GetCell(FarCoord.X, FarCoord.Y);
+    if (!TestNotNull(TEXT("Ordinary cell exists"), OrdinaryCell)) { Manager->Destroy(); return false; }
+
+    for (FGridCell* Cell : { StoneCell, OrdinaryCell })
+    {
+        Cell->State.Meta.Purity = 0.0f;
+        Cell->TargetState.Meta.Purity = 1.0f;
+        Cell->State.Meta.Corruption = 0.1f;
+        Cell->TargetState.Meta.Corruption = 0.1f;
+        Cell->Memory.bDegrading = false;
+    }
+
+    Manager->RegenerateCellParameters(10.0f);
+
+    TestTrue(TEXT("Ordinary cell moved toward its TargetState"), OrdinaryCell->State.Meta.Purity > 0.0f);
+    TestTrue(TEXT("GoryuchKamen cell also moved, just less"), StoneCell->State.Meta.Purity > 0.0f);
+    TestTrue(TEXT("GoryuchKamen resists the shift -- moves less than an ordinary cell in the same step"),
+        StoneCell->State.Meta.Purity < OrdinaryCell->State.Meta.Purity);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

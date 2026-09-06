@@ -44,11 +44,26 @@ void AGridWorldManager::SeedPointsOfInterest()
     // только вызов переносится под эту общую точку входа.
     SeedKurganSites();
 
+    // Занятые клетки — курганы (свежесеянные строкой выше) и всё, что уже
+    // расставили SeedTestLandmarks/SeedLegendaryAnchors чуть раньше в этой
+    // же InitializeCells (найдено 2026-09-06 регрессией
+    // Herbalist.Landmark.SeedTestLandmarksGivesEachDefinitionADistinctCell:
+    // без этого Тотем/Светлояр/Горюч-камень/Соловей/Змей могли сесть на уже
+    // занятую клетку "хозяина"-по-биому, а Змей вдобавок стал бы вторым,
+    // недостижимым EntityLandmark на той же клетке).
     TSet<FIntPoint> Occupied;
-    Occupied.Reserve(KurganSites.Num() + 4);
+    Occupied.Reserve(KurganSites.Num() + EntityLandmarks.Num() + LegendaryAnchors.Num() + 5);
     for (const auto& Pair : KurganSites)
     {
         Occupied.Add(Pair.Key);
+    }
+    for (const FEntityLandmark& Landmark : EntityLandmarks)
+    {
+        Occupied.Add(Landmark.Cell);
+    }
+    for (const auto& Pair : LegendaryAnchors)
+    {
+        Occupied.Add(Pair.Value);
     }
 
     TotemSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
@@ -63,9 +78,21 @@ void AGridWorldManager::SeedPointsOfInterest()
     SoloveySite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
     if (SoloveySite != FIntPoint(-1, -1)) Occupied.Add(SoloveySite);
 
-    UE_LOG(LogHerbalistWorld, Log, TEXT("[POI] Seeded: Totem(%d,%d) Svetloyar(%d,%d) GoryuchKamen(%d,%d) Solovey(%d,%d)"),
+    // Калинов мост / Трёхглавый Змей (§4.4) -- в отличие от остальных выше,
+    // сразу же становится Landmark (RegisterZmeyGorynych), не просто
+    // координатой: взаимодействие идёт через уже существующий TalkTo/
+    // ChooseDialogueBranch, а не отдельный запрос/Activate-метод.
+    KalinovMostSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
+    if (KalinovMostSite != FIntPoint(-1, -1))
+    {
+        Occupied.Add(KalinovMostSite);
+        RegisterZmeyGorynych(KalinovMostSite);
+    }
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[POI] Seeded: Totem(%d,%d) Svetloyar(%d,%d) GoryuchKamen(%d,%d) Solovey(%d,%d) KalinovMost(%d,%d)"),
         TotemSite.X, TotemSite.Y, SvetloyarSite.X, SvetloyarSite.Y,
-        GoryuchKamenSite.X, GoryuchKamenSite.Y, SoloveySite.X, SoloveySite.Y);
+        GoryuchKamenSite.X, GoryuchKamenSite.Y, SoloveySite.X, SoloveySite.Y,
+        KalinovMostSite.X, KalinovMostSite.Y);
 }
 
 FString AGridWorldManager::GetTotemRevealText() const
@@ -137,4 +164,19 @@ bool AGridWorldManager::ActivateSolovey()
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Solovey] Triggered at (%d,%d): AoE corruption radius %d, burst %.2f"),
         SoloveySite.X, SoloveySite.Y, Radius, Burst);
     return true;
+}
+
+void AGridWorldManager::ApplyKalinovMostFightCost(const FIntPoint& Cell)
+{
+    FGridCell* GridCell = GetCell(Cell.X, Cell.Y);
+    if (!GridCell) return;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Cost = Settings ? Settings->KalinovMostFightCost : 0.3f;
+
+    GridCell->State.Meta.Purity = FMath::Clamp(GridCell->State.Meta.Purity - Cost, 0.0f, 1.0f);
+    GridCell->State.Meta.Stability = FMath::Clamp(GridCell->State.Meta.Stability - Cost, 0.0f, 1.0f);
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[KalinovMost] Fight chosen at (%d,%d): Purity/Stability cost %.2f"),
+        Cell.X, Cell.Y, Cost);
 }

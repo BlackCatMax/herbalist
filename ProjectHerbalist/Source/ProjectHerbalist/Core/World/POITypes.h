@@ -27,5 +27,6 @@ enum class EPOIKind : uint8
     Totem,          // §4.2 -- Збручский идол, "похожий, но не тот же" объект
     Svetloyar,      // §4.5 -- потребитель GlobalPerceptionClarity
     GoryuchKamen,   // §4.5 -- архетип "упрямого камня" (имя разведено с ward-кристаллом Синь-камень яруса 2, см. довод у AGridWorldManager::GoryuchKamenSite)
-    Solovey         // §4.4 -- Соловей-разбойник
+    Solovey,        // §4.4 -- Соловей-разбойник
+    KalinovMost     // §4.4 -- Трёхглавый Змей, реализован как Landmark + диалог (bManualRegistrationOnly), не отдельный игровой глагол
 };

@@ -64,6 +64,37 @@ namespace
             Defs.Add(D);
         }
 
+        // Калинов мост / Трёхглавый Змей (§4.4, 2026-09-06) -- та же
+        // построчная транскрипция, что уже держит
+        // KalinovMostDialogueAppendCommandlet для живой таблицы, дублируется
+        // здесь только ради честной пересборки таблицы с нуля.
+        {
+            FDialogueDefinition D;
+            D.DialogueID = FName(TEXT("ЗмейГорыныч"));
+            D.SortOrder = Order++;
+            D.StartNodeID = FName(TEXT("Bridge"));
+
+            FDialogueNode Bridge;
+            Bridge.NodeID = FName(TEXT("Bridge"));
+            Bridge.SpeakerLine = FText::FromString(TEXT("Огненная река шипит под Калиновым мостом — Трёхглавый Змей поднимает головы, дорога дальше закрыта."));
+
+            FDialogueBranch Fight;
+            Fight.ActionText = FText::FromString(TEXT("Вступить в бой со Змеем"));
+            Fight.MinGate = -1.0f; Fight.MaxGate = 1.0f;
+            Fight.NextNodeID = NAME_None;
+            Fight.bIsKalinovMostFight = true;
+            Bridge.Branches.Add(Fight);
+
+            FDialogueBranch Deal;
+            Deal.ActionText = FText::FromString(TEXT("Откупиться подношением, пройти без боя"));
+            Deal.MinGate = -1.0f; Deal.MaxGate = 1.0f;
+            Deal.NextNodeID = NAME_None;
+            Bridge.Branches.Add(Deal);
+
+            D.Nodes.Add(Bridge);
+            Defs.Add(D);
+        }
+
         return Defs;
     }
 }

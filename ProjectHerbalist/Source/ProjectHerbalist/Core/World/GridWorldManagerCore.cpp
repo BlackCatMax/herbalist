@@ -2069,6 +2069,26 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
             }
         }
 
+        // Горюч-камень (§4.5, "упрямый камень", 2026-09-06, юнит 2/2 POI) —
+        // аномальное сопротивление сдвигу TargetState "в любую сторону, не
+        // только к лучшему": та же точка приложения, что уже модуляция
+        // капища выше (CellDeltaRegen/StabilityDeltaRegen/
+        // DirectionRateMultiplier — насколько БЫСТРО State следует за
+        // TargetState), но множитель СИММЕТРИЧЕН (не различает "к S0" или
+        // "от S0", в отличие от капища) и применяется только к одной
+        // конкретной клетке, не всей сетке — не тот класс риска, что полная
+        // миграция Morok/Zaryana на read-time оверлей (ROADMAP.md,
+        // "Архитектурный долг"): контагион/гистерезис/капища по-прежнему
+        // пишут в TargetState этой клетки как обычно, сопротивление гасит
+        // только скорость, с которой State за ней угонится.
+        if (GoryuchKamenSite != FIntPoint(-1, -1) && Cell.X == GoryuchKamenSite.X && Cell.Y == GoryuchKamenSite.Y)
+        {
+            const float Resistance = Settings ? Settings->GoryuchKamenShiftResistance : 0.5f;
+            CellDeltaRegen *= Resistance;
+            StabilityDeltaRegen *= Resistance;
+            DirectionRateMultiplier *= Resistance;
+        }
+
         // 1. Отклонение по Meta + Magnitude — единым шагом на все семь осей
         // вместо прежних четырёх. bChanged нужен только для раннего выхода
         // из релаксации Direction ниже, спад HarvestStress идёт независимо.

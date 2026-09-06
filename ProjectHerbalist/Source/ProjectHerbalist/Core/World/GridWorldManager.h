@@ -653,6 +653,12 @@ public:
     // AAlchemyTableActor::BeginPlay на клетке жилища, идемпотентно.
     void RegisterDomovoi(const FIntPoint& Cell);
 
+    // Трёхглавый Змей (§4.4, Калинов мост, 2026-09-06) -- тот же
+    // bManualRegistrationOnly/идемпотентный приём, что RegisterDomovoi выше,
+    // но регистрируется не актором игрока, а самим SeedPointsOfInterest
+    // (GridWorldManagerPOI.cpp) -- это не "хозяин" дома, а точка на карте.
+    void RegisterZmeyGorynych(const FIntPoint& Cell);
+
     // Тип капища по месту, не жёстко Ancestral (находка финального аудита
     // 2026-08-30: единственная точка регистрации, AlchemyTableActor::BeginPlay,
     // передавала EShrineType::Ancestral безусловно — формулы остальных 4 типов
@@ -1303,6 +1309,22 @@ public:
     void SetSoloveyTriggered(bool bTriggered) { bSoloveyTriggered = bTriggered; }
     bool ActivateSolovey();
 
+    // Калинов мост / Трёхглавый Змей (§4.4) -- в отличие от остальных POI
+    // выше, само взаимодействие НЕ живёт здесь: это Landmark (см.
+    // RegisterZmeyGorynych) + диалог (DT_Dialogue, ЗмейГорыныч), доступный
+    // через уже существующий AHerbalistPlayerController::TalkTo/
+    // ChooseDialogueBranch, тем же путём, что Домовой. Координата хранится
+    // только для сева (не занять эту клетку другим POI) и для отладочного
+    // запроса "где искать" -- сам поиск собеседника всё равно идёт через
+    // FindLandmarkAt(Cell), не через это поле.
+    FIntPoint GetKalinovMostSite() const { return KalinovMostSite; }
+    void SetKalinovMostSite(const FIntPoint& InSite) { KalinovMostSite = InSite; }
+
+    // Цена ветки "Бой" (FDialogueBranch::bIsKalinovMostFight) -- удар по
+    // Purity/Stability клетки Змея, вызывается из
+    // AHerbalistPlayerController::ChooseDialogueBranch.
+    void ApplyKalinovMostFightCost(const FIntPoint& Cell);
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -1512,6 +1534,7 @@ protected:
     FIntPoint GoryuchKamenSite = FIntPoint(-1, -1);
     FIntPoint SoloveySite = FIntPoint(-1, -1);
     bool bSoloveyTriggered = false;
+    FIntPoint KalinovMostSite = FIntPoint(-1, -1);
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

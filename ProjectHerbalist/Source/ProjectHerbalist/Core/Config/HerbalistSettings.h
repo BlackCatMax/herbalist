@@ -1338,6 +1338,14 @@ public:
     // от NightPerceptionDistortionBonus. Черновое число.
     UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float SoloveyCorruptionBurst = 0.3f;
+
+    // Калинов мост / Трёхглавый Змей (§4.4) — цена ветки "Бой" в диалоге
+    // (FDialogueBranch::bIsKalinovMostFight): удар по Purity/Stability
+    // клетки Змея. Тот же порядок, что SoloveyCorruptionBurst — сознательно
+    // не равен ему тем же числом (баланс POI друг от друга не зависит),
+    // черновое.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float KalinovMostFightCost = 0.3f;
 };
 
 // PROJECTHERBALIST_API добавлен 2026-09-04 (обнаружено при линковке

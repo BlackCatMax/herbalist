@@ -511,6 +511,22 @@ void AGridWorldManager::RegisterDomovoi(const FIntPoint& Cell)
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Domovoi] Registered at (%d,%d)"), Cell.X, Cell.Y);
 }
 
+void AGridWorldManager::RegisterZmeyGorynych(const FIntPoint& Cell)
+{
+    if (FindLandmarkAt(Cell))
+    {
+        // Тот же принцип идемпотентности, что RegisterDomovoi/RegisterShrine.
+        return;
+    }
+
+    FEntityLandmark Landmark;
+    Landmark.EntityID = FName(TEXT("ЗмейГорыныч"));
+    Landmark.Cell = Cell;
+    Landmark.Respect = 0.0f;
+    EntityLandmarks.Add(Landmark);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[KalinovMost] ЗмейГорыныч registered at (%d,%d)"), Cell.X, Cell.Y);
+}
+
 // Якоря Легендарного ранга (§16.4, LegendaryEntityTypes.h) — тот же
 // CellsUsed-приём, что уже применяет SeedTestLandmarks выше, но с учётом
 // bLandOnly/bWaterOnly (у Landmark их нет вовсе, там земля всегда).

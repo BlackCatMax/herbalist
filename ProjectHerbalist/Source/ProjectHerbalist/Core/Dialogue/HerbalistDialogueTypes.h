@@ -64,6 +64,19 @@ struct FDialogueBranch
     // "прислушаться, как он расположен") не должны молча тоже считаться
     // подношением.
     UPROPERTY() bool bIsSymbolicOffering = false;
+
+    // Калинов мост / Трёхглавый Змей (DESIGN_Brewing_Situations_And_Lore.md
+    // §4.4, 2026-09-06, решение пользователя: "диалоговый выбор" вместо
+    // боевой системы, которой в проекте нет). Тот же класс спец-флага, что
+    // bIsSymbolicOffering выше -- одна ветка диалога несёт эффект за
+    // пределами обычного перехода по узлам. Выбор этой ветки в
+    // AHerbalistPlayerController::ChooseDialogueBranch бьёт по Purity/
+    // Stability клетки самого Змея (UHerbalistSettings::KalinovMostFightCost)
+    // -- риск боя, а не победа даром. "Сделка" (другая ветка того же узла)
+    // сознательно НЕ резолвит предмет — честный пробел, тот же класс, что
+    // уже у ActivateWard/TradeWithCommunity (IngredientRegistrySubsystem
+    // недоступен из ChooseDialogueBranch), см. ROADMAP.md.
+    UPROPERTY() bool bIsKalinovMostFight = false;
 };
 
 USTRUCT()
