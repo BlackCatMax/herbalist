@@ -30,6 +30,9 @@ namespace
         Deal.ActionText = FText::FromString(TEXT("Откупиться подношением, пройти без боя"));
         Deal.MinGate = -1.0f; Deal.MaxGate = 1.0f;
         Deal.NextNodeID = NAME_None;
+        // Сделка (2026-09-06, DESIGN_POI_Art_And_LevelDesign.md) -- см.
+        // довод у FDialogueBranch::bIsKalinovMostDeal.
+        Deal.bIsKalinovMostDeal = true;
         Bridge.Branches.Add(Deal);
 
         D.Nodes.Add(Bridge);

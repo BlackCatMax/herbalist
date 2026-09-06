@@ -791,6 +791,14 @@ void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
         Grid->ApplyKalinovMostFightCost(CurrentDialogueCell);
     }
 
+    // Сделка (§4.4, 2026-09-06) -- выбор ветки только "вооружает" сделку,
+    // реальную жертву завершает отдельная команда (PayKalinovMostToll),
+    // см. довод у FDialogueBranch::bIsKalinovMostDeal.
+    if (Available[BranchIndex]->bIsKalinovMostDeal)
+    {
+        Grid->ArmKalinovMostDeal();
+    }
+
     const FName NextNodeID = Available[BranchIndex]->NextNodeID;
     if (NextNodeID.IsNone())
     {
@@ -805,6 +813,25 @@ void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
     if (NextNode)
     {
         PrintDialogueNode(*Def, *NextNode, Landmark->Respect);
+    }
+}
+
+void AHerbalistPlayerController::PayKalinovMostToll(FName ArtifactID)
+{
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("PayKalinovMostToll: no world manager"));
+        return;
+    }
+
+    if (Grid->TryPayKalinovMostToll(ArtifactID))
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("[KalinovMost] %s given up as toll -- passage granted"), *ArtifactID.ToString());
+    }
+    else
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("PayKalinovMostToll: failed (no deal armed, or %s not among acquired artifacts)"), *ArtifactID.ToString());
     }
 }
 

@@ -77,6 +77,17 @@ struct FDialogueBranch
     // уже у ActivateWard/TradeWithCommunity (IngredientRegistrySubsystem
     // недоступен из ChooseDialogueBranch), см. ROADMAP.md.
     UPROPERTY() bool bIsKalinovMostFight = false;
+
+    // Сделка (§4.4, DESIGN_POI_Art_And_LevelDesign.md "открытые вопросы —
+    // решения", 2026-09-06) -- "Змей берёт... один из добытых даров, по
+    // выбору самого странника" (карточка компендиума). Выбор ЭТОЙ ветки не
+    // выбирает предмет сам (дерево диалога статично, не может перечислить
+    // артефакты текущего игрока построчно) -- только "вооружает" сделку
+    // (AGridWorldManager::ArmKalinovMostDeal), реальную жертву завершает
+    // отдельная команда (AHerbalistPlayerController::PayKalinovMostToll),
+    // тем же классом разделения, что уже у ActivateWard/TradeWithCommunity
+    // (резолв инвентаря — не забота диалогового дерева).
+    UPROPERTY() bool bIsKalinovMostDeal = false;
 };
 
 USTRUCT()

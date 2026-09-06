@@ -9582,3 +9582,54 @@ SoloveyAmbientZoneCapsPurityUntilCalmed` (Purity выше потолка сни�
 `ProjectHerbalistTests/.../Tests/POITest.cpp`. Продолжение (Калинов мост —
 цена артефактом, Курганы — физический подбор + связи с DECISIONS_LOG
 №2/№4) — следующими коммитами этой же сессии.
+
+## POI визуал-логика юнит 3: Калинов мост — цена Сделки артефактом (2026-09-06)
+
+Открытый вопрос из DESIGN_POI_Art_And_LevelDesign.md ("цена Сделки —
+пожертвовать одним из уже добытых артефактов Легендарных, по выбору
+игрока, безвозвратно") закрыт кодом. Дерево диалога статично (не может
+перечислить артефакты текущего игрока построчно), поэтому механика
+разделена на два шага, тем же классом разделения, что уже у
+`ActivateWard`/`TradeWithCommunity`: `FDialogueBranch::bIsKalinovMostDeal`
+(тот же спец-флаг паттерн, что `bIsSymbolicOffering`/`bIsKalinovMostFight`)
+— выбор ветки в `ChooseDialogueBranch` только "вооружает" сделку
+(`AGridWorldManager::ArmKalinovMostDeal`, сессионный флаг
+`bKalinovMostDealPending`, НЕ персистентен — тот же класс "короткого окна
+между двумя действиями игрока", что уже `ResetSessionOnlyWardTimers`
+описывает для оберегов); реальную жертву завершает новая консольная
+команда `AHerbalistPlayerController::PayKalinovMostToll(ArtifactID)` →
+`AGridWorldManager::TryPayKalinovMostToll` — списывает названный артефакт
+из `AcquiredArtifacts` безвозвратно, отказывает без вооружённой сделки или
+если названного артефакта нет во владении. v1 консольный (называет
+артефакт явно), тем же путём, что и остальные Exec-команды проекта до
+появления UI-списка добытых (ROADMAP.md).
+
+Живой `DT_Dialogue` пропатчен новым `KalinovMostDealPatchCommandlet`
+(`-run=KalinovMostDealPatch`, тот же приём, что уже
+`DomovoiMilkOfferingPatchCommandlet`/`KalinovMostFightCost`-эквивалент для
+ветки "Бой" юнита 1 предыдущего захода) — существующий
+`KalinovMostDialogueAppendCommandlet` идемпотентен только в сторону "ряд
+уже есть, ничего не делаю", не патчит уже существующий ряд.
+`DialogueCreateCommandlet.cpp` тоже обновлён той же записью для честной
+пересборки таблицы с нуля.
+
+**Тестирование:** `Herbalist.Dialogue.
+ZmeyGorynychDefinitionHasFightAndDealBranches` (усилен — явная проверка
+`bIsKalinovMostDeal`, не "не Бой, значит Сделка"), `Herbalist.Dialogue.
+ChoosingKalinovMostDealArmsItAndTollRemovesArtifact` (end-to-end
+`TalkTo`→`ChooseDialogueBranch`→`PayKalinovMostToll`, включая отказ при
+попытке заплатить не принадлежащим артефактом), `Herbalist.Dialogue.
+PayingKalinovMostTollWithoutArmingFails` (без выбора ветки команда
+отказывает, ничего не списывает).
+
+**Итог:** 435 → 437 тестов, **437/437, два чистых прогона, ноль
+регрессий.** Файлы: `Core/Dialogue/HerbalistDialogueTypes.h`,
+`Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerPOI.cpp`,
+`Player/HerbalistPlayerController.h/.cpp`,
+`ProjectHerbalistTests/.../Commandlets/KalinovMostDealPatchCommandlet.h/.cpp`
+(новый), `ProjectHerbalistTests/.../Commandlets/
+KalinovMostDialogueAppendCommandlet.cpp`,
+`ProjectHerbalistTests/.../Commandlets/DialogueCreateCommandlet.cpp`,
+`ProjectHerbalistTests/.../Tests/DialogueTest.cpp`, `ROADMAP.md`.
+Продолжение (Курганы — физический подбор + связи с DECISIONS_LOG №2/№4) —
+следующим коммитом этой же сессии.

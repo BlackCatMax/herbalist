@@ -189,10 +189,13 @@ bool FHerbalistDialogue_ZmeyGorynychDefinitionHasFightAndDealBranches::RunTest(c
     for (const FDialogueBranch& Branch : Start->Branches)
     {
         if (Branch.bIsKalinovMostFight) bHasFight = true;
-        else bHasDeal = true;
+        if (Branch.bIsKalinovMostDeal) bHasDeal = true;
     }
     TestTrue(TEXT("One branch is flagged as the fight"), bHasFight);
-    TestTrue(TEXT("The other branch is the (costless-in-code) deal"), bHasDeal);
+    // Регрессия на KalinovMostDealPatchCommandlet (2026-09-06) -- без него
+    // выбор "Сделка" молча ничего не вооружает, тем же классом пробела,
+    // что раньше был у "блюдца молока" до DomovoiMilkOfferingPatchCommandlet.
+    TestTrue(TEXT("The other branch is flagged as the deal"), bHasDeal);
 
     return true;
 }
@@ -235,6 +238,75 @@ bool FHerbalistDialogue_ChoosingKalinovMostFightBranchCostsPurityAndStability::R
 
     Manager->Destroy();
     PC->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDialogue_ChoosingKalinovMostDealArmsItAndTollRemovesArtifact,
+    "Herbalist.Dialogue.ChoosingKalinovMostDealArmsItAndTollRemovesArtifact",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDialogue_ChoosingKalinovMostDealArmsItAndTollRemovesArtifact::RunTest(const FString& Parameters)
+{
+    // Решение пользователя 2026-09-06 (DESIGN_POI_Art_And_LevelDesign.md):
+    // цена Сделки -- один из уже добытых артефактов, по выбору странника.
+    // Выбор ветки только вооружает сделку, PayKalinovMostToll завершает её.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+
+    // Артефакт уже во владении -- напрямую, минуя весь путь добычи
+    // (TryAcquireArtifact требует проявленную Легендарную сущность,
+    // не относящийся к этому тесту путь).
+    FAcquiredArtifact Mirror;
+    Mirror.ArtifactID = FName(TEXT("Зеркальце"));
+    Manager->SetAcquiredArtifacts({ Mirror });
+
+    Manager->RegisterZmeyGorynych(FIntPoint(6, 6));
+    TestFalse(TEXT("Sanity: deal not armed yet"), Manager->IsKalinovMostDealPending());
+
+    PC->TalkTo(6, 6);
+    // "Откупиться подношением, пройти без боя" -- MinGate=-1/MaxGate=1,
+    // вторая ветка узла.
+    PC->ChooseDialogueBranch(1);
+    TestTrue(TEXT("Choosing the Deal branch arms it"), Manager->IsKalinovMostDealPending());
+
+    // Отказ до вооружения/несуществующим артефактом -- ничего не списывает.
+    TestFalse(TEXT("Paying with an unowned artifact fails"), Manager->TryPayKalinovMostToll(FName(TEXT("Клубочек"))));
+    TestEqual(TEXT("Still one artifact -- failed payment changed nothing"), Manager->GetAcquiredArtifacts().Num(), 1);
+
+    PC->PayKalinovMostToll(FName(TEXT("Зеркальце")));
+    TestEqual(TEXT("Artifact given up as toll"), Manager->GetAcquiredArtifacts().Num(), 0);
+    TestFalse(TEXT("Deal no longer pending after payment"), Manager->IsKalinovMostDealPending());
+
+    Manager->Destroy();
+    PC->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDialogue_PayingKalinovMostTollWithoutArmingFails,
+    "Herbalist.Dialogue.PayingKalinovMostTollWithoutArmingFails",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDialogue_PayingKalinovMostTollWithoutArmingFails::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    FAcquiredArtifact Mirror;
+    Mirror.ArtifactID = FName(TEXT("Зеркальце"));
+    Manager->SetAcquiredArtifacts({ Mirror });
+
+    TestFalse(TEXT("Toll fails -- no deal was ever armed"), Manager->TryPayKalinovMostToll(FName(TEXT("Зеркальце"))));
+    TestEqual(TEXT("Artifact untouched"), Manager->GetAcquiredArtifacts().Num(), 1);
+
+    Manager->Destroy();
     return true;
 }
 

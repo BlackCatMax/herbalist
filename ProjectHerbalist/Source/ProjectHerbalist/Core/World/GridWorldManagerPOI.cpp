@@ -260,3 +260,26 @@ void AGridWorldManager::ApplyKalinovMostFightCost(const FIntPoint& Cell)
     UE_LOG(LogHerbalistWorld, Log, TEXT("[KalinovMost] Fight chosen at (%d,%d): Purity/Stability cost %.2f"),
         Cell.X, Cell.Y, Cost);
 }
+
+bool AGridWorldManager::TryPayKalinovMostToll(FName ArtifactID)
+{
+    if (!bKalinovMostDealPending)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[KalinovMost] PayToll: no deal armed -- choose the Сделка branch first"));
+        return false;
+    }
+
+    const int32 Index = AcquiredArtifacts.IndexOfByPredicate(
+        [ArtifactID](const FAcquiredArtifact& A) { return A.ArtifactID == ArtifactID; });
+    if (Index == INDEX_NONE)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[KalinovMost] PayToll: %s is not among acquired artifacts"), *ArtifactID.ToString());
+        return false;
+    }
+
+    AcquiredArtifacts.RemoveAt(Index);
+    bKalinovMostDealPending = false;
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[KalinovMost] Toll paid: %s given up безвозвратно, passage granted"), *ArtifactID.ToString());
+    return true;
+}

@@ -1364,6 +1364,23 @@ public:
     // AHerbalistPlayerController::ChooseDialogueBranch.
     void ApplyKalinovMostFightCost(const FIntPoint& Cell);
 
+    // Сделка (FDialogueBranch::bIsKalinovMostDeal, 2026-09-06) -- "вооружает"
+    // сделку выбором ветки диалога, реальная жертва -- отдельной командой
+    // (см. TryPayKalinovMostToll ниже). Сессионный флаг, НЕ персистентен --
+    // тот же класс "короткого окна между двумя действиями игрока", что уже
+    // ResetSessionOnlyWardTimers описывает для оберегов: сохранение/загрузка
+    // между выбором ветки и уплатой пошлины — редкий, не защищаемый явно
+    // случай, разговор в любом случае придётся начать заново после загрузки
+    // (CurrentDialogueID тоже не персистентен).
+    void ArmKalinovMostDeal() { bKalinovMostDealPending = true; }
+    bool IsKalinovMostDealPending() const { return bKalinovMostDealPending; }
+
+    // Завершает уже вооружённую сделку: списывает названный артефакт из
+    // AcquiredArtifacts безвозвратно. false, если сделка не вооружена
+    // (диалоговая ветка не выбиралась) или названного артефакта нет во
+    // владении -- в обоих случаях ничего не списывается.
+    bool TryPayKalinovMostToll(FName ArtifactID);
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -1576,6 +1593,7 @@ protected:
     bool bSoloveyCalmed = false;
     FIntPoint KalinovMostSite = FIntPoint(-1, -1);
     int32 GoryuchKamenApplyAttemptCount = 0;
+    bool bKalinovMostDealPending = false;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

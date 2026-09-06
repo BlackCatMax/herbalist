@@ -216,6 +216,13 @@ public:
     UFUNCTION(Exec)
     void ChooseDialogueBranch(int32 BranchIndex);
 
+    // Калинов мост, Сделка (§4.4, 2026-09-06) -- завершает уже вооружённую
+    // ветку диалога, называя КОНКРЕТНЫЙ артефакт для жертвы (v1 консольный,
+    // тем же путём, что и остальные Exec-команды проекта до появления
+    // UI-списка добытых, см. ROADMAP.md).
+    UFUNCTION(Exec)
+    void PayKalinovMostToll(FName ArtifactID);
+
     // Подношение общине (DESIGN_Community_And_Homestead.md §1.3, 2026-08-31)
     // — тот же приём, что TestNewApply: ингредиенты по именам через запятую,
     // ищутся в инвентаре, списываются, ΔMolva логируется в
