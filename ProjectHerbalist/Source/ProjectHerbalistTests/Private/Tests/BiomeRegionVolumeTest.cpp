@@ -112,4 +112,39 @@ bool FHerbalistBiomeRegion_DegenerateSplineIsNeverInsideAndDoesNotCrash::RunTest
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeRegion_SetSplinePointsWorldMatchesManualSpline,
+    "Herbalist.BiomeRegion.SetSplinePointsWorldMatchesManualSpline",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeRegion_SetSplinePointsWorldMatchesManualSpline::RunTest(const FString& Parameters)
+{
+    // SetSplinePointsWorld (2026-09-06, "сделай тестовую карту в движке" --
+    // хук для процедурной/коммандлет-сборки уровня) должна давать тот же
+    // результат, что и ручная расстановка через сам USplineComponent
+    // (см. SpawnSquareRegion выше) -- тот же квадрат, другой путь установки.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    ABiomeRegionVolume* Region = World->SpawnActor<ABiomeRegionVolume>();
+    if (!TestNotNull(TEXT("Region spawned"), Region)) return false;
+
+    const TArray<FVector> Corners = {
+        FVector(-100.0f, -100.0f, 0.0f),
+        FVector( 100.0f, -100.0f, 0.0f),
+        FVector( 100.0f,  100.0f, 0.0f),
+        FVector(-100.0f,  100.0f, 0.0f),
+    };
+    Region->SetSplinePointsWorld(Corners);
+
+    TestTrue(TEXT("Center of the square is inside"), Region->IsPointInside(FVector(0.0f, 0.0f, 500.0f)));
+    TestFalse(TEXT("A point clearly outside the square is not inside"), Region->IsPointInside(FVector(1000.0f, 1000.0f, 0.0f)));
+
+    // Меньше 3 точек -- явный отказ, не крах и не тихая порча существующей формы.
+    Region->SetSplinePointsWorld({ FVector(0,0,0), FVector(1,1,0) });
+    TestTrue(TEXT("Fewer than 3 points: previous valid shape is left untouched"), Region->IsPointInside(FVector(0.0f, 0.0f, 500.0f)));
+
+    Region->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

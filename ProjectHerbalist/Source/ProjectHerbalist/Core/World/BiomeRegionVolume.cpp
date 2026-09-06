@@ -52,6 +52,20 @@ void ABiomeRegionVolume::UpdateCachedPoints()
     }
 }
 
+void ABiomeRegionVolume::SetSplinePointsWorld(const TArray<FVector>& WorldPoints)
+{
+    if (!SplineComponent || WorldPoints.Num() < 3) return;
+
+    SplineComponent->ClearSplinePoints(false);
+    for (const FVector& Point : WorldPoints)
+    {
+        SplineComponent->AddSplinePoint(Point, ESplineCoordinateSpace::World, false);
+    }
+    SplineComponent->SetClosedLoop(true, false);
+    SplineComponent->UpdateSpline();
+    UpdateCachedPoints();
+}
+
 void ABiomeRegionVolume::EnsureCachedPoints() const
 {
     // Порядок BeginPlay между акторами уровня не гарантирован UE — регион
