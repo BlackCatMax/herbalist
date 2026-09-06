@@ -658,4 +658,110 @@ bool FHerbalistBiomeGraph_AmbientDistortionStabilizesOverLongRealTimeWithoutExte
     return true;
 }
 
+// Вторая половина проверки покоя, дополняющая
+// AmbientDistortionStabilizesOverLongRealTimeWithoutExternalInput выше: тот
+// проверяет, что ВОЗМУЩЁННЫЙ мир сходится (прирост замедляется), а этот —
+// что уже СОГЛАСОВАННЫЙ покой никуда не уезжает ни вверх, ни вниз.
+//
+// Заведён 2026-09-07 после ревизии всей математики (MATH_REFERENCE.md §6.1):
+// я ошибочно вывел алгеброй, что единственное равновесие контура
+// State→MorokField→TargetState→State — ноль, и что мир "высыхает". Замер
+// показал обратное: D устойчиво стоит чуть ВЫШЕ M (D/M ≈ 1.0064 при
+// выведенных 1.00667), и этого зазора ровно хватает, чтобы блендинг
+// (RecalculateFieldsFromGrid) компенсировал декей (UpdateMemories). Дрейф —
+// 0.4% за 300с. Тест закрепляет именно это: самосогласованный старт остаётся
+// на месте, а не сползает ни к нулю, ни к потолку.
+//
+// Purity/Stability здесь СОЗНАТЕЛЬНО не проверяются: у них своя, отдельно
+// подтверждённая замером проблема (MATH_REFERENCE.md §6.2 — ветка Заряны
+// тянет их к f(Distortion), а не к дефолтам биома), она ждёт дизайн-решения
+// пользователя. Проверять их сейчас значило бы закрепить тестом поведение,
+// которое сами же считаем неверным.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_SelfConsistentRestingStateStaysPut,
+    "Herbalist.BiomeGraph.SelfConsistentRestingStateStaysPut",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeGraph_SelfConsistentRestingStateStaysPut::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!TestNotNull(TEXT("UBiomeGraphSubsystem present"), Graph))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+    if (!TestNotNull(TEXT("DA_BiomeGraph asset loads"), Asset))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Graph->InitializeFromAsset(Asset);
+    if (!TestTrue(TEXT("BiomeGraphSubsystem reports initialized"), Graph->IsInitialized()))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // 400с..700с -- вне Рассвета (до 360с) и вне окна Полудницы (720-840с),
+    // см. MATH_REFERENCE.md §1.
+    Manager->SetGameClockSeconds(400.0f);
+
+    // Самосогласованный покой: клетки на 0.3, поле узла на том же 0.3.
+    // Именно "согласованный" -- если бы поле и клетки расходились, тест
+    // мерил бы сходимость (это уже делает соседний тест), а не устойчивость.
+    const float RestingDistortion = 0.3f;
+    for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
+    {
+        for (int32 X = 0; X < Manager->GridSizeX; ++X)
+        {
+            if (FGridCell* Cell = Manager->GetCell(X, Y))
+            {
+                Cell->Memory.bDegrading = false;
+                Cell->State.Meta.Distortion = RestingDistortion;
+                Cell->TargetState.Meta.Distortion = RestingDistortion;
+            }
+        }
+    }
+    for (const auto& Pair : Graph->GetNodes())
+    {
+        if (FBiomeGraphNode* Node = Graph->GetMutableNode(Pair.Key))
+        {
+            Node->MorokField = RestingDistortion;
+        }
+    }
+
+    auto AvgDistortion = [Manager]() -> double
+    {
+        double Sum = 0.0;
+        int32 Count = 0;
+        Manager->ForEachCell([&](const FGridCell& Cell) { Sum += Cell.State.Meta.Distortion; ++Count; });
+        return Count > 0 ? Sum / Count : 0.0;
+    };
+
+    for (int32 Step = 0; Step < 3000; ++Step)   // 300 симулированных секунд
+    {
+        Manager->Tick(0.1f);
+    }
+    const double AvgAfter = AvgDistortion();
+
+    // Замеренный дрейф на этом же сценарии -- +0.0007 за 300с. Допуск 0.02
+    // (в ~28 раз шире) ловит любое реальное сползание (старый баг давал
+    // +0.15 и больше за то же время), не придираясь к квазиравновесному
+    // зазору D/M.
+    TestTrue(FString::Printf(TEXT("Self-consistent resting world neither drains nor grows over 300 simulated seconds (%.4f -> %.4f)"),
+        RestingDistortion, AvgAfter),
+        FMath::Abs(AvgAfter - RestingDistortion) < 0.02);
+
+    Graph->Deinitialize();
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
