@@ -42,8 +42,17 @@ struct FInventorySnapshot
  */
 struct FBiomeFieldContext
 {
+    // ВНИМАНИЕ: MorokField/ZaryanaField с 2026-09-07 -- ЗНАКОВЫЕ ОТКЛОНЕНИЯ
+    // от природных значений биома, а не абсолютные уровни (см. довод у
+    // GetBiomeSamples, GridWorldManagerCore.cpp). Ноль означает "биом в своей
+    // природе". Для сравнения с авторскими АБСОЛЮТНЫМИ порогами и для
+    // "насколько это место испорчено" бери AmbientMorok ниже.
     float MorokField = 0.f;
     float ZaryanaField = 0.f;
+
+    // Абсолютный уровень Морока места = дефолт биома + отклонение, [0,1].
+    // Заполняется UBiomeGraphSubsystem::CaptureState.
+    float AmbientMorok = 0.f;
     float MorokAffinity = 0.5f;
     float ZaryanaAffinity = 0.5f;
     FVector4 AxisDrift = FVector4(0.25f, 0.25f, 0.25f, 0.25f);

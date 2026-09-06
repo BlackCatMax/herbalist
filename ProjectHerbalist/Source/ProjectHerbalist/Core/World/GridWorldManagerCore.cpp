@@ -749,7 +749,28 @@ TArray<FGridBiomeSample> AGridWorldManager::GetBiomeSamples() const
     {
         FGridBiomeSample Sample;
         Sample.BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
-        Sample.MorokValue = Cell.State.Meta.Distortion;
+
+        // Морок как ОТКЛОНЕНИЕ Distortion от дефолта биома (2026-09-07,
+        // вторым заходом, симметрично Заряне ниже). Абсолютный уровень
+        // здесь не годился по двум причинам, обе проверены:
+        //  1) у поля не было якоря на природе биома -- Болото со своими
+        //     0.70 медленно уезжало туда, куда скажет затухающее поле;
+        //  2) при настоящей таблице биомов ветка Морока дёргала ВСЕ 400
+        //     клеток каждый шаг (падал Save.BiomeInfluencesWithZeroFieldsStaySparse),
+        //     потому что "ведро" всегда тянуло Distortion от дефолта к нулю.
+        // На отклонениях покой даёт ровно ноль -- ни записи, ни дрейфа.
+        //
+        // Отдельно: НЕЛЬЗЯ было оставить абсолют и просто релаксировать поле
+        // к дефолту биома (более дешёвая на вид альтернатива). Диффузия по
+        // рёбрам (PropagateWaves) переносит АБСОЛЮТНЫЕ значения со скоростью
+        // MorokLeak (0.15 за шаг = 0.75/с), что на два порядка сильнее
+        // релаксации (0.01/с): соседние биомы просто усреднились бы, и
+        // Болото перестало бы отличаться от Поймы. На отклонениях в покое
+        // переносить нечего -- диффундирует только реальный избыток.
+        const FRealState BiomeDefault = Cell.bIsWater
+            ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
+            : FBiomeDefaults::GetDefaultState(Cell.Biome);
+        Sample.MorokValue = Cell.State.Meta.Distortion - BiomeDefault.Meta.Distortion;
 
         // Заряна как ОТКЛОНЕНИЕ Stability от дефолта биома (2026-09-07,
         // выбор пользователя, вариант "а" из ROADMAP.md; было
@@ -766,9 +787,7 @@ TArray<FGridBiomeSample> AGridWorldManager::GetBiomeSamples() const
         // а не сползание к нулю. Читается и применяется в ОДНОЙ системе
         // отсчёта (см. ApplyBiomeInfluences) -- ровно то, чего не хватало
         // сломанной правке 2026-09-07 по Distortion (двойной счёт).
-        const FRealState BiomeDefault = Cell.bIsWater
-            ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
-            : FBiomeDefaults::GetDefaultState(Cell.Biome);
+        // BiomeDefault объявлен выше, в блоке Морока -- он общий для обеих осей.
         Sample.ZaryanaValue = Cell.State.Meta.Stability - BiomeDefault.Meta.Stability;
         Samples.Add(Sample);
     }
@@ -877,10 +896,19 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
                 PushRate *= (1.0f - FMath::Clamp(Dampening * DominantShrine->Restoration, 0.0f, 1.0f));
             }
 
-            const float CurrentDistortion = NewTarget.Meta.Distortion;
-            const float NewDistortion = FMath::Clamp(
-                CurrentDistortion + (*MorokField * PushRate * GlobalScale - DecayRate * CurrentDistortion) * DeltaTime,
-                0.f, 1.f);
+            // Отклонение от дефолта биома, а не абсолют (2026-09-07, второй
+            // заход): в покое отклонение равно нулю, шаг равен нулю, записи
+            // нет -- и Distortion остаётся ровно на природе своего биома.
+            // Раньше "ведро" тянуло абсолютный Distortion к затухающему полю,
+            // то есть к нулю, и заодно метило грязными все 400 клеток каждый
+            // шаг при настоящих дефолтах биомов.
+            const FRealState MorokBiomeDefault = Cell.bIsWater
+                ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
+                : FBiomeDefaults::GetDefaultState(Cell.Biome);
+            const float DistortionDeviation = NewTarget.Meta.Distortion - MorokBiomeDefault.Meta.Distortion;
+            const float NewDistortionDeviation = DistortionDeviation
+                + (*MorokField * PushRate * GlobalScale - DecayRate * DistortionDeviation) * DeltaTime;
+            const float NewDistortion = FMath::Clamp(MorokBiomeDefault.Meta.Distortion + NewDistortionDeviation, 0.f, 1.f);
             if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
             {
                 NewTarget.Meta.Distortion = NewDistortion;
@@ -2056,8 +2084,14 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
     // Стриминг сетки (2026-09-03): релаксация считается только в активных
     // чанках. Неактивная клетка не «портится» и не «чинится», пока до неё
     // никому нет дела; при активации получит догон за всё пропущенное
-    // время (CatchUpActivatedChunks) — экспоненциальная форма сходимости
-    // делает такой единичный шаг точным, а не приближённым.
+    // время (CatchUpActivatedChunks) — единичный догоняющий шаг здесь точен,
+    // а не приближён, но НЕ по той причине, что была написана раньше
+    // ("экспоненциальная форма сходимости"): MoveToward ниже делает ЛИНЕЙНЫЙ
+    // шаг фиксированного размера и клампится ровно в цель, поэтому N шагов
+    // по dt и один шаг по N*dt дают одно и то же (2026-09-07, проверка
+    // математики). У экспоненциальной формы такой эквивалентности как раз
+    // НЕ было бы -- если релаксацию когда-нибудь переведут на неё, догон
+    // придётся считать иначе.
     //
     // Тело вынесено в лямбду, а выбор ОБХОДА — наружу: раньше оба режима
     // (обычный тик и догон одного чанка) шли одним и тем же полным
@@ -2352,8 +2386,12 @@ void AGridWorldManager::DrawBiomeGraphDebug()
             const FVector* Pos = Centers.Find(Pair.Key);
             if (Pos)
             {
-                const FBiomeGraphNode& Node = Pair.Value;
-                FColor Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, Node.MorokField).ToFColor(false);
+                // Абсолютный уровень, не поле (2026-09-07): MorokField теперь
+                // знаковое отклонение, и зелёный означал бы "биом в своей
+                // природе" одинаково и для Тайги, и для Болота -- отладка
+                // перестала бы показывать, где реально грязно.
+                const float AmbientMorok = Graph->GetAmbientMorok(Pair.Key);
+                FColor Color = FLinearColor::LerpUsingHSV(FLinearColor::Green, FLinearColor::Red, AmbientMorok).ToFColor(false);
                 DrawDebugSphere(World, *Pos, 30.0f, 12, Color, false, 0.0f, 0, 2.0f);
                 DrawDebugString(World, *Pos + FVector(0, 0, 50.0f), Pair.Key.ToString(), nullptr, FColor::White, 0.0f, true, 1.2f);
             }

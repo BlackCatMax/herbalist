@@ -1247,7 +1247,13 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             bool bEligible = false;
             if (Def.Pole == ELegendaryPole::Malign)
             {
-                bEligible = PassesHysteresisThreshold(bWasActive, Node->MorokField, Def.MorokThreshold, HysteresisMargin);
+                // Абсолютный уровень, не поле напрямую (2026-09-07):
+                // Def.MorokThreshold задан авторски как АБСОЛЮТНЫЙ уровень
+                // Морока биома, а MorokField с этой даты хранит знаковое
+                // отклонение от природы биома. Прямое сравнение отклонения
+                // (в покое ~0) с порогом уровня (~0.6) молча никогда бы не
+                // срабатывало -- Злые легендарные перестали бы проявляться.
+                bEligible = PassesHysteresisThreshold(bWasActive, Graph->GetAmbientMorok(BiomeID), Def.MorokThreshold, HysteresisMargin);
             }
             else
             {
@@ -1255,7 +1261,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // знака, что уже применяет §16.2 для bTriggerAbove=false
                 // (AmbientEntityTypes.h): сравниваем отрицания, не пишем
                 // отдельную "ниже порога" версию PassesHysteresisThreshold.
-                const bool bMorokEligible = PassesHysteresisThreshold(bWasActive, -Node->MorokField, -Def.MorokThreshold, HysteresisMargin);
+                const bool bMorokEligible = PassesHysteresisThreshold(bWasActive, -Graph->GetAmbientMorok(BiomeID), -Def.MorokThreshold, HysteresisMargin);
                 bool bShrineEligible = false;
                 if (Def.bHasShrinePath)
                 {

@@ -1067,7 +1067,11 @@ bool FPipelineV2ApplyBiomeContextRaisesDistortionTest::RunTest(const FString& Pa
 
     FBiomeSnapshot MorokBiomeSnap;
     FBiomeFieldContext Ctx;
-    Ctx.MorokField = 0.9f;
+    // Варка читает АБСОЛЮТНЫЙ уровень (AmbientMorok), а MorokField с
+    // 2026-09-07 -- знаковое отклонение от природы биома (SnapshotTypes.h).
+    // Задаём оба согласованно: "место испорчено на столько-то" без
+    // привязки к конкретному биому в этом юнит-тесте.
+    Ctx.AmbientMorok = 0.9f;
     Ctx.MorokAffinity = 1.0f;
     MorokBiomeSnap.Contexts.Add(FBiomeDefaults::BiomeTypeToName(EBiomeType::MixedForest), Ctx);
     FRandomStream RngWithMorok(11);
@@ -1116,7 +1120,11 @@ bool FPipelineV2ApplyFullMoonRaisesMorokDistortionTest::RunTest(const FString& P
 
     FBiomeSnapshot BiomeSnap;
     FBiomeFieldContext Ctx;
-    Ctx.MorokField = 0.9f;
+    // Варка читает АБСОЛЮТНЫЙ уровень (AmbientMorok), а MorokField с
+    // 2026-09-07 -- знаковое отклонение от природы биома (SnapshotTypes.h).
+    // Задаём оба согласованно: "место испорчено на столько-то" без
+    // привязки к конкретному биому в этом юнит-тесте.
+    Ctx.AmbientMorok = 0.9f;
     Ctx.MorokAffinity = 1.0f;
     BiomeSnap.Contexts.Add(FBiomeDefaults::BiomeTypeToName(EBiomeType::MixedForest), Ctx);
 
@@ -1158,7 +1166,11 @@ bool FPipelineV2ApplyIsDeterministicTest::RunTest(const FString& Parameters)
     WorldSnap.GridState.Add(FIntPoint(5, 5), MakeTargetCell(5, 5));
     FBiomeSnapshot BiomeSnap;
     FBiomeFieldContext Ctx;
-    Ctx.MorokField = 0.6f;
+    // Варка читает АБСОЛЮТНЫЙ уровень (AmbientMorok), а MorokField с
+    // 2026-09-07 -- знаковое отклонение от природы биома (SnapshotTypes.h).
+    // Задаём оба согласованно: "место испорчено на столько-то" без
+    // привязки к конкретному биому в этом юнит-тесте.
+    Ctx.AmbientMorok = 0.6f;
     Ctx.ZaryanaField = 0.4f;
     BiomeSnap.Contexts.Add(FBiomeDefaults::BiomeTypeToName(EBiomeType::MixedForest), Ctx);
 

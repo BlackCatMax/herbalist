@@ -3,6 +3,7 @@
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
+#include "Core/Types/BiomeTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Journal/HerbalistJournalComponent.h"
 #include "Player/HerbalistPlayerController.h"
@@ -43,7 +44,12 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // SaveVersion уже 1 по дефолту UPROPERTY (см. HerbalistSaveTypes.h) —
     // выставляем явно, чтобы будущая смена версии формата была одной
     // видимой строкой здесь, а не тихим переносом дефолта.
-    Save->SaveVersion = 1;
+    // v2 (2026-09-07): сменилась СЕМАНТИКА BiomeGraphNodes.MorokField/
+    // ZaryanaField -- из абсолютных уровней они стали знаковыми отклонениями
+    // от природы биома (см. GetBiomeSamples, GridWorldManagerCore.cpp).
+    // Формат полей тот же, смысл другой -- ровно тот "случай посложнее
+    // простого добавления поля", ради которого версия и заводилась.
+    Save->SaveVersion = 2;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
     Save->GridSizeY = WorldManager->GridSizeY;
@@ -111,6 +117,31 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     return bSuccess;
 }
 
+// Дефолтный Distortion биома по FName -- нужен только миграции v1 -> v2
+// ниже (обратного маппинга FName -> EBiomeType в проекте нет намеренно,
+// см. BiomeTypes.h). Дублировать общий хелпер ради одного вызова смысла нет.
+static float BiomeDefaultDistortionForSave(FName BiomeID)
+{
+    for (EBiomeType Biome : FBiomeDefaults::GetAllBiomeTypes())
+    {
+        if (FBiomeDefaults::BiomeTypeToName(Biome) == BiomeID)
+        {
+            return FBiomeDefaults::GetDefaultState(Biome).Meta.Distortion;
+        }
+    }
+    return 0.0f;
+}
+
+void UHerbalistSaveSubsystem::MigrateBiomeGraphNodesV1ToV2(TMap<FName, FBiomeGraphNode>& Nodes)
+{
+    for (auto& Pair : Nodes)
+    {
+        const float LegacyAbsoluteMorok = Pair.Value.MorokField;
+        Pair.Value.MorokField = LegacyAbsoluteMorok - BiomeDefaultDistortionForSave(Pair.Key);
+        Pair.Value.ZaryanaField = 0.0f;
+    }
+}
+
 bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
 {
     const FString Slot = SlotName.IsEmpty() ? DefaultSlotName : SlotName;
@@ -133,9 +164,9 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     // новой версией игры), отклоняется явно, а не десериализуется вслепую с
     // риском тихо потерять/неверно истолковать поля, которых эта версия ещё
     // не знает.
-    if (Save->SaveVersion > 1)
+    if (Save->SaveVersion > 2)
     {
-        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (1), aborted"),
+        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (2), aborted"),
             *Slot, Save->SaveVersion);
         return false;
     }
@@ -210,7 +241,24 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     // просто остаётся на дефолтах InitializeFromAsset.
     if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
     {
-        Graph->RestoreNodeFieldState(Save->BiomeGraphNodes);
+        // Миграция v1 -> v2 (2026-09-07). В v1 MorokField хранил АБСОЛЮТНЫЙ
+        // уровень Морока биома, в v2 -- знаковое ОТКЛОНЕНИЕ от природного
+        // Distortion этого биома. Без пересчёта старый сейв Болота (0.70
+        // абсолютных) прочитался бы как "+0.70 сверх природных 0.70", то
+        // есть мир загрузился бы максимально испорченным -- молча, без
+        // единой ошибки в логе.
+        //
+        // ZaryanaField в v1 был вообще другой величиной (1 - Distortion, то
+        // есть зеркало Морока, а не самостоятельная ось), осмысленного
+        // соответствия отклонению Stability у него нет -- честнее обнулить
+        // (биом стартует со своей природы), чем пересчитывать наугад.
+        TMap<FName, FBiomeGraphNode> RestoredNodes = Save->BiomeGraphNodes;
+        if (Save->SaveVersion < 2)
+        {
+            MigrateBiomeGraphNodesV1ToV2(RestoredNodes);
+            UE_LOG(LogHerbalistSave, Log, TEXT("LoadGame: сейв v%d -- поля биом-графа пересчитаны в отклонения (v2)"), Save->SaveVersion);
+        }
+        Graph->RestoreNodeFieldState(RestoredNodes);
     }
 
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()))

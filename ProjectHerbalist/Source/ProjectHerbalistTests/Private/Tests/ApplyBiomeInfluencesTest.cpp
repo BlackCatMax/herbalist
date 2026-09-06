@@ -28,6 +28,8 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Engine/DataTable.h"
+#include "Core/Save/HerbalistSaveSubsystem.h"
+#include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "UObject/UObjectGlobals.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
@@ -252,6 +254,174 @@ bool FHerbalistApplyBiomeInfluences_PurityReturnsToItsOwnBiomeDefault::RunTest(c
 
     Manager->Destroy();
     // Обязательный возврат глобального состояния -- см. довод у заголовка.
+    FBiomeDefaults::SetBiomeTable(nullptr);
+    return true;
+}
+
+// Ветка Морока переведена на отклонения вторым заходом (2026-09-07),
+// симметрично Заряне. Тот же приём с точечной загрузкой настоящей
+// DT_BiomeDefaults и обязательным возвратом static -- см. довод у теста
+// PurityReturnsToItsOwnBiomeDefault выше.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistApplyBiomeInfluences_DistortionReturnsToItsOwnBiomeDefault,
+    "Herbalist.ApplyBiomeInfluences.DistortionReturnsToItsOwnBiomeDefault",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistApplyBiomeInfluences_DistortionReturnsToItsOwnBiomeDefault::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults"));
+    if (!TestNotNull(TEXT("DT_BiomeDefaults loads"), BiomeTable)) return false;
+    FBiomeDefaults::SetBiomeTable(BiomeTable);
+
+    const float DefaultDistortion = FBiomeDefaults::GetDefaultState(EBiomeType::Taiga).Meta.Distortion;
+    if (!TestTrue(TEXT("Real biome table is in effect (Taiga Distortion is not the zeroed stub)"), DefaultDistortion > 0.1f))
+    {
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager))
+    {
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell exists"), Cell))
+    {
+        Manager->Destroy();
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    // Клетку "испортили" далеко выше её природы -- до правки она бы тут и
+    // осталась (поле тянуло к себе, а не к дефолту биома).
+    Cell->Biome = EBiomeType::Taiga;
+    Cell->Memory.bDegrading = false;
+    Cell->TargetState.Meta.Distortion = 0.9f;
+
+    TMap<FName, float> MorokFields = { { FBiomeDefaults::BiomeTypeToName(EBiomeType::Taiga), 0.0f } };
+    TMap<FName, float> ZaryanaFields;
+
+    for (int32 Step = 0; Step < 1500; ++Step)   // 300 симулированных секунд
+    {
+        Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 0.2f);
+    }
+
+    // Мёртвая зона сторожа разреженности -- 0.05 (MATH_REFERENCE.md §6.4).
+    const float Recovered = Cell->TargetState.Meta.Distortion;
+    TestTrue(FString::Printf(TEXT("Distortion fell back toward its OWN biome default (0.9 -> %.4f, default %.4f)"),
+        Recovered, DefaultDistortion),
+        Recovered < DefaultDistortion + 0.06f);
+    TestTrue(FString::Printf(TEXT("Distortion did not undershoot below the biome default (got %.4f, default %.4f)"),
+        Recovered, DefaultDistortion),
+        Recovered >= DefaultDistortion - KINDA_SMALL_NUMBER);
+
+    Manager->Destroy();
+    FBiomeDefaults::SetBiomeTable(nullptr);
+    return true;
+}
+
+// Разреженность сохранения при НАСТОЯЩИХ дефолтах биомов. Именно этот
+// сценарий ронял Herbalist.Save.BiomeInfluencesWithZeroFieldsStaySparse при
+// пробном включении реальной таблицы (2026-09-07): абсолютное "ведро" всегда
+// тянуло Distortion от дефолта биома к нулю, то есть КАЖДЫЙ шаг менял все
+// 400 клеток и обесценивал липкий DirtyCellIndices, вокруг которого
+// построена вся система сохранений (AUDIT_AND_REFACTORING_PLAN.md §7.1).
+// На отклонениях покой даёт ровно нулевой шаг -- записи нет.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistApplyBiomeInfluences_RestingWorldStaysSparseWithRealBiomeDefaults,
+    "Herbalist.ApplyBiomeInfluences.RestingWorldStaysSparseWithRealBiomeDefaults",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistApplyBiomeInfluences_RestingWorldStaysSparseWithRealBiomeDefaults::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults"));
+    if (!TestNotNull(TEXT("DT_BiomeDefaults loads"), BiomeTable)) return false;
+    FBiomeDefaults::SetBiomeTable(BiomeTable);
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager))
+    {
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    // Мир только что создан: каждая клетка стоит ровно на дефолте своего
+    // биома (InitializeCells), поля графа нулевые -- полный покой.
+    TestEqual(TEXT("Freshly initialized world starts with zero dirty cells"), Manager->CaptureSaveCells().Num(), 0);
+
+    TMap<FName, float> MorokFields, ZaryanaFields;
+    for (EBiomeType Biome : FBiomeDefaults::GetAllBiomeTypes())
+    {
+        const FName BiomeID = FBiomeDefaults::BiomeTypeToName(Biome);
+        MorokFields.Add(BiomeID, 0.0f);
+        ZaryanaFields.Add(BiomeID, 0.0f);
+    }
+
+    for (int32 Step = 0; Step < 50; ++Step)
+    {
+        Manager->ApplyBiomeInfluences(MorokFields, ZaryanaFields, 1.0f, 0.2f);
+    }
+
+    TestEqual(TEXT("A world resting at its biome defaults stays sparse -- ambient branch writes nothing"),
+        Manager->CaptureSaveCells().Num(), 0);
+
+    Manager->Destroy();
+    FBiomeDefaults::SetBiomeTable(nullptr);
+    return true;
+}
+
+// Совместимость сохранений при смене СЕМАНТИКИ поля (2026-09-07). Поля
+// биом-графа сериализуются (`Save->BiomeGraphNodes = Graph->GetNodes()`), а
+// смысл MorokField в этот день сменился с абсолютного уровня на знаковое
+// отклонение. Без миграции старый сейв Болота (0.70 абсолютных) прочитался
+// бы как "+0.70 сверх природных 0.70" -- мир загрузился бы максимально
+// испорченным МОЛЧА, без единой ошибки в логе. Найдено финальной проверкой
+// математики, а не тестами: ни один тест не покрывал смену семантики
+// сериализуемого поля.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_BiomeGraphV1NodesMigrateToDeviations,
+    "Herbalist.Save.BiomeGraphV1NodesMigrateToDeviations",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_BiomeGraphV1NodesMigrateToDeviations::RunTest(const FString& Parameters)
+{
+    UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults"));
+    if (!TestNotNull(TEXT("DT_BiomeDefaults loads"), BiomeTable)) return false;
+    FBiomeDefaults::SetBiomeTable(BiomeTable);
+
+    const FName BogID = FBiomeDefaults::BiomeTypeToName(EBiomeType::Bog);
+    const float BogDefault = FBiomeDefaults::GetDefaultState(EBiomeType::Bog).Meta.Distortion;
+    if (!TestTrue(TEXT("Real biome table is in effect"), BogDefault > 0.1f))
+    {
+        FBiomeDefaults::SetBiomeTable(nullptr);
+        return false;
+    }
+
+    // Узел ровно в том виде, в каком его записал бы сейв v1: MorokField --
+    // АБСОЛЮТНЫЙ уровень, равный природе биома (мир в покое), ZaryanaField --
+    // старое зеркало Морока (1 - Distortion).
+    TMap<FName, FBiomeGraphNode> LegacyNodes;
+    FBiomeGraphNode LegacyBog;
+    LegacyBog.MorokField = BogDefault;
+    LegacyBog.ZaryanaField = 1.0f - BogDefault;
+    LegacyNodes.Add(BogID, LegacyBog);
+
+    UHerbalistSaveSubsystem::MigrateBiomeGraphNodesV1ToV2(LegacyNodes);
+
+    const FBiomeGraphNode& Migrated = LegacyNodes[BogID];
+    TestTrue(FString::Printf(TEXT("Спокойный мир v1 (Морок = природа биома %.3f) переносится в НУЛЕВОЕ отклонение, а не в удвоение (получено %.4f)"),
+        BogDefault, Migrated.MorokField),
+        FMath::IsNearlyEqual(Migrated.MorokField, 0.0f, 0.001f));
+    TestTrue(FString::Printf(TEXT("Старое зеркало Морока в ZaryanaField обнулено, а не истолковано как отклонение Stability (получено %.4f)"),
+        Migrated.ZaryanaField),
+        FMath::IsNearlyEqual(Migrated.ZaryanaField, 0.0f, 0.001f));
+
     FBiomeDefaults::SetBiomeTable(nullptr);
     return true;
 }

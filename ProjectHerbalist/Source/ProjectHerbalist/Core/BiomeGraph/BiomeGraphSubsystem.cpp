@@ -107,6 +107,29 @@ FBiomeGraphNode* UBiomeGraphSubsystem::GetMutableNode(FName BiomeID)
     return Nodes.Find(BiomeID);
 }
 
+// Дефолтный Distortion биома по его FName. Обратного маппинга FName ->
+// EBiomeType в проекте нет намеренно (удалён как мёртвый код 2026-09-02),
+// поэтому идём прямым перебором восьми типов -- дешевле, чем заводить и
+// поддерживать вторую таблицу соответствий ради одного места.
+static float BiomeDefaultDistortionFor(FName BiomeID)
+{
+    for (EBiomeType Biome : FBiomeDefaults::GetAllBiomeTypes())
+    {
+        if (FBiomeDefaults::BiomeTypeToName(Biome) == BiomeID)
+        {
+            return FBiomeDefaults::GetDefaultState(Biome).Meta.Distortion;
+        }
+    }
+    return 0.0f;
+}
+
+float UBiomeGraphSubsystem::GetAmbientMorok(FName BiomeID) const
+{
+    const FBiomeGraphNode* Node = Nodes.Find(BiomeID);
+    if (!Node) return 0.0f;
+    return FMath::Clamp(BiomeDefaultDistortionFor(BiomeID) + Node->MorokField, 0.0f, 1.0f);
+}
+
 void UBiomeGraphSubsystem::RestoreNodeFieldState(const TMap<FName, FBiomeGraphNode>& InNodes)
 {
     for (const auto& Pair : InNodes)
@@ -148,8 +171,8 @@ void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
         return;
     }
 
-    RecalculateFieldsFromGrid(Grid);
-    PropagateWaves(Grid);
+    RecalculateFieldsFromGrid(Grid, StepDeltaTime);
+    PropagateWaves(Grid, StepDeltaTime);
     ApplyFieldsToGrid(Grid, StepDeltaTime);
     UpdateMemories(StepDeltaTime);
 
@@ -164,7 +187,7 @@ void UBiomeGraphSubsystem::InternalStep(float StepDeltaTime)
     UpdateVisualization();
 }
 
-void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
+void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid, float StepDeltaTime)
 {
     if (!Grid) return;
 
@@ -202,10 +225,18 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid)
             // Прежний кламп в [0,1] срезал бы всю отрицательную половину --
             // "биом хуже своей природы" стало бы неотличимо от "ровно в своей
             // природе". MorokField остаётся абсолютным уровнем в [0,1].
-            const float GridAvgMorok = FMath::Clamp(MorokSum[BiomeID] / Count, 0.f, 1.f);
+            const float GridAvgMorok = FMath::Clamp(MorokSum[BiomeID] / Count, -1.f, 1.f);
             const float GridAvgZaryana = FMath::Clamp(ZaryanaSum[BiomeID] / Count, -1.f, 1.f);
-            Pair.Value.MorokField = FMath::Clamp(FMath::Lerp(Pair.Value.MorokField, GridAvgMorok, GridBlendFactor), 0.f, 1.f);
-            Pair.Value.ZaryanaField = FMath::Clamp(FMath::Lerp(Pair.Value.ZaryanaField, GridAvgZaryana, GridBlendFactor), -1.f, 1.f);
+
+            // GridBlendFactor исторически задан "за шаг" -- приводим к
+            // "в секунду" через опорный шаг (§6.3 MATH_REFERENCE.md). При
+            // боевом FixedTimeStep=0.2с Alpha равна прежним 0.3 в точности.
+            // Кламп обязателен: при крупном шаге Alpha ушла бы за 1 и Lerp
+            // проскочил бы цель (перерегулирование вместо сходимости).
+            const float BlendAlpha = FMath::Clamp(
+                GridBlendFactor / LegacyPerStepReference * StepDeltaTime, 0.f, 1.f);
+            Pair.Value.MorokField = FMath::Clamp(FMath::Lerp(Pair.Value.MorokField, GridAvgMorok, BlendAlpha), -1.f, 1.f);
+            Pair.Value.ZaryanaField = FMath::Clamp(FMath::Lerp(Pair.Value.ZaryanaField, GridAvgZaryana, BlendAlpha), -1.f, 1.f);
         }
     }
 
@@ -252,12 +283,12 @@ static void CollectBorderShrineDamping(AGridWorldManager* Grid, float DampeningF
     }
 }
 
-void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
+void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid, float StepDeltaTime)
 {
     TMap<FName, float> PrevMorok, PrevZaryana;
     for (const auto& Pair : Nodes)
     {
-        PrevMorok.Add(Pair.Key, FMath::Clamp(Pair.Value.MorokField, 0.f, 1.f));
+        PrevMorok.Add(Pair.Key, FMath::Clamp(Pair.Value.MorokField, -1.f, 1.f));
         // Заряна знаковая (отклонение от дефолта биома, 2026-09-07) -- [-1,1].
         PrevZaryana.Add(Pair.Key, FMath::Clamp(Pair.Value.ZaryanaField, -1.f, 1.f));
     }
@@ -303,8 +334,13 @@ void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
             }
         }
 
-        const float MorokFlow = SourceMorok * EffectiveMorokLeak * GlobalInfluenceScale;
-        const float ZaryanaFlowAmount = SourceZaryana * Edge.ZaryanaFlow * GlobalInfluenceScale;
+        // Edge.MorokLeak/ZaryanaFlow заданы в ассете "за шаг" -- тот же
+        // пересчёт в "в секунду", что и у BlendAlpha выше (§6.3). При боевом
+        // шаге 0.2с множитель равен единице, поток прежний; данные в
+        // DA_BiomeGraph менять не потребовалось.
+        const float StepScale = StepDeltaTime / LegacyPerStepReference;
+        const float MorokFlow = SourceMorok * EffectiveMorokLeak * GlobalInfluenceScale * StepScale;
+        const float ZaryanaFlowAmount = SourceZaryana * Edge.ZaryanaFlow * GlobalInfluenceScale * StepScale;
 
         DeltaMorok[Edge.ToBiome] += MorokFlow;
         DeltaMorok[Edge.FromBiome] -= MorokFlow;
@@ -314,7 +350,7 @@ void UBiomeGraphSubsystem::PropagateWaves(AGridWorldManager* Grid)
 
     for (auto& Pair : Nodes)
     {
-        Pair.Value.MorokField = FMath::Clamp(PrevMorok[Pair.Key] + DeltaMorok[Pair.Key], 0.f, 1.f);
+        Pair.Value.MorokField = FMath::Clamp(PrevMorok[Pair.Key] + DeltaMorok[Pair.Key], -1.f, 1.f);
         Pair.Value.ZaryanaField = FMath::Clamp(PrevZaryana[Pair.Key] + DeltaZaryana[Pair.Key], -1.f, 1.f);
     }
 
@@ -358,7 +394,7 @@ void UBiomeGraphSubsystem::UpdateMemories(float StepDeltaTime)
         // единственные два поля этой структуры без затухания, при том что
         // Instability/AxisDrift ниже уже decay'ятся. Та же формула, что уже
         // у Memory.*History -- новых чисел не вводится.
-        Node.MorokField = FMath::Clamp(Node.MorokField * (1.f - GlobalMorokDecay * StepDeltaTime), 0.f, 1.f);
+        Node.MorokField = FMath::Clamp(Node.MorokField * (1.f - GlobalMorokDecay * StepDeltaTime), -1.f, 1.f);
         // Знаковое поле (отклонение) -- множительное затухание тянет его к
         // нулю с ЛЮБОЙ стороны, то есть возвращает биом к его дефолту.
         Node.ZaryanaField = FMath::Clamp(Node.ZaryanaField * (1.f - GlobalZaryanaDecay * StepDeltaTime), -1.f, 1.f);
@@ -489,6 +525,7 @@ FBiomeSnapshot UBiomeGraphSubsystem::CaptureState() const
         FBiomeFieldContext Ctx;
         Ctx.MorokField      = Pair.Value.MorokField;
         Ctx.ZaryanaField    = Pair.Value.ZaryanaField;
+        Ctx.AmbientMorok    = GetAmbientMorok(Pair.Key);
         Ctx.MorokAffinity   = Pair.Value.MorokAffinity;
         Ctx.ZaryanaAffinity = Pair.Value.ZaryanaAffinity;
         Ctx.AxisDrift       = Pair.Value.Memory.AxisDrift;

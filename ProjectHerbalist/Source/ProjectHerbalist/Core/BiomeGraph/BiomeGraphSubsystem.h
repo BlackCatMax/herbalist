@@ -51,6 +51,16 @@ public:
     const FBiomeGraphNode* GetNode(FName BiomeID) const;
     FBiomeGraphNode* GetMutableNode(FName BiomeID);
 
+    // АБСОЛЮТНЫЙ уровень Морока биома = дефолт биома + отклонение
+    // (2026-09-07). С этой даты FBiomeGraphNode::MorokField хранит ЗНАКОВОЕ
+    // отклонение от природного Distortion биома, а не абсолютный уровень
+    // (см. довод у GetBiomeSamples в GridWorldManagerCore.cpp). Всё, что
+    // сравнивает Морок с авторскими АБСОЛЮТНЫМИ порогами (пороги проявления
+    // легендарных сущностей, вклад места в варку, отладочная визуализация),
+    // обязано читать этот метод, а не поле напрямую -- иначе сравнение
+    // "0.05 отклонения" с порогом "0.6 уровня" молча никогда не сработает.
+    float GetAmbientMorok(FName BiomeID) const;
+
     void DebugPrintNodes() const;
     void ResetGraph();
 	
@@ -82,6 +92,14 @@ protected:
     float GlobalInfluenceScale = 1.0f;
     float GridBlendFactor = 0.3f;
 
+    // Опорный шаг, при котором исторически заданы "за шаг" величины
+    // GridBlendFactor и Edge.MorokLeak (2026-09-07, §6.3 MATH_REFERENCE.md).
+    // Обе приводятся к "в секунду" делением на него и умножением на
+    // фактический StepDeltaTime -- при боевом шаге 0.2с поведение ровно
+    // прежнее, но перестаёт молча меняться, если тронуть FixedTimeStep.
+    // Значения в DA_BiomeGraph трогать не пришлось: пересчёт на чтении.
+    static constexpr float LegacyPerStepReference = 0.2f;
+
     bool bInitialized = false;
     float TimeAccumulator = 0.f;
 
@@ -95,8 +113,8 @@ protected:
     void UpdateBiomeCenters(AGridWorldManager* Grid);
 
     void InternalStep(float StepDeltaTime);
-    void RecalculateFieldsFromGrid(AGridWorldManager* Grid);
-    void PropagateWaves(AGridWorldManager* Grid);
+    void RecalculateFieldsFromGrid(AGridWorldManager* Grid, float StepDeltaTime);
+    void PropagateWaves(AGridWorldManager* Grid, float StepDeltaTime);
     void ApplyFieldsToGrid(AGridWorldManager* Grid, float StepDeltaTime);
     void UpdateMemories(float StepDeltaTime);
 };
