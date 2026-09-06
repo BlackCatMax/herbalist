@@ -137,4 +137,101 @@ bool FHerbalistBiomeGraph_RealTickKeepsDirtyCellsSparse::RunTest(const FString& 
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Персистентность накопленных полей графа (AUDIT_AND_REFACTORING_PLAN.md
+// §7.1, 2026-09-06, решение пользователя: "граф должен переживать
+// сохранение"). RestoreNodeFieldState тестируется напрямую на живой
+// подсистеме -- тот же класс пробела на GameInstanceSubsystem (реальный
+// путь через UHerbalistSaveSubsystem::SaveGame/LoadGame), что уже
+// известен у ActivateWard/TradeWithCommunity (см. ROADMAP.md), сам эффект
+// не зависит от GameInstance вовсе.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_RestoreNodeFieldStateOverwritesCurrentWithSaved,
+    "Herbalist.BiomeGraph.RestoreNodeFieldStateOverwritesCurrentWithSaved",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeGraph_RestoreNodeFieldStateOverwritesCurrentWithSaved::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!TestNotNull(TEXT("UBiomeGraphSubsystem present"), Graph)) return false;
+
+    UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+    if (!TestNotNull(TEXT("DA_BiomeGraph asset loads"), Asset)) return false;
+    Graph->InitializeFromAsset(Asset);
+    if (!TestTrue(TEXT("BiomeGraphSubsystem reports initialized"), Graph->IsInitialized())) return false;
+
+    if (!TestTrue(TEXT("Graph has at least one node"), Graph->GetNodes().Num() > 0))
+    {
+        Graph->Deinitialize();
+        return false;
+    }
+    const FName BiomeID = Graph->GetNodes().CreateConstIterator()->Key;
+
+    // "Сохранённое" состояние -- то, что было в момент SaveGame.
+    if (FBiomeGraphNode* Node = Graph->GetMutableNode(BiomeID))
+    {
+        Node->MorokField = 0.42f;
+        Node->ZaryanaField = 0.24f;
+        Node->Memory.MorokHistory = 0.5f;
+    }
+    const TMap<FName, FBiomeGraphNode> Saved = Graph->GetNodes();
+
+    // "Текущее" состояние на момент LoadGame -- намеренно другое, имитирует
+    // сессию, накопившую иные значения до вызова restore.
+    if (FBiomeGraphNode* Node = Graph->GetMutableNode(BiomeID))
+    {
+        Node->MorokField = 0.9f;
+        Node->ZaryanaField = 0.1f;
+        Node->Memory.MorokHistory = 0.0f;
+    }
+
+    Graph->RestoreNodeFieldState(Saved);
+
+    const FBiomeGraphNode* Restored = Graph->GetNode(BiomeID);
+    if (TestNotNull(TEXT("Node still exists after restore"), Restored))
+    {
+        TestEqual(TEXT("MorokField restored to the saved value"), Restored->MorokField, 0.42f);
+        TestEqual(TEXT("ZaryanaField restored to the saved value"), Restored->ZaryanaField, 0.24f);
+        TestEqual(TEXT("Memory.MorokHistory restored to the saved value"), Restored->Memory.MorokHistory, 0.5f);
+    }
+
+    Graph->Deinitialize();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeGraph_RestoreNodeFieldStateIgnoresUnknownBiomes,
+    "Herbalist.BiomeGraph.RestoreNodeFieldStateIgnoresUnknownBiomes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeGraph_RestoreNodeFieldStateIgnoresUnknownBiomes::RunTest(const FString& Parameters)
+{
+    // Старый сейв без этого поля (пустая карта) или сейв, ссылающийся на
+    // биом, которого больше нет в DA_BiomeGraph -- не должны крашить или
+    // как-либо трогать реальные узлы.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>();
+    if (!TestNotNull(TEXT("UBiomeGraphSubsystem present"), Graph)) return false;
+
+    UBiomeGraphAsset* Asset = LoadObject<UBiomeGraphAsset>(nullptr, TEXT("/Game/Data/DA_BiomeGraph"));
+    if (!TestNotNull(TEXT("DA_BiomeGraph asset loads"), Asset)) return false;
+    Graph->InitializeFromAsset(Asset);
+
+    TMap<FName, FBiomeGraphNode> BogusSave;
+    FBiomeGraphNode Bogus;
+    Bogus.MorokField = 0.99f;
+    BogusSave.Add(FName(TEXT("НетТакогоБиома")), Bogus);
+
+    // Не должно упасть, не должно завести несуществующий узел.
+    Graph->RestoreNodeFieldState(BogusSave);
+    TestNull(TEXT("No node was created for the unknown biome"), Graph->GetNode(FName(TEXT("НетТакогоБиома"))));
+
+    Graph->Deinitialize();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

@@ -33,6 +33,21 @@ public:
     const TMap<FName, FBiomeGraphNode>& GetNodes() const { return Nodes; }
     const TArray<FBiomeGraphEdge>& GetEdges() const { return Edges; }
 
+    // Персистентность накопленных полей (AUDIT_AND_REFACTORING_PLAN.md §7.1,
+    // "Правильная" альтернатива — реализовано 2026-09-06, решение
+    // пользователя: граф должен переживать сохранение, не сбрасываться к
+    // дефолтам DA_BiomeGraph при каждой загрузке). MorokField/ZaryanaField
+    // помечены Transient (BiomeGraphTypes.h) — не участвуют в обычной
+    // UPROPERTY-сериализации намеренно, поэтому нужен явный путь. Восстанавливает
+    // ТОЛЬКО динамическую часть узла (MorokField/ZaryanaField/Memory) поверх
+    // уже загруженных статических параметров дизайна (MorokAffinity/
+    // ZaryanaAffinity/Stability из DA_BiomeGraph, InitializeFromAsset должен
+    // отработать раньше) — не перезаписывает узел целиком, на случай если
+    // DA_BiomeGraph когда-нибудь изменится между сессиями. Узлы, отсутствующие
+    // в InNodes (например, новый биом добавлен в граф уже после этого сейва),
+    // тихо остаются на дефолтах InitializeFromAsset — не ошибка.
+    void RestoreNodeFieldState(const TMap<FName, FBiomeGraphNode>& InNodes);
+
     const FBiomeGraphNode* GetNode(FName BiomeID) const;
     FBiomeGraphNode* GetMutableNode(FName BiomeID);
 

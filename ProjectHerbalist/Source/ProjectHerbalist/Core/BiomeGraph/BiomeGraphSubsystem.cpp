@@ -105,6 +105,19 @@ FBiomeGraphNode* UBiomeGraphSubsystem::GetMutableNode(FName BiomeID)
     return Nodes.Find(BiomeID);
 }
 
+void UBiomeGraphSubsystem::RestoreNodeFieldState(const TMap<FName, FBiomeGraphNode>& InNodes)
+{
+    for (const auto& Pair : InNodes)
+    {
+        if (FBiomeGraphNode* Node = Nodes.Find(Pair.Key))
+        {
+            Node->MorokField = Pair.Value.MorokField;
+            Node->ZaryanaField = Pair.Value.ZaryanaField;
+            Node->Memory = Pair.Value.Memory;
+        }
+    }
+}
+
 void UBiomeGraphSubsystem::StepSimulation(float DeltaTime)
 {
     if (!bInitialized || Nodes.Num() == 0) return;

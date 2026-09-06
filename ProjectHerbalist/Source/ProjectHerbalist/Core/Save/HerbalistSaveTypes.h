@@ -21,6 +21,7 @@
 #include "Core/Entities/ArtifactTypes.h"
 #include "Core/Shrine/ShrineTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
+#include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "HerbalistSaveTypes.generated.h"
 
 USTRUCT()
@@ -239,6 +240,22 @@ public:
     // "воскрешала" бы уже найденные Костяной нож/Серебряный оберег.
     UPROPERTY()
     TMap<FIntPoint, FName> KurganSites;
+
+    // Биомный граф — накопленные поля (AUDIT_AND_REFACTORING_PLAN.md §7.1,
+    // 2026-09-06, решение пользователя: "граф должен переживать сохранение").
+    // FBiomeGraphNode::MorokField/ZaryanaField помечены Transient (обычная
+    // UPROPERTY-сериализация их не видит намеренно) — без этого поля граф
+    // откатывался бы к статическим дефолтам DA_BiomeGraph при каждой
+    // загрузке, хотя видимый в клетках эффект накопленного влияния (уже
+    // просочившийся в Cell.TargetState через тактический фикс §7.1)
+    // корректно переживает сохранение и без этого. Сохраняется узел
+    // целиком (включая статические MorokAffinity/ZaryanaAffinity/Stability,
+    // не только динамическую часть) — UBiomeGraphSubsystem::
+    // RestoreNodeFieldState сам выбирает из этой карты только MorokField/
+    // ZaryanaField/Memory, статику из уже загруженного DA_BiomeGraph не
+    // трогает.
+    UPROPERTY()
+    TMap<FName, FBiomeGraphNode> BiomeGraphNodes;
 
     // Заряна (обсуждение в сессии 2026-08-24) — Clarity/Буян/собранные ID
     // растут медленно и редко, ровно то, что должно переживать сохранение.

@@ -2,6 +2,7 @@
 #include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Journal/HerbalistJournalComponent.h"
 #include "Player/HerbalistPlayerController.h"
@@ -68,6 +69,14 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->TieredWards = WorldManager->CaptureTieredWards();
     Save->bSilverWardActive = WorldManager->IsSilverWardActive();
     Save->KurganSites = WorldManager->GetKurganSites();
+
+    // Биомный граф (AUDIT_AND_REFACTORING_PLAN.md §7.1, 2026-09-06) —
+    // отсутствие графа в мире (тестовое окружение без DA_BiomeGraph) не
+    // повод отказывать сохранению целиком, GetNodes() просто пуст.
+    if (UBiomeGraphSubsystem* Graph = World ? World->GetSubsystem<UBiomeGraphSubsystem>() : nullptr)
+    {
+        Save->BiomeGraphNodes = Graph->GetNodes();
+    }
 
     if (AHerbalistPlayerController* PC = World ? Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()) : nullptr)
     {
@@ -174,6 +183,15 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->RestoreTieredWards(Save->TieredWards);
     WorldManager->SetSilverWardActive(Save->bSilverWardActive);
     WorldManager->SetKurganSites(Save->KurganSites);
+
+    // Биомный граф (AUDIT_AND_REFACTORING_PLAN.md §7.1, 2026-09-06) —
+    // RestoreNodeFieldState сам не трогает узлы, отсутствующие в сейве
+    // (например, старый сейв без этого поля вовсе — пустая карта), граф
+    // просто остаётся на дефолтах InitializeFromAsset.
+    if (UBiomeGraphSubsystem* Graph = World->GetSubsystem<UBiomeGraphSubsystem>())
+    {
+        Graph->RestoreNodeFieldState(Save->BiomeGraphNodes);
+    }
 
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()))
     {

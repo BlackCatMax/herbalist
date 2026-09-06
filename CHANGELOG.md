@@ -9218,3 +9218,54 @@ DomovoiMilkOfferingPatch`) точечно патчит уже существую
 `ProjectHerbalistTests/.../Commandlets/DomovoiMilkOfferingPatchCommandlet.h/.cpp`
 (новый), `ProjectHerbalistTests/.../Commandlets/DialogueCreateCommandlet.cpp`,
 `ProjectHerbalistTests/.../Tests/DialogueTest.cpp`, `ROADMAP.md`.
+
+## Биомный граф переживает сохранение (2026-09-06, частичное закрытие архдолга §7.1)
+
+Прямой запрос пользователя ("закрываем долг: Полный переход Morok/Zaryana
+на read-time оверлей"). Перед реализацией дочитан `AUDIT_AND_REFACTORING_
+PLAN.md §7.1/§7.3` целиком — найдено, что пункт описывает ДВЕ разные вещи
+одним заголовком: (а) `BiomeGraphSubsystem::Nodes` (8 записей `MorokField`/
+`ZaryanaField`) нигде не сохраняется и откатывается к дизайн-дефолтам
+`DA_BiomeGraph` при каждой загрузке, (б) саму архитектуру записи влияния
+графа в `Cell.TargetState` предлагалось заменить на "читать оверлей в
+момент использования", как уже сделано для `MoonPhase` — но это тронуло бы
+общий цикл релаксации, которым пользуются бистабильность/капища/Гнильники/
+Берегиня, "непропорциональный blast radius" собственными словами документа,
+и не чинит ни одной ИЗМЕРЕННОЙ проблемы (та уже закрыта тактическим фиксом
+2026-08-24 — сравнение "изменилось ли значение" перед записью).
+
+Спрошено у пользователя, какая из двух конкретно нужна первой — ответ:
+"граф должен переживать сохранение" (пункт а). **Реализован пункт (а)
+целиком, пункт (б) сознательно не начат** — риск регрессии в четырёх уже
+откалиброванных системах разом ради архитектурной чистоты без второго
+измеренного бага не оправдан в этот заход, решение явно записано в
+ROADMAP.md, не скрыто под общей галочкой "закрыто".
+
+**Реализовано:** `FBiomeGraphNode::MorokField`/`ZaryanaField` помечены
+`UPROPERTY(Transient)` (обычная сериализация их не видит намеренно) —
+новый `UBiomeGraphSubsystem::RestoreNodeFieldState(const TMap<FName,
+FBiomeGraphNode>&)` явно копирует `MorokField`/`ZaryanaField`/`Memory` из
+сохранённой карты в уже загруженные (из `DA_BiomeGraph`) узлы, не трогая
+статические `MorokAffinity`/`ZaryanaAffinity`/`Stability` — на случай,
+если дизайн-ассет изменится между сессиями. `GetNodes()` (уже
+существовавший геттер) переиспользован для захвата — новый метод capture
+не понадобился. Новое поле `UHerbalistSaveGame::BiomeGraphNodes`
+(`TMap<FName, FBiomeGraphNode>`), `HerbalistSaveSubsystem::SaveGame`/
+`LoadGame` подключены к `World->GetSubsystem<UBiomeGraphSubsystem>()`.
+Отсутствие графа в мире (тест без `DA_BiomeGraph`, старый сейв без этого
+поля) не отказывает сохранению/загрузке целиком — `GetNodes()` пуст,
+`RestoreNodeFieldState` с пустой/чужой картой тихо ничего не меняет.
+
+**Тестирование:** `Herbalist.BiomeGraph.RestoreNodeFieldStateOverwritesCurrentWithSaved`
+(сохранённое значение побеждает текущее после restore, не наоборот) и
+`Herbalist.BiomeGraph.RestoreNodeFieldStateIgnoresUnknownBiomes` (сейв с
+несуществующим BiomeID не падает и не заводит лишний узел) — оба на живой
+`UBiomeGraphSubsystem`/`DA_BiomeGraph`, напрямую, минуя
+`UHerbalistSaveSubsystem` (тот же класс пробела на `GameInstanceSubsystem`,
+что уже у `ActivateWard`/`TradeWithCommunity`, см. ROADMAP.md) — сам
+эффект восстановления не зависит от `GameInstance`.
+
+**Итог:** 417 → 419 тестов, **419/419, два чистых прогона, ноль
+регрессий.** Файлы: `Core/BiomeGraph/BiomeGraphSubsystem.h/.cpp`,
+`Core/Save/HerbalistSaveTypes.h`, `Core/Save/HerbalistSaveSubsystem.cpp`,
+`ProjectHerbalistTests/.../Tests/BiomeGraphIntegrationTest.cpp`, `ROADMAP.md`.
