@@ -56,11 +56,12 @@ public:
     float MaxHarvestDistance = 200.0f;
 
     // Текущий инструмент сбора (DESIGN_Community_And_Homestead.md §2.3,
-    // 2026-08-31) — читается AGridWorldManager::OnResourceCollected в
-    // Cmd.Harvest.Tool. v1: переключается Exec-командой (SetGatheringTool),
-    // не физическим предметом в инвентаре — экономика источников
-    // инструментов (курганы/дары хозяев/торговля) отдельный, ещё не
-    // реализованный проход; сам множитель качества работает уже сейчас.
+    // множитель 2026-08-31, физический предмет 2026-09-06) — читается
+    // AGridWorldManager::OnResourceCollected в Cmd.Harvest.Tool.
+    // Переключается Exec-командой (SetGatheringTool), но теперь с реальной
+    // проверкой владения — Железный серп в стартовом инвентаре (BeginPlay),
+    // Медный серп добывается общинной торговлей (§1.2, IngredientTableRow::
+    // bIsGatheringTool), Костяной нож — находка в кургане (LootKurgan).
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Harvesting")
     EGatheringTool CurrentGatheringTool = EGatheringTool::BareHands;
 
@@ -166,9 +167,33 @@ public:
     // Переключить текущий инструмент сбора (§ комментарий у CurrentGatheringTool
     // выше). ToolName: "hands"/"iron"/"copper"/"bone" — строка, не enum,
     // тем же паттерном, что SetGatheringTool видится проще с консоли, чем
-    // числовой индекс EGatheringTool.
+    // числовой индекс EGatheringTool. "hands" доступен всегда; для
+    // остальных трёх требуется соответствующий предмет в инвентаре
+    // (Железный/Медный серп, Костяной нож) — резолв по имени, тот же
+    // приём, что уже ActivateWard, отказывает и логирует при отсутствии.
     UFUNCTION(Exec)
     void SetGatheringTool(FString ToolName);
+
+    // Оберег-при-сборе (Ось Б §2.3, серебро, 2026-09-06) — экипировать
+    // "Серебряный оберег" из инвентаря (резолв по имени, тот же приём, что
+    // SetGatheringTool). НЕ расходуется, не резак — постоянно подавляет
+    // проявление враждебных сущностей наравне с Шапкой-невидимкой/
+    // Плакун-камнем (AGridWorldManager::IsSilverWardActive), не только во
+    // время сбора. Источник предмета — находка в кургане (LootKurgan), как
+    // и у Костяного ножа.
+    UFUNCTION(Exec)
+    void EquipSilverWard();
+
+    // Разграбить курган на клетке игрока (DESIGN_Brewing_Situations_And_Lore.md
+    // §4.3, DESIGN_Community_And_Homestead.md §2.3, 2026-09-06) — единственный
+    // источник Костяного ножа/Серебряного оберега (артефакт-тир инструментов,
+    // не рыночный товар). Каждый курган разовый (AGridWorldManager::
+    // KurganSites, LootKurgan снимает запись после выдачи), без визуального
+    // актора на уровне — v1 консольный, тем же принципом, что SetGardenPlot/
+    // ActivateWard: сама механика (находка → предмет в инвентаре) работает
+    // уже сейчас, обнаружение места кургана — через GetSelectedCellInfo.
+    UFUNCTION(Exec)
+    void LootKurgan();
 
     // Переключить намерение сбора (§ комментарий у CurrentHarvestIntent
     // выше). IntentName: "brew" (по умолчанию, обычный ингредиент) /

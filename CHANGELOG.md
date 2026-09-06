@@ -8816,3 +8816,103 @@ test-only `IsTieredBrewBoostActiveForTest()` (у BrewBoost-тиража не б�
 `Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerWards.cpp`,
 `Core/Save/HerbalistSaveSubsystem.cpp`,
 `ProjectHerbalistTests/.../Tests/WardTest.cpp`, `ROADMAP.md`.
+
+## Инструмент сбора: полировка (физический предмет, серебряный оберег, курганы) (2026-09-06)
+
+Прямой запрос пользователя ("инструменты сбора") после закрытия аудита
+2026-09-05 — выбор из списка механик, у которых сделана только "скелетная"
+часть (`ROADMAP.md`). Множитель качества (`ToolQualityMultiplier`,
+`PipelineV2.cpp`) был готов с 2026-08-31; не хватало трёх вещей, которые
+сама таблица §2.3 документа называла явно.
+
+**Разведка перед реализацией (pochemuchka) нашла два реальных препятствия,
+не видных из самого документа:**
+
+1. Источники Костяного ножа/Серебряного оберега, названные в документе
+   ("находка в кургане ИЛИ дар хозяина места"), физически не существуют в
+   коде — курганы (Гнёздово, `DESIGN_Brewing_Situations_And_Lore.md §4.3`)
+   были только абзацем мирового лора, ни POI, ни лута; "дар хозяина" не
+   имел механизма выдачи предметов вовсе. Спрошено у пользователя — выбран
+   вариант **"полноценные курганы как POI"**, не заглушка.
+2. Строка "штраф Respect хозяина за железо" из таблицы §2.3 **прямо
+   противоречит** более раннему прямому решению пользователя (2026-08-29,
+   `GridWorldManagerEntities.cpp::UpdateEntityManifestations`): "Respect
+   меняется только через подношение". Строка §2.3 была написана без учёта
+   этого более позднего архитектурного решения. Спрошено у пользователя —
+   выбрано **"отказаться от штрафа вовсе"**: множителя 0.3x к качеству
+   признано достаточным наказанием, второй канал изменения Respect не
+   заводится.
+
+**Реализовано:**
+
+- **Физический предмет вместо голого Exec-переключателя.** Новые поля
+  `FIngredientTableRow::bIsGatheringTool`+`GatheringToolType` (Ось А) и
+  `bIsSilverWard` (Ось Б, отдельно — не резак вообще, тот же принцип
+  раздельных осей, что уже у `EGatheringTool`). Три новых строки
+  `DT_IngredientClass` (`GatheringToolAppendCommandlet`, тот же
+  `UDataTable::AddRow`-приём, что `ContainerAppendCommandlet`/
+  `WardCrystalAppendCommandlet`): Железный серп, Медный серп, Костяной
+  нож — плюс Серебряный оберег четвёртой строкой. `AHerbalistPlayerController::
+  SetGatheringTool` резолвит владение по инвентарю (тот же приём, что
+  `ActivateWard`) вместо безусловного переключения: "hands" доступен
+  всегда, "iron"/"copper"/"bone" требуют соответствующего предмета.
+  Железный серп выдаётся стартовым инвентарём (`BeginPlay`, тот же приём,
+  что стартовая Корзина) — источник "ремесло/стартовый инвентарь" из
+  таблицы §2.3. Медный серп добывается общинной торговлей (`TryTradeWithCommunity`
+  уже работает с любым резолвящимся `IngredientID`, новых полей на
+  торговлю не потребовалось). Костяной нож — только находка в кургане.
+- **Серебряный оберег (Ось Б)** — `AGridWorldManager::bSilverWardActive`/
+  `IsSilverWardActive`/`SetSilverWardActive`, экипируется новой Exec-командой
+  `EquipSilverWard` (резолв по инвентарю). Решение пользователя: общий
+  источник подавления проявлений на всю сетку, действует всегда, не
+  только во время сбора — добавлен в ту же OR-цепочку гейта манифестации,
+  что уже `IsInvisibilityCapActive`/`IsWardConcealmentActive`/
+  `IsTieredConcealmentActive` (оба места в `GridWorldManagerEntities.cpp` —
+  Низший и Основной ранг), без Center/Radius вовсе — самый простой
+  источник подавления из всех. Персистентен (Save/Load), как тиражные
+  обереги, не как шесть таймеров "короткого окна".
+- **Курганы** — новый файл `GridWorldManagerKurgan.cpp`.
+  `AGridWorldManager::KurganSites` (`TMap<FIntPoint, FName>`, ключ — клетка,
+  значение — награда) засеивается в `InitializeCells` детерминированным
+  `WorldRNG` (тот же генератор, что уже заливка воды/ресурсов в этой же
+  функции): линейный обход сетки от случайного сдвига, первые две
+  неводные клетки получают по одной награде (Костяной нож, Серебряный
+  оберег) — не retry-цикл со случайными координатами, гарантированно
+  завершается даже на маленькой тестовой сетке. `LootKurgan(Cell, OutID)`
+  выдаёт награду и удаляет запись из карты (разграбленный курган просто
+  отсутствует в `KurganSites` — не отдельный `bool bLooted`, нечего
+  проверять на повторной попытке). Персистентно (`Save->KurganSites`,
+  тот же класс поля, что `GardenPlots`) — иначе перезагрузка "воскрешала"
+  бы уже найденные предметы. Без визуального актора на уровне — v1
+  консольный (`LootKurgan` Exec на клетке игрока, тот же принцип, что
+  `SetGardenPlot`/`ActivateWard`), обнаружение места — новый суффикс
+  `Kurgan=<IngredientID>` в `GetSelectedCellInfo` (`GridWorldManagerDebug.cpp`),
+  исчезает сам собой после разграбления.
+- Заодно поправлен устаревший комментарий у `bTieredConcealmentActive`
+  (`GridWorldManager.h`) — утверждал "не персистятся", хотя персистентность
+  тиражных оберегов была добавлена в предыдущей находке этой же сессии
+  (2026-09-05) и комментарий не обновили тогда.
+
+**Тестирование:** новый `GatheringToolOwnershipTest.cpp` (5 тестов, тот же
+`DispatchBeginPlay`-паттерн, что `ArtifactInventoryTest.cpp`, включая
+регрессию на сами ряды `DT_IngredientClass`) и `KurganTest.cpp` (4 теста —
+детерминированность сева, разовость находки, отказ на пустой клетке,
+интеграция Серебряного оберега в реальный гейт манифестации через ту же
+фикстуру Гнильников, что уже `AmbientEntityTest.cpp`). `CountItemsWithID`
+(был продублирован в `ArtifactInventoryTest.cpp`) вынесен в
+`TestWorldHelpers.h` — тот же ODR-урок про unity-сборку, что уже у
+`SpawnAndBeginPlay`/`SpawnControllerAndBeginPlay`.
+
+**Итог:** 392 → 401 тест, **401/401, два чистых прогона, ноль
+регрессий.** Файлы: `Core/Data/IngredientTableRow.h`,
+`Core/Types/HerbalistCoreTypes.h`, `Core/World/GridWorldManager.h`,
+`Core/World/GridWorldManagerKurgan.cpp` (новый),
+`Core/World/GridWorldManagerEntities.cpp`,
+`Core/World/GridWorldManagerCore.cpp`, `Core/World/GridWorldManagerDebug.cpp`,
+`Core/Save/HerbalistSaveTypes.h`, `Core/Save/HerbalistSaveSubsystem.cpp`,
+`Player/HerbalistPlayerController.h/.cpp`,
+`ProjectHerbalistTests/.../Commandlets/GatheringToolAppendCommandlet.h/.cpp`
+(новый), `ProjectHerbalistTests/.../Tests/GatheringToolOwnershipTest.cpp`
+(новый), `ProjectHerbalistTests/.../Tests/KurganTest.cpp` (новый),
+`ProjectHerbalistTests/.../Tests/TestWorldHelpers.h`,
+`ProjectHerbalistTests/.../Tests/ArtifactInventoryTest.cpp`, `ROADMAP.md`.

@@ -59,13 +59,25 @@ FString AGridWorldManager::GetSelectedCellInfo() const
     // выделенной клетки. Не нормализовано в [0,1] — см. HerbalistCoreMath.h.
     const float DistanceToS0 = HerbalistCore::Math::Distance(Cell->State, FAlatyr::S0);
 
-    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, DistToS0=%.2f, Resource=%s"),
+    // Курган (§2.3/§4.3, 2026-09-06) — единственный способ обнаружить место
+    // без визуального актора на уровне (v1 консольный, тот же принцип, что
+    // остальные Exec-первопроходы этого проекта): непустая строка означает
+    // ещё не разграбленный курган на выделенной клетке (LootKurgan снимает
+    // запись из KurganSites после выдачи, суффикс исчезает сам собой).
+    FString KurganStr;
+    if (const FName* Loot = KurganSites.Find(FIntPoint(SelectedX, SelectedY)))
+    {
+        KurganStr = FString::Printf(TEXT(", Kurgan=%s"), *Loot->ToString());
+    }
+
+    return FString::Printf(TEXT("Cell (%d,%d): Mag=%.2f, Dist=%.2f, Stress=%.3f, DistToS0=%.2f, Resource=%s%s"),
         SelectedX, SelectedY,
         Cell->State.Magnitude,
         Cell->State.Meta.Distortion,
         Cell->HarvestStress,
         DistanceToS0,
-        *ResourceStr);
+        *ResourceStr,
+        *KurganStr);
 }
 
 void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& ResourceName, float& RegrowthTimer, float& Distortion, float& HarvestStress)

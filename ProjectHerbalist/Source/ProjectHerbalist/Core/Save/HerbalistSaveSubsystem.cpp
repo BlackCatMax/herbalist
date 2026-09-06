@@ -66,6 +66,8 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
     Save->HomeStorages = WorldManager->CaptureHomeStorages();
     Save->TieredWards = WorldManager->CaptureTieredWards();
+    Save->bSilverWardActive = WorldManager->IsSilverWardActive();
+    Save->KurganSites = WorldManager->GetKurganSites();
 
     if (AHerbalistPlayerController* PC = World ? Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()) : nullptr)
     {
@@ -170,6 +172,8 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->ApplySaveCells(Save->Cells);
     WorldManager->RestoreHomeStorages(Save->HomeStorages);
     WorldManager->RestoreTieredWards(Save->TieredWards);
+    WorldManager->SetSilverWardActive(Save->bSilverWardActive);
+    WorldManager->SetKurganSites(Save->KurganSites);
 
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(World->GetFirstPlayerController()))
     {

@@ -1208,6 +1208,38 @@ public:
     // для проверки Capture/Restore round-trip в тестах.
     bool IsTieredBrewBoostActiveForTest() const { return bTieredBrewBoostActive; }
 
+    // ---- Серебряный оберег (Ось Б §2.3, DESIGN_Community_And_Homestead.md,
+    // 2026-09-06) — экипированный (AHerbalistPlayerController::EquipSilverWard),
+    // НЕ расходуется, не резак вообще (см. комментарий у EGatheringTool,
+    // HerbalistCoreTypes.h). В отличие от шести таймерных оберегов выше и
+    // трёх тиражных — нет ни таймера, ни геометрии: постоянный, общий для
+    // ВСЕЙ сетки источник подавления проявлений, действует наравне с
+    // IsInvisibilityCapActive/IsWardConcealmentActive/IsTieredConcealmentActive
+    // в геймплейной OR-цепочке гейта (см. UpdateEntityManifestations,
+    // GridWorldManagerEntities.cpp) — не только во время сбора (решение
+    // пользователя 2026-09-06: "общий источник, всегда активен"). Персистентен
+    // (не session-only) — награда за находку в кургане, не эффект короткого
+    // окна.
+    bool IsSilverWardActive() const { return bSilverWardActive; }
+    void SetSilverWardActive(bool bActive) { bSilverWardActive = bActive; }
+
+    // ---- Курганы (DESIGN_Brewing_Situations_And_Lore.md §4.3 "Гнёздово",
+    // DESIGN_Community_And_Homestead.md §2.3, 2026-09-06) — единственный
+    // источник Костяного ножа/Серебряного оберега (артефакт-тир инструментов,
+    // "не рыночный товар, а находка"). Ключ карты — клетка кургана, значение —
+    // IngredientID награды; разграбленный курган удаляется из карты целиком
+    // (не отдельный bool bLooted -- нечего проверять на второй попытке, курган
+    // просто больше не в KurganSites). Засеивается один раз в InitializeCells
+    // детерминированным WorldRNG (тот же генератор, что заливка воды/ресурсов
+    // в этой же функции) -- не отдельный, несинхронизированный источник
+    // случайности. Никакого актора на уровне -- v1 консольный (LootKurgan),
+    // тот же принцип, что у SetGardenPlot/ActivateWard: обнаружение места --
+    // через GetSelectedCellInfo (GridWorldManagerDebug.cpp).
+    void SeedKurganSites();
+    bool LootKurgan(const FIntPoint& Cell, FName& OutGrantedIngredientID);
+    const TMap<FIntPoint, FName>& GetKurganSites() const { return KurganSites; }
+    void SetKurganSites(const TMap<FIntPoint, FName>& InSites) { KurganSites = InSites; }
+
     int32 GetCurrentTickID() const { return CurrentTickID; }
     void SetCurrentTickID(int32 InTickID) { CurrentTickID = InTickID; }
 
@@ -1384,14 +1416,26 @@ protected:
     // 2026-09-04, GridWorldManagerWards.cpp::ActivateTieredWard) -- НЕТ
     // ExpiryGameSeconds-поля, в отличие от пяти выше: "нет таймера" в
     // прямом запросе означает именно отсутствие срока действия, не
-    // сентинел с огромным числом. Тоже не персистятся (Save/Load) -- тот
-    // же довод, что и у остальных Ward-полей этого блока. ----
+    // сентинел с огромным числом. В ОТЛИЧИЕ от остальных Ward-полей этого
+    // блока -- ПЕРСИСТЯТСЯ (аудит 2026-09-05, решение пользователя (а):
+    // постоянная награда за ритуал обязана пережить перезагрузку, см.
+    // CaptureTieredWards/RestoreTieredWards выше). ----
     bool bTieredConcealmentActive = false;
     TArray<EBiomeType> TieredConcealmentHomeBiomes;
     bool bTieredMorokReductionActive = false;
     TArray<EBiomeType> TieredMorokReductionHomeBiomes;
     bool bTieredBrewBoostActive = false;
     TArray<EBiomeType> TieredBrewBoostHomeBiomes;
+
+    // ---- Серебряный оберег (Ось Б §2.3, 2026-09-06) -- см. IsSilverWardActive
+    // выше. Персистентен (Save/Load), тот же принцип, что тиражные обереги
+    // выше -- находка в кургане, не эффект короткого окна.
+    bool bSilverWardActive = false;
+
+    // ---- Курганы (§2.3/§4.3 DESIGN_Brewing_Situations_And_Lore.md,
+    // 2026-09-06) -- см. SeedKurganSites/LootKurgan выше. Персистентна
+    // (Save/Load): разграбленный курган не должен "возрождаться" при загрузке.
+    TMap<FIntPoint, FName> KurganSites;
 
     // ---- Заряна: фрагменты памяти и Буян ----
     float GlobalPerceptionClarity = 0.0f;

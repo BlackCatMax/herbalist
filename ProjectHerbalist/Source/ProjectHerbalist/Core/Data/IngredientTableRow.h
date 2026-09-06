@@ -264,6 +264,24 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ward", meta = (EditCondition = "bIsTieredWard"))
     TArray<EBiomeType> WardHomeBiomes;
 
+    // ---- Инструменты сбора и оберег-при-сборе (DESIGN_Community_And_Homestead.md
+    // §2.3, "полировка" 2026-09-06) — карточка становится физическим предметом
+    // инвентаря вместо голого Exec-переключателя (AHerbalistPlayerController::
+    // SetGatheringTool теперь резолвит владение по этому флагу, тем же приёмом,
+    // что ActivateWard делает для bIsWard). Ось А (резак) — bIsGatheringTool +
+    // GatheringToolType, три карточки (Железный/Медный серп, Костяной нож).
+    // Ось Б (серебряный оберег) — bIsSilverWard, отдельно: не резак вообще, тот
+    // же принцип раздельных осей, что уже у EGatheringTool (см. комментарий у
+    // enum'а, HerbalistCoreTypes.h). false/None у всех обычных трав/грибов.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GatheringTool")
+    bool bIsGatheringTool = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GatheringTool", meta = (EditCondition = "bIsGatheringTool"))
+    EGatheringTool GatheringToolType = EGatheringTool::BareHands;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GatheringTool")
+    bool bIsSilverWard = false;
+
     // ---- Переносные контейнеры (Корзина/Мешок/Туёс, 2026-08-31/09-04,
     // "разберём тщательно" систему хранения, прямой запрос пользователя) ----
     // Если карточка представляет предмет-контейнер (утварь, не растение/

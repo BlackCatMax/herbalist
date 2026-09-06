@@ -22,6 +22,7 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
 #include "Player/HerbalistPlayerController.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Components/SplineComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -121,6 +122,21 @@ namespace
         if (!Asset) return nullptr;
         Graph->InitializeFromAsset(Asset);
         return Graph;
+    }
+
+    // Тот же ODR-урок, что и у SpawnControllerAndBeginPlay выше -- было
+    // продублировано одинаковым телом в ArtifactInventoryTest.cpp и
+    // GatheringToolOwnershipTest.cpp (2026-09-06, MSVC C2084 при добавлении
+    // второго файла). Считает суммарный Count всех слотов с данным
+    // IngredientID -- не просто "есть хотя бы один слот".
+    int32 CountItemsWithID(UHerbalistInventoryComponent* Inventory, FName ID)
+    {
+        int32 Count = 0;
+        for (const FInventoryItem& Item : Inventory->GetItems())
+        {
+            if (Item.IngredientID == ID) Count += Item.Count;
+        }
+        return Count;
     }
 
     // Прямоугольный ABiomeRegionVolume, покрывающий заданный прямоугольник

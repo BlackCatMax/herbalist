@@ -76,6 +76,19 @@ void AHerbalistPlayerController::BeginPlay()
         StartingBasket.bSubjectToDecay = false;
         InventoryComponent->AddItem(StartingBasket);
         InventoryComponent->ContainerType = EStorageContainerType::Basket;
+
+        // Стартовый Железный серп (DESIGN_Community_And_Homestead.md §2.3,
+        // "ремесло/стартовый инвентарь", физический предмет 2026-09-06) —
+        // тот же приём, что StartingBasket выше: сконструирован напрямую,
+        // без резолва через IngredientRegistrySubsystem, недоступный на
+        // этом кадре BeginPlay. Медный серп/Костяной нож НЕ выдаются здесь
+        // -- добываются общинной торговлей/находкой в кургане (см.
+        // SetGatheringTool/LootKurgan).
+        FInventoryItem StartingIronBlade;
+        StartingIronBlade.IngredientID = FName(TEXT("Железный серп"));
+        StartingIronBlade.Count = 1;
+        StartingIronBlade.bSubjectToDecay = false;
+        InventoryComponent->AddItem(StartingIronBlade);
     }
 }
 
@@ -603,15 +616,52 @@ void AHerbalistPlayerController::ShowInventory()
 void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
 {
     ToolName.ToLowerInline();
-    if (ToolName == TEXT("iron"))         CurrentGatheringTool = EGatheringTool::IronBlade;
-    else if (ToolName == TEXT("copper"))  CurrentGatheringTool = EGatheringTool::CopperBlade;
-    else if (ToolName == TEXT("bone"))    CurrentGatheringTool = EGatheringTool::BoneKnife;
-    else if (ToolName == TEXT("hands"))   CurrentGatheringTool = EGatheringTool::BareHands;
+    if (ToolName == TEXT("hands"))
+    {
+        // Голые руки — единственный вариант без предмета, всегда доступен
+        // (тот же принцип, что "стартовое" в таблице множителей §2.3).
+        CurrentGatheringTool = EGatheringTool::BareHands;
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("SetGatheringTool: %s"), *ToolName);
+        return;
+    }
+
+    FName RequiredIngredientID;
+    EGatheringTool RequestedTool;
+    if (ToolName == TEXT("iron"))        { RequiredIngredientID = FName(TEXT("Железный серп")); RequestedTool = EGatheringTool::IronBlade; }
+    else if (ToolName == TEXT("copper")) { RequiredIngredientID = FName(TEXT("Медный серп"));   RequestedTool = EGatheringTool::CopperBlade; }
+    else if (ToolName == TEXT("bone"))   { RequiredIngredientID = FName(TEXT("Костяной нож"));  RequestedTool = EGatheringTool::BoneKnife; }
     else
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGatheringTool: unknown tool '%s' (ожидались hands/iron/copper/bone)"), *ToolName);
         return;
     }
+
+    // Владение — тот же поиск по имени, что уже ActivateWard, без списания:
+    // инструмент не расходуется переключением (§2.3, "как активировал/надел,
+    // так и работает"). Аудит 2026-09-06: раньше SetGatheringTool переключал
+    // ЛЮБОЙ инструмент без всякой проверки — теперь железо нужно получить
+    // (стартовое), медь — выменять у общины, кость — найти в кургане.
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGatheringTool: no inventory component"));
+        return;
+    }
+    bool bHasTool = false;
+    for (const FInventoryItem& Item : InventoryComponent->GetItems())
+    {
+        if (Item.IngredientID == RequiredIngredientID && Item.Count > 0)
+        {
+            bHasTool = true;
+            break;
+        }
+    }
+    if (!bHasTool)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGatheringTool: no '%s' in inventory"), *RequiredIngredientID.ToString());
+        return;
+    }
+
+    CurrentGatheringTool = RequestedTool;
     UE_LOG(LogHerbalistPlayer, Log, TEXT("SetGatheringTool: %s"), *ToolName);
 }
 
@@ -1065,6 +1115,94 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
     default:
         break;
     }
+}
+
+void AHerbalistPlayerController::EquipSilverWard()
+{
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipSilverWard: no inventory component"));
+        return;
+    }
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipSilverWard: world manager not found"));
+        return;
+    }
+
+    // Владение — тот же поиск по имени, что уже ActivateWard/SetGatheringTool,
+    // без списания: оберег не расходуется экипировкой.
+    static const FName SilverWardID(TEXT("Серебряный оберег"));
+    bool bHasSilverWard = false;
+    for (const FInventoryItem& Item : InventoryComponent->GetItems())
+    {
+        if (Item.IngredientID == SilverWardID && Item.Count > 0)
+        {
+            bHasSilverWard = true;
+            break;
+        }
+    }
+    if (!bHasSilverWard)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipSilverWard: no '%s' in inventory"), *SilverWardID.ToString());
+        return;
+    }
+
+    Manager->SetSilverWardActive(true);
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("EquipSilverWard: активен"));
+}
+
+void AHerbalistPlayerController::LootKurgan()
+{
+    if (!InventoryComponent)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: no inventory component"));
+        return;
+    }
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: world manager not found"));
+        return;
+    }
+
+    APawn* ControlledPawn = GetPawn();
+    int32 X = 0, Y = 0;
+    if (!ControlledPawn || !Manager->WorldPositionToCell(ControlledPawn->GetActorLocation(), X, Y))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: no pawn, or pawn is outside the grid"));
+        return;
+    }
+
+    FName GrantedIngredientID;
+    if (!Manager->LootKurgan(FIntPoint(X, Y), GrantedIngredientID))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: no unlooted kurgan at (%d,%d)"), X, Y);
+        return;
+    }
+
+    // Резолв State через IngredientRegistrySubsystem — тот же приём, что уже
+    // награда ритуала (GridWorldManagerRitual.cpp::TryAdvanceRitual). Недоступен
+    // в Editor-мире автотестов — без реестра предмет всё равно попадает в
+    // инвентарь (голый FRealState()), тот же класс пробела, что у остальных
+    // резолвов по имени этого файла (см. ROADMAP.md).
+    FInventoryItem Reward;
+    Reward.IngredientID = GrantedIngredientID;
+    Reward.Count = 1;
+    Reward.bSubjectToDecay = false;
+    if (UGameInstance* GameInstance = GetGameInstance())
+    {
+        if (UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>())
+        {
+            if (const FIngredientTableRow* Row = IngredientSubsystem->GetRow(GrantedIngredientID))
+            {
+                Reward.State = Row->BaseState;
+            }
+        }
+    }
+    InventoryComponent->AddItem(Reward);
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("LootKurgan: found '%s' at (%d,%d)"), *GrantedIngredientID.ToString(), X, Y);
 }
 
 void AHerbalistPlayerController::EquipContainer(FString ContainerIngredientID)

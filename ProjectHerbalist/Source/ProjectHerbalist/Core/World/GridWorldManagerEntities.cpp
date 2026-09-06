@@ -847,6 +847,12 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                     // взаимоисключающий источник подавления, своя геометрия
                     // (домашний биом клетки, см. IsTieredConcealmentActive).
                     && !IsTieredConcealmentActive(FIntPoint(Cell.X, Cell.Y))
+                    // Серебряный оберег (Ось Б §2.3, 2026-09-06) — ещё один
+                    // независимый источник, но БЕЗ геометрии вовсе (общий на
+                    // всю сетку, решение пользователя "всегда активен, не
+                    // только при сборе") — тот же класс источника, что
+                    // остальные три выше, просто без Center/Radius.
+                    && !IsSilverWardActive()
                     && !IsCrowdedBySameEntity(Cell, Def))))
             {
                 Cell.ManifestedEntityID = Def.EntityID;
@@ -1252,7 +1258,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                     && !IsWardConcealmentActive(*Anchor)
                     // Тиражный EntityConceal — тот же независимый источник
                     // подавления, что и у Низшего/Основного ранга выше.
-                    && !IsTieredConcealmentActive(*Anchor))))
+                    && !IsTieredConcealmentActive(*Anchor)
+                    // Серебряный оберег (Ось Б §2.3, 2026-09-06) — общий на
+                    // всю сетку, без геометрии, см. довод у Низшего ранга выше.
+                    && !IsSilverWardActive())))
             {
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
                 ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);

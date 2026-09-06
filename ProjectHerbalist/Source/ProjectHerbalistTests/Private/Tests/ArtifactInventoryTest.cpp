@@ -24,24 +24,12 @@
 
 #include "TestWorldHelpers.h"
 
-namespace
-{
-    // SpawnControllerAndBeginPlay -- вынесено в TestWorldHelpers.h (2026-09-04,
-    // ODR-дубликат с GardenPlantingTest.cpp, тот же класс проблемы, что уже
-    // решён для SpawnAndBeginPlay). Manager явно передаётся и инжектируется
-    // (SetWorldManagerForTests) — та же причина, что и раньше, см. комментарий
-    // у SetWorldManagerForTests, HerbalistPlayerController.h.
-
-    int32 CountItemsWithID(UHerbalistInventoryComponent* Inventory, FName ID)
-    {
-        int32 Count = 0;
-        for (const FInventoryItem& Item : Inventory->GetItems())
-        {
-            if (Item.IngredientID == ID) ++Count;
-        }
-        return Count;
-    }
-}
+// SpawnControllerAndBeginPlay/CountItemsWithID -- вынесены в TestWorldHelpers.h
+// (2026-09-04/2026-09-06, ODR-дубликаты с GardenPlantingTest.cpp/
+// GatheringToolOwnershipTest.cpp, тот же класс проблемы, что уже решён для
+// SpawnAndBeginPlay). Manager явно передаётся и инжектируется
+// (SetWorldManagerForTests) — та же причина, что и раньше, см. комментарий
+// у SetWorldManagerForTests, HerbalistPlayerController.h.
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifactInventory_HonestOfferingAddsArtifactToPlayerInventory,
     "Herbalist.ArtifactInventory.HonestOfferingAddsArtifactToPlayerInventory",

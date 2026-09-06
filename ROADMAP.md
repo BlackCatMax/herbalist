@@ -496,26 +496,57 @@ ResolveShrineTypeForCell` резолвит Пограничное (капище 
   реализована в коде (сейчас читается голый `Distance`).
 - **PCG/материалы** — задел есть (`MPC_WorldStateFields.uasset`), визуальный
   вывод состояния мира в материалы не продолжен.
-- **Инструмент сбора (`DESIGN_Community_And_Homestead.md §2.3`) — реализован
-  только сам множитель качества, не экономика вокруг него.** Готово: флаги
-  `bIronAverse`/`bDelicate` в `FIngredientTableRow`, множитель в
-  `GenerateHarvestResult` (голые руки 0.7/железо 1.0/медь-кость 0.9,
-  железо-табу 0.3, костяной бонус 1.15), три карточки компендиума с реальным
-  фольклорным основанием (Плакун-трава/Чистотел/Медуница) — размечены и в
-  тексте, и в живой `DT_IngredientClass` (`ingredient_gathering_and_garden_
-  flags.json` + `IngredientGatheringAndGardenPatchCommandlet`, 2026-08-31),
-  Exec-команда `SetGatheringTool` на `AHerbalistPlayerController::
-  CurrentGatheringTool`. **Не сделано, сознательно вне этого прохода**
-  (см. `DESIGN_Community_And_Homestead.md §2.3` — источник артефакт-тира
-  курганы/дары хозяев, не торговля): физический предмет-инструмент в
-  инвентаре (сейчас переключается только консольной командой, не
-  подбирается/не крафтится), серебряный оберег (вторая, независимая ось —
-  гасит сигнатуру игрока при сборе, ношимая версия уже спроектированного
-  "скрытия"/одолень-травы, не резак вообще, не тронута), штраф `Respect`
-  хозяина места за железо на bIronAverse-траве при проявленном хозяине
-  (архитектурная граница: `GenerateHarvestResult`/`ProcessHarvestCommand`
-  не видят `Landmark`/`Respect`, это состояние живёт на `AGridWorldManager`
-  отдельно от `WorldSnap.GridState` — нужен отдельный проход).
+- **✅ Инструмент сбора (`DESIGN_Community_And_Homestead.md §2.3`) —
+  полировка завершена 2026-09-06.** Множитель качества (голые руки 0.7/
+  железо 1.0/медь-кость 0.9, железо-табу 0.3, костяной бонус 1.15) был
+  готов с 2026-08-31 (см. запись ниже про 76 карточек); закрыт остаток —
+  три источника, которых не хватало множителю:
+  - **Физический предмет вместо голого переключателя.** Железный/Медный
+    серп/Костяной нож — реальные строки `DT_IngredientClass`
+    (`GatheringToolAppendCommandlet`, `bIsGatheringTool`+`GatheringToolType`,
+    тот же приём, что уже `bIsWard`/`WardEffectType` у оберегов). `SetGatheringTool`
+    теперь резолвит владение по инвентарю (Железный серп — стартовый
+    инвентарь, `AHerbalistPlayerController::BeginPlay`; Медный —
+    общинная торговля §1.2, обычный товар; Костяной нож — только находка
+    в кургане, см. ниже), "hands" по-прежнему доступен всегда.
+  - **Серебряный оберег (Ось Б)** — `AGridWorldManager::IsSilverWardActive`/
+    `SetSilverWardActive`, экипируется `EquipSilverWard` (резолв по
+    инвентарю, тот же приём, что `ActivateWard`). Решение пользователя
+    2026-09-06: общий источник подавления проявлений на ВСЮ сетку, без
+    геометрии и без ограничения "только во время сбора" — добавлен в ту
+    же OR-цепочку гейта манифестации, что `IsInvisibilityCapActive`/
+    `IsWardConcealmentActive`/`IsTieredConcealmentActive`
+    (`GridWorldManagerEntities.cpp`, оба места — Низший и Основной ранг).
+    Персистентен (Save/Load), не session-only таймер.
+  - **Курганы** (`DESIGN_Brewing_Situations_And_Lore.md §4.3` "Гнёздово") —
+    решение пользователя: полноценный POI, не заглушка. `AGridWorldManager::
+    SeedKurganSites` детерминированно (`WorldRNG`) сажает ровно два кургана
+    на незанятые водой клетки в `InitializeCells` — один даёт Костяной
+    нож, другой Серебряный оберег; `LootKurgan` выдаёт предмет и снимает
+    сайт из `KurganSites` (персистентно, разграбленный курган не
+    "воскресает" при загрузке). Без визуального актора на уровне — v1
+    консольный (`LootKurgan` Exec), обнаружение через `GetSelectedCellInfo`
+    (`Kurgan=...` суффикс). Дар хозяина места как альтернативный источник
+    (упомянут в документе через "или") сознательно не реализован — курганы
+    закрывают оба предмета полностью.
+  - **Штраф `Respect` хозяина за железо** — рассмотрен и **отклонён**:
+    прямо противоречит более раннему прямому решению пользователя
+    (2026-08-29, см. комментарий у `UpdateEntityManifestations`,
+    `GridWorldManagerEntities.cpp`): "Respect меняется только через
+    подношение". Второй канал изменения Respect (штраф в момент сбора)
+    нарушил бы уже принятую границу — множителя 0.3x к качеству признано
+    достаточным наказанием за неуважительный сбор.
+  392 → 401 тест, **401/401, два чистых прогона, ноль регрессий.** Файлы:
+  `Core/Data/IngredientTableRow.h`, `Core/Types/HerbalistCoreTypes.h`,
+  `Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerKurgan.cpp`
+  (новый), `Core/World/GridWorldManagerEntities.cpp`,
+  `Core/World/GridWorldManagerCore.cpp`, `Core/World/GridWorldManagerDebug.cpp`,
+  `Core/Save/HerbalistSaveTypes.h`, `Core/Save/HerbalistSaveSubsystem.cpp`,
+  `Player/HerbalistPlayerController.h/.cpp`,
+  `ProjectHerbalistTests/.../Commandlets/GatheringToolAppendCommandlet.h/.cpp`
+  (новый), `ProjectHerbalistTests/.../Tests/GatheringToolOwnershipTest.cpp`
+  (новый), `ProjectHerbalistTests/.../Tests/KurganTest.cpp` (новый),
+  `ProjectHerbalistTests/.../Tests/TestWorldHelpers.h`.
   **✅ Проход по всем 76 карточкам компендиума на bIronAverse/bDelicate
   завершён 2026-09-04** (ночная автономная задача, 8 биомов, коммит на
   биом) — новых мотивов не нашлось за пределами исходных трёх карточек,
