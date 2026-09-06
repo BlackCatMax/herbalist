@@ -61,7 +61,7 @@ public:
     // Переключается Exec-командой (SetGatheringTool), но теперь с реальной
     // проверкой владения — Железный серп в стартовом инвентаре (BeginPlay),
     // Медный серп добывается общинной торговлей (§1.2, IngredientTableRow::
-    // bIsGatheringTool), Костяной нож — находка в кургане (LootKurgan).
+    // bIsGatheringTool), Костяной нож — находка в кургане (AKurganActor).
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Harvesting")
     EGatheringTool CurrentGatheringTool = EGatheringTool::BareHands;
 
@@ -179,21 +179,20 @@ public:
     // SetGatheringTool). НЕ расходуется, не резак — постоянно подавляет
     // проявление враждебных сущностей наравне с Шапкой-невидимкой/
     // Плакун-камнем (AGridWorldManager::IsSilverWardActive), не только во
-    // время сбора. Источник предмета — находка в кургане (LootKurgan), как
+    // время сбора. Источник предмета — находка в кургане (AKurganActor), как
     // и у Костяного ножа.
     UFUNCTION(Exec)
     void EquipSilverWard();
 
-    // Разграбить курган на клетке игрока (DESIGN_Brewing_Situations_And_Lore.md
-    // §4.3, DESIGN_Community_And_Homestead.md §2.3, 2026-09-06) — единственный
-    // источник Костяного ножа/Серебряного оберега (артефакт-тир инструментов,
-    // не рыночный товар). Каждый курган разовый (AGridWorldManager::
-    // KurganSites, LootKurgan снимает запись после выдачи), без визуального
-    // актора на уровне — v1 консольный, тем же принципом, что SetGardenPlot/
-    // ActivateWard: сама механика (находка → предмет в инвентаре) работает
-    // уже сейчас, обнаружение места кургана — через GetSelectedCellInfo.
-    UFUNCTION(Exec)
-    void LootKurgan();
+    // Разграбление кургана (DESIGN_Brewing_Situations_And_Lore.md §4.3,
+    // DESIGN_Community_And_Homestead.md §2.3, DECISIONS_LOG.md решение №5,
+    // 2026-09-06) — единственный источник Костяного ножа/Серебряного
+    // оберега. Пересмотрено: раньше был голый Exec (LootKurgan снимал
+    // клетку игрока, грантил предмет тихо, без физического представления
+    // в мире). Теперь — физический актор (AKurganActor, Core/World/
+    // KurganActor.h, тот же паттерн, что AMemoryFragmentActor у артефактов
+    // Легендарных), подбирается вручную через уже существующий Interact()/
+    // IInteractable, отдельного Exec-метода для этого больше нет.
 
     // Переключить намерение сбора (§ комментарий у CurrentHarvestIntent
     // выше). IntentName: "brew" (по умолчанию, обычный ингредиент) /

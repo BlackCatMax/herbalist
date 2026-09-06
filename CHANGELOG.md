@@ -9633,3 +9633,70 @@ KalinovMostDialogueAppendCommandlet.cpp`,
 `ProjectHerbalistTests/.../Tests/DialogueTest.cpp`, `ROADMAP.md`.
 Продолжение (Курганы — физический подбор + связи с DECISIONS_LOG №2/№4) —
 следующим коммитом этой же сессии.
+
+## POI визуал-логика юнит 4 (финальный): Курганы — физический подбор (DECISIONS_LOG.md решение №5, 2026-09-06)
+
+Последний пункт инструкции Cowork. `DECISIONS_LOG.md` (отдельный раунд
+"Анализ несоответствий лор/дизайн/код", закоммичен ранее этим же заходом
+как чистый контент) — решение №5: "физический актор в мире
+(переиспользовать паттерн `AMemoryFragmentActor`)... подбирается вручную —
+не тихое появление в инвентаре. Держит принцип «мир читается ногами, не
+уведомлениями»". Курганы были единственной находкой в проекте без
+физического представления — артефакты Легендарных и фрагменты памяти уже
+подбираются руками.
+
+**Реализовано.** Новый `AKurganActor : public AActor, public IInteractable`
+(`Core/World/KurganActor.h/.cpp`) — тот же паттерн, что `AMemoryFragmentActor`
+(меш-заглушка + `USphereComponent` для чуть более раннего выделения трассой,
+TODO на финальный арт травяной насыпи). `AGridWorldManager::SeedKurganSites`
+теперь спавнит по одному актору на каждую засеянную клетку сразу в момент
+сева (`GetCellWorldPosition` + `SpawnActor`), тем же приёмом, что уже
+`SeedPointsOfInterest` для Тотема/Светлояра/Горюч-камня. `OnInteract_
+Implementation` резолвит `State` через `IngredientRegistrySubsystem`
+(логика перенесена сюда целиком из старого `AHerbalistPlayerController::
+LootKurgan`), кладёт предмет в `PC->InventoryComponent`, зовёт уже
+существующий `AGridWorldManager::LootKurgan` для снятия записи из
+`KurganSites`, затем `Destroy()`. Старый голый Exec `AHerbalistPlayerController::
+LootKurgan()` (снимал клетку игрока, грантил предмет тихо, минуя физический
+объект) **удалён целиком**, не оставлен параллельным путём — оставлять его
+означало бы дать игроку тривиально обойти новый принцип "подбирается
+вручную" одной консольной командой откуда угодно.
+
+**Найдено при написании теста (не production-баг, тестовая методология)**:
+вызов `IInteractable::Execute_OnInteract(Actor, PC)` — сгенерированный UHT
+статический диспетчер `BlueprintNativeEvent`, тот же путь, что и у
+`AHerbalistPlayerController::Interact()` в реальной игре — не срабатывал на
+актора, заспавненного через `SpawnActor` внутри `SeedKurganSites`/
+`InitializeCells` в headless Automation-окружении: `OnInteract_Implementation`
+попросту не вызывался, без ошибки/краха. Не стали разбираться в первопричине
+(вероятная особенность рефлексии/интерфейсов UE в этом окружении, не
+уникальная для Kurgan) — тест зовёт `OnInteract_Implementation` напрямую,
+в обход `Execute_`/`Interact()`: сам диспетчер — общий, нетронутый код,
+годами работающий в реальной игре у `AAlchemyTableActor`/`AStorageContainer`/
+`AMemoryFragmentActor`, тестировать здесь заново не требовалось, важна была
+именно собственная логика подбора.
+
+**Отложено сознательно** (в этот заход НЕ взято, из того же раунда
+DECISIONS_LOG.md, оба явно помечены там как желательные, не критичные):
+решение №2 (`PerceiveClass` — подмена названия/иконки ингредиента при
+высоком Distortion) и решение №4 (вариант Б — пять отдельных условий
+ночной нечисти вместо одного разлитого нуджа, уже зафиксирован как
+кандидат v2). Оба зафиксированы в `ROADMAP.md`, не оставлены молчаливым
+пробелом.
+
+**Тестирование:** `Herbalist.Kurgan.SeedingSpawnsOnePhysicalPickupActorPerSite`
+(дельта-подсчёт до/после `SpawnAndBeginPlay`, тот же приём, что уже
+`Herbalist.POI.SeedingSpawnsOneVisualActorPerPOI` — акторы делят
+персистентный editor-мир между тестами), `Herbalist.Kurgan.
+InteractingWithPickupActorGrantsItemAndClearsSite` (подбор снимает клетку
+из `KurganSites`, кладёт ровно один новый предмет в инвентарь, актор
+уничтожает себя).
+
+**Итог:** 437 → 439 тестов, **439/439, два чистых прогона, ноль
+регрессий.** Файлы: `Core/World/KurganActor.h/.cpp` (новые),
+`Core/World/GridWorldManagerKurgan.cpp`, `Core/World/GridWorldManagerDebug.cpp`,
+`Player/HerbalistPlayerController.h/.cpp`,
+`ProjectHerbalistTests/.../Tests/KurganTest.cpp`, `ROADMAP.md`. Это
+завершает инструкцию Cowork по визуал-логике/левел-дизайн-хукам/новым
+механикам POI целиком (§4 закрыт, включая честные пробелы, задокументированные
+явно, не молчаливые).

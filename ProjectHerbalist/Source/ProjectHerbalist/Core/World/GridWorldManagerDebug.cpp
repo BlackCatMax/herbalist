@@ -62,11 +62,12 @@ FString AGridWorldManager::GetSelectedCellInfo() const
     // не голый снимок State.
     const float DistanceToS0 = HerbalistCore::Math::DistanceWithHistory(Cell->State, Cell->Memory.AverageCoherence);
 
-    // Курган (§2.3/§4.3, 2026-09-06) — единственный способ обнаружить место
-    // без визуального актора на уровне (v1 консольный, тот же принцип, что
-    // остальные Exec-первопроходы этого проекта): непустая строка означает
-    // ещё не разграбленный курган на выделенной клетке (LootKurgan снимает
-    // запись из KurganSites после выдачи, суффикс исчезает сам собой).
+    // Курган (§2.3/§4.3, 2026-09-06) — теперь физический AKurganActor на
+    // клетке (DECISIONS_LOG.md решение №5), этот дебаг-суффикс остаётся
+    // дополнительным способом проверить состояние из консоли: непустая
+    // строка означает ещё не разграбленный курган на выделенной клетке
+    // (AGridWorldManager::LootKurgan снимает запись из KurganSites после
+    // выдачи, суффикс исчезает сам собой).
     FString KurganStr;
     if (const FName* Loot = KurganSites.Find(FIntPoint(SelectedX, SelectedY)))
     {

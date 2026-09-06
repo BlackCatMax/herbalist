@@ -1273,58 +1273,6 @@ void AHerbalistPlayerController::EquipSilverWard()
     UE_LOG(LogHerbalistPlayer, Log, TEXT("EquipSilverWard: активен"));
 }
 
-void AHerbalistPlayerController::LootKurgan()
-{
-    if (!InventoryComponent)
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: no inventory component"));
-        return;
-    }
-    AGridWorldManager* Manager = FindWorldManager();
-    if (!Manager)
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: world manager not found"));
-        return;
-    }
-
-    APawn* ControlledPawn = GetPawn();
-    int32 X = 0, Y = 0;
-    if (!ControlledPawn || !Manager->WorldPositionToCell(ControlledPawn->GetActorLocation(), X, Y))
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: no pawn, or pawn is outside the grid"));
-        return;
-    }
-
-    FName GrantedIngredientID;
-    if (!Manager->LootKurgan(FIntPoint(X, Y), GrantedIngredientID))
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LootKurgan: no unlooted kurgan at (%d,%d)"), X, Y);
-        return;
-    }
-
-    // Резолв State через IngredientRegistrySubsystem — тот же приём, что уже
-    // награда ритуала (GridWorldManagerRitual.cpp::TryAdvanceRitual). Недоступен
-    // в Editor-мире автотестов — без реестра предмет всё равно попадает в
-    // инвентарь (голый FRealState()), тот же класс пробела, что у остальных
-    // резолвов по имени этого файла (см. ROADMAP.md).
-    FInventoryItem Reward;
-    Reward.IngredientID = GrantedIngredientID;
-    Reward.Count = 1;
-    Reward.bSubjectToDecay = false;
-    if (UGameInstance* GameInstance = GetGameInstance())
-    {
-        if (UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance->GetSubsystem<UIngredientRegistrySubsystem>())
-        {
-            if (const FIngredientTableRow* Row = IngredientSubsystem->GetRow(GrantedIngredientID))
-            {
-                Reward.State = Row->BaseState;
-            }
-        }
-    }
-    InventoryComponent->AddItem(Reward);
-    UE_LOG(LogHerbalistPlayer, Log, TEXT("LootKurgan: found '%s' at (%d,%d)"), *GrantedIngredientID.ToString(), X, Y);
-}
-
 void AHerbalistPlayerController::EquipContainer(FString ContainerIngredientID)
 {
     if (!InventoryComponent)

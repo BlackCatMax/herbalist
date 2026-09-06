@@ -9,12 +9,14 @@
 //
 // Владение (есть ли предмет в инвентаре после находки) НЕ проверяется
 // здесь — тот же принцип разделения обязанностей, что уже у оберегов
-// (GridWorldManagerWards.cpp): AHerbalistPlayerController::LootKurgan
-// резолвит State через IngredientRegistrySubsystem и кладёт предмет в
-// инвентарь, GridWorldManager хранит только то, какие курганы ещё не
-// разграблены.
+// (GridWorldManagerWards.cpp): AKurganActor::OnInteract (Core/World/
+// KurganActor.h, DECISIONS_LOG.md решение №5, 2026-09-06 — физический
+// подбор вместо тихого Exec-гранта) резолвит State через
+// IngredientRegistrySubsystem и кладёт предмет в инвентарь,
+// GridWorldManager хранит только то, какие курганы ещё не разграблены.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/World/KurganActor.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
@@ -49,6 +51,19 @@ void AGridWorldManager::SeedKurganSites()
         KurganSites.Add(Coord, Loot[LootIndex]);
         UE_LOG(LogHerbalistWorld, Log, TEXT("[Kurgan] Seeded '%s' at (%d,%d)"),
             *Loot[LootIndex].ToString(), Coord.X, Coord.Y);
+
+        // Физический подбор (DECISIONS_LOG.md решение №5, 2026-09-06) --
+        // AKurganActor спавнится сразу здесь, тем же приёмом, что
+        // Тотем/Светлояр/Горюч-камень в SeedPointsOfInterest.
+        if (UWorld* World = GetWorld())
+        {
+            if (AKurganActor* KurganPickup = World->SpawnActor<AKurganActor>(AKurganActor::StaticClass(),
+                GetCellWorldPosition(Coord.X, Coord.Y), FRotator::ZeroRotator))
+            {
+                KurganPickup->Init(this, Coord.X, Coord.Y, Loot[LootIndex]);
+            }
+        }
+
         ++LootIndex;
     }
 }
