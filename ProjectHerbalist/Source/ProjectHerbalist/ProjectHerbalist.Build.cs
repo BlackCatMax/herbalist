@@ -23,7 +23,9 @@ public class ProjectHerbalist : ModuleRules
         {
             "AssetRegistry",
             "Landscape",     // <--- добавлено для работы с ландшафтом
-            "PCG"            // <--- узел «состояние сетки -> PCG-граф» (2026-09-03)
+            "PCG",           // <--- узел «состояние сетки -> PCG-граф» (2026-09-03)
+            "RenderCore",    // <--- выгрузка карты состояния мира в текстуру (2026-09-07)
+            "RHI"
         });
 
         PublicIncludePaths.AddRange(new string[]

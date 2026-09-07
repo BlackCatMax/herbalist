@@ -999,11 +999,27 @@ void AGridWorldManager::BeginPlay()
             UE_LOG(LogHerbalistWorld, Log, TEXT("Grid corruption (auto): %s"), *GetGridCorruptionReport());
         }, GridCorruptionReportIntervalSeconds, true);
     }
+
+    // Карта состояния мира в текстуру (2026-09-07, "план A") -- довод в
+    // шапке GridWorldManagerWorldStateMap.cpp, обоснование периода у
+    // WorldStateMapUpdateIntervalSeconds в заголовке. Первая выгрузка --
+    // сразу, не через период: иначе первую секунду после загрузки уровня
+    // материалы читали бы пустую (чёрную) карту, то есть показывали бы
+    // нетронутый мир там, где он на самом деле уже испорчен.
+    if (WorldStateMapUpdateIntervalSeconds > 0.0f)
+    {
+        UpdateWorldStateMap();
+        GetWorldTimerManager().SetTimer(WorldStateMapTimerHandle, [this]()
+        {
+            UpdateWorldStateMap();
+        }, WorldStateMapUpdateIntervalSeconds, true);
+    }
 }
 
 void AGridWorldManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     GetWorldTimerManager().ClearTimer(GridCorruptionReportTimerHandle);
+    GetWorldTimerManager().ClearTimer(WorldStateMapTimerHandle);
     Super::EndPlay(EndPlayReason);
 }
 

@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "TimerManager.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Math/RandomStream.h"
@@ -110,6 +111,60 @@ public:
     // SpawnOneResourceInCell выше) -- подтверждает, что таймер реально
     // запланирован/остановлен, не просто что код скомпилировался.
     bool IsGridCorruptionAutoReportScheduled() const;
+
+    // ---- Карта состояния мира в текстуру (2026-09-07, "план A") ----
+    // Полный довод -- в шапке GridWorldManagerWorldStateMap.cpp. Коротко:
+    // материалы травы и ландшафта читают состояние симуляции по мировой
+    // позиции, один тексель на клетку.
+    //
+    // Цель назначается вручную (мягкая ссылка, как VisualizationMPC у
+    // UBiomeGraphSubsystem). Не назначена -- механизм выключен, без ошибок:
+    // в автотестах и headless-прогонах рисовать всё равно некуда.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
+    TSoftObjectPtr<UTextureRenderTarget2D> WorldStateMap;
+
+    // Период выгрузки карты. 1 секунда -- не круглое число "на глаз", а
+    // граница, посчитанная от самой симуляции: пассивный дрейф Distortion
+    // ограничен сверху 0.01/сек (MorokDistortionPushRate и
+    // MorokDistortionDecayRate оба 0.01, а оба множителя лежат в [0,1] --
+    // см. UHerbalistSettings). За секунду значение уходит максимум на
+    // 0.01, то есть ~2.5 шага 8-битного квантования (1/255) -- ступенька
+    // порядка 1% диапазона, глазом не ловится. Чаще ~0.4 с смысла не
+    // имеет вовсе: тогда изменение между кадрами мельче одного шага
+    // квантования, и лишние выгрузки ничего не добавляют к картинке.
+    //
+    // Оговорка, которую важно знать: 0.01/сек -- предел ПАССИВНОГО дрейфа.
+    // Дискретные события (сбор, зелье на клетку) меняют значение мгновенно,
+    // и для них этот период -- задержка отклика до секунды, а не ступенька.
+    // Если понадобится мгновенная реакция на действие игрока, правильным
+    // решением будет внеочередная выгрузка на самом событии, а не общее
+    // учащение таймера.
+    //
+    // <=0 выключает выгрузку совсем -- тот же приём, что у
+    // GridCorruptionReportIntervalSeconds выше.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization", meta = (ClampMin = "0.0"))
+    float WorldStateMapUpdateIntervalSeconds = 1.0f;
+
+    // Собирает буфер карты: по пикселю на клетку, индекс == GetCellIndex.
+    // Публичный ради тестов -- проверяемая часть механизма именно эта
+    // (раскладка и значения), выгрузка на GPU headless не проверяется.
+    TArray<FColor> BuildWorldStateMapPixels() const;
+
+    // Мировая позиция -> UV карты. Возвращает false, если точка вне сетки.
+    // Существует, чтобы соответствие "материал <-> симуляция" можно было
+    // проверить тестом, а не сверять формулу глазами с материалом.
+    bool GetWorldStateMapUV(const FVector& WorldPosition, FVector2D& OutUV) const;
+
+    // Начало и размер сетки в мире -- то, что материалу нужно знать, чтобы
+    // самому построить UV из абсолютной мировой позиции.
+    UFUNCTION(BlueprintCallable, Category = "Visualization")
+    void GetWorldStateMapFrame(FVector& OutOrigin, FVector2D& OutWorldSize) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Visualization")
+    void UpdateWorldStateMap();
+
+    // Та же тестовая видимость, что у IsGridCorruptionAutoReportScheduled.
+    bool IsWorldStateMapUpdateScheduled() const;
 
     // Базовый сид для детерминированного пайплайна (Simulation::ExecutePipeline).
     // Не используется для процедурной генерации мира (см. WorldRNG) — по сиду
@@ -1437,6 +1492,10 @@ protected:
     // persistent editor-мире между автотестами (та же причина, что уже
     // чистит менеджеры прежних тестов в TestWorldHelpers.h::SpawnAndBeginPlay).
     FTimerHandle GridCorruptionReportTimerHandle;
+
+    // Хэндл таймера WorldStateMapUpdateIntervalSeconds -- та же причина
+    // остановки в EndPlay, что у соседа выше.
+    FTimerHandle WorldStateMapTimerHandle;
 
     // ---- Ландшафт и кеш высот ----
     UPROPERTY()
