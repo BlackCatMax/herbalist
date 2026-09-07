@@ -462,17 +462,55 @@ void AGridWorldManager::SeedTestLandmarks()
         // клетке подходящего биома, второй — на самом деле у жилища.
         if (Def.bManualRegistrationOnly) continue;
 
-        for (const FGridCell& Cell : Cells)
+        // Клетка выбирается СЛУЧАЙНО из всех подходящих, а не берётся первая
+        // попавшаяся (2026-09-07, найдено разбором PIE-лога пользователя).
+        //
+        // Раньше здесь стоял прямой `for (const FGridCell& Cell : Cells)` с
+        // выходом на первом совпадении. Обход идёт по строкам
+        // (index = Y*GridSizeX + X), значит "первая подходящая" -- это всегда
+        // МИНИМАЛЬНЫЙ X в полосе своего биома. На сетке 20x20 незаметно, на
+        // 250x250 весь бестиарий выстроился шеренгой вдоль западной кромки:
+        // 27 якорей из 29 при X = 0..3.
+        //
+        // Случайного СТАРТА обхода с проходом по модулю (приём SeedKurganSites)
+        // здесь НЕ хватает, и это проверено замером: у курганов подходит любая
+        // не-водная клетка, поэтому первое совпадение приходится прямо на
+        // случайный старт. Здесь же фильтр по биому, а полоса биома -- это
+        // непрерывный диапазон индексов; старт вне полосы (а он вне неё в
+        // семи случаях из восьми) упирается в её ПЕРВУЮ клетку, то есть в тот
+        // же самый X=0. Замер это и показал: якоря остались при X=0..2, а их
+        // Y встали ровно на границы полос -- 31, 62, 94, 125, 156.
+        //
+        // Поэтому два прохода: посчитать кандидатов, взять один жребий из
+        // WorldRNG (общий детерминированный поток мира), дойти до выбранного.
+        // Один бросок на определение, а не по броску на клетку -- поток не
+        // расходуется зря. Предикат вынесен в лямбду: два прохода обязаны
+        // фильтровать ОДИНАКОВО, иначе выбранный индекс укажет не на ту клетку.
+        auto IsSuitable = [&](const FGridCell& Cell)
         {
-            if (Cell.Biome != Def.Biome || Cell.bIsWater) continue;
+            if (Cell.Biome != Def.Biome || Cell.bIsWater) return false;
             // PCG-биомы (2026-09-02) -- та же логика, что у спавна
             // ресурсов/проявления: не сеять хозяина на клетку вне всех
             // размещённых регионов, только потому что блочный фолбэк
             // формально приписал ей подходящий биом.
-            if (!IsCellClaimedByBiomeRegion(Cell)) continue;
-            const FIntPoint Coord(Cell.X, Cell.Y);
-            if (CellsUsed.Contains(Coord)) continue;
+            if (!IsCellClaimedByBiomeRegion(Cell)) return false;
+            return !CellsUsed.Contains(FIntPoint(Cell.X, Cell.Y));
+        };
 
+        int32 Candidates = 0;
+        for (const FGridCell& Cell : Cells)
+        {
+            if (IsSuitable(Cell)) ++Candidates;
+        }
+        if (Candidates == 0) continue;
+
+        int32 Pick = WorldRNG.RandRange(0, Candidates - 1);
+        for (const FGridCell& Cell : Cells)
+        {
+            if (!IsSuitable(Cell)) continue;
+            if (Pick-- > 0) continue;
+
+            const FIntPoint Coord(Cell.X, Cell.Y);
             FEntityLandmark Landmark;
             Landmark.EntityID = Def.EntityID;
             Landmark.Cell = Coord;
@@ -544,16 +582,34 @@ void AGridWorldManager::SeedLegendaryAnchors()
         // независимо в UpdateEntityManifestations, не одна выделенная.
         if (Def.bUsesCellHistoryPurity) continue;
 
+        // Случайная клетка из подходящих -- ровно тот же довод и тот же
+        // приём (счёт кандидатов, один жребий, доход до выбранного), что у
+        // SeedTestLandmarks выше, включая объяснение, почему случайного
+        // СТАРТА обхода тут недостаточно. См. подробный комментарий там.
+        auto IsSuitable = [&](const FGridCell& Cell)
+        {
+            if (Cell.Biome != Def.Biome) return false;
+            if (Def.bLandOnly && Cell.bIsWater) return false;
+            if (Def.bWaterOnly && !Cell.bIsWater) return false;
+            // PCG-биомы (2026-09-02) -- тот же гейт, что у SeedTestLandmarks выше.
+            if (!IsCellClaimedByBiomeRegion(Cell)) return false;
+            return !CellsUsed.Contains(FIntPoint(Cell.X, Cell.Y));
+        };
+
+        int32 Candidates = 0;
         for (const FGridCell& Cell : Cells)
         {
-            if (Cell.Biome != Def.Biome) continue;
-            if (Def.bLandOnly && Cell.bIsWater) continue;
-            if (Def.bWaterOnly && !Cell.bIsWater) continue;
-            // PCG-биомы (2026-09-02) -- тот же гейт, что у SeedTestLandmarks выше.
-            if (!IsCellClaimedByBiomeRegion(Cell)) continue;
-            const FIntPoint Coord(Cell.X, Cell.Y);
-            if (CellsUsed.Contains(Coord)) continue;
+            if (IsSuitable(Cell)) ++Candidates;
+        }
+        if (Candidates == 0) continue;
 
+        int32 Pick = WorldRNG.RandRange(0, Candidates - 1);
+        for (const FGridCell& Cell : Cells)
+        {
+            if (!IsSuitable(Cell)) continue;
+            if (Pick-- > 0) continue;
+
+            const FIntPoint Coord(Cell.X, Cell.Y);
             LegendaryAnchors.Add(Def.EntityID, Coord);
             CellsUsed.Add(Coord);
             UE_LOG(LogHerbalistWorld, Log, TEXT("[Entities] Seeded legendary anchor %s at (%d,%d)"),

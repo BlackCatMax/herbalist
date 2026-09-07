@@ -51,7 +51,12 @@ namespace
     // остальных хелперов этого файла: тест получает предсказуемый мир,
     // не то, что случайно лежит на уровне. Region->Destroy() — только в
     // этом одноразовом headless-процессе, .umap на диске не трогается.
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World, const TArray<AActor*>& KeepRegions = {})
+    // RngSeed (2026-09-07): мир процедурен, и размещение хозяев мест/якорей
+    // теперь честно случайно по WorldRNG -- значит проверить это свойство
+    // можно только сравнив ДВА мира с разными сидами. Сид обязан ставиться
+    // ДО DispatchBeginPlay: WorldRNG.Initialize(RngBaseSeed) вызывается
+    // именно там, и посев идёт следом. -1 -- оставить дефолт актора.
+    AGridWorldManager* SpawnAndBeginPlay(UWorld* World, const TArray<AActor*>& KeepRegions = {}, int32 RngSeed = -1)
     {
         if (!World) return nullptr;
 
@@ -94,6 +99,10 @@ namespace
         AGridWorldManager* Manager = World->SpawnActor<AGridWorldManager>();
         if (Manager)
         {
+            if (RngSeed >= 0)
+            {
+                Manager->RngBaseSeed = RngSeed;
+            }
             Manager->DispatchBeginPlay();
         }
         return Manager;

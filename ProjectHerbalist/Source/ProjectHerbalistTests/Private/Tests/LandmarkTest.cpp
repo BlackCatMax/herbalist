@@ -414,4 +414,95 @@ bool FHerbalistLandmark_DomovoiAggravatedCurseHitsStabilityBelowThreshold::RunTe
     return true;
 }
 
+// Хозяева мест и легендарные якоря разбросаны по своему биому, а не жмутся
+// к одному краю (2026-09-07, найдено разбором PIE-лога пользователя).
+//
+// Что было. Посев брал ПЕРВУЮ подходящую клетку прямым обходом
+// `for (const FGridCell& Cell : Cells)`. Обход идёт по строкам
+// (index = Y*GridSizeX + X), поэтому "первая подходящая" -- всегда
+// минимальный X в полосе своего биома. На карте 20x20 это было почти
+// незаметно, на 250x250 весь бестиарий выстроился шеренгой вдоль западной
+// кромки: 27 якорей из 29 при X = 0..3.
+//
+// Почему тест именно такой. Первая попытка починки (случайный СТАРТ обхода
+// с проходом по модулю, приём SeedKurganSites) выглядела правильной и
+// оказалась почти бесполезной: полоса биома -- непрерывный диапазон
+// индексов, старт вне неё упирается в её первую клетку, то есть в тот же
+// X=0. Замер показал якоря на X=0..2 с Y ровно на границах полос. Значит
+// проверять надо не "используется ли RNG", а НАБЛЮДАЕМОЕ свойство --
+// что клетки реально разные и реально зависят от сида.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistLandmark_SeedingScattersAnchorsInsteadOfHuggingTheEdge,
+    "Herbalist.Landmark.SeedingScattersAnchorsInsteadOfHuggingTheEdge",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistLandmark_SeedingScattersAnchorsInsteadOfHuggingTheEdge::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* First = SpawnAndBeginPlay(World, {}, 12345);
+    if (!TestNotNull(TEXT("Manager spawned"), First)) return false;
+
+    TMap<FName, FIntPoint> FirstLayout;
+    int32 MaxX = 0;
+    for (const FEntityLandmark& L : First->GetEntityLandmarks())
+    {
+        FirstLayout.Add(L.EntityID, L.Cell);
+        MaxX = FMath::Max(MaxX, L.Cell.X);
+    }
+    for (const TPair<FName, FIntPoint>& Anchor : First->GetLegendaryAnchors())
+    {
+        FirstLayout.Add(Anchor.Key, Anchor.Value);
+        MaxX = FMath::Max(MaxX, Anchor.Value.X);
+    }
+
+    if (!TestTrue(TEXT("Что-то вообще засеялось"), FirstLayout.Num() > 0))
+    {
+        First->Destroy();
+        return false;
+    }
+
+    // Прямая проверка исходного симптома: при старом посеве ВСЕ якоря
+    // сидели в первых колонках. Порог намеренно скромный -- тест про
+    // "не прижаты к краю", а не про качество распределения.
+    TestTrue(FString::Printf(TEXT("Якоря не жмутся к западной кромке: максимальный X = %d при ширине сетки %d"),
+        MaxX, First->GridSizeX),
+        MaxX > 3);
+
+    const int32 GridWidth = First->GridSizeX;
+    First->Destroy();
+
+    // Второй мир с ДРУГИМ сидом: размещение обязано быть функцией сида, а не
+    // константой. Именно это отличает честный жребий от "первой клетки".
+    AGridWorldManager* Second = SpawnAndBeginPlay(World, {}, 999);
+    if (!TestNotNull(TEXT("Second manager spawned"), Second)) return false;
+
+    TMap<FName, FIntPoint> SecondLayout;
+    for (const FEntityLandmark& L : Second->GetEntityLandmarks())
+    {
+        SecondLayout.Add(L.EntityID, L.Cell);
+    }
+    for (const TPair<FName, FIntPoint>& Anchor : Second->GetLegendaryAnchors())
+    {
+        SecondLayout.Add(Anchor.Key, Anchor.Value);
+    }
+
+    int32 Moved = 0, Compared = 0;
+    for (const TPair<FName, FIntPoint>& Entry : FirstLayout)
+    {
+        if (const FIntPoint* Other = SecondLayout.Find(Entry.Key))
+        {
+            ++Compared;
+            if (*Other != Entry.Value) ++Moved;
+        }
+    }
+
+    TestTrue(FString::Printf(TEXT("Смена сида переставляет якорей: сдвинулось %d из %d (ширина сетки %d)"),
+        Moved, Compared, GridWidth),
+        Moved > 0);
+
+    Second->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
