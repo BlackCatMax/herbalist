@@ -15,6 +15,7 @@
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Entities/HerbalistEntityActor.h"
 #include "Core/Entities/LandmarkTypes.h"
+#include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
@@ -565,6 +566,80 @@ bool FHerbalistGridStreaming_LandmarkManifestationDoesNotSpawnActorOutsideActive
         Cell->ManifestedEntityActor.IsValid());
 
     Manager->Destroy();
+    return true;
+}
+
+// Стриминг включён, и его радиус накрывает самый дальнобойный локальный
+// механизм (2026-09-07).
+//
+// Почему тест понадобился. Разбирая PIE-лог, я заявил, что стриминг
+// выключен -- и ошибся: смотрел на дефолт `-1` в заголовке
+// `HerbalistSettings.h` и не проверил `Config/DefaultGame.ini`, который его
+// перекрывает (`ActiveSimulationRadiusMeters=100`, `ChunkSizeInCells=8`).
+// Настройка помечена `config` у класса `UCLASS(config = Game, defaultconfig)`,
+// то есть значение в заголовке -- лишь запасное, а действует ini. Тест
+// читает ДЕЙСТВУЮЩЕЕ значение, поэтому такую ошибку больше не сделать ни
+// мне, ни при следующей правке конфига.
+//
+// Что именно проверяется. Ограничение задаёт не производительность, а
+// КОРРЕКТНОСТЬ: ни один локальный механизм не должен дотягиваться из
+// активной клетки в спящую. Самый дальнобойный такой механизм --
+// разрежение сущностей (`FAmbientEntityDefinition::MinSpacingMeters`,
+// максимум 30 м): `IsCrowdedBySameEntity` читает соседей именно на эту
+// дистанцию, и если бы они спали, разрежение молча ослабло бы у границы
+// активной области. Порог берётся из самого реестра, а не зашит числом --
+// добавят карточку с большей дистанцией, тест это заметит.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_ActiveRadiusCoversTheLongestLocalMechanic,
+    "Herbalist.GridStreaming.ActiveRadiusCoversTheLongestLocalMechanic",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_ActiveRadiusCoversTheLongestLocalMechanic::RunTest(const FString& Parameters)
+{
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+    if (!TestNotNull(TEXT("Settings CDO available"), Settings)) return false;
+
+    const float RadiusMeters = Settings->ActiveSimulationRadiusMeters;
+    const int32 ChunkCells = Settings->ChunkSizeInCells;
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    const float CellSize = Manager->CellSize;
+    const float ChunkSpanMeters = CellSize * ChunkCells / 100.0f;
+    const int32 RadiusInChunks = Manager->GetActiveRadiusInChunks();
+    Manager->Destroy();
+
+    AddInfo(FString::Printf(TEXT("Действующие значения: ActiveSimulationRadiusMeters=%.1f, ChunkSizeInCells=%d, CellSize=%.0f (клетка %.2f м) -> чанк %.1f м, радиус %d чанков = %.1f м"),
+        RadiusMeters, ChunkCells, CellSize, CellSize / 100.0f, ChunkSpanMeters,
+        RadiusInChunks, RadiusInChunks * ChunkSpanMeters));
+
+    // Решение пользователя 2026-09-07: стриминг должен быть включён.
+    // Если его когда-нибудь осознанно выключат (-1 -- "активны все клетки",
+    // это КОРРЕКТНО, просто дороже), обновлять надо именно эту проверку.
+    if (!TestTrue(FString::Printf(TEXT("Стриминг включён (ActiveSimulationRadiusMeters=%.1f, должно быть > 0)"), RadiusMeters),
+        RadiusMeters > 0.0f))
+    {
+        return false;
+    }
+
+    float LongestSpacing = 0.0f;
+    FName LongestOwner;
+    for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
+    {
+        if (Def.MinSpacingMeters > LongestSpacing)
+        {
+            LongestSpacing = Def.MinSpacingMeters;
+            LongestOwner = Def.EntityID;
+        }
+    }
+
+    const float EffectiveRadiusMeters = RadiusInChunks * ChunkSpanMeters;
+    TestTrue(FString::Printf(TEXT("Активный радиус %.1f м накрывает самый дальнобойный локальный механизм -- разрежение '%s' на %.1f м"),
+        EffectiveRadiusMeters, *LongestOwner.ToString(), LongestSpacing),
+        EffectiveRadiusMeters >= LongestSpacing);
+
     return true;
 }
 
