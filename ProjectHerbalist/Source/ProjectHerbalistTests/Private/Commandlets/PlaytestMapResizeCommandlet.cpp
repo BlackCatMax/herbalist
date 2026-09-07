@@ -40,9 +40,18 @@ int32 UPlaytestMapResizeCommandlet::Main(const FString& Params)
     // трогать её ради одной диагностики нельзя.
     const bool bDryRun = FParse::Param(*Params, TEXT("dryrun"));
 
-    int32 NewSize = 128;
-    FParse::Value(*Params, TEXT("size="), NewSize);
-    if (NewSize < 8)
+    // -size НЕОБЯЗАТЕЛЕН: без него размер сетки остаётся как есть, а
+    // коммандлет только перекладывает биом-полосы под неё. Так и нужно в
+    // самом частом случае -- сетку меняли руками в редакторе, а регионы за
+    // ней не пошли.
+    //
+    // Раньше здесь стояло значение по умолчанию 128, и это была ловушка:
+    // запуск без -size молча УЖАЛ БЫ карту до 128 клеток, потеряв ручную
+    // правку размера. Замечено 2026-09-07 при разборе PIE-лога, где сетку
+    // как раз увеличивали вручную до 250 и 500.
+    int32 NewSize = 0;
+    const bool bSizeGiven = FParse::Value(*Params, TEXT("size="), NewSize);
+    if (bSizeGiven && NewSize < 8)
     {
         UE_LOG(LogTemp, Error, TEXT("PlaytestMapResize: -size=%d слишком мал (минимум 8)"), NewSize);
         return 1;
@@ -94,6 +103,11 @@ int32 UPlaytestMapResizeCommandlet::Main(const FString& Params)
     const int32 OldY = Manager->GridSizeY;
     const float CellSize = Manager->CellSize;
 
+    if (!bSizeGiven)
+    {
+        NewSize = OldX;
+    }
+
     int32 RegionCount = 0;
     for (AActor* Actor : Level->Actors)
     {
@@ -106,8 +120,10 @@ int32 UPlaytestMapResizeCommandlet::Main(const FString& Params)
     if (bDryRun)
     {
         const float WouldBe = NewSize * CellSize / 100.0f;
-        UE_LOG(LogTemp, Display, TEXT("-dryrun: изменений НЕ вносится. С -size=%d вышло бы %dx%d, мир %.0f м, полоса биома %.1f м."),
-            NewSize, NewSize, NewSize, WouldBe, WouldBe / 8.0f);
+        UE_LOG(LogTemp, Display, TEXT("-dryrun: изменений НЕ вносится. Вышло бы %dx%d (%s), мир %.0f м, полоса биома %.1f м."),
+            NewSize, NewSize,
+            bSizeGiven ? TEXT("размер задан ключом -size") : TEXT("размер сетки сохранён как есть, переложены только полосы"),
+            WouldBe, WouldBe / 8.0f);
         return 0;
     }
 
@@ -184,8 +200,9 @@ int32 UPlaytestMapResizeCommandlet::Main(const FString& Params)
     }
 
     const float WorldMetres = NewSize * CellSize / 100.0f;
-    UE_LOG(LogTemp, Display, TEXT("PlaytestMapResize: сетка %dx%d -> %dx%d (мир %.0f м при CellSize=%.0f), полос снесено %d, создано %d"),
-        OldX, OldY, NewSize, NewSize, WorldMetres, CellSize, Removed, Created);
+    UE_LOG(LogTemp, Display, TEXT("PlaytestMapResize: сетка %dx%d -> %dx%d (мир %.0f м при CellSize=%.0f), полос снесено %d, создано %d%s"),
+        OldX, OldY, NewSize, NewSize, WorldMetres, CellSize, Removed, Created,
+        bSizeGiven ? TEXT("") : TEXT(" -- размер сетки не менялся, переложены только полосы"));
     UE_LOG(LogTemp, Display, TEXT("ЛАНДШАФТ НЕ ТРОНУТ -- клетки за его краем получат высоту 0. Довести ландшафт до нового размера нужно в редакторе."));
     return 0;
 }
