@@ -18,6 +18,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -36,6 +37,27 @@ namespace
         Def.MinSpacingMeters = SpacingMeters;
         return Def;
     }
+
+    // Настройка живёт в CDO и переживает тест -- обязательно возвращаем,
+    // иначе следующие тесты поедут в зависимости от порядка выполнения
+    // (тот же приём и тот же довод, что FScopedPlacementSettings в
+    // SpawnPlacementTest.cpp).
+    struct FScopedSpacingMultiplier
+    {
+        UHerbalistSettings* Settings;
+        float Saved;
+
+        explicit FScopedSpacingMultiplier(float Value)
+            : Settings(GetMutableDefault<UHerbalistSettings>())
+            , Saved(Settings->EntitySpacingMultiplier)
+        {
+            Settings->EntitySpacingMultiplier = Value;
+        }
+        ~FScopedSpacingMultiplier()
+        {
+            Settings->EntitySpacingMultiplier = Saved;
+        }
+    };
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistEntitySpacing_NeighbourOfSameSpeciesCrowdsOutANewOne,
@@ -174,6 +196,116 @@ bool FHerbalistEntitySpacing_SpacingIsMeasuredInMetresNotCells::RunTest(const FS
         Manager->IsCrowdedBySameEntity(*Candidate, Def));
 
     Manager->Destroy();
+    return true;
+}
+
+// Ручка плотности заселения (2026-09-07, прямой запрос пользователя).
+// Числа дистанций в карточках заданы для боевого масштаба (клетка 10 м);
+// на дев-карте клетка -- 1 м, и те же 15 м дают радиус 15 клеток при сетке
+// 20x20, то есть одну особь вида на весь мир. Множитель приводит масштабы
+// друг к другу, не трогая данные карточек.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistEntitySpacing_MultiplierScalesTheEffectiveDistance,
+    "Herbalist.EntitySpacing.MultiplierScalesTheEffectiveDistance",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistEntitySpacing_MultiplierScalesTheEffectiveDistance::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    // Карточка на 10 м; сосед стоит в 5 м (клетка = 1 м в тестовом мире).
+    const FAmbientEntityDefinition Def = MakeSpacedDefinition(FName(TEXT("TestSpirit")), 10.0f);
+
+    FGridCell* Candidate = Manager->GetCell(10, 10);
+    FGridCell* Neighbour = Manager->GetCell(15, 10);
+    if (!TestNotNull(TEXT("Cells exist"), Candidate) || !Neighbour) { Manager->Destroy(); return false; }
+    Neighbour->ManifestedEntityID = FName(TEXT("TestSpirit"));
+
+    {
+        FScopedSpacingMultiplier Scope(1.0f);
+        TestTrue(TEXT("При множителе 1.0 дистанция 10 м действует -- сосед в 5 м мешает"),
+            Manager->IsCrowdedBySameEntity(*Candidate, Def));
+    }
+    {
+        // 10 м * 0.4 = 4 м -- сосед в пяти метрах теперь снаружи круга.
+        FScopedSpacingMultiplier Scope(0.4f);
+        TestFalse(TEXT("При множителе 0.4 та же дистанция сжимается до 4 м -- сосед в 5 м больше не мешает"),
+            Manager->IsCrowdedBySameEntity(*Candidate, Def));
+    }
+    {
+        // 10 м * 2.0 = 20 м -- дальний сосед снова внутри.
+        FScopedSpacingMultiplier Scope(2.0f);
+        FGridCell* FarNeighbour = Manager->GetCell(10, 25);   // 15 м по Y
+        if (FarNeighbour)
+        {
+            Neighbour->ManifestedEntityID = NAME_None;
+            FarNeighbour->ManifestedEntityID = FName(TEXT("TestSpirit"));
+            TestTrue(TEXT("При множителе 2.0 дистанция растягивается до 20 м -- сосед в 15 м мешает"),
+                Manager->IsCrowdedBySameEntity(*Candidate, Def));
+            FarNeighbour->ManifestedEntityID = NAME_None;
+        }
+        Neighbour->ManifestedEntityID = FName(TEXT("TestSpirit"));
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+// Ноль -- полное выключение разрежения. Нужен именно как отдельный режим:
+// он позволяет отделить этот механизм (одинаковые виды, геометрия) от
+// «занял -- держит вечно» в CanManifest (РАЗНЫЕ виды, приоритет ранга) --
+// две совершенно разные причины, по которым существо может не проявиться,
+// и путать их при отладке дорого.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistEntitySpacing_ZeroMultiplierDisablesCrowdingEntirely,
+    "Herbalist.EntitySpacing.ZeroMultiplierDisablesCrowdingEntirely",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistEntitySpacing_ZeroMultiplierDisablesCrowdingEntirely::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    const FAmbientEntityDefinition Def = MakeSpacedDefinition(FName(TEXT("TestSpirit")), 30.0f);
+
+    FGridCell* Candidate = Manager->GetCell(10, 10);
+    FGridCell* Adjacent = Manager->GetCell(11, 10);   // вплотную, 1 м
+    if (!TestNotNull(TEXT("Cells exist"), Candidate) || !Adjacent) { Manager->Destroy(); return false; }
+    Adjacent->ManifestedEntityID = FName(TEXT("TestSpirit"));
+
+    {
+        FScopedSpacingMultiplier Scope(1.0f);
+        TestTrue(TEXT("Контроль: при множителе 1.0 сосед вплотную мешает"),
+            Manager->IsCrowdedBySameEntity(*Candidate, Def));
+    }
+    {
+        FScopedSpacingMultiplier Scope(0.0f);
+        TestFalse(TEXT("Множитель 0 выключает разрежение -- даже соседняя клетка не мешает"),
+            Manager->IsCrowdedBySameEntity(*Candidate, Def));
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+// Дефолт настройки обязан быть нейтральным: включение ручки не должно
+// молча изменить мир у того, кто её не трогал.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistEntitySpacing_MultiplierDefaultsToNeutral,
+    "Herbalist.EntitySpacing.MultiplierDefaultsToNeutral",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistEntitySpacing_MultiplierDefaultsToNeutral::RunTest(const FString& Parameters)
+{
+    const UHerbalistSettings* Defaults = GetDefault<UHerbalistSettings>();
+    if (!TestNotNull(TEXT("Settings CDO available"), Defaults)) return false;
+
+    TestEqual(TEXT("EntitySpacingMultiplier по умолчанию 1.0 -- поведение ровно как до появления ручки"),
+        Defaults->EntitySpacingMultiplier, 1.0f);
     return true;
 }
 

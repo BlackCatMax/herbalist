@@ -586,7 +586,17 @@ bool AGridWorldManager::IsCrowdedBySameEntity(const FGridCell& Cell, const FAmbi
 {
     if (Def.MinSpacingMeters <= 0.0f) return false;   // выключено для этого вида
 
-    const float SpacingCm = Def.MinSpacingMeters * 100.0f;
+    // Ручка плотности заселения (2026-09-07) -- см. довод у
+    // UHerbalistSettings::EntitySpacingMultiplier: числа карточек заданы для
+    // боевого масштаба (клетка 10 м), а дев-карта живёт на клетке в 1 м.
+    // Ноль выключает разрежение полностью, поэтому проверяем ПОСЛЕ
+    // умножения, а не только исходное MinSpacingMeters.
+    const UHerbalistSettings* SpacingSettings = GetHerbalistSettings();
+    const float SpacingMultiplier = SpacingSettings ? FMath::Max(0.0f, SpacingSettings->EntitySpacingMultiplier) : 1.0f;
+    const float EffectiveSpacingMeters = Def.MinSpacingMeters * SpacingMultiplier;
+    if (EffectiveSpacingMeters <= 0.0f) return false;
+
+    const float SpacingCm = EffectiveSpacingMeters * 100.0f;
     const float SafeCellSize = FMath::Max(CellSize, KINDA_SMALL_NUMBER);
     // CeilToInt здесь никогда не даёт <=0 (SpacingCm/SafeCellSize > 0 всегда,
     // раз MinSpacingMeters>0 уже проверен выше) -- суб-клеточный spacing
