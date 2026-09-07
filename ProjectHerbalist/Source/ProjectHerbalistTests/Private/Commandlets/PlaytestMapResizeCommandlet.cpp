@@ -34,6 +34,12 @@ namespace
 
 int32 UPlaytestMapResizeCommandlet::Main(const FString& Params)
 {
+    // -dryrun: только доложить текущее состояние карты и то, что было бы
+    // сделано. Добавлено 2026-09-07 при разборе PIE-лога: понадобилось
+    // узнать настоящие GridSize/CellSize уже изменённой вручную карты, а
+    // трогать её ради одной диагностики нельзя.
+    const bool bDryRun = FParse::Param(*Params, TEXT("dryrun"));
+
     int32 NewSize = 128;
     FParse::Value(*Params, TEXT("size="), NewSize);
     if (NewSize < 8)
@@ -87,6 +93,23 @@ int32 UPlaytestMapResizeCommandlet::Main(const FString& Params)
     const int32 OldX = Manager->GridSizeX;
     const int32 OldY = Manager->GridSizeY;
     const float CellSize = Manager->CellSize;
+
+    int32 RegionCount = 0;
+    for (AActor* Actor : Level->Actors)
+    {
+        if (Cast<ABiomeRegionVolume>(Actor)) ++RegionCount;
+    }
+
+    UE_LOG(LogTemp, Display, TEXT("Сейчас на карте: сетка %dx%d, CellSize=%.0f (клетка %.2f м), мир %.0f м, биом-регионов %d"),
+        OldX, OldY, CellSize, CellSize / 100.0f, OldX * CellSize / 100.0f, RegionCount);
+
+    if (bDryRun)
+    {
+        const float WouldBe = NewSize * CellSize / 100.0f;
+        UE_LOG(LogTemp, Display, TEXT("-dryrun: изменений НЕ вносится. С -size=%d вышло бы %dx%d, мир %.0f м, полоса биома %.1f м."),
+            NewSize, NewSize, NewSize, WouldBe, WouldBe / 8.0f);
+        return 0;
+    }
 
     Manager->GridSizeX = NewSize;
     Manager->GridSizeY = NewSize;
