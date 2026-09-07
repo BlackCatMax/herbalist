@@ -25,9 +25,14 @@
 #include "Commandlets/DocumentedBiomeValues.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Types/BiomeRow.h"
+#include "Core/World/GridWorldManager.h"
 #include "Misc/AutomationTest.h"
+#include "Editor.h"
+#include "Engine/World.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
+
+#include "TestWorldHelpers.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeDefaults_AssetMatchesTheCompendium,
     "Herbalist.BiomeDefaults.AssetMatchesTheCompendium",
@@ -70,7 +75,17 @@ bool FHerbalistBiomeDefaults_AssetMatchesTheCompendium::RunTest(const FString& P
             { TEXT("Environment.Toxicity"),  Row->Environment.Toxicity,  Doc.Toxicity },
             { TEXT("Environment.Fertility"), Row->Environment.Fertility, Doc.Fertility },
             { TEXT("Environment.Moisture"),  Row->Environment.Moisture,  Doc.Moisture },
+            // Выведенное компендиумом значение (extract_biomes.py), не прямое
+            // из фронтматтера -- см. довод в DocumentedBiomeValues.h. Стоит
+            // здесь потому, что в ассете оно полгода было нейтральной
+            // единицей у всех восьми биомов, то есть механика зарастания
+            // молча не работала вовсе.
+            { TEXT("StressRecoveryMultiplier"), Row->StressRecoveryMultiplier, Doc.StressRecoveryMultiplier },
         };
+
+        TestTrue(FString::Printf(TEXT("[%s] DisplayName ассет '%s' == карточка '%s'"),
+            *BiomeName, *Row->DisplayName.ToString(), Doc.DisplayName),
+            Row->DisplayName.ToString().Equals(Doc.DisplayName, ESearchCase::CaseSensitive));
 
         for (const FCheck& C : Checks)
         {
@@ -80,6 +95,64 @@ bool FHerbalistBiomeDefaults_AssetMatchesTheCompendium::RunTest(const FString& P
         }
     }
 
+    return true;
+}
+
+// Документированное значение доехало не только до ДАННЫХ, но и до
+// ПОВЕДЕНИЯ. Тест выше сверяет таблицу с карточками; этот проверяет, что
+// из таблицы величину кто-то читает и она различает биомы.
+//
+// Нужен именно потому, что сверка данных сама по себе этого не ловит.
+// `StressRecoveryMultiplier` полгода стоял в ассете нейтральной единицей у
+// всех восьми биомов: механика «место держит след дольше или меньше» была
+// формально реализована (`RegenerateCellParameters` читает поле и делит на
+// него скорость зарастания), но фактически выключена — все биомы зарастали
+// одинаково. Если завтра поле снова обнулят или перестанут читать, сверка
+// данных промолчит, а этот тест упадёт.
+//
+// Болото (1.717) против Смешанного леса (0.588) — крайние значения шкалы,
+// разница почти втрое. Сезонный множитель у обеих клеток общий (часы одни),
+// поэтому в сравнении он сокращается.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeDefaults_StressRecoverySpeedDiffersByBiome,
+    "Herbalist.BiomeDefaults.StressRecoverySpeedDiffersByBiome",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeDefaults_StressRecoverySpeedDiffersByBiome::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    FGridCell* SlowCell = Manager->GetCell(2, 2);   // Болото -- держит след дольше всех
+    FGridCell* FastCell = Manager->GetCell(4, 4);   // Смешанный лес -- зарастает быстрее всех
+    if (!TestNotNull(TEXT("Cells exist"), SlowCell) || !FastCell) { Manager->Destroy(); return false; }
+
+    SlowCell->Biome = EBiomeType::Bog;
+    FastCell->Biome = EBiomeType::MixedForest;
+    SlowCell->HarvestStress = 1.0f;
+    FastCell->HarvestStress = 1.0f;
+
+    // Заметный отрезок: зарастание идёт за игровые СУТКИ, шаг в секунду дал
+    // бы разницу в шестом знаке.
+    for (int32 i = 0; i < 200; ++i)
+    {
+        Manager->RegenerateCellParameters(60.0f);
+    }
+
+    const float SlowLeft = SlowCell->HarvestStress;
+    const float FastLeft = FastCell->HarvestStress;
+
+    TestTrue(FString::Printf(TEXT("Оба биома реально зарастают (Болото %.4f, Смешанный лес %.4f -- оба ниже старта 1.0)"),
+        SlowLeft, FastLeft),
+        SlowLeft < 1.0f && FastLeft < 1.0f);
+
+    TestTrue(FString::Printf(TEXT("Болото (множитель 1.717) держит след ДОЛЬШЕ Смешанного леса (0.588): осталось %.4f против %.4f"),
+        SlowLeft, FastLeft),
+        SlowLeft > FastLeft + KINDA_SMALL_NUMBER);
+
+    Manager->Destroy();
     return true;
 }
 

@@ -82,6 +82,16 @@ int32 UBiomeDefaultsSyncCommandlet::Main(const FString& Params)
         Changed += SyncField(N, TEXT("Environment.Toxicity"), Row->Environment.Toxicity, Doc.Toxicity) ? 1 : 0;
         Changed += SyncField(N, TEXT("Environment.Fertility"), Row->Environment.Fertility, Doc.Fertility) ? 1 : 0;
         Changed += SyncField(N, TEXT("Environment.Moisture"), Row->Environment.Moisture, Doc.Moisture) ? 1 : 0;
+        Changed += SyncField(N, TEXT("StressRecoveryMultiplier"), Row->StressRecoveryMultiplier, Doc.StressRecoveryMultiplier) ? 1 : 0;
+
+        // Отображаемое имя -- FText, не число, поэтому мимо SyncField.
+        const FString CurrentDisplay = Row->DisplayName.ToString();
+        if (!CurrentDisplay.Equals(Doc.DisplayName, ESearchCase::CaseSensitive))
+        {
+            UE_LOG(LogTemp, Display, TEXT("  ~ %s.DisplayName: '%s' -> '%s'"), N, *CurrentDisplay, Doc.DisplayName);
+            Row->DisplayName = FText::FromString(Doc.DisplayName);
+            ++Changed;
+        }
 
         if (Changed == Before)
         {
@@ -101,6 +111,6 @@ int32 UBiomeDefaultsSyncCommandlet::Main(const FString& Params)
     }
 
     UE_LOG(LogTemp, Display, TEXT("BiomeDefaultsSync: приведено к документации значений: %d"), Changed);
-    UE_LOG(LogTemp, Display, TEXT("НЕ трогались (документация их не задаёт): EntityActivityBase, DefaultWaterState, StressRecoveryMultiplier."));
+    UE_LOG(LogTemp, Display, TEXT("НЕ трогались (документация их не задаёт): EntityActivityBase, DefaultWaterState."));
     return 0;
 }
