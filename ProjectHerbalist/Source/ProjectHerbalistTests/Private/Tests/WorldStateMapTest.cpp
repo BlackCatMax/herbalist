@@ -19,6 +19,7 @@
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "Core/Config/HerbalistSettings.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -266,6 +267,134 @@ bool FHerbalistWorldStateMap_EndPlayStopsTheTimer::RunTest(const FString& Parame
 
     TestFalse(TEXT("EndPlay clears the upload timer"),
         Manager->IsWorldStateMapUpdateScheduled());
+
+    Manager->Destroy();
+    return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWorldStateMap_DiscreteChangeIsEasedNotJumped,
+    "Herbalist.WorldStateMap.DiscreteChangeIsEasedNotJumped",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWorldStateMap_DiscreteChangeIsEasedNotJumped::RunTest(const FString& Parameters)
+{
+    // Регрессия на замечание из редактора (2026-09-08): "цвет травы
+    // лерпается мгновенно после применения зелья на клетку, надо
+    // постепенно и очень медленно". Зелье меняет клетку СКАЧКОМ -- это
+    // правильно и в симуляции остаётся так; сглаживается только картинка.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const int32 X = 2;
+    const int32 Y = 2;
+    FGridCell* Cell = Manager->GetCell(X, Y);
+    if (!TestNotNull(TEXT("Cell (2,2) exists"), Cell))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    const int32 Index = Y * Manager->GridSizeX + X;
+
+    // Исходное состояние -- ноль, показываемое приравнено к нему.
+    Cell->State.Meta.Distortion = 0.0f;
+    Manager->SnapWorldStateMapDisplayToWorld();
+    const int32 Before = Manager->BuildWorldStateMapPixels()[Index].R;
+    TestTrue(TEXT("Snap makes the picture equal the world at once"), Before <= 1);
+
+    // Скачок, какой даёт зелье на клетку.
+    Cell->State.Meta.Distortion = 1.0f;
+    Manager->AdvanceWorldStateMapDisplay(1.0f);
+    const int32 AfterOneSecond = Manager->BuildWorldStateMapPixels()[Index].R;
+
+    // Главное утверждение: за секунду картинка НЕ доехала. Порог 128 --
+    // заведомо середина, чтобы тест ловил именно скачок, а не мелкую
+    // неточность округления.
+    TestTrue(TEXT("One second after a discrete jump the picture has NOT arrived"),
+        AfterOneSecond < 128);
+
+    // И проехала ровно на заявленную скорость (в пределах шага квантования).
+    const float ExpectedDelta = Manager->WorldStateMapVisualRatePerSecond * 1.0f * 255.0f;
+    TestTrue(TEXT("It moved by exactly the declared rate, within one quantisation step"),
+        FMath::Abs((AfterOneSecond - Before) - ExpectedDelta) <= 1.5f);
+
+    // За заведомо большое время -- доезжает полностью. Ограничение
+    // скорости, а не экспонента: приходит за конечное время, а не
+    // приближается вечно.
+    Manager->AdvanceWorldStateMapDisplay(1000.0f);
+    TestEqual(TEXT("Given enough time the picture arrives exactly"),
+        int32(Manager->BuildWorldStateMapPixels()[Index].R), 255);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWorldStateMap_PictureNeverOutrunsTheWorld,
+    "Herbalist.WorldStateMap.PictureNeverOutrunsTheWorld",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWorldStateMap_PictureNeverOutrunsTheWorld::RunTest(const FString& Parameters)
+{
+    // Правило, из которого взята скорость сглаживания: КАРТИНКА НЕ МЕНЯЕТСЯ
+    // БЫСТРЕЕ, ЧЕМ МИР СПОСОБЕН ИЗМЕНИТЬСЯ САМ. Предел собственного дрейфа
+    // Distortion -- MorokDistortionPushRate (множители в [0,1]).
+    //
+    // Тест связывает два числа, живущие в разных файлах. Замедлить картинку
+    // можно свободно (это вкус), а вот сделать её быстрее мира -- значит
+    // вернуть тот самый рывок, ради устранения которого всё писалось, и
+    // тогда этот тест упадёт и заставит подтвердить решение осознанно.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+    if (!TestNotNull(TEXT("Herbalist settings available"), Settings))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    TestTrue(TEXT("Visual catch-up rate never exceeds the world's own passive drift"),
+        Manager->WorldStateMapVisualRatePerSecond <= Settings->MorokDistortionPushRate + KINDA_SMALL_NUMBER);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWorldStateMap_ZeroRateDisablesEasing,
+    "Herbalist.WorldStateMap.ZeroRateDisablesEasing",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistWorldStateMap_ZeroRateDisablesEasing::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(1, 1);
+    if (!TestNotNull(TEXT("Cell (1,1) exists"), Cell))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    const int32 Index = 1 * Manager->GridSizeX + 1;
+
+    Cell->State.Meta.Distortion = 0.0f;
+    Manager->SnapWorldStateMapDisplayToWorld();
+
+    Manager->WorldStateMapVisualRatePerSecond = 0.0f;
+    Cell->State.Meta.Distortion = 1.0f;
+    Manager->AdvanceWorldStateMapDisplay(1.0f);
+
+    TestEqual(TEXT("Zero rate means the picture follows the world instantly"),
+        int32(Manager->BuildWorldStateMapPixels()[Index].R), 255);
 
     Manager->Destroy();
     return true;

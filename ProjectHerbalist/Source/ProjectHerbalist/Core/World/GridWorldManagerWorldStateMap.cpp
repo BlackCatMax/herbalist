@@ -55,6 +55,88 @@ namespace
         const float Clamped = FMath::Clamp(Value, 0.0f, 1.0f);
         return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Clamped * 255.0f), 0, 255));
     }
+
+    // Двигает Current к Target не быстрее MaxDelta. Именно ограничение
+    // скорости, а не экспоненциальное приближение -- довод у
+    // WorldStateMapVisualRatePerSecond в заголовке.
+    float StepToward(float Current, float Target, float MaxDelta)
+    {
+        if (MaxDelta <= 0.0f)
+        {
+            return Target;
+        }
+        return Current + FMath::Clamp(Target - Current, -MaxDelta, MaxDelta);
+    }
+}
+
+FVector4f AGridWorldManager::GetCellWorldStateAxes(const FGridCell& Cell) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ShrineRadius = Settings ? Settings->ShrineInfluenceRadius : 3;
+
+    // Каналы выбраны не произвольно: это ровно те четыре оси, которые шапка
+    // PCGHerbalistGridData.h называет практическим применением обратной
+    // связи "симуляция -> вид мира" ("почерневшая от Морока трава",
+    // "вытоптанная поляна редеет", "вокруг ухоженного капища гуще").
+    // Четыре канала стоят столько же, сколько один.
+    return FVector4f(
+        Cell.State.Meta.Distortion,
+        Cell.State.Meta.Corruption,
+        Cell.HarvestStress,
+        HerbalistCore::Shrine::GetInfluenceAt(
+            FIntPoint(Cell.X, Cell.Y), GetShrines(), ShrineRadius));
+}
+
+void AGridWorldManager::SnapWorldStateMapDisplayToWorld()
+{
+    if (GridSizeX <= 0 || GridSizeY <= 0 || Cells.Num() == 0)
+    {
+        DisplayedWorldState.Reset();
+        return;
+    }
+
+    DisplayedWorldState.SetNumZeroed(GridSizeX * GridSizeY);
+    ForEachCell([&](const FGridCell& Cell)
+    {
+        const int32 Index = GetCellIndex(Cell.X, Cell.Y);
+        if (DisplayedWorldState.IsValidIndex(Index))
+        {
+            DisplayedWorldState[Index] = GetCellWorldStateAxes(Cell);
+        }
+    });
+}
+
+void AGridWorldManager::AdvanceWorldStateMapDisplay(float DeltaSeconds)
+{
+    if (GridSizeX <= 0 || GridSizeY <= 0 || Cells.Num() == 0)
+    {
+        return;
+    }
+
+    // Первый вызов (или сетка сменила размер) -- приравниваем, а не
+    // догоняем: иначе при загрузке уровня мир выцветал бы из нулей на
+    // глазах у игрока, изображая изменение, которого не было.
+    if (DisplayedWorldState.Num() != GridSizeX * GridSizeY)
+    {
+        SnapWorldStateMapDisplayToWorld();
+        return;
+    }
+
+    const float MaxDelta = WorldStateMapVisualRatePerSecond * FMath::Max(DeltaSeconds, 0.0f);
+
+    ForEachCell([&](const FGridCell& Cell)
+    {
+        const int32 Index = GetCellIndex(Cell.X, Cell.Y);
+        if (!DisplayedWorldState.IsValidIndex(Index)) return;
+
+        const FVector4f Target = GetCellWorldStateAxes(Cell);
+        FVector4f& Shown = DisplayedWorldState[Index];
+
+        Shown.X = StepToward(Shown.X, Target.X, MaxDelta);
+        Shown.Y = StepToward(Shown.Y, Target.Y, MaxDelta);
+        Shown.Z = StepToward(Shown.Z, Target.Z, MaxDelta);
+        Shown.W = StepToward(Shown.W, Target.W, MaxDelta);
+    });
 }
 
 TArray<FColor> AGridWorldManager::BuildWorldStateMapPixels() const
@@ -72,30 +154,27 @@ TArray<FColor> AGridWorldManager::BuildWorldStateMapPixels() const
     // причём тихо и правдоподобно.
     Pixels.SetNumZeroed(GridSizeX * GridSizeY);
 
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ShrineRadius = Settings ? Settings->ShrineInfluenceRadius : 3;
-    const TArray<FShrine>& ShrineList = GetShrines();
+    // Читаем ПОКАЗЫВАЕМОЕ состояние, а не истинное: разница между ними и
+    // есть сглаживание рывков от дискретных событий, см.
+    // AdvanceWorldStateMapDisplay. Если сглаживание ещё не
+    // инициализировано, показываем истинное -- правильный кадр без
+    // сглаживания лучше чёрного.
+    const bool bHasDisplayState = DisplayedWorldState.Num() == GridSizeX * GridSizeY;
 
     ForEachCell([&](const FGridCell& Cell)
     {
         const int32 Index = GetCellIndex(Cell.X, Cell.Y);
         if (!Pixels.IsValidIndex(Index)) return;
 
-        // Каналы выбраны не произвольно: это ровно те четыре оси, которые
-        // шапка PCGHerbalistGridData.h называет практическим применением
-        // обратной связи "симуляция -> вид мира" ("почерневшая от Морока
-        // трава", "вытоптанная поляна редеет", "вокруг ухоженного капища
-        // гуще"). Четыре канала стоят столько же, сколько один, поэтому
-        // класть сюда меньше -- значит гарантировать вторую такую же
-        // текстуру через месяц.
-        const float Restoration = HerbalistCore::Shrine::GetInfluenceAt(
-            FIntPoint(Cell.X, Cell.Y), ShrineList, ShrineRadius);
+        const FVector4f Axes = bHasDisplayState
+            ? DisplayedWorldState[Index]
+            : GetCellWorldStateAxes(Cell);
 
         Pixels[Index] = FColor(
-            Quantize01(Cell.State.Meta.Distortion),   // R -- непрерывная порча
-            Quantize01(Cell.State.Meta.Corruption),   // G -- ось бистабильности
-            Quantize01(Cell.HarvestStress),           // B -- вытоптанность
-            Quantize01(Restoration));                 // A -- влияние капищ
+            Quantize01(Axes.X),   // R -- непрерывная порча
+            Quantize01(Axes.Y),   // G -- ось бистабильности
+            Quantize01(Axes.Z),   // B -- вытоптанность
+            Quantize01(Axes.W));  // A -- влияние капищ
     });
 
     return Pixels;
@@ -158,6 +237,10 @@ void AGridWorldManager::UpdateWorldStateMap()
     {
         return;   // Карта не назначена -- механизм просто выключен, это не ошибка.
     }
+
+    // Сначала двигаем картинку к миру, потом снимаем её. Шаг равен периоду
+    // таймера -- он и есть время, прошедшее с прошлой выгрузки.
+    AdvanceWorldStateMapDisplay(WorldStateMapUpdateIntervalSeconds);
 
     TArray<FColor> Pixels = BuildWorldStateMapPixels();
     if (Pixels.Num() == 0)

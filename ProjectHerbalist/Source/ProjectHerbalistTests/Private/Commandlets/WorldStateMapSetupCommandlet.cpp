@@ -31,9 +31,50 @@ namespace
         return UPackage::SavePackage(Package, Asset, *FileName, Args);
     }
 
+    // Синхронизирует UTexture::SRGB с UTextureRenderTarget2D::IsSRGB().
+    //
+    // Это НЕ перестраховка, а починка настоящей ошибки, найденной сразу
+    // после первого прогона (2026-09-08): материал не компилировался с
+    // "Sampler type is Linear Color, should be Color".
+    //
+    // У render target два независимых признака гаммы. Ресурс на GPU
+    // создаётся из IsSRGB() -- он для RTF_RGBA8 возвращает false, то есть
+    // сэмплирование и правда линейное. А редактор материалов сверяет тип
+    // сэмплера с унаследованным полем UTexture::SRGB, и вот оно
+    // синхронизируется ТОЛЬКО внутри PostEditChangeProperty. Объект,
+    // собранный через NewObject в коммандлете, этого события не видит
+    // никогда, и поле остаётся в дефолте UTexture (true) -- ассет заявляет
+    // sRGB, будучи линейным. Движок сам признаёт расхождение комментарием у
+    // IsSRGB(): "in theory you'd like the bool SRGB variable to == this,
+    // but it does not".
+    //
+    // Чинится существующим ассетам тоже, а не только новым: первый выпуск
+    // коммандлета уже успел создать битый.
+    void FixSRGBFlagIfStale(UTextureRenderTarget2D* RenderTarget)
+    {
+        const bool bShouldBeSRGB = RenderTarget->IsSRGB();
+        if (RenderTarget->SRGB == bShouldBeSRGB)
+        {
+            return;
+        }
+
+        UE_LOG(LogTemp, Display,
+            TEXT("  ~ SRGB: %s -> %s (поле ассета расходилось с IsSRGB(); материал из-за этого не компилировался)"),
+            RenderTarget->SRGB ? TEXT("true") : TEXT("false"),
+            bShouldBeSRGB ? TEXT("true") : TEXT("false"));
+
+        RenderTarget->SRGB = bShouldBeSRGB;
+        SaveWorldStateMapPackage(RenderTarget->GetOutermost(), RenderTarget);
+    }
+
     const TCHAR* RenderTargetPath = TEXT("/Game/Materials/RT_WorldStateMap");
     const TCHAR* CollectionPath   = TEXT("/Game/Materials/MPC_WorldStateFields");
-    const TCHAR* PlaytestMapPath  = TEXT("/Game/Maps/L_Playtest");
+    // Карта по умолчанию -- L_TestDev, а не L_Playtest: именно она
+    // EditorStartupMap/GameDefaultMap (Config/DefaultEngine.ini), именно на
+    // ней лежит настоящий ландшафт и PCG-компонент с травой. На L_Playtest
+    // PCG нет вовсе, и отклик растительности там показать не на чем.
+    // Переопределяется параметром -map=<путь>.
+    const TCHAR* DefaultMapPath = TEXT("/Game/Maps/L_TestDev");
 
     // Ищет менеджер сетки на карте, чтобы узнать размер сетки. Обход
     // PersistentLevel->Actors НАПРЯМУЮ, а не через TActorIterator: мир,
@@ -81,7 +122,11 @@ int32 UWorldStateMapSetupCommandlet::Main(const FString& Params)
     int32 SizeX = 256;
     int32 SizeY = 256;
 
-    UPackage* MapPackage = LoadPackage(nullptr, PlaytestMapPath, LOAD_None);
+    FString MapPath = DefaultMapPath;
+    FParse::Value(*Params, TEXT("map="), MapPath);
+    UE_LOG(LogTemp, Display, TEXT("Карта: %s"), *MapPath);
+
+    UPackage* MapPackage = LoadPackage(nullptr, *MapPath, LOAD_None);
     UWorld* MapWorld = MapPackage ? UWorld::FindWorldInPackage(MapPackage) : nullptr;
     AGridWorldManager* Manager = FindManagerInLevel(MapWorld);
 
@@ -89,13 +134,13 @@ int32 UWorldStateMapSetupCommandlet::Main(const FString& Params)
     {
         SizeX = FMath::Max(1, Manager->GridSizeX);
         SizeY = FMath::Max(1, Manager->GridSizeY);
-        UE_LOG(LogTemp, Display, TEXT("Сетка на L_Playtest: %d x %d клеток, клетка %.0f см"),
+        UE_LOG(LogTemp, Display, TEXT("Сетка на карте: %d x %d клеток, клетка %.0f см"),
             SizeX, SizeY, Manager->CellSize);
     }
     else
     {
         UE_LOG(LogTemp, Warning,
-            TEXT("Менеджер сетки на L_Playtest не найден -- размер цели взят по умолчанию (%d x %d). "
+            TEXT("Менеджер сетки на карте не найден -- размер цели взят по умолчанию (%d x %d). "
                  "Рантайм всё равно подгонит его под сетку через ResizeTarget."), SizeX, SizeY);
     }
 
@@ -105,8 +150,9 @@ int32 UWorldStateMapSetupCommandlet::Main(const FString& Params)
 
     if (RenderTarget)
     {
-        UE_LOG(LogTemp, Display, TEXT("RT_WorldStateMap уже есть (%d x %d) -- не трогаю."),
+        UE_LOG(LogTemp, Display, TEXT("RT_WorldStateMap уже есть (%d x %d)."),
             RenderTarget->SizeX, RenderTarget->SizeY);
+        FixSRGBFlagIfStale(RenderTarget);
     }
     else
     {
@@ -130,6 +176,7 @@ int32 UWorldStateMapSetupCommandlet::Main(const FString& Params)
         RenderTarget->ClearColor = FLinearColor::Black;
         RenderTarget->InitAutoFormat(SizeX, SizeY);
         RenderTarget->UpdateResourceImmediate(true);
+        FixSRGBFlagIfStale(RenderTarget);
 
         FAssetRegistryModule::AssetCreated(RenderTarget);
 
@@ -225,11 +272,11 @@ int32 UWorldStateMapSetupCommandlet::Main(const FString& Params)
     MapSaveArgs.SaveFlags = SAVE_NoError;
     if (!UPackage::SavePackage(MapPackage, MapWorld, *MapFileName, MapSaveArgs))
     {
-        UE_LOG(LogTemp, Error, TEXT("Не удалось сохранить карту %s"), PlaytestMapPath);
+        UE_LOG(LogTemp, Error, TEXT("Не удалось сохранить карту %s"), *MapPath);
         return 1;
     }
 
-    UE_LOG(LogTemp, Display, TEXT("RT_WorldStateMap назначен менеджеру на L_Playtest, карта сохранена."));
+    UE_LOG(LogTemp, Display, TEXT("RT_WorldStateMap назначен менеджеру, карта %s сохранена."), *MapPath);
     UE_LOG(LogTemp, Display, TEXT("=== WorldStateMapSetup: готово ==="));
     return 0;
 }
