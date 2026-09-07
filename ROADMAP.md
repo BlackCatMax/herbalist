@@ -217,9 +217,11 @@
   каналы R/G/B/A = Distortion/Corruption/HarvestStress/ShrineRestoration).
   Осталось: (а) назначить render target и завести чтение этой карты в
   материалах травы и ландшафта — редакторская и художественная работа, не код;
-  (б) дискретная смена флоры (колючки → цветы) по образцу CalystoWorld:
-  `Get Herbalist Grid` → HLSL-узел → `Out_SetStringKey` →
-  `PCGMeshSelectorByAttribute`, переключение по липкому `bDegrading`.
+  (б) дискретная смена флоры: узел `Sample Herbalist Cell` написан
+  (2026-09-08) и выдаёт точкам `MeshKey` по липкому `bDegrading`, но в графе
+  `PCG_Grass` не стоит — осталось вставить его перед спавнером, переключить
+  спавнер на `PCGMeshSelectorByAttribute` по `MeshKey` и завести две записи,
+  `Healthy` и `Degrading`, с разными мешами.
 - **`PCG_Grass` собран не по назначению** — четыре `StaticMeshSpawner` ставят
   ОДИН и тот же меш, а три `DensityFilter` (0.0–0.1, 0.1–0.3, 0.3–1.0) вместе
   покрывают весь диапазон и не отсеивают ничего; «ярусы» отличаются только
