@@ -29,8 +29,45 @@ void FBiomeDefaults::SetBiomeTable(UDataTable* InTable)
     }
 }
 
+// Ленивый фолбэк на случай, когда SetBiomeTable никто не позвал.
+// Push-инициализация живёт ровно в одном месте — AProjectHerbalistGameModeBase
+// ::BeginPlay, — а его нет ни в headless-автотесте (editor-мир без GameMode),
+// ни в коммандлетах. До 2026-09-07 это молча означало «все дефолты биомов
+// нулевые»: GetDefaultState отдавал пустой FRealState, и весь мир считался от
+// Distortion=0/Purity=0 вместо честных 0.25-0.70 из DT_BiomeDefaults.
+// Тесты от этого НЕ падали — они просто проверяли математику на нулевых
+// константах, что заметно слабее (найдено ревизией математики, MATH_REFERENCE
+// §8). Лечим причину, а не тестовый мир: тот же ленивый function-local static,
+// что уже несёт GetAmbientEntityDefinitions (Core/Entities/AmbientEntityTypes.h)
+// по тому же самому доводу. Push-путь GameMode остаётся и имеет приоритет —
+// он просто перестал быть ЕДИНСТВЕННЫМ.
+static void EnsureBiomeTableLoaded()
+{
+    if (BiomeDataTable) return;
+
+    // LoadObject не потокобезопасен. GetBiomeRow зовут в том числе из расчётной
+    // части мира, поэтому не check() — вне игрового потока просто сохраняем
+    // прежнее поведение (nullptr), а не роняем процесс.
+    if (!IsInGameThread()) return;
+
+    // Одна попытка на процесс: в cooked-сборке без этого ассета повторный
+    // LoadObject на каждый вызов GetBiomeRow стоил бы дороже самого расчёта.
+    static bool bTriedLazyLoad = false;
+    if (bTriedLazyLoad) return;
+    bTriedLazyLoad = true;
+
+    if (UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults")))
+    {
+        // Через SetBiomeTable, не прямым присваиванием — там же живёт AddToRoot,
+        // без которого сырой static-указатель собирает GC примерно через минуту
+        // (та же авария, что описана в самом SetBiomeTable).
+        FBiomeDefaults::SetBiomeTable(Table);
+    }
+}
+
 const FBiomeRow* FBiomeDefaults::GetBiomeRow(EBiomeType Biome)
 {
+    EnsureBiomeTableLoaded();
     if (!BiomeDataTable) return nullptr;
     FName RowName = BiomeTypeToName(Biome);
     return BiomeDataTable->FindRow<FBiomeRow>(RowName, TEXT("GetBiomeRow"));

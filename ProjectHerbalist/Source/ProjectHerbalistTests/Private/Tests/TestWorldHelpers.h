@@ -51,37 +51,18 @@ namespace
     // остальных хелперов этого файла: тест получает предсказуемый мир,
     // не то, что случайно лежит на уровне. Region->Destroy() — только в
     // этом одноразовом headless-процессе, .umap на диске не трогается.
-    // Таблица биомов (2026-09-07). FBiomeDefaults::GetDefaultState читает
-    // static-указатель, который выставляет ТОЛЬКО
-    // AProjectHerbalistGameModeBase::BeginPlay — в editor-мире автотеста его
-    // нет, поэтому до этой правки ВСЕ тесты видели дефолты биомов нулевыми
-    // (найдено 2026-09-07 при ревизии математики: зонд показал
-    // "biome default Distortion=0.00000" вместо честных 0.25-0.70). Тесты от
-    // этого не падали — они просто проверяли математику на нулевых
-    // константах, что заметно слабее. Тот же путь, что у GameMode.
-    void EnsureBiomeTableLoaded()
-    {
-        static bool bTried = false;
-        if (bTried) return;
-        bTried = true;
-        if (UDataTable* BiomeTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_BiomeDefaults")))
-        {
-            FBiomeDefaults::SetBiomeTable(BiomeTable);
-        }
-    }
-
     AGridWorldManager* SpawnAndBeginPlay(UWorld* World, const TArray<AActor*>& KeepRegions = {})
     {
         if (!World) return nullptr;
 
-        // ВНИМАНИЕ (2026-09-07): EnsureBiomeTableLoaded() здесь НЕ вызывается
-        // намеренно. Включение реальной таблицы биомов роняет 9 существующих
-        // тестов -- они писались против нулевых дефолтов и проверяют
-        // поведение, которого при настоящих данных нет (какое существо
-        // проявится, останется ли сетка разреженной при нулевых полях).
-        // Это отдельная, немаленькая работа с дизайн-суждением по каждому
-        // случаю, а не хвост текущей правки -- заведено отдельным пунктом в
-        // ROADMAP.md и MATH_REFERENCE.md §8.
+        // Дефолты биомов (2026-09-07). Здесь ничего делать не нужно: с этого
+        // дня FBiomeDefaults грузит DT_BiomeDefaults лениво сам
+        // (Core/Types/BiomeTypes.cpp), поэтому тесты видят те же 0.25-0.70,
+        // что и настоящая игра. До этого таблицу поднимал ТОЛЬКО
+        // AProjectHerbalistGameModeBase::BeginPlay, которого в editor-мире
+        // автотеста нет, и весь прогон молча считал математику на нулевых
+        // константах.
+
         for (TActorIterator<ABiomeRegionVolume> It(World); It; ++It)
         {
             ABiomeRegionVolume* Region = *It;
@@ -116,6 +97,21 @@ namespace
             Manager->DispatchBeginPlay();
         }
         return Manager;
+    }
+
+    // Дефолт биома ДЛЯ КОНКРЕТНОЙ КЛЕТКИ -- ровно тот выбор land/water, что
+    // делают и GetBiomeSamples, и ApplyBiomeInfluences (GridWorldManagerCore.cpp).
+    // Нужен любому тесту, который считает ожидание для математики на
+    // ОТКЛОНЕНИЯХ от дефолта биома (Морок/Заряна, 2026-09-07): у водяных
+    // клеток дефолт свой, и у Болота он заметно другой (0.75 против 0.70 по
+    // Distortion). Тест, зашивший число одного из двух вариантов, молча
+    // зависел бы от того, водной ли оказалась клетка (0,0) в этом мире --
+    // ровно на этом и попались два теста при включении настоящей таблицы.
+    FRealState BiomeDefaultStateForCell(const FGridCell& Cell)
+    {
+        return Cell.bIsWater
+            ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
+            : FBiomeDefaults::GetDefaultState(Cell.Biome);
     }
 
     // Тот же ODR-урок, что и у SpawnAndBeginPlay выше -- было продублировано

@@ -585,6 +585,42 @@ bool FHerbalistSystemInteraction_AmbientSweepAcrossAllBiomes::RunTest(const FStr
         const float AxisValue = FMath::Clamp(Def.bTriggerAbove ? Def.TriggerThreshold + Margin : Def.TriggerThreshold - Margin, 0.0f, 1.0f);
         SetAmbientTriggerAxisValue(*Cell, Def.TriggerAxis, AxisValue);
 
+        // Изолируем подопытную клетку от правила разрежения
+        // (IsCrowdedBySameEntity): существо не проявится, если то же самое
+        // существо уже стоит ближе своей MinSpacingMeters. Свод проверяет
+        // ГЕЙТ ИСПОРЧЕННОГО ПОЛЮСА, а не расстановку по сетке, поэтому
+        // соседи не должны влиять на него вовсе.
+        //
+        // До 2026-09-07 это сходило с рук случайно: тесты молча гонялись на
+        // НУЛЕВЫХ дефолтах биомов, осевые пороги у соседних клеток сами по
+        // себе не срабатывали, и претендентов рядом просто не было. С
+        // настоящей DT_BiomeDefaults часть карточек проходит свой порог уже
+        // на природном состоянии биома -- у Жердяев порог Distortion 0.20
+        // против природных 0.30 у Широколиственного леса, -- они занимают
+        // весь биом, и соседи в радиусе 30 м глушат саму подопытную клетку.
+        // Тест падал с "клетку держит: никто": существо не изгоняли, ему
+        // не давали проявиться, а это совсем другое утверждение.
+        //
+        // Меняем СОСЕДЯМ БИОМ, а не чистим им ManifestedEntityID: чистка
+        // перед вызовом бесполезна -- UpdateEntityManifestations обходит
+        // клетки по порядку и успевает заново заселить соседей в том же
+        // тике, ДО того как дойдёт до (6,6) (проверено замером). Гейт по
+        // биому стоит в самом начале цепочки и отсекает их насовсем.
+        const EBiomeType IsolationBiome = (Def.Biome == EBiomeType::Tundra)
+            ? EBiomeType::Taiga : EBiomeType::Tundra;
+        for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
+        {
+            for (int32 X = 0; X < Manager->GridSizeX; ++X)
+            {
+                if (X == Cell->X && Y == Cell->Y) continue;
+                if (FGridCell* Other = Manager->GetCell(X, Y))
+                {
+                    Other->Biome = IsolationBiome;
+                    Other->ManifestedEntityID = NAME_None;
+                }
+            }
+        }
+
         bool bSawNaNOrOutOfRange = false;
         for (int32 i = 0; i < 50; ++i)
         {
@@ -608,16 +644,42 @@ bool FHerbalistSystemInteraction_AmbientSweepAcrossAllBiomes::RunTest(const FStr
         const bool bExpectedExempt = IsAxisConsistentWithCorruptPole(Def.TriggerAxis, Def.bTriggerAbove);
         if (bExpectedExempt)
         {
-            // Гнильники (тоже Corruption-согласованный, тот же приоритет-ранг
-            // 0) могут забрать ту же клетку первыми на общем Bog-биоме -- уже
-            // задокументированный артефакт методики (форсированный
-            // Corruption=0.95 заодно удовлетворяет и их порог), не признак
-            // того, что гейт неправильно изгнал существо под тестом. Считаем
-            // "не несостыковка", если клетку удержало ЛИБО само существо,
-            // ЛИБО Гнильники -- обе исход согласованы с испорченным полюсом.
-            const bool bLostToGnilnikiPriorityArtifact = Cell->Memory.bDegrading && Cell->ManifestedEntityID == FName(TEXT("Гнильники"));
-            TestTrue(FString::Printf(TEXT("[%s/%s] axis-consistent entity is not incoherently evicted from a bDegrading cell"),
-                *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome)), bManifestedAsSelf || bLostToGnilnikiPriorityArtifact);
+            // Клетку мог забрать первым ДРУГОЙ Низший того же биома -- все
+            // они одного ранга (0), а CanManifest не даёт вытеснить равного,
+            // так что побеждает тот, кто раньше в реестре по SortOrder.
+            // Форсированные Corruption=0.95 и последующий полюс (Distortion=1,
+            // Purity=0, Stability=0) удовлетворяют пороги сразу нескольким
+            // карточкам разом. Это артефакт методики, а не признак того, что
+            // гейт неправильно ИЗГНАЛ существо под тестом -- проверка ведь
+            // про "не изгнали несогласованно", и держатель, согласованный с
+            // тем же полюсом, этому не противоречит.
+            //
+            // Раньше здесь по имени разрешались одни Гнильники (2026-08-30) --
+            // единственный случай, который тогда реально всплывал. 2026-09-07,
+            // при включении настоящей DT_BiomeDefaults, тем же способом
+            // всплыл второй (Жердяи на Широколиственном лесу уступают
+            // Стукачам: оба по Distortion, у Стукачей меньше SortOrder), так
+            // что частный случай заменён общим правилом -- по СОГЛАСОВАННОСТИ
+            // держателя с полюсом, а не по его имени.
+            FName HolderID = Cell->ManifestedEntityID;
+            bool bHeldByPoleConsistentPeer = false;
+            if (Cell->Memory.bDegrading && !HolderID.IsNone() && HolderID != Def.EntityID)
+            {
+                for (const FAmbientEntityDefinition& Other : GetAmbientEntityDefinitions())
+                {
+                    if (Other.EntityID != HolderID) continue;
+                    bHeldByPoleConsistentPeer = IsAxisConsistentWithCorruptPole(Other.TriggerAxis, Other.bTriggerAbove);
+                    break;
+                }
+            }
+            TestTrue(FString::Printf(TEXT("[%s/%s] axis-consistent entity is not incoherently evicted from a bDegrading cell (держит: %s | ось %d порог %.2f above=%d | State D=%.3f C=%.3f P=%.3f S=%.3f | Target D=%.3f C=%.3f | degrading=%d pure=%d water=%d)"),
+                *Def.EntityID.ToString(), *UEnum::GetValueAsString(Def.Biome),
+                HolderID.IsNone() ? TEXT("никто") : *HolderID.ToString(),
+                static_cast<int32>(Def.TriggerAxis), Def.TriggerThreshold, Def.bTriggerAbove ? 1 : 0,
+                Cell->State.Meta.Distortion, Cell->State.Meta.Corruption, Cell->State.Meta.Purity, Cell->State.Meta.Stability,
+                Cell->TargetState.Meta.Distortion, Cell->TargetState.Meta.Corruption,
+                Cell->Memory.bDegrading ? 1 : 0, Cell->bEternallyPure ? 1 : 0, Cell->bIsWater ? 1 : 0),
+                bManifestedAsSelf || bHeldByPoleConsistentPeer);
         }
         else
         {

@@ -489,8 +489,20 @@ bool FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes::RunTe
         ++Index;
     }
 
-    // Нейтрализуем RecalculateFieldsFromGrid -- каждая клетка получает
-    // Distortion, равный текущему полю ЕЁ СОБСТВЕННОГО биома.
+    // Нейтрализуем RecalculateFieldsFromGrid -- сетка должна отдать графу
+    // ровно то поле, которое у него уже есть, чтобы блендинг ничего не
+    // менял и в балансе остались только диффузия и декей.
+    //
+    // ВАЖНО: GetBiomeSamples отдаёт Морок как ОТКЛОНЕНИЕ Distortion от
+    // дефолта биома (2026-09-07), поэтому нейтральная клетка стоит на
+    // "дефолт + поле", а не на голом поле. Раньше здесь было просто
+    // `= Node->MorokField`: при нулевых дефолтах биомов, на которых до
+    // 2026-09-07 молча гонялись все тесты, эти две формулы совпадали.
+    // С настоящей DT_BiomeDefaults разошлись -- сетка вносила -Default в
+    // каждый узел, и сумма Морока падала на 24% за шаг вместо 0.2%
+    // (замер: 4.000 -> 3.039 при ожидаемых 3.992). Диффузия при этом была
+    // и осталась консервативной; неверна была подготовка мира в тесте.
+    // Водяные клетки берут СВОЙ дефолт -- ровно как GetBiomeSamples.
     for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
     {
         for (int32 X = 0; X < Manager->GridSizeX; ++X)
@@ -500,7 +512,10 @@ bool FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes::RunTe
             const FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
             if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
             {
-                Cell->State.Meta.Distortion = Node->MorokField;
+                const FRealState BiomeDefault = Cell->bIsWater
+                    ? FBiomeDefaults::GetDefaultWaterState(Cell->Biome)
+                    : FBiomeDefaults::GetDefaultState(Cell->Biome);
+                Cell->State.Meta.Distortion = BiomeDefault.Meta.Distortion + Node->MorokField;
             }
         }
     }

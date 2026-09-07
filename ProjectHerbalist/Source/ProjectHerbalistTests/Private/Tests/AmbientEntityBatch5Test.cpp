@@ -122,7 +122,12 @@ bool FHerbalistAmbientEntity_ProxyStubEntitiesManifestOnTheirConditions::RunTest
     FGridCell* WhisperCell = Manager->GetCell(0, 0);
     WhisperCell->Biome = EBiomeType::Tundra;
     WhisperCell->bIsWater = false;
-    WhisperCell->State.Meta.Stability = 0.5f;
+    // Гейт Шептунов -- Spirit >= 0.40 (решение пользователя 2026-09-07,
+    // ось и число из карточки компендиума). Раньше стоял вырожденный
+    // Stability >= 0.0, истинный всегда, поэтому клетку не нужно было
+    // готовить вовсе -- и именно из-за него Шептуны занимали всю тундру,
+    // навсегда закрывая Метельников/Ледяных духов/Снежные огни.
+    WhisperCell->State.Direction.Spirit = 0.5f;
 
     // Подпольники: HarvestStress в окне (0.4, 0.6] -- ниже злыдневского
     // порога (0.6), иначе на том же биоме выиграли бы Злыдни (зарегистрированы раньше).
@@ -141,6 +146,13 @@ bool FHerbalistAmbientEntity_ProxyStubEntitiesManifestOnTheirConditions::RunTest
     StumpCell->bIsWater = false;
     StumpCell->HarvestStress = 0.0f;
     StumpCell->State.Meta.Purity = 0.1f;   // ниже порога Моховых духов (0.75), не коллизия
+    // Nature ниже порога Чащобных духов (0.45) -- тот же довод, что и по
+    // Purity строкой выше. Понадобилось 2026-09-07, когда тесты перестали
+    // молча гонять мир на НУЛЕВЫХ дефолтах биомов: клетке меняют Biome, но
+    // не State, поэтому Direction ей достаётся от биома, которым она
+    // родилась при генерации. Природная Nature самой Тайги 0.25 после
+    // NormalizeSum -- ниже порога, коллизия чисто тестовая.
+    StumpCell->State.Direction.Nature = 0.2f;
 
     const FRealState WhisperBefore = WhisperCell->TargetState;
     const FRealState CellarBefore = CellarCell->TargetState;

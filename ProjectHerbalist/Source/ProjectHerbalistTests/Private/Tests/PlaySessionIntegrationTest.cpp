@@ -315,7 +315,22 @@ bool FHerbalistPlaySession_SaveAndReloadMidSession::RunTest(const FString& Param
     RunRealCommand(HarvestAgain, Manager, Inventory, RngHarvestAgain);
     for (int32 i = 0; i < 10; ++i) Manager->Tick(1.0f);
 
-    TestEqual(TEXT("Post-save play left two items in the live inventory"), Inventory->GetItems().Num(), 2);
+    // Считаем ПРЕДМЕТЫ, не слоты (2026-09-07). Проверка звучала как "two
+    // items", но смотрела на GetItems().Num() -- число СТОПОК. Два сбора
+    // одного и того же SwampReed с одинаковыми флагами стекуются в один
+    // слот (AreItemsStackable сверяет ID и флаги, не состояние), так что
+    // "два предмета" и "два слота" -- разные утверждения, и совпадали они
+    // лишь по стечению обстоятельств в мире с нулевыми дефолтами биомов.
+    // Смысл проверки -- что игра ПОСЛЕ сохранения реально доиграла второй
+    // сбор (и что он не протёк в сейв, см. проверку перезагруженного
+    // инвентаря ниже), а это ровно про количество предметов.
+    FString LiveInventoryDump;
+    for (const FInventoryItem& Slot : Inventory->GetItems())
+    {
+        LiveInventoryDump += FString::Printf(TEXT("[%s x%d] "), *Slot.IngredientID.ToString(), Slot.Count);
+    }
+    TestEqual(FString::Printf(TEXT("Post-save play left two items in the live inventory (слоты: %s)"), *LiveInventoryDump),
+        CountItemsWithID(Inventory, FName(TEXT("SwampReed"))), 2);
     const float LiveHerbCellDistortionAfterMorePlay = Manager->GetCellConst(3, 3)->State.Meta.Distortion;
 
     // "Игрок закрывает игру и заново заходит" -- свежие объекты, ничего не

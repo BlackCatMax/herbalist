@@ -489,4 +489,143 @@ bool FHerbalistAmbientEntity_ItemCorruptingEntitiesManifestWithoutDirtyingTheCel
     return true;
 }
 
+// ============================================================================
+// Структурные инварианты реестра Низшего ранга (2026-09-07)
+// ============================================================================
+
+// Вырожденный осевой порог: гейт формально есть, а условия нет.
+//
+// Загрузчик реестра (GetAmbientEntityDefinitions, AmbientEntityTypes.h) уже
+// отбраковывает карточку БЕЗ единого гейта -- "заявляла бы клетку безусловно
+// каждый тик". Но `TriggerAxis = Stability, TriggerThreshold = 0.0,
+// bTriggerAbove = true` формально гейт, а по сути то же самое: ось живёт в
+// [0,1], условие "ось >= 0" истинно всегда. Ровно так и было заведено у
+// Шептунов и Плескунов, с пометкой "тонкий гейт... декоративный".
+//
+// Декоративным это не оказалось. Низшие все одного ранга, а CanManifest
+// (GridWorldManagerEntities.cpp) не даёт вытеснить существо РАВНОГО ранга --
+// занявший клетку первым держит её, пока сам не перестанет проходить свой
+// гейт. Вечно истинный гейт не отпускает никогда: Шептуны заняли всю сухую
+// тундру и навсегда закрыли Метельников (метель), Ледяных духов (зима) и
+// Снежные огни (ночь); Плескуны -- всю воду поймы и Русалок с Кувшинкиными
+// духами и Омутными огнями. Три автотеста падали на этом.
+//
+// Замечено только 2026-09-07, когда FBiomeDefaults начал грузить настоящую
+// DT_BiomeDefaults и в автотестах: на нулевых дефолтах соседние карточки
+// своих порогов не проходили, конкуренции не возникало, и вырожденность
+// ничего не ломала. Тест проверяет ВЕСЬ реестр, не две исправленные
+// карточки -- иначе следующая такая заявка пройдёт так же тихо.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_NoCardHasAVacuousAxisGate,
+    "Herbalist.AmbientEntity.NoCardHasAVacuousAxisGate",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_NoCardHasAVacuousAxisGate::RunTest(const FString& Parameters)
+{
+    const TArray<FAmbientEntityDefinition>& Defs = GetAmbientEntityDefinitions();
+    if (!TestTrue(TEXT("Реестр Низшего ранга не пуст"), Defs.Num() > 0)) return false;
+
+    for (const FAmbientEntityDefinition& Def : Defs)
+    {
+        if (Def.TriggerAxis == EAmbientTriggerAxis::None) continue;   // гейт не осевой, проверяют другие тесты
+
+        // Все оси реестра (Meta и Direction) живут в [0,1]: "ось >= 0"
+        // истинно всегда, "ось <= 1" -- тоже.
+        if (Def.bTriggerAbove)
+        {
+            TestTrue(FString::Printf(TEXT("[%s] порог %.3f по оси-«выше» не вырожден (ось >= 0 истинно всегда)"),
+                *Def.EntityID.ToString(), Def.TriggerThreshold),
+                Def.TriggerThreshold > KINDA_SMALL_NUMBER);
+        }
+        else
+        {
+            TestTrue(FString::Printf(TEXT("[%s] порог %.3f по оси-«ниже» не вырожден (ось <= 1 истинно всегда)"),
+                *Def.EntityID.ToString(), Def.TriggerThreshold),
+                Def.TriggerThreshold < 1.0f - KINDA_SMALL_NUMBER);
+        }
+    }
+    return true;
+}
+
+// Настоящая таблица биомов доступна автотестам БЕЗ GameMode.
+//
+// До 2026-09-07 FBiomeDefaults получал DT_BiomeDefaults единственным путём --
+// push-вызовом SetBiomeTable из AProjectHerbalistGameModeBase::BeginPlay.
+// В editor-мире автотеста GameMode не запускается вовсе, поэтому
+// GetDefaultState молча отдавала пустой FRealState, и ВЕСЬ прогон проверял
+// математику мира на нулевых константах вместо честных 0.25-0.70. Тесты от
+// этого не падали -- они просто проверяли заметно более слабое утверждение
+// (найдено ревизией математики, MATH_REFERENCE.md §8).
+//
+// Тест намеренно НЕ зовёт SetBiomeTable сам: он проверяет ровно то, что
+// таблица приезжает без посторонней помощи (ленивый фолбэк в
+// Core/Types/BiomeTypes.cpp). Числа сверяются с DT_BiomeDefaults.json.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeDefaults_RealTableIsAvailableWithoutGameMode,
+    "Herbalist.BiomeDefaults.RealTableIsAvailableWithoutGameMode",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeDefaults_RealTableIsAvailableWithoutGameMode::RunTest(const FString& Parameters)
+{
+    // Утверждения СТРУКТУРНЫЕ, без зашитых чисел. Первая редакция этого
+    // теста сверялась с herbalist_docs/CSV_tabs/DT_BiomeDefaults.json и
+    // упала: документный экспорт разошёлся с настоящим ассетом (Болото
+    // Distortion 0.70 в json против 0.750 в игре, Тайга Purity 0.80 против
+    // 0.700). Расхождение зафиксировано отдельным пунктом; тест не должен
+    // падать от него -- он про то, что таблица ВООБЩЕ приезжает, а не про
+    // конкретные величины баланса, у которых свой источник правды.
+    int32 BiomesWithContent = 0;
+    bool bAnyWaterDiffersFromLand = false;
+
+    for (EBiomeType Biome : FBiomeDefaults::GetAllBiomeTypes())
+    {
+        const FRealState Land = FBiomeDefaults::GetDefaultState(Biome);
+        const FRealState Water = FBiomeDefaults::GetDefaultWaterState(Biome);
+        const FName Name = FBiomeDefaults::BiomeTypeToName(Biome);
+
+        // Печатаем настоящие числа в лог: единственное место, где реальное
+        // содержимое DT_BiomeDefaults видно, не открывая редактор.
+        AddInfo(FString::Printf(TEXT("[%s] земля D=%.3f S=%.3f P=%.3f C=%.3f | Direction B=%.3f M=%.3f Sp=%.3f N=%.3f | вода D=%.3f"),
+            *Name.ToString(),
+            Land.Meta.Distortion, Land.Meta.Stability, Land.Meta.Purity, Land.Meta.Corruption,
+            Land.Direction.Body, Land.Direction.Mind, Land.Direction.Spirit, Land.Direction.Nature,
+            Water.Meta.Distortion));
+
+        const bool bHasContent = Land.Meta.Distortion > KINDA_SMALL_NUMBER
+            || Land.Meta.Stability > KINDA_SMALL_NUMBER
+            || Land.Meta.Purity > KINDA_SMALL_NUMBER;
+        if (bHasContent) ++BiomesWithContent;
+
+        if (!FMath::IsNearlyEqual(Land.Meta.Distortion, Water.Meta.Distortion, KINDA_SMALL_NUMBER))
+        {
+            bAnyWaterDiffersFromLand = true;
+        }
+
+        // Direction нормализуется в GetDefaultState (NormalizeSum) -- в
+        // таблице суммы порядка 2.0. Это ровно та деталь, на которой я
+        // ошибся при первом аудите карточек Низшего ранга: пороги
+        // Direction-осей сравниваются с НОРМАЛИЗОВАННЫМ значением, а не с
+        // сырым числом из таблицы, и половина выводов от этого меняется.
+        const float DirectionSum = Land.Direction.Body + Land.Direction.Mind
+            + Land.Direction.Spirit + Land.Direction.Nature;
+        TestTrue(FString::Printf(TEXT("[%s] Direction нормализован (сумма %.4f, ожидалась 1.0)"), *Name.ToString(), DirectionSum),
+            FMath::IsNearlyEqual(DirectionSum, 1.0f, 0.01f));
+    }
+
+    // Главное утверждение: таблица приехала САМА, без GameMode. До
+    // 2026-09-07 push-вызов SetBiomeTable жил единственным местом --
+    // AProjectHerbalistGameModeBase::BeginPlay, которого в editor-мире
+    // автотеста нет, и GetDefaultState молча отдавала пустой FRealState.
+    // Весь прогон проверял математику мира на нулевых константах вместо
+    // честных значений -- тесты при этом не падали, просто проверяли
+    // заметно более слабое утверждение (MATH_REFERENCE.md §8).
+    TestEqual(TEXT("Все 8 биомов несут ненулевые дефолты -- значит DT_BiomeDefaults загрузилась без GameMode"),
+        BiomesWithContent, FBiomeDefaults::GetAllBiomeTypes().Num());
+
+    // Ветка воды живая и отличается хотя бы у одного биома: вся математика
+    // отклонений выбирает между сухопутным и водяным дефолтом по
+    // Cell.bIsWater, и молчаливое схлопывание веток обесценило бы её.
+    TestTrue(TEXT("Водяной дефолт хотя бы у одного биома отличается от сухопутного"), bAnyWaterDiffersFromLand);
+
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

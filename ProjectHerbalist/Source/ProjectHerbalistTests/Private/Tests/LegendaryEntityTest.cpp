@@ -62,7 +62,15 @@ bool FHerbalistLegendary_MalignPoleTriggersOnMorokSpike::RunTest(const FString& 
         return false;
     }
 
-    Node->MorokField = 0.1f;   // низкий -- не должен триггерить
+    // MorokField -- ЗНАКОВОЕ ОТКЛОНЕНИЕ от природного Distortion биома
+    // (2026-09-07), а пороги легендарных (MorokThreshold) заданы в
+    // АБСОЛЮТНОЙ шкале и читаются через GetAmbientMorok = дефолт + поле.
+    // Для Болота дефолт 0.70, порог Болотного царя 0.75 -- значит "низкий
+    // Морок" здесь обязан быть ОТРИЦАТЕЛЬНЫМ отклонением, а не маленьким
+    // положительным. Прежние 0.1f давали ambient 0.80, то есть на деле
+    // спайк: тест проходил только потому, что в тестовом мире дефолты
+    // биомов были нулевыми и ambient совпадал с самим полем.
+    Node->MorokField = -0.3f;   // ambient 0.40 -- честно низкий, не должен триггерить
     Manager->UpdateEntityManifestations(1.0f);
     FGridCell* Cell = Manager->GetCell(Anchor->X, Anchor->Y);
     TestNotEqual(TEXT("Low MorokField does not manifest Болотный царь"),
@@ -125,8 +133,11 @@ bool FHerbalistLegendary_BenignPoleTriggersOnLowMorokOrShrine::RunTest(const FSt
     TestNotEqual(TEXT("High MorokField, no shrine -- Дуб-старец does not manifest"),
         Cell->ManifestedEntityID, FName(TEXT("Дуб-старец")));
 
-    // Первый путь: MorokField падает достаточно низко.
-    Node->MorokField = 0.05f;
+    // Первый путь: ambient-Морок падает достаточно низко. Дефолт
+    // Широколиственного леса 0.30, потолок Дуба-старца 0.20 -- то есть
+    // Благой ранг требует, чтобы лес увели НИЖЕ его собственной природы
+    // (см. довод про знаковое отклонение у Болотного царя выше).
+    Node->MorokField = -0.2f;   // ambient 0.10 -- ниже потолка 0.20
     const float StabilityBefore = Cell->TargetState.Meta.Stability;
     Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("Low MorokField manifests Дуб-старец"),

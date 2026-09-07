@@ -139,6 +139,18 @@ bool FHerbalistAmbientEntity_DecorativeEntitiesManifestWithoutEffect::RunTest(co
     // исправление, что у Трясинных духов выше: Ржавые духи регистрируются
     // раньше в реестре и забрали бы ManifestedEntityID первыми на Stability=0.
     BogFireCell->State.Meta.Stability = 0.5f;
+    // Nature ниже порога Трясинных духов (0.4) -- та же коллизия и то же
+    // исправление, что у Ржавых духов строкой выше, но по Direction-оси.
+    // Понадобилось 2026-09-07, когда тесты перестали молча гонять мир на
+    // НУЛЕВЫХ дефолтах биомов: тест меняет клетке Biome, но НЕ State, так
+    // что Direction ей достаётся от того биома, которым клетка родилась при
+    // генерации. Пока все дефолты были нулевыми, Nature была 0 и порога не
+    // проходила никогда; с настоящей DT_BiomeDefaults она стала зависеть от
+    // случайной раскладки мира, и Трясинные духи (раньше в реестре по
+    // SortOrder) забирали ManifestedEntityID первыми. Природная Nature
+    // самого Болота, к слову, 0.30 после NormalizeSum -- ниже порога, то
+    // есть в настоящей игре этой коллизии нет, она чисто тестовая.
+    BogFireCell->State.Direction.Nature = 0.2f;
     BogFireCell->State.Meta.Distortion = 0.7f;
     BogFireCell->TargetState.Meta.Distortion = 0.7f;
     const float BogDistortionBefore = BogFireCell->TargetState.Meta.Distortion;
