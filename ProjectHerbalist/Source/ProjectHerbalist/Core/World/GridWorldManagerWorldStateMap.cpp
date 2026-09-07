@@ -43,6 +43,8 @@
 #include "RenderingThread.h"
 #include "RHICommandList.h"
 #include "TextureResource.h"
+#include "Materials/MaterialParameterCollection.h"
+#include "Kismet/KismetMaterialLibrary.h"
 
 namespace
 {
@@ -131,6 +133,26 @@ void AGridWorldManager::GetWorldStateMapFrame(FVector& OutOrigin, FVector2D& Out
 
 void AGridWorldManager::UpdateWorldStateMap()
 {
+    // Рамка карты -- отдельно от самой выгрузки и ДО проверки цели: она
+    // нужна материалу, даже если render target ещё не назначен, и стоит
+    // ровно ничего (две записи в MPC раз в секунду).
+    if (UWorld* CurrentWorld = GetWorld())
+    {
+        if (UMaterialParameterCollection* Frame = WorldStateFrameCollection.LoadSynchronous())
+        {
+            FVector Origin;
+            FVector2D WorldSize;
+            GetWorldStateMapFrame(Origin, WorldSize);
+
+            UKismetMaterialLibrary::SetVectorParameterValue(CurrentWorld, Frame,
+                TEXT("WorldStateMapOrigin"),
+                FLinearColor(Origin.X, Origin.Y, Origin.Z, 0.0f));
+            UKismetMaterialLibrary::SetVectorParameterValue(CurrentWorld, Frame,
+                TEXT("WorldStateMapSize"),
+                FLinearColor(WorldSize.X, WorldSize.Y, 0.0f, 0.0f));
+        }
+    }
+
     UTextureRenderTarget2D* Target = WorldStateMap.LoadSynchronous();
     if (!Target)
     {

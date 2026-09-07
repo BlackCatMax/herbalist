@@ -14,6 +14,7 @@
 | `-run=DataTableExport -out=<папка>` | Выгружает настоящее содержимое всех DataTable в json для сверки с документацией/`CSV_tabs` | 2026-09-07 |
 | `-run=PlaytestMapResize [-size=N] [-dryrun]` | Перекладывает биом-полосы под новый размер сетки; без `-size` — размер сохраняется, только пересчёт | 2026-09-07 |
 | `-run=ArtifactIngredientAppendCommandlet` | Добавляет ряды артефактов/перьев (§21.3, §16.4) в `DT_IngredientClass` как невыпадающие невидимо портящиеся предметы | 2026-09-02 |
+| `-run=WorldStateMapSetup` | Создаёт `RT_WorldStateMap` (размер = сетке, линейная гамма, билинейный, clamp), заводит в `MPC_WorldStateFields` параметры рамки и назначает всё менеджеру на `L_Playtest`. Идемпотентен | 2026-09-08 |
 
 ## Python-скрипты (`herbalist_docs/`)
 

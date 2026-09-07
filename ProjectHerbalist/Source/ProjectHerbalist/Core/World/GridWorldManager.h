@@ -34,6 +34,7 @@ class AHerbalistPlayerController;
 class ALandscape;
 class ABiomeRegionVolume;
 class AStorageContainer;
+class UMaterialParameterCollection;
 struct FWorldSnapshot;
 struct FStateDelta;
 
@@ -122,6 +123,15 @@ public:
     // в автотестах и headless-прогонах рисовать всё равно некуда.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
     TSoftObjectPtr<UTextureRenderTarget2D> WorldStateMap;
+
+    // Куда класть рамку карты (начало и размер сетки в мире), чтобы
+    // материал построил UV из абсолютной мировой позиции сам:
+    // UV = (WorldPos.XY - Origin.XY) / Size.XY. Отдельного канала под два
+    // вектора не заводим -- кладём в тот же MPC, где уже живёт GlobalMorok.
+    // Мягкая ссылка по тому же образцу, что WorldStateMap выше: не
+    // назначена -- просто не пишем, это не ошибка.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
+    TSoftObjectPtr<UMaterialParameterCollection> WorldStateFrameCollection;
 
     // Период выгрузки карты. 1 секунда -- не круглое число "на глаз", а
     // граница, посчитанная от самой симуляции: пассивный дрейф Distortion
