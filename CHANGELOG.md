@@ -11966,3 +11966,39 @@ StaticSwitchParameter «Trampleable» (Default Value = выключен):
 Сборка и тесты не запускались: изменены только документы.
 
 Файлы: `CHANGELOG.md`, `ROADMAP.md`.
+
+---
+
+## 2026-09-12 — прототип RVT удалён
+
+Решение пользователя. Тропы давно показываются через `RT_TrampleMap`, прототип
+ничем не используется.
+
+Удалено 9 файлов (`git rm`, восстановимо из истории):
+- `Materials/BP_PaintTest`, `Materials/M_Accumulate` — накопление следов
+  ping-pong на GPU;
+- `Materials/M_ShowRT`, `Materials/RT_Test_A`, `Materials/RT_Test_B` — его
+  рендер-таргеты и отладочный показ (`M_ShowRT` читал `RT_Test_A`);
+- `Materials/RTRVT/BP_RTRVT_Manager`, `Materials/RTRVT/M_RVTWriter`,
+  `Materials/RTRVT/RVT_Trample`;
+- объём `RuntimeVirtualTextureVolume` на `L_PlaytestPaint` (внешний актор
+  `B/PB/D9EW01RMGX2EG0VN9RV6X5`).
+
+`M_Floor` остаётся: это рабочий материал пола с тропами.
+
+### Как проверено, что ничего не сломано
+
+- Удаляли при закрытом редакторе.
+- Ссылки на каждый удаляемый ассет искались по байтам во всех
+  `.uasset`/`.umap` проекта. Снаружи набора на них не ссылается ничего:
+  на `RVT_Trample` — только удалённый объём, на `M_RVTWriter`/`M_Accumulate` —
+  только `BP_PaintTest` и `BP_RTRVT_Manager`, на `RT_Test_A` — только
+  `M_ShowRT` и сам прототип.
+- В коде имена остались только в комментариях `TrampleField.h` и
+  `TrampleSubsystem.h`: прототип там назван источником чисел (25 см на
+  тексель, 50 см между штрихами). Это история, правка не нужна. Ещё
+  упоминания есть в `Saved/` — списки недавних ассетов редактора.
+- Headless `-game` на `L_PlaytestPaint` после удаления: exit 0, ноль ошибок,
+  удалённые ассеты в логе не упоминаются.
+
+Файлы: 9 удалённых ассетов, `CHANGELOG.md`, `ROADMAP.md`.
