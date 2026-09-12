@@ -2,6 +2,7 @@
 #include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/World/Trample/TrampleSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
@@ -75,6 +76,12 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->TieredWards = WorldManager->CaptureTieredWards();
     Save->bSilverWardActive = WorldManager->IsSilverWardActive();
     Save->KurganSites = WorldManager->GetKurganSites();
+
+    // Тропы (2026-09-12) живут в мировой подсистеме, не в менеджере.
+    if (UTrampleSubsystem* Trample = World ? World->GetSubsystem<UTrampleSubsystem>() : nullptr)
+    {
+        Save->TrampleChunks = Trample->CaptureSaveChunks();
+    }
 
     // Точки интереса, §4 (2026-09-06) -- см. довод у полей в HerbalistSaveTypes.h.
     Save->TotemSite = WorldManager->GetTotemSite();
@@ -193,6 +200,13 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->RngBaseSeed = Save->RngBaseSeed;
     WorldManager->SetCurrentTickID(Save->CurrentTickID);
     WorldManager->SetGameClockSeconds(Save->GameClockSeconds);
+
+    // Тропы -- строго после часов: отсчёт распада восстановленных чанков
+    // начинается от часов загруженной сессии.
+    if (UTrampleSubsystem* Trample = World ? World->GetSubsystem<UTrampleSubsystem>() : nullptr)
+    {
+        Trample->RestoreSaveChunks(Save->TrampleChunks);
+    }
 
     // Аудит 2026-09-05: таймеры оберегов/артефактных эффектов "короткого
     // окна" (Ward*/InvisibilityCap/YouthApple/Alkonost) осознанно не

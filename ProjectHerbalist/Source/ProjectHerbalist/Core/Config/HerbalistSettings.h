@@ -6,6 +6,8 @@
 #include "HerbalistSettings.generated.h"
 
 class UStaticMesh;
+class UMaterialInterface;
+class URuntimeVirtualTexture;
 
 UCLASS(config = Game, defaultconfig, meta = (DisplayName = "Herbalist Settings"))
 class PROJECTHERBALIST_API UHerbalistSettings : public UDeveloperSettings
@@ -1428,6 +1430,28 @@ public:
     // черновое.
     UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float KalinovMostFightCost = 0.3f;
+
+    // --- Тропы (2026-09-12, UTrampleSubsystem) ---
+    // Runtime Virtual Texture, в которую плоскости-писатели рисуют
+    // вытоптанность, и материал-писатель с текстурным параметром. Ландшафт
+    // читает эту же RVT. Пусто -- поле копится, показа нет.
+    UPROPERTY(config, EditAnywhere, Category = "Trample")
+    TSoftObjectPtr<URuntimeVirtualTexture> TrampleVirtualTexture;
+
+    UPROPERTY(config, EditAnywhere, Category = "Trample")
+    TSoftObjectPtr<UMaterialInterface> TrampleWriterMaterial;
+
+    // Имя текстурного параметра в материале-писателе. CurrentRT -- как в
+    // M_RVTWriter прототипа.
+    UPROPERTY(config, EditAnywhere, Category = "Trample")
+    FName TrampleWriterTextureParameter = TEXT("CurrentRT");
+
+    // Только для проверки глазами: во сколько раз быстрее зарастает тропа
+    // ("для теста можно и быстрее"). Вклад прохода не меняется. 1 -- игра.
+    // Период зарастания -- тот же, что у HarvestStress (StressRecoveryGameDays
+    // с биомом, сезоном и капищем), отдельного числа у троп нет.
+    UPROPERTY(config, EditAnywhere, Category = "Trample", meta = (ClampMin = "0.01"))
+    float TrampleTestTimeScale = 1.0f;
 };
 
 // PROJECTHERBALIST_API добавлен 2026-09-04 (обнаружено при линковке

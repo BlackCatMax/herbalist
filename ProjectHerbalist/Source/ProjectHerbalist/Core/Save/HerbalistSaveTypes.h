@@ -104,6 +104,22 @@ struct PROJECTHERBALIST_API FSavedHomeStorage
     TArray<FInventoryItem> Items;
 };
 
+// Чанк поля вытоптанности (2026-09-12, UTrampleSubsystem). Тропа живёт
+// неделю игрового времени -- без сейва любая загрузка стирала бы её.
+// Значения уже с применённым распадом, uint16 (довод -- у
+// FTrampleField::QuantizeValues). Пустые чанки не сохраняются.
+USTRUCT()
+struct PROJECTHERBALIST_API FSavedTrampleChunk
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FIntPoint Coord = FIntPoint::ZeroValue;
+
+    UPROPERTY()
+    TArray<uint16> Values;
+};
+
 // Тиражные обереги (награда ритуалов перехода ярусов биомов, 2026-09-04,
 // GridWorldManagerWards.cpp::ActivateTieredWard) — аудит 2026-09-05,
 // решение пользователя (а): постоянная награда за завершённый ритуал, БЕЗ
@@ -369,4 +385,10 @@ public:
 
     UPROPERTY()
     FRotator PlayerRotation = FRotator::ZeroRotator;
+
+    // Тропы (2026-09-12) -- см. FSavedTrampleChunk выше. Новое поле с
+    // дефолтом: старые сейвы читаются как "троп нет", версия формата не
+    // меняется.
+    UPROPERTY()
+    TArray<FSavedTrampleChunk> TrampleChunks;
 };
