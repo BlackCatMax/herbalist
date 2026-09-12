@@ -21,6 +21,18 @@ namespace
         }
         return bAllZero;
     }
+
+    // Целочисленное деление с округлением вниз и для отрицательных индексов.
+    int32 TrampleFloorDiv(int32 Value, int32 Divisor)
+    {
+        return FMath::FloorToInt(static_cast<double>(Value) / Divisor);
+    }
+
+    float DecayStep(float NowSeconds, float LastAdvanceSeconds, float FullClearSeconds)
+    {
+        const float Elapsed = FMath::Max(NowSeconds - LastAdvanceSeconds, 0.0f);
+        return (FullClearSeconds > KINDA_SMALL_NUMBER) ? Elapsed / FullClearSeconds : 1.0f;
+    }
 }
 
 FIntPoint FTrampleField::WorldToChunk(const FVector2D& WorldXY)
@@ -43,6 +55,11 @@ FVector2D FTrampleField::GetChunkCenter(const FIntPoint& ChunkCoord)
 FVector2D FTrampleField::GetTexelCenter(const FIntPoint& ChunkCoord, int32 I, int32 J)
 {
     return GetChunkOrigin(ChunkCoord) + FVector2D((I + 0.5f) * TexelSizeCm, (J + 0.5f) * TexelSizeCm);
+}
+
+int32 FTrampleField::WorldToTexel(double WorldCoord)
+{
+    return FMath::FloorToInt(WorldCoord / TexelSizeCm);
 }
 
 float FTrampleField::ChordLengthInDisk(const FVector2D& A, const FVector2D& B, const FVector2D& Center, float Radius)
@@ -88,11 +105,10 @@ bool FTrampleField::AdvanceChunk(const FIntPoint& ChunkCoord, float NowSeconds, 
     Chunk->LastAdvanceSeconds = NowSeconds;
     if (Elapsed <= 0.0f)
     {
-        return Chunk->Values.ContainsByPredicate([](float Value) { return Value > 0.0f; }) == false;
+        return !Chunk->Values.ContainsByPredicate([](float Value) { return Value > 0.0f; });
     }
 
-    const float Step = (FullClearSeconds > KINDA_SMALL_NUMBER) ? Elapsed / FullClearSeconds : 1.0f;
-    return DecayValues(Chunk->Values, Step);
+    return DecayValues(Chunk->Values, DecayStep(NowSeconds, NowSeconds - Elapsed, FullClearSeconds));
 }
 
 TArray<FIntPoint> FTrampleField::AdvanceAll(float NowSeconds, FClearSecondsFn ClearSeconds)
@@ -167,14 +183,10 @@ void FTrampleField::AddStroke(const FVector2D& From, const FVector2D& To, float 
                 }
             }
 
-            if (bTouched)
+            // Рамка задела чанк, но ни один центр текселя не попал в радиус --
+            // пустой чанк не заводим, поле остаётся разреженным.
+            if (!bTouched && !bExisted)
             {
-                Chunk.bDirty = true;
-            }
-            else if (!bExisted)
-            {
-                // Рамка задела чанк, но ни один центр текселя не попал в
-                // радиус -- пустой чанк не заводим, поле остаётся разреженным.
                 Chunks.Remove(Coord);
             }
         }
@@ -194,17 +206,72 @@ float FTrampleField::GetValueAt(const FVector2D& WorldXY, float NowSeconds, FCle
     const int32 I = FMath::Clamp(FMath::FloorToInt(Local.X / TexelSizeCm), 0, ChunkTexels - 1);
     const int32 J = FMath::Clamp(FMath::FloorToInt(Local.Y / TexelSizeCm), 0, ChunkTexels - 1);
 
-    const float FullClear = ClearSeconds(Coord);
-    const float Elapsed = FMath::Max(NowSeconds - Chunk->LastAdvanceSeconds, 0.0f);
-    const float Step = (FullClear > KINDA_SMALL_NUMBER) ? Elapsed / FullClear : 1.0f;
+    const float Step = DecayStep(NowSeconds, Chunk->LastAdvanceSeconds, ClearSeconds(Coord));
     return FMath::Max(Chunk->Values[J * ChunkTexels + I] - Step, 0.0f);
 }
 
-void FTrampleField::ClearDirty(const FIntPoint& ChunkCoord)
+void FTrampleField::SampleTexelRect(int32 MinGX, int32 MinGY, int32 Width, int32 Height, float NowSeconds,
+    FClearSecondsFn ClearSeconds, TArray<float>& OutValues) const
 {
-    if (FChunk* Chunk = Chunks.Find(ChunkCoord))
+    OutValues.SetNumZeroed(FMath::Max(Width, 0) * FMath::Max(Height, 0));
+    if (Width <= 0 || Height <= 0 || Chunks.Num() == 0)
     {
-        Chunk->bDirty = false;
+        return;
+    }
+
+    const int32 MaxGX = MinGX + Width - 1;
+    const int32 MaxGY = MinGY + Height - 1;
+    const int32 MinCX = TrampleFloorDiv(MinGX, ChunkTexels);
+    const int32 MaxCX = TrampleFloorDiv(MaxGX, ChunkTexels);
+    const int32 MinCY = TrampleFloorDiv(MinGY, ChunkTexels);
+    const int32 MaxCY = TrampleFloorDiv(MaxGY, ChunkTexels);
+
+    auto FillFromChunk = [&](const FIntPoint& Coord, const FChunk& Chunk)
+    {
+        const float Step = DecayStep(NowSeconds, Chunk.LastAdvanceSeconds, ClearSeconds(Coord));
+        const int32 BaseGX = Coord.X * ChunkTexels;
+        const int32 BaseGY = Coord.Y * ChunkTexels;
+        const int32 StartGX = FMath::Max(MinGX, BaseGX);
+        const int32 EndGX = FMath::Min(MaxGX, BaseGX + ChunkTexels - 1);
+        const int32 StartGY = FMath::Max(MinGY, BaseGY);
+        const int32 EndGY = FMath::Min(MaxGY, BaseGY + ChunkTexels - 1);
+
+        for (int32 GY = StartGY; GY <= EndGY; ++GY)
+        {
+            const int32 SourceRow = (GY - BaseGY) * ChunkTexels;
+            const int32 TargetRow = (GY - MinGY) * Width;
+            for (int32 GX = StartGX; GX <= EndGX; ++GX)
+            {
+                OutValues[TargetRow + (GX - MinGX)] = FMath::Max(Chunk.Values[SourceRow + (GX - BaseGX)] - Step, 0.0f);
+            }
+        }
+    };
+
+    // Обходим то, чего меньше: чанки рамки или чанки поля.
+    const int64 RectChunkCount = static_cast<int64>(MaxCX - MinCX + 1) * (MaxCY - MinCY + 1);
+    if (RectChunkCount <= Chunks.Num())
+    {
+        for (int32 CY = MinCY; CY <= MaxCY; ++CY)
+        {
+            for (int32 CX = MinCX; CX <= MaxCX; ++CX)
+            {
+                const FIntPoint Coord(CX, CY);
+                if (const FChunk* Chunk = Chunks.Find(Coord))
+                {
+                    FillFromChunk(Coord, *Chunk);
+                }
+            }
+        }
+    }
+    else
+    {
+        for (const TPair<FIntPoint, FChunk>& Pair : Chunks)
+        {
+            if (Pair.Key.X >= MinCX && Pair.Key.X <= MaxCX && Pair.Key.Y >= MinCY && Pair.Key.Y <= MaxCY)
+            {
+                FillFromChunk(Pair.Key, Pair.Value);
+            }
+        }
     }
 }
 
@@ -217,19 +284,7 @@ bool FTrampleField::SetChunkValues(const FIntPoint& ChunkCoord, TArray<float>&& 
     FChunk& Chunk = Chunks.FindOrAdd(ChunkCoord);
     Chunk.Values = MoveTemp(InValues);
     Chunk.LastAdvanceSeconds = NowSeconds;
-    Chunk.bDirty = true;
     return true;
-}
-
-void FTrampleField::BuildChunkPixels(const FIntPoint& ChunkCoord, TArray<FColor>& OutPixels) const
-{
-    OutPixels.SetNumZeroed(TexelCount);
-    const FChunk* Chunk = Chunks.Find(ChunkCoord);
-    for (int32 Index = 0; Index < TexelCount; ++Index)
-    {
-        const uint8 Level = Chunk ? static_cast<uint8>(FMath::RoundToInt(FMath::Clamp(Chunk->Values[Index], 0.0f, 1.0f) * 255.0f)) : 0;
-        OutPixels[Index] = FColor(Level, Level, Level, 255);
-    }
 }
 
 void FTrampleField::QuantizeValues(const TArray<float>& InValues, TArray<uint16>& OutValues)

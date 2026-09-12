@@ -7,21 +7,17 @@
 #include "Core/World/GridWorldManager.h"
 #include "HerbalistLogChannels.h"
 
-#include "Components/RuntimeVirtualTextureComponent.h"
-#include "Components/StaticMeshComponent.h"
-#include "Engine/StaticMesh.h"
-#include "Engine/StaticMeshActor.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "Materials/MaterialInstanceDynamic.h"
+#include "Kismet/KismetMaterialLibrary.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "RenderingThread.h"
 #include "RHICommandList.h"
 #include "TextureResource.h"
-#include "VT/RuntimeVirtualTexture.h"
-#include "VT/RuntimeVirtualTextureVolume.h"
 
 bool UTrampleSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
 {
@@ -49,25 +45,32 @@ void UTrampleSubsystem::Tick(float DeltaTime)
         return;
     }
 
-    APawn* Pawn = UGameplayStatics::GetPlayerPawn(World, 0);
-    if (!Pawn)
+    FVector Viewer;
+    if (APawn* Pawn = UGameplayStatics::GetPlayerPawn(World, 0))
+    {
+        // Радиус -- реальная ширина тела пешки (у персонажа это капсула), не
+        // выдуманная константа.
+        bool bOnGround = true;
+        if (const ACharacter* Character = Cast<ACharacter>(Pawn))
+        {
+            const UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+            bOnGround = Movement && Movement->IsMovingOnGround();
+        }
+        Viewer = Pawn->GetActorLocation();
+        FeedWalker(Viewer, Pawn->GetSimpleCollisionRadius(), bOnGround);
+    }
+    else if (const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(World, 0))
+    {
+        LastWalkerXY.Reset();
+        Viewer = Camera->GetCameraLocation();
+    }
+    else
     {
         LastWalkerXY.Reset();
         return;
     }
 
-    // Радиус -- реальная ширина тела пешки (у персонажа это капсула), не
-    // выдуманная константа.
-    bool bOnGround = true;
-    if (const ACharacter* Character = Cast<ACharacter>(Pawn))
-    {
-        const UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
-        bOnGround = Movement && Movement->IsMovingOnGround();
-    }
-
-    const FVector Location = Pawn->GetActorLocation();
-    FeedWalker(Location, Pawn->GetSimpleCollisionRadius(), bOnGround);
-    RefreshDisplays(FVector2D(Location));
+    UpdateDisplay(Viewer, DeltaTime);
 }
 
 void UTrampleSubsystem::FeedWalker(const FVector& Location, float RadiusCm, bool bOnGround)
@@ -105,6 +108,14 @@ void UTrampleSubsystem::AddStroke(const FVector2D& From, const FVector2D& To, fl
 {
     Field.AddStroke(From, To, RadiusCm, GetPassDeposit(), GetNowSeconds(),
         [this](const FIntPoint& Coord) { return GetFullClearSeconds(Coord); });
+
+    // Рамка штриха в текселях -- её цели пересчитаются в ближайшем кадре.
+    FTrampleWindow::FRect Rect;
+    Rect.MinGX = FTrampleField::WorldToTexel(FMath::Min(From.X, To.X) - RadiusCm);
+    Rect.MinGY = FTrampleField::WorldToTexel(FMath::Min(From.Y, To.Y) - RadiusCm);
+    Rect.Width = FTrampleField::WorldToTexel(FMath::Max(From.X, To.X) + RadiusCm) - Rect.MinGX + 1;
+    Rect.Height = FTrampleField::WorldToTexel(FMath::Max(From.Y, To.Y) + RadiusCm) - Rect.MinGY + 1;
+    PendingStrokeRects.Add(Rect);
 }
 
 float UTrampleSubsystem::GetNowSeconds() const
@@ -157,24 +168,46 @@ float UTrampleSubsystem::GetPassDeposit() const
     // Правило: тропа, по которой проходят раз в игровые сутки, держится на
     // месте -- проход добавляет ровно столько, сколько сутки распада снимают
     // при биоме 1.0: DaySeconds / (RecoveryDays x DaySeconds) = 1/RecoveryDays.
-    // Один проход виден слабо (1/7) и зарастает за сутки; два прохода в сутки
-    // протаптывают тропу до полной за неделю -- "за неделю игрового времени".
+    // Это же число -- порог видимости в FTrampleWindow: то, что держится при
+    // проходе раз в сутки, ещё не тропа.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float RecoveryDays = Settings ? Settings->StressRecoveryGameDays : 7.0f;
     return 1.0f / FMath::Max(RecoveryDays, 0.01f);
-}
-
-float UTrampleSubsystem::GetUploadIntervalSeconds(float FullClearSeconds)
-{
-    // Ровно одна ступень RGBA8: чаще -- выгружать ту же картинку, реже --
-    // пропускать видимые ступени распада.
-    return FMath::Max(FullClearSeconds, 0.0f) / 255.0f;
 }
 
 float UTrampleSubsystem::GetValueAt(const FVector2D& WorldXY) const
 {
     return Field.GetValueAt(WorldXY, GetNowSeconds(),
         [this](const FIntPoint& Coord) { return GetFullClearSeconds(Coord); });
+}
+
+float UTrampleSubsystem::GetDisplayedAt(const FVector2D& WorldXY) const
+{
+    return Window.GetDisplayedAtTexel(FTrampleField::WorldToTexel(WorldXY.X), FTrampleField::WorldToTexel(WorldXY.Y));
+}
+
+float UTrampleSubsystem::GetDecayRefreshIntervalSeconds(float FullClearSeconds)
+{
+    return FMath::Max(FullClearSeconds, 0.0f) / 255.0f;
+}
+
+float UTrampleSubsystem::GetEaseStepSeconds()
+{
+    return (1.0f / 255.0f) / VisualRatePerSecond;
+}
+
+float UTrampleSubsystem::GetFadeStartCm() const
+{
+    // Начало затухания -- радиус симуляции мира: там же, где стоят ресурсы.
+    // Конец -- граница верных данных окна. Стриминг выключен (-1) -- гасим
+    // только у самой границы.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Meters = Settings ? Settings->ActiveSimulationRadiusMeters : -1.0f;
+    if (Meters < 0.0f)
+    {
+        return GetFadeEndCm();
+    }
+    return FMath::Min(Meters * 100.0f, GetFadeEndCm());
 }
 
 AGridWorldManager* UTrampleSubsystem::FindManager() const
@@ -194,271 +227,177 @@ AGridWorldManager* UTrampleSubsystem::FindManager() const
     return nullptr;
 }
 
-URuntimeVirtualTextureComponent* UTrampleSubsystem::FindVolume() const
+void UTrampleSubsystem::RefreshRect(const FTrampleWindow::FRect& Rect, float NowSeconds, bool bSnap)
 {
-    if (URuntimeVirtualTextureComponent* Cached = CachedVolume.Get())
+    const FTrampleWindow::FRect Clipped = FTrampleWindow::FRect::Intersect(Rect, Window.GetWindowRect());
+    if (Clipped.IsEmpty())
     {
-        return Cached;
+        return;
     }
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const URuntimeVirtualTexture* Texture = Settings ? Settings->TrampleVirtualTexture.LoadSynchronous() : nullptr;
-    UWorld* World = GetWorld();
-    if (!Texture || !World)
-    {
-        return nullptr;
-    }
-    for (TActorIterator<ARuntimeVirtualTextureVolume> It(World); It; ++It)
-    {
-        URuntimeVirtualTextureComponent* Component = It->VirtualTextureComponent;
-        if (Component && Component->GetVirtualTexture() == Texture)
-        {
-            CachedVolume = Component;
-            return Component;
-        }
-    }
-    return nullptr;
+    TArray<float> Values;
+    Field.SampleTexelRect(Clipped.MinGX, Clipped.MinGY, Clipped.Width, Clipped.Height, NowSeconds,
+        [this](const FIntPoint& Coord) { return GetFullClearSeconds(Coord); }, Values);
+    Window.SetTargets(Clipped, Values, GetPassDeposit(), bSnap);
 }
 
-float UTrampleSubsystem::GetDisplayRadiusCm() const
-{
-    // Радиус симуляции мира: тропа видна там же, где стоят ресурсы и живут
-    // сущности. -1 у настройки -- стриминг выключен, показываем всё. Плюс
-    // полдиагонали чанка: радиус меряется до центра чанка, а виден он краем.
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float Meters = Settings ? Settings->ActiveSimulationRadiusMeters : -1.0f;
-    if (Meters < 0.0f)
-    {
-        return TNumericLimits<float>::Max();
-    }
-    return Meters * 100.0f + FTrampleField::ChunkSizeCm * UE_INV_SQRT_2;
-}
-
-void UTrampleSubsystem::RefreshDisplays(const FVector2D& ViewerXY)
+void UTrampleSubsystem::UpdateDisplay(const FVector& ViewerLocation, float DeltaSeconds)
 {
     const float Now = GetNowSeconds();
-    auto ClearSeconds = [this](const FIntPoint& Coord) { return GetFullClearSeconds(Coord); };
+    const FVector2D ViewerXY(ViewerLocation);
 
-    // 1. Чанки вдали от зрителя не выгружаются, но распадаться обязаны, иначе
-    // память росла бы до возвращения игрока. Раз в ступень RGBA8 при базовом
-    // периоде -- тот же такт, что у выгрузки.
-    const float FullAdvanceInterval = GetUploadIntervalSeconds(ClearSeconds(FIntPoint::ZeroValue));
-    if (LastFullAdvanceSeconds < 0.0f || Now < LastFullAdvanceSeconds || Now - LastFullAdvanceSeconds >= FullAdvanceInterval)
+    // 1. Окно. Вошедшие полосы получают значения сразу: они входят у края,
+    // в зоне затухания, скачок там не виден.
+    for (const FTrampleWindow::FRect& Entered : Window.Recenter(ViewerXY))
     {
-        for (const FIntPoint& Removed : Field.AdvanceAll(Now, ClearSeconds))
-        {
-            DestroyDisplay(Removed);
-        }
-        LastFullAdvanceSeconds = Now;
+        RefreshRect(Entered, Now, true);
     }
 
-    // 2. Показ заводится только рядом с игроком.
-    const double RadiusCm = GetDisplayRadiusCm();
-    for (const TPair<FIntPoint, FTrampleField::FChunk>& Pair : Field.GetChunks())
+    // 2. Распад -- раз в ступень RGBA8. Пересчитываются только натоптанные
+    // чанки и те, что только что опустели (их показ надо увести в ноль).
+    const float RefreshInterval = GetDecayRefreshIntervalSeconds(GetFullClearSeconds(FTrampleField::WorldToChunk(ViewerXY)));
+    if (LastDecayRefreshSeconds < 0.0f || Now < LastDecayRefreshSeconds || Now - LastDecayRefreshSeconds >= RefreshInterval)
     {
-        if (FVector2D::Distance(FTrampleField::GetChunkCenter(Pair.Key), ViewerXY) <= RadiusCm)
+        TArray<FIntPoint> Touched = Field.AdvanceAll(Now, [this](const FIntPoint& Coord) { return GetFullClearSeconds(Coord); });
+        for (const TPair<FIntPoint, FTrampleField::FChunk>& Pair : Field.GetChunks())
         {
-            EnsureDisplay(Pair.Key);
+            Touched.Add(Pair.Key);
         }
+        for (const FIntPoint& Coord : Touched)
+        {
+            FTrampleWindow::FRect ChunkRect;
+            ChunkRect.MinGX = Coord.X * FTrampleField::ChunkTexels;
+            ChunkRect.MinGY = Coord.Y * FTrampleField::ChunkTexels;
+            ChunkRect.Width = FTrampleField::ChunkTexels;
+            ChunkRect.Height = FTrampleField::ChunkTexels;
+            RefreshRect(ChunkRect, Now, false);
+        }
+        LastDecayRefreshSeconds = Now;
     }
 
-    TArray<FIntPoint> ToDestroy;
-    for (const TPair<FIntPoint, FTrampleChunkDisplay>& Pair : Displays)
+    // 3. Штрихи.
+    for (const FTrampleWindow::FRect& Rect : PendingStrokeRects)
     {
-        if (!Field.FindChunk(Pair.Key) || FVector2D::Distance(FTrampleField::GetChunkCenter(Pair.Key), ViewerXY) > RadiusCm)
+        RefreshRect(Rect, Now, false);
+    }
+    PendingStrokeRects.Reset();
+
+    // 4. Догон -- тактами в ступень байта, а не каждый кадр: чаще картинка
+    // всё равно не изменится ни на один байт.
+    if (Window.HasEasing())
+    {
+        EaseAccumulatorSeconds += FMath::Max(DeltaSeconds, 0.0f);
+        if (EaseAccumulatorSeconds >= GetEaseStepSeconds())
         {
-            ToDestroy.Add(Pair.Key);
+            Window.Ease(VisualRatePerSecond * EaseAccumulatorSeconds);
+            EaseAccumulatorSeconds = 0.0f;
         }
     }
-    for (const FIntPoint& Coord : ToDestroy)
+    else
     {
-        DestroyDisplay(Coord);
+        EaseAccumulatorSeconds = 0.0f;
     }
 
-    // 3. Выгрузка: сразу после штриха, иначе -- раз в ступень распада.
-    FBox DirtyBounds(ForceInit);
-    TArray<FIntPoint> Emptied;
-    for (TPair<FIntPoint, FTrampleChunkDisplay>& Pair : Displays)
-    {
-        const FTrampleField::FChunk* Chunk = Field.FindChunk(Pair.Key);
-        const float FullClear = ClearSeconds(Pair.Key);
-        const bool bDue = Pair.Value.LastUploadSeconds < 0.0f
-            || Now < Pair.Value.LastUploadSeconds
-            || Now - Pair.Value.LastUploadSeconds >= GetUploadIntervalSeconds(FullClear);
-        if (!Chunk || !(Chunk->bDirty || bDue))
-        {
-            continue;
-        }
-
-        if (Field.AdvanceChunk(Pair.Key, Now, FullClear))
-        {
-            Emptied.Add(Pair.Key);
-            continue;
-        }
-
-        UploadChunk(Pair.Key, Pair.Value);
-        Pair.Value.LastUploadSeconds = Now;
-        Field.ClearDirty(Pair.Key);
-
-        const FVector2D Origin = FTrampleField::GetChunkOrigin(Pair.Key);
-        DirtyBounds += FVector(Origin, 0.0);
-        DirtyBounds += FVector(Origin + FVector2D(FTrampleField::ChunkSizeCm), 0.0);
-    }
-    for (const FIntPoint& Coord : Emptied)
-    {
-        Field.RemoveChunk(Coord);
-        if (FTrampleChunkDisplay* Display = Displays.Find(Coord))
-        {
-            // Последняя выгрузка -- чёрная, иначе страницы RVT держали бы
-            // прошлую картинку уже удалённого чанка.
-            UploadChunk(Coord, *Display);
-            const FVector2D Origin = FTrampleField::GetChunkOrigin(Coord);
-            DirtyBounds += FVector(Origin, 0.0);
-            DirtyBounds += FVector(Origin + FVector2D(FTrampleField::ChunkSizeCm), 0.0);
-        }
-        DestroyDisplay(Coord);
-    }
-
-    // 4. Один Invalidate на кадр, по объединённой рамке.
-    if (DirtyBounds.IsValid)
-    {
-        if (URuntimeVirtualTextureComponent* Volume = FindVolume())
-        {
-            const FBox VolumeBox = Volume->Bounds.GetBox();
-            DirtyBounds.Min.Z = VolumeBox.Min.Z;
-            DirtyBounds.Max.Z = VolumeBox.Max.Z;
-            Volume->Invalidate(FBoxSphereBounds(DirtyBounds));
-        }
-    }
+    UploadDirtyTiles();
+    PushFrameToCollection(ViewerLocation);
 }
 
-void UTrampleSubsystem::EnsureDisplay(const FIntPoint& ChunkCoord)
+void UTrampleSubsystem::UploadDirtyTiles()
 {
-    if (Displays.Contains(ChunkCoord))
+    if (!MapTarget)
     {
-        return;
-    }
-
-    // Без объёма RVT рисовать некуда: поле копится, показа нет. Так
-    // L_TestDev, где объёма пока нет, не плодит бесполезных плоскостей.
-    URuntimeVirtualTextureComponent* Volume = FindVolume();
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    URuntimeVirtualTexture* VirtualTexture = Settings ? Settings->TrampleVirtualTexture.LoadSynchronous() : nullptr;
-    UMaterialInterface* WriterMaterial = Settings ? Settings->TrampleWriterMaterial.LoadSynchronous() : nullptr;
-    UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
-    UWorld* World = GetWorld();
-    if (!Volume || !VirtualTexture || !WriterMaterial || !PlaneMesh || !World)
-    {
-        if (!bWarnedMissingAssets && (!VirtualTexture || !WriterMaterial || !PlaneMesh))
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        MapTarget = Settings ? Settings->TrampleMap.LoadSynchronous() : nullptr;
+        if (!MapTarget)
         {
-            UE_LOG(LogHerbalistWorld, Warning,
-                TEXT("[Trample] Показ выключен: не назначены TrampleVirtualTexture/TrampleWriterMaterial в Herbalist Settings или нет /Engine/BasicShapes/Plane"));
-            bWarnedMissingAssets = true;
+            return;   // Текстура не назначена -- поле копится, показа нет.
         }
-        return;
+        if (MapTarget->SizeX != FTrampleWindow::Size || MapTarget->SizeY != FTrampleWindow::Size)
+        {
+            MapTarget->ResizeTarget(FTrampleWindow::Size, FTrampleWindow::Size);
+        }
+        // Что лежало в текстуре до нас -- неизвестно.
+        Window.MarkAllDirty();
     }
-
-    FTrampleChunkDisplay Display;
-
-    // Те же флаги, что у RT_WorldStateMap: RGBA8 с линейной гаммой читается
-    // сэмплером Linear Color -- ровно такой стоит у CurrentRT в M_RVTWriter.
-    Display.Texture = NewObject<UTextureRenderTarget2D>(this);
-    Display.Texture->RenderTargetFormat = RTF_RGBA8;
-    Display.Texture->bForceLinearGamma = true;
-    Display.Texture->Filter = TF_Bilinear;
-    Display.Texture->AddressX = TA_Clamp;
-    Display.Texture->AddressY = TA_Clamp;
-    Display.Texture->ClearColor = FLinearColor::Black;
-    Display.Texture->InitAutoFormat(FTrampleField::ChunkTexels, FTrampleField::ChunkTexels);
-    Display.Texture->UpdateResourceImmediate(true);
-
-    // Плоскость не поворачивается: её UV совпадают с мировыми X/Y только
-    // без поворота. Z -- середина объёма, иначе RVT её не захватит.
-    const FVector2D Center = FTrampleField::GetChunkCenter(ChunkCoord);
-    const FVector Location(Center, Volume->Bounds.Origin.Z);
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.ObjectFlags |= RF_Transient;
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    AStaticMeshActor* Plane = World->SpawnActor<AStaticMeshActor>(Location, FRotator::ZeroRotator, SpawnParams);
-    if (!Plane)
+    if (!Window.IsInitialized())
     {
         return;
     }
 
-    UStaticMeshComponent* Mesh = Plane->GetStaticMeshComponent();
-    Mesh->SetMobility(EComponentMobility::Movable);
-    Mesh->SetStaticMesh(PlaneMesh);
-    Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    Mesh->SetCastShadow(false);
-    Mesh->VirtualTextureRenderPassType = ERuntimeVirtualTextureMainPassType::Never;
-    Mesh->RuntimeVirtualTextures.Add(VirtualTexture);
-
-    // Меш -- 100x100 см.
-    Plane->SetActorScale3D(FVector(FTrampleField::ChunkSizeCm / 100.0f, FTrampleField::ChunkSizeCm / 100.0f, 1.0f));
-
-    Display.Material = UMaterialInstanceDynamic::Create(WriterMaterial, this);
-    Display.Material->SetTextureParameterValue(Settings->TrampleWriterTextureParameter, Display.Texture);
-    Mesh->SetMaterial(0, Display.Material);
-    Mesh->MarkRenderStateDirty();
-
-    Display.WriterPlane = Plane;
-    Displays.Add(ChunkCoord, Display);
-}
-
-void UTrampleSubsystem::DestroyDisplay(const FIntPoint& ChunkCoord)
-{
-    FTrampleChunkDisplay Display;
-    if (!Displays.RemoveAndCopyValue(ChunkCoord, Display))
-    {
-        return;
-    }
-    if (Display.WriterPlane)
-    {
-        Display.WriterPlane->Destroy();
-    }
-    if (Display.Texture)
-    {
-        Display.Texture->ReleaseResource();
-    }
-}
-
-void UTrampleSubsystem::UploadChunk(const FIntPoint& ChunkCoord, FTrampleChunkDisplay& Display)
-{
-    if (!Display.Texture)
-    {
-        return;
-    }
-    FTextureRenderTargetResource* Resource = Display.Texture->GameThread_GetRenderTargetResource();
+    FTextureRenderTargetResource* Resource = MapTarget->GameThread_GetRenderTargetResource();
     if (!Resource)
     {
         return;
     }
 
-    TArray<FColor> Pixels;
-    Field.BuildChunkPixels(ChunkCoord, Pixels);
-    const int32 Size = FTrampleField::ChunkTexels;
+    TArray<FIntPoint> Tiles;
+    Window.CollectDirtyTiles(Tiles);
+    if (Tiles.Num() == 0)
+    {
+        return;
+    }
 
-    // Тот же путь, что у RT_WorldStateMap (GridWorldManagerWorldStateMap.cpp).
-    ENQUEUE_RENDER_COMMAND(HerbalistTrampleUpload)(
-        [Resource, Pixels = MoveTemp(Pixels), Size](FRHICommandListImmediate& RHICmdList)
+    struct FTileUpload
+    {
+        FIntPoint Tile;
+        TArray<FColor> Pixels;
+    };
+    TArray<FTileUpload> Uploads;
+    Uploads.Reserve(Tiles.Num());
+    for (const FIntPoint& Tile : Tiles)
+    {
+        FTileUpload& Upload = Uploads.AddDefaulted_GetRef();
+        Upload.Tile = Tile;
+        Window.BuildTilePixels(Tile, Upload.Pixels);
+    }
+
+    // Тот же путь, что у RT_WorldStateMap (GridWorldManagerWorldStateMap.cpp),
+    // только по тайлам.
+    ENQUEUE_RENDER_COMMAND(HerbalistTrampleMapUpload)(
+        [Resource, Uploads = MoveTemp(Uploads)](FRHICommandListImmediate& RHICmdList)
         {
             FRHITexture* Texture = Resource->GetRenderTargetTexture();
             if (!Texture) return;
 
-            const FUpdateTextureRegion2D Region(0, 0, 0, 0, Size, Size);
-            RHICmdList.UpdateTexture2D(Texture, 0, Region, Size * sizeof(FColor),
-                reinterpret_cast<const uint8*>(Pixels.GetData()));
+            const int32 Tile = FTrampleWindow::TileTexels;
+            for (const FTileUpload& Upload : Uploads)
+            {
+                const FUpdateTextureRegion2D Region(Upload.Tile.X * Tile, Upload.Tile.Y * Tile, 0, 0, Tile, Tile);
+                RHICmdList.UpdateTexture2D(Texture, 0, Region, Tile * sizeof(FColor),
+                    reinterpret_cast<const uint8*>(Upload.Pixels.GetData()));
+            }
         });
+}
+
+void UTrampleSubsystem::PushFrameToCollection(const FVector& ViewerLocation)
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+    if (!FrameCollection)
+    {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        FrameCollection = Settings ? Settings->TrampleFrameCollection.LoadSynchronous() : nullptr;
+        if (!FrameCollection)
+        {
+            return;
+        }
+    }
+
+    UKismetMaterialLibrary::SetVectorParameterValue(World, FrameCollection, TEXT("TrampleMapFrame"),
+        FLinearColor(FTrampleWindow::WorldSizeCm, GetFadeStartCm(), GetFadeEndCm(), 0.0f));
+    UKismetMaterialLibrary::SetVectorParameterValue(World, FrameCollection, TEXT("TramplePlayerPosition"),
+        FLinearColor(static_cast<float>(ViewerLocation.X), static_cast<float>(ViewerLocation.Y),
+            static_cast<float>(ViewerLocation.Z), 0.0f));
 }
 
 TArray<FSavedTrampleChunk> UTrampleSubsystem::CaptureSaveChunks()
 {
     // Сохраняем уже распавшиеся значения: при загрузке отсчёт идёт заново
     // от часов загруженной сессии, время между сессиями игровым не является.
-    const float Now = GetNowSeconds();
-    for (const FIntPoint& Removed : Field.AdvanceAll(Now, [this](const FIntPoint& Coord) { return GetFullClearSeconds(Coord); }))
-    {
-        DestroyDisplay(Removed);
-    }
+    // Показ не сохраняется -- это состояние картинки, а не мира.
+    Field.AdvanceAll(GetNowSeconds(), [this](const FIntPoint& Coord) { return GetFullClearSeconds(Coord); });
 
     TArray<FSavedTrampleChunk> Result;
     Result.Reserve(Field.GetChunks().Num());
@@ -473,6 +412,8 @@ TArray<FSavedTrampleChunk> UTrampleSubsystem::CaptureSaveChunks()
 
 void UTrampleSubsystem::RestoreSaveChunks(const TArray<FSavedTrampleChunk>& InChunks)
 {
+    // Сброс окна -- следующий кадр заполнит его заново со snap: мир после
+    // загрузки не проявляется из нуля у игрока на глазах.
     ResetTrample();
 
     const float Now = GetNowSeconds();
@@ -486,18 +427,14 @@ void UTrampleSubsystem::RestoreSaveChunks(const TArray<FSavedTrampleChunk>& InCh
                 Saved.Coord.X, Saved.Coord.Y, Saved.Values.Num());
         }
     }
-    LastFullAdvanceSeconds = Now;
 }
 
 void UTrampleSubsystem::ResetTrample()
 {
-    TArray<FIntPoint> Coords;
-    Displays.GetKeys(Coords);
-    for (const FIntPoint& Coord : Coords)
-    {
-        DestroyDisplay(Coord);
-    }
     Field.Reset();
+    Window.Reset();
+    PendingStrokeRects.Reset();
     LastWalkerXY.Reset();
-    LastFullAdvanceSeconds = -1.0f;
+    LastDecayRefreshSeconds = -1.0f;
+    EaseAccumulatorSeconds = 0.0f;
 }

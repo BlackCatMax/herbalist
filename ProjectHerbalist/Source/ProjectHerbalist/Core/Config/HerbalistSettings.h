@@ -6,8 +6,8 @@
 #include "HerbalistSettings.generated.h"
 
 class UStaticMesh;
-class UMaterialInterface;
-class URuntimeVirtualTexture;
+class UMaterialParameterCollection;
+class UTextureRenderTarget2D;
 
 UCLASS(config = Game, defaultconfig, meta = (DisplayName = "Herbalist Settings"))
 class PROJECTHERBALIST_API UHerbalistSettings : public UDeveloperSettings
@@ -1432,19 +1432,15 @@ public:
     float KalinovMostFightCost = 0.3f;
 
     // --- Тропы (2026-09-12, UTrampleSubsystem) ---
-    // Runtime Virtual Texture, в которую плоскости-писатели рисуют
-    // вытоптанность, и материал-писатель с текстурным параметром. Ландшафт
-    // читает эту же RVT. Пусто -- поле копится, показа нет.
+    // Мировая текстура троп вокруг игрока (1024x1024 по 25 см, адресация по
+    // кругу) и MPC, куда пишутся её рамка (TrampleMapFrame: размер окна,
+    // начало и конец затухания) и позиция игрока (TramplePlayerPosition).
+    // Заводятся -run=TrampleMapSetup. Пусто -- поле копится, показа нет.
     UPROPERTY(config, EditAnywhere, Category = "Trample")
-    TSoftObjectPtr<URuntimeVirtualTexture> TrampleVirtualTexture;
+    TSoftObjectPtr<UTextureRenderTarget2D> TrampleMap;
 
     UPROPERTY(config, EditAnywhere, Category = "Trample")
-    TSoftObjectPtr<UMaterialInterface> TrampleWriterMaterial;
-
-    // Имя текстурного параметра в материале-писателе. CurrentRT -- как в
-    // M_RVTWriter прототипа.
-    UPROPERTY(config, EditAnywhere, Category = "Trample")
-    FName TrampleWriterTextureParameter = TEXT("CurrentRT");
+    TSoftObjectPtr<UMaterialParameterCollection> TrampleFrameCollection;
 
     // Только для проверки глазами: во сколько раз быстрее зарастает тропа
     // ("для теста можно и быстрее"). Вклад прохода не меняется. 1 -- игра.

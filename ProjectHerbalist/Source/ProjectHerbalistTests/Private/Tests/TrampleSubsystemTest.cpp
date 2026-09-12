@@ -1,8 +1,9 @@
 // Source/ProjectHerbalistTests/Private/Tests/TrampleSubsystemTest.cpp
 //
 // Тропы в мире (2026-09-12) -- UTrampleSubsystem: откуда берутся числа,
-// когда ходьба становится штрихом, как заводится показ и что переживает
-// сейв. Математика самого поля -- в TrampleFieldTest.cpp.
+// когда ходьба становится штрихом, как тропа проявляется на картинке, что
+// уходит в материал и что переживает сейв. Математика поля и окна -- в
+// TrampleFieldTest.cpp и TrampleWindowTest.cpp.
 //
 // Тесты идут в editor-мире, где подсистема существует (DoesSupportWorldType
 // включает Editor), но не тикает. Часы подменяются SetClockOverride; все
@@ -13,13 +14,10 @@
 #include "Core/World/Trample/TrampleSubsystem.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Config/HerbalistSettings.h"
-#include "Components/RuntimeVirtualTextureComponent.h"
-#include "Components/StaticMeshComponent.h"
-#include "Engine/StaticMeshActor.h"
+#include "Core/World/GridWorldManager.h"
 #include "Engine/TextureRenderTarget2D.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "VT/RuntimeVirtualTexture.h"
-#include "VT/RuntimeVirtualTextureVolume.h"
+#include "Kismet/KismetMaterialLibrary.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "Editor.h"
 #include "Engine/World.h"
 
@@ -45,6 +43,16 @@ namespace
             Trample->ResetTrample();
             Trample->ClearClockOverride();
         }
+    }
+
+    // Центр мирового текселя -- чтобы значение на оси штриха было ровно
+    // вкладом прохода, без поправки на смещение от оси.
+    FVector TrampleTexelCenterPoint(double X, double Y)
+    {
+        return FVector(
+            (FTrampleField::WorldToTexel(X) + 0.5) * FTrampleField::TexelSizeCm,
+            (FTrampleField::WorldToTexel(Y) + 0.5) * FTrampleField::TexelSizeCm,
+            0.0);
     }
 }
 
@@ -75,16 +83,34 @@ bool FHerbalistTrampleSubsystem_OnePassPerDayHoldsThePathSteady::RunTest(const F
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_UploadIntervalIsOneByteStep,
-    "Herbalist.Trample.Subsystem.UploadIntervalIsOneByteStep",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_RefreshAndEaseStepsAreOneByteStep,
+    "Herbalist.Trample.Subsystem.RefreshAndEaseStepsAreOneByteStep",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistTrampleSubsystem_UploadIntervalIsOneByteStep::RunTest(const FString& Parameters)
+bool FHerbalistTrampleSubsystem_RefreshAndEaseStepsAreOneByteStep::RunTest(const FString& Parameters)
 {
-    // За такт выгрузки значение спадает ровно на одну ступень RGBA8.
+    // Оба такта -- ровно одна ступень RGBA8: чаще картинка не изменится ни
+    // на байт, реже -- пропустит видимую ступень.
     const float FullClear = 13440.0f;
-    const float Interval = UTrampleSubsystem::GetUploadIntervalSeconds(FullClear);
-    TestEqual(TEXT("Спад за такт = 1/255"), Interval / FullClear, 1.0f / 255.0f, 0.000001f);
+    TestEqual(TEXT("Распад за такт пересчёта = 1/255"),
+        UTrampleSubsystem::GetDecayRefreshIntervalSeconds(FullClear) / FullClear, 1.0f / 255.0f, 0.000001f);
+    TestEqual(TEXT("Догон за такт = 1/255"),
+        UTrampleSubsystem::GetEaseStepSeconds() * UTrampleSubsystem::VisualRatePerSecond, 1.0f / 255.0f, 0.000001f);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_PictureRateMatchesWorldStateMap,
+    "Herbalist.Trample.Subsystem.PictureRateMatchesWorldStateMap",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTrampleSubsystem_PictureRateMatchesWorldStateMap::RunTest(const FString& Parameters)
+{
+    // Два числа из разных файлов связаны решением: вся картинка мира
+    // проявляется с одной скоростью. Поменять одно -- тест упадёт и заставит
+    // решить осознанно, остаются ли они равны.
+    const AGridWorldManager* ManagerDefaults = GetDefault<AGridWorldManager>();
+    TestEqual(TEXT("Скорость троп = скорость карты состояния мира"),
+        UTrampleSubsystem::VisualRatePerSecond, ManagerDefaults->WorldStateMapVisualRatePerSecond, 0.000001f);
     return true;
 }
 
@@ -157,119 +183,183 @@ bool FHerbalistTrampleSubsystem_WalkingNeedsGroundDistanceAndNoTeleport::RunTest
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_NoVolumeMeansNoWriterPlanes,
-    "Herbalist.Trample.Subsystem.NoVolumeMeansNoWriterPlanes",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_SinglePassStaysInvisibleSeveralPassesFadeIn,
+    "Herbalist.Trample.Subsystem.SinglePassStaysInvisibleSeveralPassesFadeIn",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistTrampleSubsystem_NoVolumeMeansNoWriterPlanes::RunTest(const FString& Parameters)
+bool FHerbalistTrampleSubsystem_SinglePassStaysInvisibleSeveralPassesFadeIn::RunTest(const FString& Parameters)
 {
-    // На карте без объёма RVT_Trample (L_TestDev сегодня) поле копится, а
-    // плоскостей не заводится -- рисовать им некуда.
+    // Весь путь "проход -> картинка" разом: один проход записан, но не виден;
+    // после нескольких тропа проступает не рывком, а со скоростью картинки,
+    // и приходит ровно к порогу-smoothstep от данных.
     UWorld* World = nullptr;
     UTrampleSubsystem* Trample = GetTrampleForTest(*this, World);
     if (!Trample) return false;
 
-    const FVector2D Point(510000.0, 510000.0);
-    Trample->AddStroke(Point - FVector2D(200.0, 0.0), Point + FVector2D(200.0, 0.0), 40.0f);
-    Trample->RefreshDisplays(Point);
+    const FVector Viewer = TrampleTexelCenterPoint(541000.0, 541000.0);
+    const FVector2D Point(Viewer);
+    auto WalkPass = [&]()
+    {
+        Trample->AddStroke(Point - FVector2D(300.0, 0.0), Point + FVector2D(300.0, 0.0), 40.0f);
+    };
 
-    TestTrue(TEXT("Поле натоптано"), Trample->GetValueAt(Point) > 0.0f);
-    TestEqual(TEXT("Плоскостей нет"), Trample->GetDisplayCount(), 0);
+    WalkPass();
+    Trample->UpdateDisplay(Viewer, 1000.0f);
+    TestEqual(TEXT("Один проход записан в данные"), Trample->GetValueAt(Point), Trample->GetPassDeposit(), 0.0001f);
+    TestEqual(TEXT("Но на картинке его нет"), Trample->GetDisplayedAt(Point), 0.0f, 0.000001f);
+
+    WalkPass();
+    WalkPass();
+    WalkPass();
+    Trample->UpdateDisplay(Viewer, 1.0f);
+    const float AfterOneSecond = Trample->GetDisplayedAt(Point);
+    TestTrue(TEXT("После четырёх проходов тропа начала проступать"), AfterOneSecond > 0.0f);
+    TestTrue(FString::Printf(TEXT("Но не рывком: за секунду не больше скорости картинки (%.4f)"), AfterOneSecond),
+        AfterOneSecond <= UTrampleSubsystem::VisualRatePerSecond * 1.0f + 0.00001f);
+
+    Trample->UpdateDisplay(Viewer, 1000.0f);
+    const float Expected = FTrampleWindow::VisualFromRaw(Trample->GetValueAt(Point), Trample->GetPassDeposit());
+    TestEqual(TEXT("Со временем приходит ровно к цели"), Trample->GetDisplayedAt(Point), Expected, 0.0001f);
+    TestEqual(TEXT("Четыре прохода -- половина"), Expected, 0.5f, 0.001f);
 
     FinishTrampleTest(Trample);
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_NearbyChunkGetsWriterPlane,
-    "Herbalist.Trample.Subsystem.NearbyChunkGetsWriterPlane",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_FadeRadiiFollowSimulationRadiusAndWindow,
+    "Herbalist.Trample.Subsystem.FadeRadiiFollowSimulationRadiusAndWindow",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistTrampleSubsystem_NearbyChunkGetsWriterPlane::RunTest(const FString& Parameters)
+bool FHerbalistTrampleSubsystem_FadeRadiiFollowSimulationRadiusAndWindow::RunTest(const FString& Parameters)
 {
+    // Затухание начинается на радиусе симуляции и кончается там, где данные
+    // окна перестают быть гарантированно верными.
     UWorld* World = nullptr;
     UTrampleSubsystem* Trample = GetTrampleForTest(*this, World);
     if (!Trample) return false;
 
     UHerbalistSettings* Settings = GetMutableDefault<UHerbalistSettings>();
-    URuntimeVirtualTexture* VirtualTexture = Settings->TrampleVirtualTexture.LoadSynchronous();
-    if (!TestNotNull(TEXT("RVT_Trample назначен в Herbalist Settings"), VirtualTexture)) { FinishTrampleTest(Trample); return false; }
-    if (!TestNotNull(TEXT("M_RVTWriter назначен в Herbalist Settings"), Settings->TrampleWriterMaterial.LoadSynchronous())) { FinishTrampleTest(Trample); return false; }
-
-    ARuntimeVirtualTextureVolume* Volume = World->SpawnActor<ARuntimeVirtualTextureVolume>();
-    if (!TestNotNull(TEXT("Объём RVT заспавнен"), Volume)) { FinishTrampleTest(Trample); return false; }
-    Volume->VirtualTextureComponent->SetVirtualTexture(VirtualTexture);
-
     const float SavedRadius = Settings->ActiveSimulationRadiusMeters;
+
+    TestEqual(TEXT("Конец -- граница верных данных окна"), UTrampleSubsystem::GetFadeEndCm(), FTrampleWindow::ValidRadiusCm, 0.001f);
+
     Settings->ActiveSimulationRadiusMeters = 100.0f;
+    TestEqual(TEXT("Радиус 100 м -- начало на 100 м"), Trample->GetFadeStartCm(), 10000.0f, 0.001f);
 
-    const FVector2D Point(520000.0 + 1000.0, 520000.0 + 1000.0);
-    const FIntPoint Coord = FTrampleField::WorldToChunk(Point);
-    Trample->AddStroke(Point - FVector2D(200.0, 0.0), Point + FVector2D(200.0, 0.0), 40.0f);
-    Trample->RefreshDisplays(Point);
+    Settings->ActiveSimulationRadiusMeters = -1.0f;
+    TestEqual(TEXT("Стриминг выключен -- гасим у самой границы"), Trample->GetFadeStartCm(), UTrampleSubsystem::GetFadeEndCm(), 0.001f);
 
-    const FTrampleChunkDisplay* Display = Trample->FindDisplay(Coord);
-    if (TestNotNull(TEXT("Чанк рядом со зрителем получил показ"), Display) && TestNotNull(TEXT("Плоскость есть"), Display->WriterPlane.Get()))
-    {
-        const UStaticMeshComponent* Mesh = Display->WriterPlane->GetStaticMeshComponent();
-        TestTrue(TEXT("Плоскость рисует в RVT_Trample"), Mesh->RuntimeVirtualTextures.Contains(VirtualTexture));
-        TestTrue(TEXT("В основном проходе не рисуется"), Mesh->VirtualTextureRenderPassType == ERuntimeVirtualTextureMainPassType::Never);
-
-        const FVector2D Center = FTrampleField::GetChunkCenter(Coord);
-        TestEqual(TEXT("Плоскость в центре чанка по X"), Display->WriterPlane->GetActorLocation().X, Center.X, 0.01);
-        TestEqual(TEXT("Плоскость в центре чанка по Y"), Display->WriterPlane->GetActorLocation().Y, Center.Y, 0.01);
-        TestEqual(TEXT("Масштаб = размер чанка / 100 см"), Display->WriterPlane->GetActorScale3D().X, static_cast<double>(FTrampleField::ChunkSizeCm / 100.0f), 0.001);
-        TestTrue(TEXT("Плоскость не повёрнута -- иначе UV разойдутся с X/Y"), Display->WriterPlane->GetActorRotation().IsNearlyZero());
-
-        UTexture* Bound = nullptr;
-        if (TestNotNull(TEXT("Материал-писатель создан"), Display->Material.Get()))
-        {
-            Display->Material->GetTextureParameterValue(FHashedMaterialParameterInfo(Settings->TrampleWriterTextureParameter), Bound);
-        }
-        TestTrue(TEXT("В параметр материала подана текстура чанка"), Bound != nullptr && Bound == Display->Texture.Get());
-    }
-
-    // Зритель ушёл дальше радиуса -- показ снят, данные остались.
-    Trample->RefreshDisplays(Point + FVector2D(Settings->ActiveSimulationRadiusMeters * 100.0 + FTrampleField::ChunkSizeCm * 2.0, 0.0));
-    TestNull(TEXT("Дальний чанк без показа"), Trample->FindDisplay(Coord));
-    TestNotNull(TEXT("Но поле чанка на месте"), Trample->GetField().FindChunk(Coord));
+    Settings->ActiveSimulationRadiusMeters = 500.0f;
+    TestEqual(TEXT("Радиус больше окна -- начало не дальше конца"), Trample->GetFadeStartCm(), UTrampleSubsystem::GetFadeEndCm(), 0.001f);
 
     Settings->ActiveSimulationRadiusMeters = SavedRadius;
     FinishTrampleTest(Trample);
-    Volume->Destroy();
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_SaveRoundTripKeepsThePath,
-    "Herbalist.Trample.Subsystem.SaveRoundTripKeepsThePath",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_FrameReachesTheMaterialCollection,
+    "Herbalist.Trample.Subsystem.FrameReachesTheMaterialCollection",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistTrampleSubsystem_SaveRoundTripKeepsThePath::RunTest(const FString& Parameters)
+bool FHerbalistTrampleSubsystem_FrameReachesTheMaterialCollection::RunTest(const FString& Parameters)
 {
-    // Недельная тропа обязана пережить загрузку. Сохраняется уже распавшееся
-    // значение; время между сессиями игровым не считается.
+    // Материал знает о тропах только через MPC: размер окна, радиусы
+    // затухания и позицию игрока. Если параметров нет в коллекции (не
+    // запущен -run=TrampleMapSetup), запись в них молча теряется -- тест
+    // это и ловит.
     UWorld* World = nullptr;
     UTrampleSubsystem* Trample = GetTrampleForTest(*this, World);
     if (!Trample) return false;
 
-    const FVector2D Point(530000.0 + 1000.0, 530000.0 + 1000.0);
-    Trample->AddStroke(Point - FVector2D(200.0, 0.0), Point + FVector2D(200.0, 0.0), 40.0f);
-    Trample->AddStroke(Point - FVector2D(200.0, 0.0), Point + FVector2D(200.0, 0.0), 40.0f);
+    const FVector Viewer(550000.0, 551000.0, 1234.0);
+    Trample->UpdateDisplay(Viewer, 0.1f);
+
+    UMaterialParameterCollection* Collection = GetDefault<UHerbalistSettings>()->TrampleFrameCollection.LoadSynchronous();
+    if (TestNotNull(TEXT("TrampleFrameCollection назначен в Herbalist Settings"), Collection))
+    {
+        const FLinearColor Frame = UKismetMaterialLibrary::GetVectorParameterValue(World, Collection, TEXT("TrampleMapFrame"));
+        TestEqual(TEXT("R -- размер окна"), Frame.R, FTrampleWindow::WorldSizeCm, 0.01f);
+        TestEqual(TEXT("G -- начало затухания"), Frame.G, Trample->GetFadeStartCm(), 0.01f);
+        TestEqual(TEXT("B -- конец затухания"), Frame.B, UTrampleSubsystem::GetFadeEndCm(), 0.01f);
+
+        const FLinearColor Player = UKismetMaterialLibrary::GetVectorParameterValue(World, Collection, TEXT("TramplePlayerPosition"));
+        TestEqual(TEXT("Позиция игрока X"), static_cast<double>(Player.R), Viewer.X, 1.0);
+        TestEqual(TEXT("Позиция игрока Y"), static_cast<double>(Player.G), Viewer.Y, 1.0);
+    }
+
+    FinishTrampleTest(Trample);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_MapTextureIsWindowSizedWrapAndLinear,
+    "Herbalist.Trample.Subsystem.MapTextureIsWindowSizedWrapAndLinear",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTrampleSubsystem_MapTextureIsWindowSizedWrapAndLinear::RunTest(const FString& Parameters)
+{
+    // Контракт с материалом. Wrap обязателен: окно адресуется по кругу, с
+    // Clamp тропы легли бы полосой по краю. Линейная гамма -- это данные, а
+    // не цвет. SRGB совпадает с IsSRGB() -- иначе материал не скомпилирует
+    // сэмплер Linear Color (ловушка RT_WorldStateMap).
+    UTextureRenderTarget2D* Map = GetDefault<UHerbalistSettings>()->TrampleMap.LoadSynchronous();
+    if (!TestNotNull(TEXT("TrampleMap назначен в Herbalist Settings"), Map)) return false;
+
+    TestEqual(TEXT("Ширина = окну"), Map->SizeX, FTrampleWindow::Size);
+    TestEqual(TEXT("Высота = окну"), Map->SizeY, FTrampleWindow::Size);
+    TestTrue(TEXT("Адресация X -- Wrap"), Map->AddressX == TA_Wrap);
+    TestTrue(TEXT("Адресация Y -- Wrap"), Map->AddressY == TA_Wrap);
+    TestTrue(TEXT("RGBA8"), Map->RenderTargetFormat == RTF_RGBA8);
+    TestTrue(TEXT("Линейная гамма"), Map->bForceLinearGamma != 0);
+    TestEqual(TEXT("SRGB совпадает с IsSRGB()"), Map->SRGB != 0, Map->IsSRGB());
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleSubsystem_SaveRoundTripKeepsThePathAndSnapsTheDisplay,
+    "Herbalist.Trample.Subsystem.SaveRoundTripKeepsThePathAndSnapsTheDisplay",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTrampleSubsystem_SaveRoundTripKeepsThePathAndSnapsTheDisplay::RunTest(const FString& Parameters)
+{
+    // Недельная тропа обязана пережить загрузку. Сохраняются данные, а не
+    // картинка; после загрузки картинка сразу равна данным -- мир не
+    // проявляется из нуля у игрока на глазах.
+    UWorld* World = nullptr;
+    UTrampleSubsystem* Trample = GetTrampleForTest(*this, World);
+    if (!Trample) return false;
+
+    // Центр чанка (166, 166): штрих ±300 см не выходит за его границы, так
+    // что сохраняться обязан ровно один чанк. Первая версия теста ставила
+    // точку в 187.5 см от границы -- штрих честно задевал соседний чанк.
+    const double ChunkCenter = 166.0 * FTrampleField::ChunkSizeCm + FTrampleField::ChunkSizeCm * 0.5;
+    const FVector Viewer = TrampleTexelCenterPoint(ChunkCenter, ChunkCenter);
+    const FVector2D Point(Viewer);
+    for (int32 Pass = 0; Pass < 4; ++Pass)
+    {
+        Trample->AddStroke(Point - FVector2D(300.0, 0.0), Point + FVector2D(300.0, 0.0), 40.0f);
+    }
+    Trample->UpdateDisplay(Viewer, 1000.0f);
 
     const float Later = Trample->GetFullClearSeconds(FTrampleField::WorldToChunk(Point)) * 0.1f;
     Trample->SetClockOverride(Later);
     const float BeforeSave = Trample->GetValueAt(Point);
-    TestTrue(TEXT("К моменту сейва тропа частично заросла, но есть"), BeforeSave > 0.0f);
+    TestTrue(TEXT("К моменту сейва тропа частично заросла, но есть"), BeforeSave > Trample->GetPassDeposit());
 
     const TArray<FSavedTrampleChunk> Saved = Trample->CaptureSaveChunks();
     TestEqual(TEXT("Сохранён один чанк"), Saved.Num(), 1);
 
     Trample->ResetTrample();
     TestEqual(TEXT("После сброса поле пусто"), Trample->GetValueAt(Point), 0.0f, 0.0001f);
+    TestEqual(TEXT("И картинка пуста"), Trample->GetDisplayedAt(Point), 0.0f, 0.000001f);
 
     // Загрузка в сессии с другими часами.
     Trample->SetClockOverride(12345.0f);
     Trample->RestoreSaveChunks(Saved);
-    TestEqual(TEXT("После загрузки -- то же значение"), Trample->GetValueAt(Point), BeforeSave, 1.0f / 65535.0f + 0.00001f);
+    Trample->UpdateDisplay(Viewer, 0.0f);
+
+    const float AfterLoad = Trample->GetValueAt(Point);
+    TestEqual(TEXT("Данные -- те же"), AfterLoad, BeforeSave, 1.0f / 65535.0f + 0.00001f);
+    TestEqual(TEXT("Картинка -- сразу равна данным, без проявления"),
+        Trample->GetDisplayedAt(Point), FTrampleWindow::VisualFromRaw(AfterLoad, Trample->GetPassDeposit()), 0.0001f);
 
     FinishTrampleTest(Trample);
     return true;

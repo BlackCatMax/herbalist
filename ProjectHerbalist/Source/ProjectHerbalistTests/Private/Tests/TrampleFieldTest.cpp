@@ -200,40 +200,43 @@ bool FHerbalistTrampleField_StrokeAcrossChunkBorderIsSeamless::RunTest(const FSt
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleField_PixelColumnIsXRowIsY,
-    "Herbalist.Trample.Field.PixelColumnIsXRowIsY",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleField_SampleTexelRectMatchesPointQueries,
+    "Herbalist.Trample.Field.SampleTexelRectMatchesPointQueries",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistTrampleField_PixelColumnIsXRowIsY::RunTest(const FString& Parameters)
+bool FHerbalistTrampleField_SampleTexelRectMatchesPointQueries::RunTest(const FString& Parameters)
 {
-    // Короткий штрих внутри одного текселя (I=90, J=12) -- в буфере пикселей
-    // светится ровно индекс J*128 + I. Вместе с EnginePlaneUVFollowsLocalXY
-    // это доказывает, что тропа ляжет на плоскость не зеркально.
+    // Выборка прямоугольника -- то, чем окно показа читает поле. Обязана
+    // совпадать с точечным запросом в каждом текселе, в том числе через
+    // отрицательные координаты и стык четырёх чанков, и с учётом распада.
     FTrampleField Field;
-    const FVector2D Center = TexelCenter(90, 12);
-    Field.AddStroke(Center - FVector2D(4, 0), Center + FVector2D(4, 0), 6.0f, 1.0f, 0.0f, ClearFn);
+    Field.AddStroke(FVector2D(-900.0, -700.0), FVector2D(800.0, 650.0), 45.0f, 0.4f, 0.0f, ClearFn);
+    Field.AddStroke(FVector2D(-600.0, 500.0), FVector2D(700.0, -400.0), 35.0f, 0.3f, 0.0f, ClearFn);
 
-    TArray<FColor> Pixels;
-    Field.BuildChunkPixels(FIntPoint(0, 0), Pixels);
-    if (!TestEqual(TEXT("128x128 пикселей"), Pixels.Num(), FTrampleField::ChunkTexels * FTrampleField::ChunkTexels)) return false;
+    const float Now = 123.0f;
+    const int32 MinGX = -50;
+    const int32 MinGY = -40;
+    const int32 Width = 97;
+    const int32 Height = 83;
+    TArray<float> Values;
+    Field.SampleTexelRect(MinGX, MinGY, Width, Height, Now, ClearFn, Values);
+    if (!TestEqual(TEXT("Размер выборки"), Values.Num(), Width * Height)) return false;
 
-    int32 LitIndex = INDEX_NONE;
-    int32 LitCount = 0;
-    for (int32 Index = 0; Index < Pixels.Num(); ++Index)
+    int32 Mismatches = 0;
+    int32 NonZero = 0;
+    for (int32 Row = 0; Row < Height; ++Row)
     {
-        if (Pixels[Index].R > 0)
+        for (int32 Col = 0; Col < Width; ++Col)
         {
-            LitIndex = Index;
-            ++LitCount;
+            const FVector2D Center((MinGX + Col + 0.5) * FTrampleField::TexelSizeCm, (MinGY + Row + 0.5) * FTrampleField::TexelSizeCm);
+            const float Expected = Field.GetValueAt(Center, Now, ClearFn);
+            const float Actual = Values[Row * Width + Col];
+            if (!FMath::IsNearlyEqual(Expected, Actual, 0.00001f)) ++Mismatches;
+            if (Actual > 0.0f) ++NonZero;
         }
     }
-    TestEqual(TEXT("Светится один пиксель"), LitCount, 1);
-    TestEqual(TEXT("Его индекс J*128 + I"), LitIndex, 12 * FTrampleField::ChunkTexels + 90);
-    if (LitIndex != INDEX_NONE)
-    {
-        TestEqual(TEXT("Серый: R = G = B"), static_cast<int32>(Pixels[LitIndex].G), static_cast<int32>(Pixels[LitIndex].R));
-        TestEqual(TEXT("Альфа 255"), static_cast<int32>(Pixels[LitIndex].A), 255);
-    }
+    TestEqual(TEXT("Каждый тексель совпадает с точечным запросом"), Mismatches, 0);
+    TestTrue(TEXT("Выборка задела натоптанное"), NonZero > 0);
     return true;
 }
 

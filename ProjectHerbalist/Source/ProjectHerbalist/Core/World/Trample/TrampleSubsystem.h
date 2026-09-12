@@ -1,48 +1,28 @@
 // Source/ProjectHerbalist/Core/World/Trample/TrampleSubsystem.h
 //
-// Тропы в мире (2026-09-12): поле вытоптанности (FTrampleField) плюс его
-// показ через Runtime Virtual Texture. Мировая подсистема, а не актор:
-// существует в любом мире без расстановки -- на L_PlaytestPaint, где лежит
-// прототип, менеджера сетки нет вовсе.
+// Тропы в мире (2026-09-12): поле вытоптанности (FTrampleField) и его показ
+// через одну мировую текстуру вокруг игрока (FTrampleWindow). Мировая
+// подсистема, а не актор: существует в любом мире без расстановки -- на
+// L_PlaytestPaint менеджера сетки нет вовсе.
 //
-// Показ: на каждый чанк поля рядом с игроком -- своя текстура 128x128 и
-// плоскость-писатель /Engine/BasicShapes/Plane с материалом-писателем
-// (M_RVTWriter, параметр CurrentRT), которая рисует в RVT_Trample и не
-// рисуется в основном проходе. Ландшафт читает RVT. После выгрузки --
-// Invalidate на компоненте объёма RVT (он живёт на
-// ARuntimeVirtualTextureVolume, не на плоскости).
+// Показ: RT_TrampleMap (1024x1024, 25 см, адресация по кругу) плюс рамка в
+// MPC_WorldStateFields -- TrampleMapFrame (размер окна, начало и конец
+// затухания) и TramplePlayerPosition. Материал ландшафта/травы читает
+// frac(WorldPos / размер) и гасит тропу к краю по расстоянию до игрока.
+// Сначала был показ через Runtime Virtual Texture -- снят в тот же день
+// (глюки на тайлах, выигрыша не было, см. CHANGELOG.md).
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "Core/World/Trample/TrampleField.h"
+#include "Core/World/Trample/TrampleWindow.h"
 #include "TrampleSubsystem.generated.h"
 
 class AGridWorldManager;
-class AStaticMeshActor;
-class UMaterialInstanceDynamic;
-class URuntimeVirtualTextureComponent;
+class UMaterialParameterCollection;
 class UTextureRenderTarget2D;
 struct FSavedTrampleChunk;
-
-USTRUCT()
-struct FTrampleChunkDisplay
-{
-    GENERATED_BODY()
-
-    UPROPERTY()
-    TObjectPtr<AStaticMeshActor> WriterPlane = nullptr;
-
-    UPROPERTY()
-    TObjectPtr<UTextureRenderTarget2D> Texture = nullptr;
-
-    UPROPERTY()
-    TObjectPtr<UMaterialInstanceDynamic> Material = nullptr;
-
-    // Игровое время последней выгрузки; < 0 -- ещё не выгружался.
-    float LastUploadSeconds = -1.0f;
-};
 
 UCLASS()
 class PROJECTHERBALIST_API UTrampleSubsystem : public UTickableWorldSubsystem
@@ -65,19 +45,26 @@ public:
     void FeedWalker(const FVector& Location, float RadiusCm, bool bOnGround);
     void AddStroke(const FVector2D& From, const FVector2D& To, float RadiusCm);
 
-    // Догнать распад, завести/убрать показ чанков вокруг зрителя, выгрузить
-    // изменившиеся текстуры и инвалидировать RVT.
-    void RefreshDisplays(const FVector2D& ViewerXY);
+    // Показ за кадр: окно вокруг зрителя, цели после штрихов и распада, догон
+    // картинки, выгрузка изменившихся тайлов, рамка в MPC.
+    void UpdateDisplay(const FVector& ViewerLocation, float DeltaSeconds);
 
     float GetNowSeconds() const;
     float GetFullClearSeconds(const FIntPoint& ChunkCoord) const;
     float GetPassDeposit() const;
-    static float GetUploadIntervalSeconds(float FullClearSeconds);
     float GetValueAt(const FVector2D& WorldXY) const;
+    float GetDisplayedAt(const FVector2D& WorldXY) const;
+
+    // Пересчёт распада -- раз в ступень RGBA8 при данном периоде зарастания.
+    static float GetDecayRefreshIntervalSeconds(float FullClearSeconds);
+    // Такт догона -- время, за которое показ сдвигается на ступень RGBA8.
+    static float GetEaseStepSeconds();
+
+    float GetFadeStartCm() const;
+    static float GetFadeEndCm() { return FTrampleWindow::ValidRadiusCm; }
 
     const FTrampleField& GetField() const { return Field; }
-    const FTrampleChunkDisplay* FindDisplay(const FIntPoint& ChunkCoord) const { return Displays.Find(ChunkCoord); }
-    int32 GetDisplayCount() const { return Displays.Num(); }
+    const FTrampleWindow& GetWindow() const { return Window; }
 
     TArray<FSavedTrampleChunk> CaptureSaveChunks();
     void RestoreSaveChunks(const TArray<FSavedTrampleChunk>& InChunks);
@@ -93,24 +80,32 @@ public:
     // Совпадает с MinStampDistance прототипа BP_PaintTest (50 см).
     static constexpr float MinStrokeDistanceCm = 2.0f * FTrampleField::TexelSizeCm;
 
+    // Скорость проявления картинки -- та же, что у карты состояния мира
+    // (AGridWorldManager::WorldStateMapVisualRatePerSecond): вся картинка мира
+    // меняется с одной скоростью. Порог 1/7 до 0.5 (четыре прохода) проступает
+    // за 50 с -- не рывком за спиной, но и не за игровые сутки.
+    static constexpr float VisualRatePerSecond = 0.01f;
+
 private:
     AGridWorldManager* FindManager() const;
-    URuntimeVirtualTextureComponent* FindVolume() const;
-    float GetDisplayRadiusCm() const;
-    void EnsureDisplay(const FIntPoint& ChunkCoord);
-    void DestroyDisplay(const FIntPoint& ChunkCoord);
-    void UploadChunk(const FIntPoint& ChunkCoord, FTrampleChunkDisplay& Display);
+    void RefreshRect(const FTrampleWindow::FRect& Rect, float NowSeconds, bool bSnap);
+    void UploadDirtyTiles();
+    void PushFrameToCollection(const FVector& ViewerLocation);
 
     FTrampleField Field;
+    FTrampleWindow Window;
+    TArray<FTrampleWindow::FRect> PendingStrokeRects;
 
     UPROPERTY()
-    TMap<FIntPoint, FTrampleChunkDisplay> Displays;
+    TObjectPtr<UTextureRenderTarget2D> MapTarget = nullptr;
+
+    UPROPERTY()
+    TObjectPtr<UMaterialParameterCollection> FrameCollection = nullptr;
 
     TOptional<FVector2D> LastWalkerXY;
     TOptional<float> ClockOverride;
-    float LastFullAdvanceSeconds = -1.0f;
-    bool bWarnedMissingAssets = false;
+    float LastDecayRefreshSeconds = -1.0f;
+    float EaseAccumulatorSeconds = 0.0f;
 
     mutable TWeakObjectPtr<AGridWorldManager> CachedManager;
-    mutable TWeakObjectPtr<URuntimeVirtualTextureComponent> CachedVolume;
 };

@@ -7,8 +7,7 @@
 // данные на CPU, пока только визуал.
 //
 // Этот класс -- чистые данные и математика, без мира и рендера, ради прямой
-// проверки автотестами. Показ (текстуры, плоскости-писатели RVT) -- в
-// UTrampleSubsystem.
+// проверки автотестами. Показ -- FTrampleWindow и UTrampleSubsystem.
 //
 // Почему CPU, а не ping-pong на GPU, как в прототипе BP_PaintTest:
 // недельный период распада при шаге 0.05 с даёт множитель 1 - 2.6e-6 за
@@ -19,7 +18,7 @@
 // Модель -- та же, что у HarvestStress клетки (линейный спад до нуля,
 // кламп в 1), чтобы земля заживала одинаково от сбора и от ходьбы:
 //
-//   * Штрих (отрезок пути, пройденный с радиусом тела R) добавляет тексeлю
+//   * Штрих (отрезок пути, пройденный с радиусом тела R) добавляет текселю
 //     PassDeposit x |отрезок ∩ круг(тексель, R)| / (2R). Для текселя на
 //     оси пути полный проход даёт ровно PassDeposit; сбоку -- по хорде,
 //     профиль sqrt(1 - (d/R)^2). Хорды последовательных отрезков
@@ -28,6 +27,9 @@
 //   * Распад линейный: v -= dt / FullClearSeconds. Один шаг на dt и N шагов
 //     по dt/N с клампом в ноль дают одно и то же, поэтому чанк можно
 //     догонять лениво, в момент обращения.
+//
+// Здесь -- сырые данные. Что из них видно глазу (порог "одного прохода не
+// видно", мягкое проявление) -- решает показ, FTrampleWindow.
 
 #pragma once
 
@@ -42,25 +44,19 @@ public:
     // не делать.
     static constexpr float TexelSizeCm = 25.0f;
 
-    // Степень двойки -- ради мипов и привычных размеров текстуры; 128
-    // текселей по 25 см = 32 м на чанк.
+    // 128 текселей по 25 см = 32 м на чанк. Граница чанка кратна текселю,
+    // поэтому тексели всех чанков лежат на одной мировой сетке.
     static constexpr int32 ChunkTexels = 128;
     static constexpr float ChunkSizeCm = ChunkTexels * TexelSizeCm;
 
     struct FChunk
     {
         // ChunkTexels x ChunkTexels, построчно: индекс J * ChunkTexels + I,
-        // столбец I идёт вдоль мировой X, строка J -- вдоль мировой Y. Ровно
-        // так разложены UV движковой плоскости /Engine/BasicShapes/Plane
-        // (U вдоль локальной X, V вдоль Y), см. TramplePlaneLayoutTest.cpp.
+        // столбец I идёт вдоль мировой X, строка J -- вдоль мировой Y.
         TArray<float> Values;
 
         // Игровое время, до которого распад уже применён к Values.
         float LastAdvanceSeconds = 0.0f;
-
-        // Значения менялись не распадом (штрих, восстановление из сейва) --
-        // показ обязан выгрузить чанк, не дожидаясь своего такта.
-        bool bDirty = true;
     };
 
     // Сколько секунд чанку нужно, чтобы значение 1.0 спало до нуля.
@@ -70,6 +66,9 @@ public:
     static FVector2D GetChunkOrigin(const FIntPoint& ChunkCoord);
     static FVector2D GetChunkCenter(const FIntPoint& ChunkCoord);
     static FVector2D GetTexelCenter(const FIntPoint& ChunkCoord, int32 I, int32 J);
+
+    // Глобальный индекс текселя вдоль оси: floor(координата / TexelSizeCm).
+    static int32 WorldToTexel(double WorldCoord);
 
     // Длина части отрезка AB, лежащей внутри круга. Публичная ради прямой
     // проверки геометрии.
@@ -89,17 +88,18 @@ public:
     // Значение в точке на момент NowSeconds, без изменения поля.
     float GetValueAt(const FVector2D& WorldXY, float NowSeconds, FClearSecondsFn ClearSeconds) const;
 
+    // Значения прямоугольника глобальных текселей на момент NowSeconds, без
+    // изменения поля, построчно: OutValues[(GY - MinGY) * Width + (GX - MinGX)].
+    // Где данных нет -- ноль.
+    void SampleTexelRect(int32 MinGX, int32 MinGY, int32 Width, int32 Height, float NowSeconds,
+        FClearSecondsFn ClearSeconds, TArray<float>& OutValues) const;
+
     const TMap<FIntPoint, FChunk>& GetChunks() const { return Chunks; }
     const FChunk* FindChunk(const FIntPoint& ChunkCoord) const { return Chunks.Find(ChunkCoord); }
-    void ClearDirty(const FIntPoint& ChunkCoord);
-    void RemoveChunk(const FIntPoint& ChunkCoord) { Chunks.Remove(ChunkCoord); }
     void Reset() { Chunks.Reset(); }
 
     // Восстановление (сейв): значения считаются уже применёнными на NowSeconds.
     bool SetChunkValues(const FIntPoint& ChunkCoord, TArray<float>&& InValues, float NowSeconds);
-
-    // Серый RGBA8 для текстуры чанка: R = G = B = значение, A = 255.
-    void BuildChunkPixels(const FIntPoint& ChunkCoord, TArray<FColor>& OutPixels) const;
 
     // uint16, а не uint8: восьмибитный шаг 1/255 равен ~53 с распада при
     // недельном периоде, 1/65535 -- ~0.2 с, погрешность сейва неразличима.
