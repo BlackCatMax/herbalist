@@ -82,12 +82,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density")
     bool bSpawnResourcesFromGrid = true;
 
-    // Было: WorldRNG.RandRange(1, 3), один диапазон на всю сетку.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0"))
-    int32 MinResourcesPerCell = 1;
+    // Плотность ресурсов НА ПЛОЩАДЬ, ресурсов на 100 м² (2026-09-12, разметка
+    // мира, решение пользователя: «так логичнее»). Раньше -- MinResourcesPerCell
+    // / MaxResourcesPerCell, число на клетку: плотность молча менялась вместе с
+    // размером клетки, а он теперь выводится из ландшафта. Уже расставленные
+    // регионы переносятся редиректом свойства (Config/DefaultEngine.ini) один в
+    // один -- их значения задавались на клетке 10 м = 100 м². Число на
+    // конкретную клетку -- AGridWorldManager::RollResourceCount.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.0", ClampMax = "1000000.0", UIMax = "1000.0"))
+    float MinResourcesPer100SquareMeters = 1.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0"))
-    int32 MaxResourcesPerCell = 3;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.0", ClampMax = "1000000.0", UIMax = "1000.0"))
+    float MaxResourcesPer100SquareMeters = 3.0f;
 
     // Было: AGridWorldManager::ResourceRegrowthTime, одно число на менеджере
     // для всего мира сразу.

@@ -171,6 +171,13 @@ int32 UPlaytestMapResizeCommandlet::Main(const FString& Params)
         if (!Region) continue;
 
         Region->Biome = Order[i];
+        // Плотность ресурсов -- на площадь (2026-09-12, разметка мира). У
+        // L_Playtest клетка 1 м, и прежний дефолт "1-3 на клетку" был 1-3 на
+        // квадратный метр; новый дефолт региона -- 1-3 на 100 м², в сто раз
+        // реже. Коммандлет пересоздаёт регионы, поэтому прежняя густота
+        // задаётся здесь явно, а не рукой на карте (найдено ревью).
+        Region->MinResourcesPer100SquareMeters = 100.0f;
+        Region->MaxResourcesPer100SquareMeters = 300.0f;
         const float MinY = MinEdge + BandHeight * i;
         const float MaxY = MinEdge + BandHeight * (i + 1);
         const TArray<FVector> Corners = {

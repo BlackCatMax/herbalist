@@ -2,7 +2,8 @@
 //
 // Пер-региональная плотность контента на ABiomeRegionVolume (2026-09-02,
 // прямой запрос пользователя: "настройки под все дела в этих волюмах").
-// MinResourcesPerCell/MaxResourcesPerCell/WaterDensity -- раньше были одним
+// MinResourcesPer100SquareMeters/MaxResourcesPer100SquareMeters (до 2026-09-12 --
+// на клетку)/WaterDensity -- раньше были одним
 // числом на весь мир (AGridWorldManager), теперь настройка самого региона.
 // ResourceRegrowthTimeSeconds не тестируется отдельно -- тот же класс
 // "таймер, не проверяемый в автотестах без реального Tick", что и у
@@ -31,8 +32,8 @@ bool FHerbalistRegionDensity_ZeroMaxResourcesPerCellSpawnsNothing::RunTest(const
 
     ABiomeRegionVolume* Region = SpawnRegionCoveringWorldRect(World, EBiomeType::Bog, -50.f, -50.f, 1950.f, 1950.f);
     if (!TestNotNull(TEXT("Region spawned"), Region)) return false;
-    Region->MinResourcesPerCell = 0;
-    Region->MaxResourcesPerCell = 0;
+    Region->MinResourcesPer100SquareMeters = 0.0f;
+    Region->MaxResourcesPer100SquareMeters = 0.0f;
 
     AGridWorldManager* Manager = SpawnAndBeginPlay(World, { Region });
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) { Region->Destroy(); return false; }
@@ -44,10 +45,10 @@ bool FHerbalistRegionDensity_ZeroMaxResourcesPerCellSpawnsNothing::RunTest(const
         Manager->Destroy(); Region->Destroy(); return false;
     }
 
-    TestEqual(TEXT("MinResourcesPerCell=MaxResourcesPerCell=0 on the claiming region -- no resources spawned at InitializeCells"),
+    TestEqual(TEXT("Zero density per 100 m2 on the claiming region -- no resources spawned at InitializeCells"),
         Cell->ResourceActors.Num(), 0);
 
-    // Регрессия на сам джиттер вызова напрямую -- RandRange(0,0) детерминированно
+    // Регрессия на сам джиттер вызова напрямую -- нулевая плотность детерминированно
     // ноль итераций, не зависит от доступности IngredientRegistrySubsystem
     // в тестовом окружении (см. GetClaimingRegion -> MinRes/MaxRes в SpawnResourcesInCell).
     FGridCell MutableCopy = *Cell;

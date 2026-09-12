@@ -68,6 +68,15 @@ public:
 
     // ---- Инициализация ----
     void SpawnResourcesInCell(FGridCell& Cell);
+
+    // Сколько ресурсов положить в клетку: плотность на 100 м² (случайная между
+    // Min и Max) × площадь клетки × DensityScale (затухание к краю региона);
+    // дробная часть разыгрывается, чтобы среднее на площадь не зависело от
+    // размера клетки (решение пользователя 7). Не больше MaxResourcesPerCell.
+    // Статическая -- проверяется тестом без мира.
+    static constexpr int32 MaxResourcesPerCell = 100000;
+    static int32 RollResourceCount(float MinPer100SquareMeters, float MaxPer100SquareMeters,
+        double CellSizeCm, FRandomStream& Rng, float DensityScale = 1.0f);
     // Один ресурс, не вся клетка (2026-09-04) -- вынесено из
     // SpawnResourcesInCell как общий шаг между первичным заселением (цикл
     // по NumResources) и поресурсным отрастанием (StartRegeneration, один
@@ -418,8 +427,8 @@ public:
     bool IsCellClaimedByBiomeRegion(const FGridCell& Cell) const;
 
     // Какой именно регион реально заявил эту клетку (2026-09-02, для
-    // пер-региональных настроек плотности -- MinResourcesPerCell/
-    // MaxResourcesPerCell/ResourceRegrowthTimeSeconds/WaterDensity на самом
+    // пер-региональных настроек плотности -- MinResourcesPer100SquareMeters/
+    // MaxResourcesPer100SquareMeters/ResourceRegrowthTimeSeconds/WaterDensity на самом
     // ABiomeRegionVolume). nullptr — клетка вне всех регионов ИЛИ регионов
     // на уровне вообще нет (в обоих случаях вызывающая сторона откатывается
     // на прежние глобальные дефолты). Если клетку перекрывают несколько

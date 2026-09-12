@@ -1889,36 +1889,61 @@ void AGridWorldManager::SpawnResourcesInCell(FGridCell& Cell)
     // это отдельный, пока не заведённый случай.
     const EGardenNiche* PlotNiche = Cell.bIsWater ? nullptr : GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
 
-    // Диапазон количества ресурсов -- пер-региональная настройка
-    // (ABiomeRegionVolume::MinResourcesPerCell/MaxResourcesPerCell,
-    // 2026-09-02), если клетка реально заявлена регионом; без регионов на
-    // уровне (тесты, сцены без PCG) -- GetClaimingRegion возвращает
-    // nullptr, дефолт 1-3 не меняется.
+    // Плотность -- пер-региональная настройка, ресурсов на 100 м²
+    // (ABiomeRegionVolume::MinResourcesPer100SquareMeters/Max..., с 2026-09-12
+    // на площадь, а не на клетку), если клетка реально заявлена регионом; без
+    // регионов на уровне (тесты, сцены без PCG) -- GetClaimingRegion
+    // возвращает nullptr, дефолт 1-3 на 100 м².
     ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(Cell);
 
     // Регион, отданный PCG-графу (2026-09-03), C++ не заселяет вовсе --
     // иначе к разбросу графа добавился бы второй, клеточный набор внахлёст.
     if (ClaimingRegion && !ClaimingRegion->bSpawnResourcesFromGrid) return;
 
-    const int32 MinRes = ClaimingRegion ? FMath::Min(ClaimingRegion->MinResourcesPerCell, ClaimingRegion->MaxResourcesPerCell) : 1;
-    const int32 MaxRes = ClaimingRegion ? FMath::Max(ClaimingRegion->MinResourcesPerCell, ClaimingRegion->MaxResourcesPerCell) : 3;
-    int32 NumResources = WorldRNG.RandRange(MinRes, MaxRes);
+    const float MinPer100SquareMeters = ClaimingRegion ? ClaimingRegion->MinResourcesPer100SquareMeters : 1.0f;
+    const float MaxPer100SquareMeters = ClaimingRegion ? ClaimingRegion->MaxResourcesPer100SquareMeters : 3.0f;
 
     // Затухание плотности к границе региона (2026-09-03, "как у PCG в ноде
     // Transform"). 0 (дефолт) -- множитель всегда 1, поведение не меняется.
-    // Клетка целиком, не каждый её ресурс отдельно -- плотность решается
-    // один раз "сколько кустов в этой клетке", не "где именно они встанут".
+    // Множитель входит в бросок ДО розыгрыша дробной части (2026-09-12, ревью
+    // этапа 2 разметки мира): округление уже целого числа ресурсов делало
+    // затухание ступенькой (1 x 0.6 -> 1, 1 x 0.4 -> 0) и ломало среднее на
+    // площадь -- сильнее всего на мелких клетках.
+    float DensityScale = 1.0f;
     if (ClaimingRegion && ClaimingRegion->DensityFalloffStrength > 0.0f)
     {
         const float T = ClaimingRegion->GetNormalizedDistanceFromCenter(GetCellWorldPositionFlat(Cell.X, Cell.Y));
-        const float DensityMultiplier = FMath::Lerp(1.0f, 1.0f - T, ClaimingRegion->DensityFalloffStrength);
-        NumResources = FMath::RoundToInt(NumResources * DensityMultiplier);
+        DensityScale = FMath::Lerp(1.0f, 1.0f - T, ClaimingRegion->DensityFalloffStrength);
     }
+    const int32 NumResources = RollResourceCount(MinPer100SquareMeters, MaxPer100SquareMeters, CellSize, WorldRNG, DensityScale);
 
     for (int32 i = 0; i < NumResources; ++i)
     {
         SpawnOneResourceInCell(Cell, Context, PlotNiche, ClaimingRegion, IngredientSubsystem);
     }
+}
+
+int32 AGridWorldManager::RollResourceCount(float MinPer100SquareMeters, float MaxPer100SquareMeters,
+    double CellSizeCm, FRandomStream& Rng, float DensityScale)
+{
+    // NaN в любом входе даёт ноль, а не -2^30 из FloorToInt32 (найдено ревью).
+    if (!FMath::IsFinite(MinPer100SquareMeters) || !FMath::IsFinite(MaxPer100SquareMeters)
+        || !FMath::IsFinite(DensityScale) || !FMath::IsFinite(CellSizeCm))
+    {
+        return 0;
+    }
+    const double Low = FMath::Max(0.0, static_cast<double>(FMath::Min(MinPer100SquareMeters, MaxPer100SquareMeters)));
+    const double High = FMath::Max(0.0, static_cast<double>(FMath::Max(MinPer100SquareMeters, MaxPer100SquareMeters)));
+    // Площадь клетки в сотнях квадратных метров: клетка 10 м -- ровно 1.
+    const double CellAreaIn100SquareMeters = FMath::Square(FMath::Max(CellSizeCm, 0.0) / 100.0) / 100.0;
+    const double Expected = FMath::Clamp(
+        Rng.FRandRange(Low, High) * CellAreaIn100SquareMeters * FMath::Max(static_cast<double>(DensityScale), 0.0),
+        0.0, static_cast<double>(MaxResourcesPerCell));
+    // Дробная часть -- вероятность ещё одного ресурса. Округление вместо
+    // розыгрыша сломало бы плотность на мелких клетках: 0.81..2.43 на клетку
+    // 9 м ещё терпимо, а 0.04 на клетку 2 м округлялось бы в пустой мир.
+    const int32 Whole = FMath::FloorToInt32(Expected);
+    return FMath::Min(Whole + (Rng.FRand() < (Expected - Whole) ? 1 : 0), MaxResourcesPerCell);
 }
 
 void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset)
@@ -2259,7 +2284,7 @@ void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)
     // Поресурсно (2026-09-04) -- каждый собранный ресурс запускает СВОЙ
     // таймер отрастания сразу, не дожидаясь, пока опустеет вся клетка.
     // Раньше гейт "Num() == 0" означал, что клетка с несколькими ресурсами
-    // (MinResourcesPerCell региона поднят выше дефолтных 1-3) вообще не
+    // (плотность региона поднята выше дефолтных 1-3) вообще не
     // отращивала ничего, пока не соберут буквально всё до последнего --
     // на практике, с широким Min/Max, это почти никогда не наступало.
     StartRegeneration(*Cell);

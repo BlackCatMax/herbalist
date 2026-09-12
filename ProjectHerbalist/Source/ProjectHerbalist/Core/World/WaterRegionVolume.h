@@ -8,7 +8,7 @@
 // (сплайн + point-in-polygon), что и у ABiomeRegionVolume -- наследуется
 // напрямую, чтобы не дублировать UpdateCachedPoints/IsPointInside.
 //
-// Biome/MinResourcesPerCell/MaxResourcesPerCell/ResourceRegrowthTimeSeconds/
+// Biome/MinResourcesPer100SquareMeters/MaxResourcesPer100SquareMeters/ResourceRegrowthTimeSeconds/
 // WaterDensity, унаследованные от родителя, здесь НЕ используются (вода не
 // спавнит ресурсы вовсе -- SpawnResourcesInCell в InitializeCells вызывается
 // только для !Cell.bIsWater) -- остаются видимыми в Details как безвредный,
