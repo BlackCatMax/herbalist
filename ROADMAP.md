@@ -294,16 +294,18 @@
   цена — бамбуковая подпорка у бобов исчезает щелчком.
 - **Тропы** (2026-09-12) — ядро сделано: `UTrampleSubsystem` + `FTrampleField`
   + `FTrampleWindow`, данные на CPU, распад формулой, сохранение, показ через
-  одну мировую текстуру `RT_TrampleMap` вокруг игрока (RVT снята в тот же
-  день, подробности — `CHANGELOG.md`). Осталось:
-  (а) **в движке не проверено.** Материал должен читать `RT_TrampleMap` через
-  `TrampleMapFrame`/`TramplePlayerPosition` из `MPC_WorldStateFields` —
-  в `M_Floor` (`L_PlaytestPaint`) пока стоит `RuntimeVirtualTextureSample`,
-  его надо заменить; объём RVT и ассет `RVT_Trample` больше не нужны;
-  (б) **`L_TestDev`**: та же цепочка нод в `M_landscape` — объём не нужен;
-  (в) трава на тропе не редеет — `M_Foliage_Master` может читать ту же
-  текстуру той же цепочкой (в Death Stranding на тропе «трава перестаёт
-  расти» — это половина образа тропы).
+  одну мировую текстуру `RT_TrampleMap` вокруг игрока. Проверено глазами:
+  `M_Floor` на `L_PlaytestPaint` и `M_landscape` на `L_TestDev`. Осталось в
+  редакторе:
+  (а) **трава на тропе прижимается к основанию** — `M_Foliage_Master` и
+  `M_plants` (WPO за переключателем `Trampleable`), переключатель включить в
+  `MI_Grass`, `MI_Clover`, `MI_Fern`, `MI_grass_01/02_Inst`,
+  `MI_flower_01/02_Inst`. Схема нод и проверка — в `CHANGELOG.md`, запись
+  «хвосты: что подтверждено в движке, схема травы на тропе». В `M_plants`
+  сначала трава, потом затухание ресурсов;
+  (б) прототип RVT больше не нужен: `RVT_Trample`, `M_RVTWriter`,
+  `M_Accumulate`, `BP_PaintTest` и объём RVT на `L_PlaytestPaint` — удалять
+  в редакторе.
 - **Прогрев артефактов (Warmth)** — структурное поле на 0 у всех восьми,
   сам тик и пороги "апгрейда" не определены; `21_Journey_And_Artifacts.md
   §21.5` прямо называет это "открытым вопросом следующего прохода", не

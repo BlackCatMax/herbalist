@@ -11830,3 +11830,139 @@ WPO:
 `Tests/ResourceDistanceFadeTest.cpp` (новый),
 `Content/Materials/MPC_WorldStateFields.uasset`, `ROADMAP.md`,
 `TOOLS_REFERENCE.md`.
+
+---
+
+## 2026-09-12 — хвосты: что подтверждено в движке, схема травы на тропе
+
+Кода нет. Сверка записей журнала с тем, что уже сделано и проверено в
+редакторе.
+
+### Подтверждено глазами
+
+- **Тропы на `L_PlaytestPaint`.** `M_Floor` переведён с
+  `RuntimeVirtualTextureSample` на мировую текстуру; после правки масок LWC —
+  «отлично, работает». Материал — в `e405f2c`. Закрывает «Что не проверено»
+  записи «тропы: показ без RVT».
+- **Тропы на ландшафте `L_TestDev`.** Та же цепочка в `M_landscape` (`Lerp` к
+  слою Ground) — «Тропки рисуются, все ок». Материал — в `e405f2c`.
+- **Материализация по загруженной земле** — косвенно, в PIE. После `16c8590`
+  ресурсы больше не висят над выгруженным ландшафтом, а исчезают на границе
+  радиуса симуляции, раньше земли (отсюда запись о затухании). Появление при
+  возвращении отдельно не подтверждалось.
+
+### Поправка к записи «тропы: показ без RVT»
+
+Там сказано, что `TrampleTestTimeScale=60` в коммит не вошло. С `21cee2f`
+строка в репозитории. Этот коммит захватил заранее проиндексированные файлы
+пользователя: `Config/DefaultGame.ini` и 142 внешних актора
+`L_TestDev`/`L_PlaytestPaint` (128 изменений, 14 удалений). Моя ошибка —
+`git add` и `git commit` без проверки индекса. Коммит уже был на `origin`;
+решение пользователя — оставить как есть, изменения его. Сейчас в
+`DefaultGame.ini` стоит его значение 30. Впредь коммит — только
+`git commit -- <свои пути>` после `git diff --cached --name-only`.
+
+### Трава на тропе — схема
+
+Запись о затухании ресурсов ссылается на «запись о траве на тропах», которой
+в журнале не было: схема была выдана только в чате. Решения пользователя:
+сжимается только низкий покров; кустик прижимается к основанию, а не редеет;
+земля на тропе — цепочкой в `M_landscape` (сделано, см. выше). C++ не
+меняется: те же `RT_TrampleMap`, `TrampleMapFrame`, `TramplePlayerPosition`.
+
+Идея: у каждого кустика берётся точка основания, в ней читается тропа `V`
+(0..1) с тем же порогом, мягким проявлением и затуханием к краю окна. Вершины
+сдвигаются к основанию на долю `V`: при `V = 0.5` кустик вдвое ниже, при
+`V = 1` уходит в землю. Ветер ослабляется так же, иначе сжатый кустик
+продолжал бы качаться.
+
+**1. Тропа у основания кустика (шейдер вершин)**
+
+```
+Основание:
+  Constant3Vector (0,0,0)
+    → Transform Position (Source = Instance & Particle Space,
+                          Destination = Absolute World Space)   = Pivot
+
+Тропа:
+  Divide: A ← Pivot,  B ← TrampleMapFrame → Mask R
+    → Frac → Mask RG
+    → TextureSample (RT_TrampleMap, Sampler Type = Linear Color,
+                     MipValueMode = MipLevel, уровень ← Constant 0) → R
+
+Затухание:
+  Subtract: A ← Pivot,  B ← TramplePlayerPosition → Mask RGB
+    → Mask RG → Length
+  SmoothStep (Min ← TrampleMapFrame → Mask G, Max ← TrampleMapFrame → Mask B)
+    → OneMinus
+
+V = Multiply (R, OneMinus)
+```
+
+Две ловушки, обе проверены по исходникам 5.7:
+- **Только `Instance & Particle Space`, не `Local Space`.** PCG-трава —
+  Nanite, а в Nanite-проходе `Local Space` означает весь PCG-компонент: трава
+  сжималась бы к его центру.
+- **`MipValueMode = MipLevel` обязателен.** В шейдере вершин нет производных,
+  без явного мипа выборка не скомпилируется.
+
+**2. Смещение вершин и переключатель**
+
+```
+W = то, что сейчас подключено к World Position Offset (ветер)
+
+Сжатие:
+  Local Position (Local Origin = Instance,
+                  Shader Offsets = Exclude Material Shader Offsets)
+    → Multiply (× V)
+    → Transform (Source = Instance & Particle Space, Destination = World Space) = S
+
+С тропой:
+  Multiply (W × OneMinus(V)) → Subtract (минус S)
+
+StaticSwitchParameter «Trampleable» (Default Value = выключен):
+  True  ← «С тропой»
+  False ← W
+  → World Position Offset
+```
+
+`Exclude Material Shader Offsets` нужен, иначе позиция зависит от самого WPO,
+и материал сообщит о цикле. Делается в `M_Foliage_Master` и `M_plants`, имя
+параметра в обоих одинаковое. В `M_plants` — раньше затухания ресурсов: его
+вход A — выход этого переключателя.
+
+**3. Переключатель в инстансах**
+
+| Включить `Trampleable` | Не трогать |
+|---|---|
+| `MI_Grass`, `MI_Clover`, `MI_Fern` | `MI_Bush`, `MI_Common_Tree_Leaves`, `MI_Pine_Tree_Leaves` |
+| `MI_grass_01_Inst`, `MI_grass_02_Inst`, `MI_flower_01_Inst`, `MI_flower_02_Inst` | `MI_shrub_01_Inst`, `MI_shrub_flower_01_Inst` |
+
+**Проверка на `L_TestDev`** при `TrampleTestTimeScale = 1`: 4–5 проходов по
+одной линии через траву. Трава на тропе становится ниже с той же мягкой
+скоростью, что и земля: до половины примерно за 50 с после четвёртого
+прохода. Кусты и деревья не меняются; дальше 100–112 м трава в полный рост.
+
+| Симптом | Где искать |
+|---|---|
+| Трава сжимается к далёкой точке или «съезжает» | `Local Space` вместо `Instance & Particle Space` |
+| Ошибка про выборку текстуры в WPO | Не выставлен `MipValueMode = MipLevel` |
+| Ошибки `FWSVector3` / `float4` | Маски на параметрах MPC: `R` для Divide, `RGB` для Subtract — до арифметики |
+| Сжимаются деревья или кусты | `Trampleable` включён не в том инстансе |
+| Земля с тропой, трава не реагирует | Переключатель не включён в инстансе или у PCG-компонента выключен `Evaluate World Position Offset` |
+
+### Что осталось — редактор, не код
+
+- Трава на тропе: `M_Foliage_Master`, `M_plants` и семь инстансов — ассеты
+  пока не менялись.
+- Затухание ресурсов: `M_Foliage`, `M_Fruits`, `M_plants` — не менялись.
+- Прототип RVT больше не используется: `RVT_Trample`, `M_RVTWriter`,
+  `M_Accumulate`, `BP_PaintTest` и объём RVT на `L_PlaytestPaint`. Удалять в
+  редакторе, чтобы тот сам проверил ссылки.
+
+Отложенное решением пользователя не трогалось: повестка об истощении (A/B
+вместе с сохранением `PendingRegrowthCount`) и пять предложений по Kena.
+
+Сборка и тесты не запускались: изменены только документы.
+
+Файлы: `CHANGELOG.md`, `ROADMAP.md`.
