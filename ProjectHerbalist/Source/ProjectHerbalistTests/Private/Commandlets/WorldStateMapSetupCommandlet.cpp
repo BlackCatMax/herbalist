@@ -201,8 +201,11 @@ int32 UWorldStateMapSetupCommandlet::Main(const FString& Params)
     {
         const bool bAddedOrigin = AddVectorParameterIfMissing(Collection, FName(TEXT("WorldStateMapOrigin")));
         const bool bAddedSize   = AddVectorParameterIfMissing(Collection, FName(TEXT("WorldStateMapSize")));
+        // Полоса затухания ресурсов (2026-09-12): начало и конец в сантиметрах
+        // от игрока, пишет менеджер в UpdateWorldStateMap.
+        const bool bAddedFade   = AddVectorParameterIfMissing(Collection, FName(TEXT("ResourceFadeFrame")));
 
-        if (bAddedOrigin || bAddedSize)
+        if (bAddedOrigin || bAddedSize || bAddedFade)
         {
             if (!SaveWorldStateMapPackage(Collection->GetOutermost(), Collection))
             {

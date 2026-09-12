@@ -740,6 +740,34 @@ void AGridWorldManager::CatchUpActivatedChunks()
     UpdateMaterializedChunks();
 }
 
+void AGridWorldManager::GetResourceFadeFrame(float& OutStartCm, float& OutEndCm) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const float ChunkSpan = FMath::Max(CellSize * ChunkSize, KINDA_SMALL_NUMBER);
+
+    const int32 Radius = GetActiveRadiusInChunks();
+    if (Radius < 0)
+    {
+        // Стриминг выключен -- ресурсы не исчезают вовсе, затухать нечему.
+        // Полоса уводится дальше любого мира; начало и конец не совпадают,
+        // иначе SmoothStep в материале делил бы на ноль.
+        OutStartCm = 1.0e9f;
+        OutEndCm = OutStartCm + ChunkSpan;
+        return;
+    }
+
+    // Материализованы чанки не дальше Radius от чанка игрока, значит граница
+    // лежит в Radius x ChunkSpan от краёв его чанка -- ближе этого ресурс не
+    // исчезнет ни в одном направлении, где бы в чанке игрок ни стоял. Ширина
+    // полосы -- один чанк: граница двигается целыми чанками, и новый ряд
+    // появляется не ближе конца полосы, то есть уже полностью сжатым.
+    // При Radius = 0 начало уходит в минус -- всё, кроме точки под игроком,
+    // сжато: граница может проходить прямо рядом с ним.
+    OutEndCm = Radius * ChunkSpan;
+    OutStartCm = OutEndCm - ChunkSpan;
+}
+
 FIntPoint AGridWorldManager::WorldPositionToChunk(const FVector& WorldPos) const
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();

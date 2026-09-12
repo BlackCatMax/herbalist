@@ -11720,3 +11720,113 @@ Partition они не входят, и сам партишен их не выг�
 Файлы: `Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerCore.cpp`,
 `Core/World/GridWorldManagerEntities.cpp`,
 `ProjectHerbalistTests/.../Tests/GridStreamingTest.cpp`, `ROADMAP.md`.
+
+---
+
+## 2026-09-12 — ресурсы гаснут у границы, а не исчезают щелчком
+
+> «Ресурсы исчезают раньше ландшафта.»
+
+Следствие предыдущей правки, а не ошибка в ней. Ресурсы стоят только в
+радиусе симуляции (12 чанков по 8 м, квадратом — 96–104 м по осям), а землю
+World Partition держит на своей дальности и грузит целыми клетками (256 м по
+умолчанию). Проверено и исключено: у `RuntimeHashSet` границы ячейки — полная
+клетка сетки (`FCellCoord::GetCellBounds`), щелей в проверке земли нет.
+
+Дотянуть ресурсы до земли нельзя: у регионов 1–3 ресурса на клетку, при
+клетке 1 м это до ~80 000 акторов на 100 м и до ~540 000 на 256 м. Мелкие
+собираемые растения почти везде пропадают на 50–100 м; плохо было не это, а
+щелчок. Решено (вариант A): **плавное сжатие к основанию на подходе к
+границе.**
+
+### Полоса — выведена
+
+- **Конец — ближайшая граница материализации:** радиус в чанках × размер
+  чанка. Материализованы чанки не дальше радиуса от чанка игрока, значит ближе
+  ресурс не исчезнет ни в одном направлении. При клетке 1 м — 96 м.
+- **Ширина — один чанк:** граница двигается целыми чанками, и новый ряд
+  появляется не ближе конца полосы, то есть уже полностью сжатым. При клетке
+  1 м — 88–96 м. (В предложении звучало «80–96» — это было на глаз.)
+- Стриминг выключен — полоса уводится дальше любого мира; начало и конец не
+  совпадают, чтобы `SmoothStep` в материале не делил на ноль.
+
+`AGridWorldManager::GetResourceFadeFrame` считает полосу из действующих
+настроек, `UpdateWorldStateMap` пишет её в `MPC_WorldStateFields` как
+`ResourceFadeFrame` (R — начало, G — конец, см). Параметр заводит
+`-run=WorldStateMapSetup`.
+
+### Сжимаются только ресурсы
+
+Мастер-материалы ресурсов общие с декором паков: `MI_GreenSappling_A`,
+`MI_Bamboo` и прочие стоят на десятках мешей. Переключатель в инстансах тут
+не работает. Поэтому **актор ресурса сам ставит метку 1** в Custom Primitive
+Data меша (индекс 0, `AHerbalistResourceActor::DistanceFadeDataIndex`), а
+материал сжимает только помеченное — у декора метка 0. Ставится значение по
+умолчанию (`SetDefaultCustomPrimitiveDataFloat`): движок сам копирует его в
+рантайм в `PostInitProperties`/`PostLoad`, так метку получают и заспавненные,
+и расставленные ресурсы. Индекс 0 в мастерах свободен, Nanite данные
+примитива в шейдере читает.
+
+Какие мастера рисуют ресурсы (разобрано по всем 18 мешам из
+`DT_IngredientClass`):
+
+| Мастер | Режим | WPO уже есть | Затухание |
+|---|---|---|---|
+| `M_Foliage` (UltimateFarming) | Masked, Nanite | да | добавить |
+| `M_Fruits` (UltimateFarming) | Opaque, Nanite | да | добавить |
+| `M_plants` (Stylized_Forest) | Masked | да (ветер) | добавить |
+| `M_Hardsurface` (UltimateFarming) | Opaque, Nanite | нет | **не трогать** |
+
+`M_Hardsurface` рисует ~67 мешей пака. WPO там заставил бы Nanite каждый
+кадр сбрасывать кэш виртуальных теней у всех построек и инструментов — ради
+одной бамбуковой подпорки у бобов. Цена: подпорка исчезает щелчком.
+
+### Схема нод (в каждый из трёх мастеров)
+
+```
+Основание:
+  Constant3Vector (0,0,0)
+    → Transform Position (Source = Instance & Particle Space,
+                          Destination = Absolute World Space)      = Pivot
+Расстояние:
+  Subtract: A ← Pivot,  B ← TramplePlayerPosition → Mask RGB
+    → Mask RG → Length                                             = D
+Доля сжатия:
+  SmoothStep (Min ← ResourceFadeFrame → Mask R,
+              Max ← ResourceFadeFrame → Mask G,  Value ← D)
+    → Multiply (× Custom Primitive Data, Data Index 0)             = Amount
+Сжатие к основанию:
+  Local Position (Local Origin = Instance, Shader Offsets = Exclude)
+    → Transform (Source = Instance & Particle Space, Destination = World Space)
+    → Multiply (× −1)                                              = Collapse
+WPO:
+  Lerp (A ← то, что сейчас идёт в World Position Offset,
+        B ← Collapse,  Alpha ← Amount)  → World Position Offset
+```
+
+В `M_plants` вход A — выход переключателя `Trampleable`. Только
+`Instance & Particle Space`, не `Local Space`: у Nanite `Local Space` — это
+компонент (довод — в записи о траве на тропах). Позиция игрока —
+`TramplePlayerPosition`, её уже пишет подсистема троп.
+
+### Тесты
+
+Три новых, `Herbalist.ResourceFade.*`:
+- `FadeEndsWhereResourcesMayVanish` — конец полосы = радиус × чанк, ширина —
+  чанк; при клетке 1 м 88–96 м; выключенный стриминг и радиус 0 не дают
+  вырожденной полосы.
+- `ResourceActorIsMarkedForFade` — у заспавненного ресурса рантайм-метка 1.
+- `FrameReachesMaterialCollection` — полоса доходит до MPC.
+
+**Итог:** 526 → 529 тестов, **529/529, два чистых прогона**. Headless `-game`
+на `L_TestDev` и `L_PlaytestPaint` — exit 0, ноль ошибок.
+
+**Не проверено:** сам шейдер — это правка трёх материалов в редакторе.
+
+Файлы: `Core/Resources/AHerbalistResourceActor.h/.cpp`,
+`Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerCore.cpp`,
+`Core/World/GridWorldManagerWorldStateMap.cpp`,
+`Commandlets/WorldStateMapSetupCommandlet.cpp`,
+`Tests/ResourceDistanceFadeTest.cpp` (новый),
+`Content/Materials/MPC_WorldStateFields.uasset`, `ROADMAP.md`,
+`TOOLS_REFERENCE.md`.

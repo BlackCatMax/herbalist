@@ -220,6 +220,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Visualization")
     void GetWorldStateMapFrame(FVector& OutOrigin, FVector2D& OutWorldSize) const;
 
+    // Полоса затухания ресурсов, в сантиметрах от игрока (2026-09-12). Конец --
+    // ближайшее расстояние, на котором ресурс может исчезнуть (граница
+    // материализации); ширина -- один чанк. Уходит в MPC как ResourceFadeFrame.
+    void GetResourceFadeFrame(float& OutStartCm, float& OutEndCm) const;
+
     UFUNCTION(BlueprintCallable, Category = "Visualization")
     void UpdateWorldStateMap();
 
