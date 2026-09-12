@@ -64,18 +64,18 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistWard_ConcealmentOnlyProtectsASmallRad
 bool FHerbalistWard_ConcealmentOnlyProtectsASmallRadiusAroundCenter::RunTest(const FString& Parameters)
 {
     // "Слабая" версия Шапки-невидимки -- та же геометрия (Chebyshev-радиус
-    // вокруг клетки активации), но WardConcealmentRadius (черновое число 1)
-    // заметно меньше InvisibilityCapRadius (3, см. HerbalistSettings.h).
+    // вокруг клетки активации), но WardConcealmentRadiusMeters (черновые 10 м)
+    // заметно меньше InvisibilityCapRadiusMeters (30 м, см. HerbalistSettings.h).
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     TestFalse(TEXT("A cell far from any center is never protected before activation"),
         Manager->IsWardConcealmentActive(FIntPoint(10, 10)));
 
-    Manager->ActivateWardConcealment(FIntPoint(5, 5));   // радиус по умолчанию 1
+    Manager->ActivateWardConcealment(FIntPoint(5, 5));   // 10 м -- 1 клетка
 
     TestTrue(TEXT("The activation cell itself is protected"), Manager->IsWardConcealmentActive(FIntPoint(5, 5)));
     TestTrue(TEXT("An adjacent cell (within radius 1) is protected"), Manager->IsWardConcealmentActive(FIntPoint(6, 6)));
@@ -130,7 +130,7 @@ bool FHerbalistWard_MorokReductionOnlyAppliesAtNightNearActivation::RunTest(cons
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     // Дневное значение ДО активации оберега вообще -- эталон "как было бы
@@ -147,7 +147,7 @@ bool FHerbalistWard_MorokReductionOnlyAppliesAtNightNearActivation::RunTest(cons
     const float BaselineNight = Manager->ComputePerceptionDistortion(5, 5);
     TestTrue(TEXT("Not active before activation"), !Manager->IsWardMorokReductionActive());
 
-    Manager->ActivateWardMorokReduction(FIntPoint(5, 5));   // радиус по умолчанию 1
+    Manager->ActivateWardMorokReduction(FIntPoint(5, 5));   // 10 м -- 1 клетка
     TestTrue(TEXT("Active immediately after activation"), Manager->IsWardMorokReductionActive());
 
     const float ReducedNight = Manager->ComputePerceptionDistortion(5, 5);

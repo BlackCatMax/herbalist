@@ -17,7 +17,7 @@
 // создаёт вовсе — капища расставляет левел-дизайнер актором AShrineActor
 // (Core/Shrine/ShrineActor.h), а близость котла к капищу стала выбором
 // игрока: надбавка к Coherence и остальные эффекты работают в
-// ShrineInfluenceRadius, а не даются варке безусловно.
+// ShrineInfluenceRadiusMeters, а не даются варке безусловно.
 #pragma once
 
 #include "CoreMinimal.h"

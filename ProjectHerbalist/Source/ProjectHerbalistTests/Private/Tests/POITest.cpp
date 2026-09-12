@@ -123,7 +123,7 @@ bool FHerbalistPOI_ActivateSoloveyAppliesAoECorruptionOnceThenNoOps::RunTest(con
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     const FIntPoint Solovey = Manager->GetSoloveySite();
@@ -133,8 +133,8 @@ bool FHerbalistPOI_ActivateSoloveyAppliesAoECorruptionOnceThenNoOps::RunTest(con
     Cell->State.Meta.Purity = 0.8f;
     Cell->State.Meta.Stability = 0.8f;
 
-    // Клетка далеко за пределами радиуса AoE (SoloveyCorruptionRadius=3
-    // по умолчанию) -- сеточная граница 20x20, Chebyshev-дистанция > 3 от
+    // Клетка далеко за пределами радиуса AoE (SoloveyCorruptionRadiusMeters -- 30 м,
+    // 3 клетки) -- сеточная граница 20x20, Chebyshev-дистанция > 3 от
     // почти любой точки гарантированно найдётся у клетки (0,0) или (19,19).
     const FIntPoint FarCoord = (FMath::Abs(Solovey.X - 0) > 3 || FMath::Abs(Solovey.Y - 0) > 3) ? FIntPoint(0, 0) : FIntPoint(19, 19);
     FGridCell* FarCell = Manager->GetCell(FarCoord.X, FarCoord.Y);

@@ -824,27 +824,31 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ClarityResponseLerpRate = 0.002f;
 
-    // Роса Заряны (19_Rosa_Signal.md §19.2, Слой 3): радиус в клетках, с
-    // которого влияние капищ/хозяев места подмешивается в её State —
-    // растёт с Clarity ("восстановленное капище на другом краю карты чуть
-    // светлит её кожу"). Числа черновые — 3 клетки у Clarity=0 (её
-    // непосредственный двор), до ~18 у Clarity=1 (большая часть сетки
-    // 20x20 по умолчанию).
-    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
-    float RosaBaseRadius = 3.0f;
+    // Роса Заряны (19_Rosa_Signal.md §19.2, Слой 3): радиус, с которого
+    // влияние капищ/хозяев места подмешивается в её State, -- растёт с Clarity
+    // ("восстановленное капище на другом краю карты чуть светлит её кожу").
+    // В МЕТРАХ с 2026-09-12 (разметка мира, решение пользователя 11): было 3
+    // клетки у Clarity=0 и +15 клеток на единицу Clarity при клетке 10 м --
+    // те же 30 м и 150 м. Числа черновые. Задумывался радиус как доля карты
+    // ("большая часть сетки 20x20"), а метры от размера карты не зависят --
+    // открытый вопрос в ROADMAP.md.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", Units = "m"))
+    float RosaBaseRadiusMeters = 30.0f;
 
-    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
-    float RosaRadiusPerClarity = 15.0f;
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", Units = "m"))
+    float RosaRadiusPerClarityMeters = 150.0f;
 
     // Первый кадр (19_Rosa_Signal.md §19.4a, 2026-09-02) — "испорченный
     // круг" вокруг ZaryanaCell при её первом размещении: трава полегла,
-    // земля темнее в непосредственной близости, спадает к краям. 3 клетки —
-    // тот же порядок величины, что уже RosaBaseRadius выше ("её
+    // земля темнее в непосредственной близости, спадает к краям. 30 м —
+    // тот же порядок величины, что уже RosaBaseRadiusMeters выше ("её
     // непосредственный двор"), не произвольное число — оба описывают один
     // и тот же ближний двор Заряны с разных сторон (радиус чувствительности
     // росы против радиуса самой порчи).
-    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0"))
-    int32 RosaCorruptedCircleRadius = 3;
+    // В метрах с 2026-09-12 (разметка мира, решение пользователя 11): было
+    // 3 клетки при клетке 10 м. В клетки переводит AGridWorldManager::GetCellRadius.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0", Units = "m"))
+    float RosaCorruptedCircleRadiusMeters = 30.0f;
 
     // Пиковая (в центре круга, спадающая линейно к нулю на краю) добавка к
     // Distortion/Corruption клетки. Distortion выше Corruption — §19.4a
@@ -932,6 +936,16 @@ public:
     // гистерезиса — только медленно толкает TargetState, оставляя игроку
     // время заметить и вмешаться (собрать, полить зельем), прежде чем сосед
     // однажды перейдёт порог уже сам.
+    //
+    // Скорость фронта задаёт не эта ставка (2026-09-12, разметка мира, этап 3).
+    // Сосед перекидывается, когда до порога входа дойдёт его State, а State
+    // идёт к TargetState линейно, 0.0005 в секунду (AGridWorldManager::StateRelaxationPerSecond);
+    // ставка 0.01 поднимает TargetState в двадцать раз быстрее. Время на
+    // клетку -- (порог входа - здоровое значение) / 0.0005, у Тайги ~1350 с,
+    // на любом размере клетки, поэтому пересчёт ставки по размеру клетки
+    // (решение пользователя 12) скорость фронта в метрах не менял. Проверено
+    // тестом Herbalist.WorldLayout.Meters.ContagionFrontIsLimitedByRelaxation.
+    // Как держать фронт в метрах -- открытый вопрос в ROADMAP.md.
     UPROPERTY(config, EditAnywhere, Category = "Biome|Bistability", meta = (ClampMin = "0.0"))
     float ContagionSpreadRate = 0.01f;
 
@@ -1036,11 +1050,15 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "1.0"))
     float ShrineNeglectDecayDays = 28.0f;
 
-    // Радиус влияния (эффекты 1/2/4) в клетках — шире радиуса подношения
+    // Радиус влияния (эффекты 1/2/4) — шире радиуса подношения
     // (только собственная клетка капища). Тот же порядок величины, что у
     // PropagationDepth биомного графа.
-    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "1"))
-    int32 ShrineInfluenceRadius = 3;
+    // В метрах с 2026-09-12 (разметка мира, решение пользователя 11): было
+    // 3 клетки при клетке 10 м. В клетки переводит AGridWorldManager::GetCellRadius.
+    // Не меньше 1 м, как прежде не меньше 1 клетки: капище всегда влияет не
+    // только на свою клетку (ненулевые метры дают хотя бы одну клетку).
+    UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "1.0", Units = "m"))
+    float ShrineInfluenceRadiusMeters = 30.0f;
 
     // Множитель надбавки к Coherence варки в радиусе влияния (эффект 2,
     // §11.7): Coherence_итог = Coherence + Restoration × ShrineCoherenceBonus.
@@ -1190,10 +1208,12 @@ public:
     // §21.3: "выводит клетку/зону из-под срабатывания", раньше в коде был
     // безусловным на всю сетку (находка разведки — у предмета не было
     // понятия зоны вовсе). Chebyshev-радиус вокруг клетки игрока в момент
-    // применения — тот же порядок величины, что уже ShrineInfluenceRadius/
-    // RosaCorruptedCircleRadius ("несколько клеток"), не одна и не полсетки.
-    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0"))
-    int32 InvisibilityCapRadius = 3;
+    // применения — тот же порядок величины, что уже ShrineInfluenceRadiusMeters/
+    // RosaCorruptedCircleRadiusMeters ("несколько клеток"), не одна и не полсетки.
+    // В метрах с 2026-09-12 (разметка мира, решение пользователя 11): было
+    // 3 клетки при клетке 10 м. В клетки переводит AGridWorldManager::GetCellRadius.
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0", Units = "m"))
+    float InvisibilityCapRadiusMeters = 30.0f;
 
     // Прогрев артефактов, вариант C (§21.4, 2026-09-01, ревизия "Update
     // docs"/"Update artifacts") — зелье нужного типа, сваренное в родном
@@ -1230,10 +1250,12 @@ public:
 
     // "Рядом" — Chebyshev-соседство с якорной клеткой Болотного царя (тот
     // же принцип расстояния, что уже GetZaryanaPerceivedState применяет к
-    // влиянию хозяев места в радиусе). 1 = его собственная клетка или любая
-    // из восьми соседних.
-    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0"))
-    int32 LurePotionRadius = 1;
+    // влиянию хозяев места в радиусе). 10 м при клетке 10 м -- 1 клетка: его
+    // собственная или любая из восьми соседних.
+    // В метрах с 2026-09-12 (разметка мира, решение пользователя 11): было
+    // 1 клетка при клетке 10 м. В клетки переводит AGridWorldManager::GetCellRadius.
+    UPROPERTY(config, EditAnywhere, Category = "Artifacts", meta = (ClampMin = "0.0", Units = "m"))
+    float LurePotionRadiusMeters = 10.0f;
 
     // --- Перья вещих птиц (16_Entity_Manifestation.md §16.4, эндгейм-
     // трофеи, 2026-09-02) ---
@@ -1279,10 +1301,12 @@ public:
 
     // EntityConceal — Chebyshev-радиус подавления новых проявлений вокруг
     // игрока, тот же механизм, что и IsInvisibilityCapActive(Cell), но
-    // заметно меньше InvisibilityCapRadius (3) — "слабый" оберег защищает
+    // заметно меньше InvisibilityCapRadiusMeters (30 м) — "слабый" оберег защищает
     // только вплотную к себе, не всю округу, как настоящая Шапка-невидимка.
-    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0"))
-    int32 WardConcealmentRadius = 1;
+    // В метрах с 2026-09-12 (разметка мира, решение пользователя 11): было
+    // 1 клетка при клетке 10 м. В клетки переводит AGridWorldManager::GetCellRadius.
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0", Units = "m"))
+    float WardConcealmentRadiusMeters = 10.0f;
 
     // MorokReduction (Куриный бог, второй заход 2026-09-04) — насколько
     // ослабляет воспринятое искажение (ComputePerceptionDistortion) ночью в
@@ -1295,12 +1319,14 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float WardMorokReductionAmount = 0.1f;
 
-    // MorokReduction — тот же Chebyshev-радиус приём, что и WardConcealmentRadius
+    // MorokReduction — тот же Chebyshev-радиус приём, что и WardConcealmentRadiusMeters
     // (не выдумываем третье число: тот же класс "слабый, радиус вплотную к
     // месту активации", что и у EntityConceal — оба защищают "здесь", не
     // всю округу).
-    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0"))
-    int32 WardMorokReductionRadius = 1;
+    // В метрах с 2026-09-12 (разметка мира, решение пользователя 11): было
+    // 1 клетка при клетке 10 м. В клетки переводит AGridWorldManager::GetCellRadius.
+    UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0", Units = "m"))
+    float WardMorokReductionRadiusMeters = 10.0f;
 
     // Тиражные обереги (награда ритуалов перехода ярусов биомов, 2026-09-04,
     // GridWorldManagerWards.cpp::ActivateTieredWard/IsTieredConcealmentActive/
@@ -1403,11 +1429,13 @@ public:
 
     // Соловей-разбойник (§4.4) — AoE-порча Purity/Stability при активации
     // без прикрытия одолень-травы (IsWardConcealmentActive). Радиус того же
-    // порядка, что ShrineInfluenceRadius (3) — площадной эффект в
+    // порядка, что ShrineInfluenceRadiusMeters (30 м) — площадной эффект в
     // несколько клеток, не одна и не полсетки; отдельное поле, чтобы
     // балансировка капищ и Соловья не были случайно связаны одним числом.
-    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0"))
-    int32 SoloveyCorruptionRadius = 3;
+    // В метрах с 2026-09-12 (разметка мира, решение пользователя 11): было
+    // 3 клетки при клетке 10 м. В клетки переводит AGridWorldManager::GetCellRadius.
+    UPROPERTY(config, EditAnywhere, Category = "POI", meta = (ClampMin = "0.0", Units = "m"))
+    float SoloveyCorruptionRadiusMeters = 30.0f;
 
     // Величина порчи Purity/Stability за срабатывание — заметно меньше
     // PotionOverdosePenalty (0.5): это фоновая угроза места, не прямая
@@ -1420,7 +1448,7 @@ public:
     // Постоянная зона порчи вокруг дуба (DESIGN_POI_Art_And_LevelDesign.md
     // §4, "Земля... в широком радиусе визибельно порченая... постоянный,
     // не разовый признак", 2026-09-06) -- потолок TargetState.Meta.Purity
-    // (тем же радиусом SoloveyCorruptionRadius), не убывающий нудж: место
+    // (тем же радиусом SoloveyCorruptionRadiusMeters), не убывающий нудж: место
     // держится на этом уровне порчи ПОСТОЯННО, пока Соловей не усмирён
     // (bSoloveyCalmed), не портится сильнее с каждым тиком. Отдельное поле
     // от SoloveyCorruptionBurst -- разовый удар и постоянный фон это две

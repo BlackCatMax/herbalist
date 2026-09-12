@@ -169,7 +169,7 @@ bool FHerbalistArtifactEffects_InvisibilityCapOnlyProtectsARealZoneAroundItsCent
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     FAcquiredArtifact Cap;
@@ -179,7 +179,7 @@ bool FHerbalistArtifactEffects_InvisibilityCapOnlyProtectsARealZoneAroundItsCent
     TestFalse(TEXT("A cell far from any center is never protected before activation"),
         Manager->IsInvisibilityCapActive(FIntPoint(10, 10)));
 
-    Manager->UseInvisibilityCap(FIntPoint(5, 5));   // радиус по умолчанию 3
+    Manager->UseInvisibilityCap(FIntPoint(5, 5));   // 30 м -- 3 клетки
 
     TestTrue(TEXT("The activation cell itself is protected"), Manager->IsInvisibilityCapActive(FIntPoint(5, 5)));
     TestTrue(TEXT("A cell within the radius is protected"), Manager->IsInvisibilityCapActive(FIntPoint(7, 6)));

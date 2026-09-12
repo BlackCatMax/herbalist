@@ -72,7 +72,7 @@ namespace
 FVector4f AGridWorldManager::GetCellWorldStateAxes(const FGridCell& Cell) const
 {
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ShrineRadius = Settings ? Settings->ShrineInfluenceRadius : 3;
+    const int32 ShrineRadius = GetCellRadius(Settings ? Settings->ShrineInfluenceRadiusMeters : 30.0f);
 
     // Каналы выбраны не произвольно: это ровно те четыре оси, которые шапка
     // PCGHerbalistGridData.h называет практическим применением обратной

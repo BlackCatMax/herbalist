@@ -272,6 +272,11 @@ void AGridWorldManager::InitializeWorldLayoutForPlay()
     }
 }
 
+int32 AGridWorldManager::GetCellRadius(float Meters) const
+{
+    return FWorldLayoutSolver::MetersToCellRadius(Meters, CellSize);
+}
+
 void AGridWorldManager::SyncWithWorldPartition()
 {
 #if WITH_EDITOR

@@ -207,6 +207,11 @@ struct PROJECTHERBALIST_API FWorldLayoutSolver
     // Действующий радиус активной области в метрах для данного чанка.
     static double EffectiveRadiusMeters(int32 ChunkSizeInCells, double CellSizeCm, double SimulationRadiusMeters);
 
+    // Радиус в клетках для величины, заданной в метрах (решение пользователя
+    // 11): round(метры / клетка), не меньше 1 для положительных метров --
+    // радиус, который был ненулевым, не должен исчезать на крупной клетке.
+    static int32 MetersToCellRadius(double Meters, double CellSizeCm);
+
     static uint32 ComputeFingerprint(double CellSizeCm, const FVector2D& Anchor, int32 PageSizeInCells);
 
     // Совпадают ли исходные величины с точностью до допуска. Границы

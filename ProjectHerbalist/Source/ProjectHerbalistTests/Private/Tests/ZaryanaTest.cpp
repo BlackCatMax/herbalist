@@ -328,13 +328,13 @@ bool FHerbalistZaryana_RosaSensingRadiusGrowsWithClarity::RunTest(const FString&
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     Manager->SetZaryanaCellIfUnset(FIntPoint(0, 0));
 
-    // Капище далеко за пределами базового радиуса (дефолт 3), но внутри
-    // радиуса при высокой Clarity (дефолт 3 + 1.0*15 = 18) — §19.2 Слой 3.
+    // Капище далеко за пределами базового радиуса (30 м -- 3 клетки), но
+    // внутри радиуса при высокой Clarity (30 + 1.0*150 = 180 м -- 18 клеток) — §19.2 Слой 3.
     Manager->RegisterShrine(FIntPoint(10, 0), EShrineType::Ancestral);
     if (FShrine* Shrine = Manager->FindShrineAt(FIntPoint(10, 0)))
     {
@@ -985,7 +985,7 @@ bool FHerbalistZaryana_FirstPlacementSeedsCorruptedCircleFallingOffWithDistance:
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     const FIntPoint Center(10, 10);

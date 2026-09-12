@@ -234,7 +234,7 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     // карточке, не сила/длительность: те, как и у остальных Zaryana/
     // Artifacts-таймеров этого проекта (InvisibilityCapDurationSeconds,
     // ShrineCoherenceBonus...), общие настройки на UHerbalistSettings
-    // (WardDurationSeconds/WardBrewBoostCoherenceBonus/WardConcealmentRadius),
+    // (WardDurationSeconds/WardBrewBoostCoherenceBonus/WardConcealmentRadiusMeters),
     // не число на каждой отдельной карточке — фольклор называет ХАРАКТЕР
     // защиты конкретного предмета, не её игровую силу в секундах/долях.
     //

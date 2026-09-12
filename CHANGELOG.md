@@ -12481,3 +12481,123 @@ StaticSwitchParameter «Trampleable» (Default Value = выключен):
 `Config/DefaultEngine.ini`, `Commandlets/PlaytestMapResizeCommandlet.cpp`,
 `Tests/ResourceDensityTest.cpp` (новый), `Tests/GridWorldManagerRegionDensityTest.cpp`,
 `Tests/ResourceRegrowthTest.cpp`, `ROADMAP.md`, `CHANGELOG.md`.
+
+---
+
+## 2026-09-12 — разметка мира, этап 3: радиусы в метрах; заражение осталось в клетках
+
+Решения пользователя 11 и 12 (`DESIGN_World_Layout.md` §5). Размер клетки
+теперь выводится из ландшафта, и радиус «в клетках» молча менялся бы вместе с
+ним.
+
+### Что сделано
+
+- **Радиусы в метрах.** В `UHerbalistSettings` поля в клетках заменены полями
+  в метрах; при клетке 10 м получаются прежние значения:
+
+  | Было (клетки) | Стало (метры) |
+  |---|---|
+  | `ShrineInfluenceRadius = 3` | `ShrineInfluenceRadiusMeters = 30` |
+  | `RosaCorruptedCircleRadius = 3` | `RosaCorruptedCircleRadiusMeters = 30` |
+  | `InvisibilityCapRadius = 3` | `InvisibilityCapRadiusMeters = 30` |
+  | `SoloveyCorruptionRadius = 3` | `SoloveyCorruptionRadiusMeters = 30` |
+  | `LurePotionRadius = 1` | `LurePotionRadiusMeters = 10` |
+  | `WardConcealmentRadius = 1` | `WardConcealmentRadiusMeters = 10` |
+  | `WardMorokReductionRadius = 1` | `WardMorokReductionRadiusMeters = 10` |
+  | `RosaBaseRadius = 3`, `RosaRadiusPerClarity = 15` | `RosaBaseRadiusMeters = 30`, `RosaRadiusPerClarityMeters = 150` |
+
+  Старые имена не заданы ни в `Config/*.ini`, ни в `Saved/Config`, ни в ассетах
+  (проверено побайтовым поиском по `.uasset`), поэтому редирект не нужен. У
+  капища сохранена нижняя граница: не меньше 1 м, как прежде не меньше 1 клетки.
+- **Перевод в клетки** — `FWorldLayoutSolver::MetersToCellRadius`: round(метры /
+  клетка). Положительный радиус даёт не меньше одной клетки: радиус, который был
+  ненулевым, не исчезает на крупной клетке. Форма зоны прежняя — квадрат по
+  Чебышёву в клетках. Менеджер переводит через `AGridWorldManager::GetCellRadius`,
+  пайплайн — по новому `FWorldSnapshot::CellSizeCm`.
+- **Карта L_TestDev** (клетка 10 м) — без изменений. После запекания разметки
+  (этап 9, клетка 9 м): 30 м — 3 клетки = 27 м, 10 м — 1 клетка = 9 м.
+- В ГДД (`19_Rosa_Signal.md`, `21_Journey_And_Artifacts.md`) имена и единицы
+  приведены к новым полям.
+
+### Заражение в метрах — не сделано: предположение не подтвердилось
+
+План (§5) предполагал, что фронт порчи идёт со скоростью ставки заражения и её
+пересчёт `ContagionSpreadRate × 10 м / клетка` удержит фронт в метрах. Он же
+требовал это проверить. Симуляция (новый тест
+`ContagionFrontIsLimitedByRelaxation`) показала:
+
+- сосед перекидывается, когда до порога входа 0,85 дойдёт его **State**;
+- State идёт к TargetState линейно, 0,0005 в секунду (теперь именованная
+  константа `AGridWorldManager::StateRelaxationPerSecond`);
+- ставка 0,01 поднимает TargetState в двадцать раз быстрее, поэтому время на
+  клетку задаёт релаксация: у Тайги ≈1350 с на любом размере клетки;
+- 60 м фронт проходит за 4060 с на клетке 20 м, 8110 с на 10 м, 16 210 с на
+  5 м. Пересчёт ставки ничего не менял.
+
+Пересчёт убран, чтобы настройка не обещала того, чего нет; `ContagionSpreadRate`
+осталась как была. Фронт в метрах возможен, только если ставка станет медленнее
+релаксации, — тогда фронт замедлится. Это решение баланса, оно вынесено в
+`ROADMAP.md` вместе с вопросом о радиусе Росы: задумывался как доля карты, а
+метры от размера карты не зависят.
+
+### Тесты
+
+Новые, `Herbalist.WorldLayout.Meters.*`:
+- `MetersToCellsFollowsDesignTable` — таблица §5 на клетках 7, 9, 10 и 14 м;
+  ноль, отрицательные метры, радиус меньше половины клетки, вырожденная клетка.
+- `ManagerConvertsOnItsOwnCell` — менеджер переводит по своему размеру клетки.
+- `ContagionFrontIsLimitedByRelaxation` — время на клетку равно
+  (порог входа − здоровое значение) / `StateRelaxationPerSecond` на клетках 5,
+  10 и 20 м.
+
+У менеджера автотеста клетка 1 м, и 30 м там — 30 клеток, больше всей сетки
+20×20. Семь тестов геометрии радиусов упали ровно на этом. Восьмой,
+`Zaryana.RosaSensingRadiusGrowsWithClarity`, остался зелёным по чужой причине:
+капище оказалось внутри радиуса при любой Clarity. Все восемь теперь
+создают менеджер с клеткой 10 м — новым параметром `SpawnAndBeginPlay(…,
+CellSizeCm)`, до `BeginPlay`, как и сид. На клетке 10 м метры дают прежние
+числа; проверки не менялись.
+
+**Итог:** 557 тестов, **557/557, два чистых прогона**.
+
+### Ревью агентом
+
+Исправлено:
+- клетка 10 м в тестах задавалась после `BeginPlay`, когда клетки, ресурсы и
+  точки интереса уже разложены по клетке 1 м; теперь до;
+- комментарии в `HerbalistSettings.h` («в клетках», «3 клетки», «1 = своя
+  клетка») и §10 плана, всё ещё обещавший фронт в метрах;
+- `ShrineInfluenceRadiusMeters` потерял нижнюю границу (было не меньше 1
+  клетки);
+- радиусы капища и Соловья переводились в клетки на каждой клетке цикла
+  релаксации — теперь один раз на вызов; локальная переменная в клетках
+  переименована в `ShrineInfluenceRadiusCells`;
+- тест фронта держал свою копию 0,0005.
+
+Проверено ревьюером и признано корректным: читателей старых имён нет нигде;
+радиус Росы при клетке 10 м совпадает с прежним при любой Clarity (оба
+округления — `floor(x + 0,5)`); `CellSizeCm` снимка проставляет единственный
+путь, где в снимке есть капища (`CaptureState`).
+
+Отмечено, не исправлялось:
+- **Остальные тесты живут на клетке 1 м**, и зона Соловья, созданная в
+  `BeginPlay`, накрывает там всю сетку 20×20. Явных поломок ревьюер не нашёл,
+  но нарушение границы радиуса в этих тестах не будет видно. Перевод всех ~560
+  тестов на клетку 10 м — отдельная широкая правка.
+- **Ненулевой радиус не меньше клетки**, и квадрат в одну клетку достаёт на
+  полторы клетки: оберег 10 м на клетке 50 м — до 75 м. На клетках 9–10 м
+  незаметно; записано в §5.
+
+Файлы: `Core/Config/HerbalistSettings.h`, `Core/World/WorldLayout.h/.cpp`,
+`Core/World/GridWorldManager.h`, `Core/World/GridWorldManagerLayout.cpp`,
+`Core/World/GridWorldManagerCore.cpp`, `…Entities.cpp`, `…ArtifactEffects.cpp`,
+`…Artifacts.cpp`, `…POI.cpp`, `…Wards.cpp`, `…WorldStateMap.cpp`,
+`…Zaryana.cpp`, `Core/PCG/PCGHerbalistGridData.cpp`,
+`Core/Simulation/Public/SnapshotTypes.h`, `Core/Simulation/Private/PipelineV2.cpp`;
+комментарии — `Player/HerbalistPlayerController.h`, `Core/Data/IngredientTableRow.h`,
+`Core/Shrine/ShrineTypes.h`, `Core/Shrine/ShrineActor.h`,
+`Core/Types/HerbalistCoreTypes.h`, `Core/Storage/AlchemyTableActor.cpp`; тесты —
+`CellRadiusMetersTest.cpp` (новый), `TestWorldHelpers.h`, `ArtifactTest.cpp`,
+`ArtifactEffectsTest.cpp`, `POITest.cpp`, `ShrineTypeEffectTest.cpp`,
+`WardTest.cpp`, `ZaryanaTest.cpp`; `DESIGN_World_Layout.md`, `ROADMAP.md`,
+`CHANGELOG.md`, `19_Rosa_Signal.md`, `21_Journey_And_Artifacts.md`.

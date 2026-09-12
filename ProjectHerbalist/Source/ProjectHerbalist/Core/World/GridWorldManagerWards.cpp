@@ -61,7 +61,7 @@ bool AGridWorldManager::IsWardConcealmentActive(const FIntPoint& Cell) const
     if (!IsWardConcealmentActive()) return false;
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->WardConcealmentRadius : 1;
+    const int32 Radius = GetCellRadius(Settings ? Settings->WardConcealmentRadiusMeters : 10.0f);
     const int32 Dist = FMath::Max(FMath::Abs(Cell.X - WardConcealmentCenter.X), FMath::Abs(Cell.Y - WardConcealmentCenter.Y));
     return Dist <= Radius;
 }
@@ -95,7 +95,7 @@ bool AGridWorldManager::IsWardMorokReductionActive(const FIntPoint& Cell) const
     if (!IsWardMorokReductionActive()) return false;
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->WardMorokReductionRadius : 1;
+    const int32 Radius = GetCellRadius(Settings ? Settings->WardMorokReductionRadiusMeters : 10.0f);
     const int32 Dist = FMath::Max(FMath::Abs(Cell.X - WardMorokReductionCenter.X), FMath::Abs(Cell.Y - WardMorokReductionCenter.Y));
     return Dist <= Radius;
 }

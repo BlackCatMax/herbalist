@@ -24,6 +24,12 @@ struct FWorldSnapshot
     // остаётся чистой функцией, читает контекст из снапшота, а не лезет в
     // AGridWorldManager напрямую.
     TArray<FShrine> Shrines;
+
+    // Размер клетки (2026-09-12, разметка мира): радиусы заданы в метрах, и
+    // Pipeline переводит их в клетки сам, не обращаясь к AGridWorldManager.
+    // Дефолт -- тот же, что у AGridWorldManager::CellSize; CaptureState
+    // проставляет настоящий. Снимок, собранный вручную с капищами, задаёт его сам.
+    double CellSizeCm = 100.0;
 };
 
 /**

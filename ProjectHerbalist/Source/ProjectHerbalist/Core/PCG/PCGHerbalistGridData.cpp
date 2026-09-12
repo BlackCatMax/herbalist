@@ -92,7 +92,7 @@ bool FPCGHerbalistGridElement::ExecuteInternal(FPCGContext* Context) const
     }
 
     const UHerbalistSettings* HerbalistSettings = GetHerbalistSettings();
-    const int32 ShrineRadius = HerbalistSettings ? HerbalistSettings->ShrineInfluenceRadius : 3;
+    const int32 ShrineRadius = Manager->GetCellRadius(HerbalistSettings ? HerbalistSettings->ShrineInfluenceRadiusMeters : 30.0f);
     const TArray<FShrine>& Shrines = Manager->GetShrines();
 
     TArray<FPCGTaggedData>& Outputs = Context->OutputData.TaggedData;

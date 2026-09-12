@@ -1,5 +1,6 @@
 // Core/Simulation/Private/PipelineV2.cpp
 #include "PipelineV2.h"
+#include "Core/World/WorldLayout.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "Core/Types/BiomeTypes.h"
@@ -969,7 +970,7 @@ namespace Simulation
         // даже при крафте, это и есть единственный способ подношению вообще сработать.
         const UHerbalistSettings* ShrineSettings = GetHerbalistSettings();
         const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(
-            Cmd.TargetCell, WorldSnap.Shrines, ShrineSettings ? ShrineSettings->ShrineInfluenceRadius : 3);
+            Cmd.TargetCell, WorldSnap.Shrines, FWorldLayoutSolver::MetersToCellRadius(ShrineSettings ? ShrineSettings->ShrineInfluenceRadiusMeters : 30.0f, WorldSnap.CellSizeCm));
         if (ShrineInfluence > 0.0f)
         {
             const float Bonus = ShrineSettings ? ShrineSettings->ShrineCoherenceBonus : 0.15f;

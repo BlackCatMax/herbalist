@@ -1174,7 +1174,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             // вклад MorokField в локальный Distortion на (1 − 0.4×Restoration),
             // только в радиусе капища.
             const FShrine* DominantShrine = Shrines.Num() > 0
-                ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3)
+                ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, GetCellRadius(Settings ? Settings->ShrineInfluenceRadiusMeters : 30.0f))
                 : nullptr;
             if (DominantShrine && DominantShrine->Type == EShrineType::Stone && DominantShrine->Restoration > 0.0f)
             {
@@ -2329,6 +2329,7 @@ FWorldSnapshot AGridWorldManager::CaptureState() const
     Snapshot.WorldSeed = GetCurrentWorldSeed();
     Snapshot.WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
     Snapshot.Shrines = Shrines;
+    Snapshot.CellSizeCm = CellSize;
     return Snapshot;
 }
 
@@ -2465,7 +2466,7 @@ float AGridWorldManager::GetStressRecoverySecondsForCell(const FGridCell& Cell) 
     {
         const UHerbalistSettings* Settings = GetHerbalistSettings();
         const FShrine* DominantShrine = HerbalistCore::Shrine::FindDominantShrine(
-            FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3);
+            FIntPoint(Cell.X, Cell.Y), Shrines, GetCellRadius(Settings ? Settings->ShrineInfluenceRadiusMeters : 30.0f));
         if (DominantShrine && DominantShrine->Type == EShrineType::Forest && DominantShrine->Restoration > 0.0f)
         {
             const float HealBonus = Settings ? Settings->ShrineForestHealBonus : 0.5f;
@@ -2478,8 +2479,7 @@ float AGridWorldManager::GetStressRecoverySecondsForCell(const FGridCell& Cell) 
 
 void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoint* OnlyChunk)
 {
-    const float RegenerationRate = 0.0005f;   // 0.05% в секунду
-    const float DeltaRegen = RegenerationRate * DeltaTime;
+    const float DeltaRegen = StateRelaxationPerSecond * DeltaTime;
 
     // Спад HarvestStress: клетка со стрессом 1.0 полностью зарастает за
     // StressRecoveryGameDays игровых суток, умноженные на множитель биома
@@ -2523,6 +2523,10 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
 
     const float DegradeCenter = Settings ? Settings->BiomeDegradeCenterCorruption : 0.75f;
     const float DegradeMargin = Settings ? Settings->BiomeDegradeMargin : 0.10f;
+
+    // Радиусы в клетках -- один раз на вызов, а не на каждую клетку.
+    const int32 ShrineRadiusCells = GetCellRadius(Settings ? Settings->ShrineInfluenceRadiusMeters : 30.0f);
+    const int32 SoloveyRadiusCells = GetCellRadius(Settings ? Settings->SoloveyCorruptionRadiusMeters : 30.0f);
 
     // Стриминг сетки (2026-09-03): релаксация считается только в активных
     // чанках. Неактивная клетка не «портится» и не «чинится», пока до неё
@@ -2647,7 +2651,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         float StabilityDeltaRegen = DeltaRegen;   // эффект 3, Родовое — см. ниже
         float DirectionRateMultiplier = 1.0f;
         const FShrine* DominantShrine = Shrines.Num() > 0
-            ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3)
+            ? HerbalistCore::Shrine::FindDominantShrine(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineRadiusCells)
             : nullptr;
         if (DominantShrine && DominantShrine->Restoration != 0.0f)
         {
@@ -2715,7 +2719,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         // записью, тот же §7.1 паттерн, что у контагиона выше в этой функции.
         if (SoloveySite != FIntPoint(-1, -1) && !bSoloveyCalmed)
         {
-            const int32 SoloveyRadius = Settings ? Settings->SoloveyCorruptionRadius : 3;
+            const int32 SoloveyRadius = SoloveyRadiusCells;
             const int32 SoloveyDist = FMath::Max(FMath::Abs(Cell.X - SoloveySite.X), FMath::Abs(Cell.Y - SoloveySite.Y));
             if (SoloveyDist <= SoloveyRadius)
             {

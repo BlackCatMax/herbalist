@@ -178,7 +178,7 @@ bool AGridWorldManager::TryLureSwampTsarWithPotion(const FIntPoint& Cell, const 
     // же метрика расстояния, что уже применяет влияние хозяев места в
     // GetZaryanaPerceivedState), не обязательно ровно его клетка.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->LurePotionRadius : 1;
+    const int32 Radius = GetCellRadius(Settings ? Settings->LurePotionRadiusMeters : 10.0f);
     const int32 Dist = FMath::Max(FMath::Abs(Cell.X - Anchor->X), FMath::Abs(Cell.Y - Anchor->Y));
     if (Dist > Radius) return false;
 

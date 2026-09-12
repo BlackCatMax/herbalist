@@ -83,6 +83,16 @@ double FWorldLayoutSolver::EffectiveRadiusMeters(int32 ChunkSizeInCells, double 
     return FMath::FloorToDouble(SimulationRadiusMeters / ChunkMeters + RatioEpsilon) * ChunkMeters;
 }
 
+int32 FWorldLayoutSolver::MetersToCellRadius(double Meters, double CellSizeCm)
+{
+    if (Meters <= 0.0)
+    {
+        return 0;
+    }
+    const double Cells = Meters * 100.0 / FMath::Max(CellSizeCm, 1.0);
+    return FMath::Max(1, FMath::RoundToInt32(Cells));
+}
+
 int32 FWorldLayoutSolver::ChooseChunkCells(int32 PageSizeInCells, double CellSizeCm,
     double SimulationRadiusMeters, double LongestLocalMechanicMeters)
 {

@@ -164,7 +164,7 @@ bool FHerbalistShrineType_WaterPullsPurityOnlyForWaterCellsInRadius::RunTest(con
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
     FGridCell* WaterCell = Manager->GetCell(0, 0);

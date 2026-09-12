@@ -124,7 +124,7 @@ bool AGridWorldManager::IsInvisibilityCapActive(const FIntPoint& Cell) const
     if (!IsInvisibilityCapActive()) return false;
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->InvisibilityCapRadius : 3;
+    const int32 Radius = GetCellRadius(Settings ? Settings->InvisibilityCapRadiusMeters : 30.0f);
     const int32 Dist = FMath::Max(FMath::Abs(Cell.X - InvisibilityCapCenter.X), FMath::Abs(Cell.Y - InvisibilityCapCenter.Y));
     return Dist <= Radius;
 }

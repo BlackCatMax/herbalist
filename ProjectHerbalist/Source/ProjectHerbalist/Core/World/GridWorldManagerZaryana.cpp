@@ -559,7 +559,7 @@ void AGridWorldManager::SeedRosaCorruptedCircle(const FIntPoint& Center)
     // придётся либо расширять FStateDelta, либо переносить сюда отдельный
     // прогон трассировки.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->RosaCorruptedCircleRadius : 3;
+    const int32 Radius = GetCellRadius(Settings ? Settings->RosaCorruptedCircleRadiusMeters : 30.0f);
     const float PeakDistortion = Settings ? Settings->RosaCorruptedCirclePeakDistortion : 0.5f;
     const float PeakCorruption = Settings ? Settings->RosaCorruptedCirclePeakCorruption : 0.4f;
     if (Radius <= 0) return;
@@ -615,11 +615,11 @@ FRealState AGridWorldManager::ComputeZaryanaBlendedState() const
     // "восстановленное капище на другом краю карты чуть светлит её кожу".
     // Тот же HerbalistCore::Shrine::GetInfluenceAt, что уже использует
     // остальной проект (GridWorldManagerEntities.cpp/PipelineV2.cpp), только
-    // с радиусом, растущим по Clarity, а не фиксированным ShrineInfluenceRadius.
+    // с радиусом, растущим по Clarity, а не фиксированным ShrineInfluenceRadiusMeters.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float BaseRadius = Settings ? Settings->RosaBaseRadius : 3.0f;
-    const float RadiusPerClarity = Settings ? Settings->RosaRadiusPerClarity : 15.0f;
-    const int32 Radius = FMath::RoundToInt(BaseRadius + GlobalPerceptionClarity * RadiusPerClarity);
+    const float BaseRadiusMeters = Settings ? Settings->RosaBaseRadiusMeters : 30.0f;
+    const float RadiusPerClarityMeters = Settings ? Settings->RosaRadiusPerClarityMeters : 150.0f;
+    const int32 Radius = GetCellRadius(BaseRadiusMeters + GlobalPerceptionClarity * RadiusPerClarityMeters);
 
     const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(ZaryanaCell, Shrines, Radius);
 

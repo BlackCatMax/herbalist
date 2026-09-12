@@ -321,7 +321,7 @@ bool FHerbalistArtifact_LureRequiresTsarManifestedAndProximity::RunTest(const FS
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
-    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
     UBiomeGraphSubsystem* Graph = InitGraph(World);
@@ -347,7 +347,7 @@ bool FHerbalistArtifact_LureRequiresTsarManifestedAndProximity::RunTest(const FS
     Manager->UpdateEntityManifestations(1.0f);
     TestTrue(TEXT("Болотный царь now manifested"), Manager->IsLegendaryManifested(FName(TEXT("Болотный царь"))));
 
-    // Далеко от его якоря (за пределами LurePotionRadius=1) -- всё ещё нет попытки.
+    // Далеко от его якоря (за пределами LurePotionRadiusMeters -- 10 м, 1 клетка) -- всё ещё нет попытки.
     const FIntPoint Far(Anchor->X + 5, Anchor->Y + 5);
     bGranted = true;
     TestFalse(TEXT("Too far from the anchor -- no attempt"),

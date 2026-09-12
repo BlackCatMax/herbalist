@@ -221,7 +221,7 @@ bool AGridWorldManager::ActivateSolovey()
     // закреплён: локальная (радиус вокруг точки), временная (один тик, не
     // устойчивое состояние региона), не Навь.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 Radius = Settings ? Settings->SoloveyCorruptionRadius : 3;
+    const int32 Radius = GetCellRadius(Settings ? Settings->SoloveyCorruptionRadiusMeters : 30.0f);
     const float Burst = Settings ? Settings->SoloveyCorruptionBurst : 0.3f;
 
     for (FGridCell& Cell : Cells)

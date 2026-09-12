@@ -56,7 +56,15 @@ namespace
     // можно только сравнив ДВА мира с разными сидами. Сид обязан ставиться
     // ДО DispatchBeginPlay: WorldRNG.Initialize(RngBaseSeed) вызывается
     // именно там, и посев идёт следом. -1 -- оставить дефолт актора.
-    AGridWorldManager* SpawnAndBeginPlay(UWorld* World, const TArray<AActor*>& KeepRegions = {}, int32 RngSeed = -1)
+    // CellSizeCm (2026-09-12, разметка мира, этап 3) -- до DispatchBeginPlay
+    // по той же причине: BeginPlay раскладывает клетки, ресурсы и точки
+    // интереса по размеру клетки. У менеджера автотеста клетка 1 м, и радиусы
+    // механик в метрах там в десять раз больше в клетках: 30 м капища или
+    // Соловья -- 30 клеток, больше всей сетки 20x20. Тесты геометрии радиуса
+    // передают 1000 (клетка 10 м), где метры дают прежние числа: 30 м -- 3
+    // клетки, 10 м -- 1. Остальные тесты живут на клетке 1 м, и зона Соловья
+    // там накрывает всю сетку. -1 -- оставить дефолт актора.
+    AGridWorldManager* SpawnAndBeginPlay(UWorld* World, const TArray<AActor*>& KeepRegions = {}, int32 RngSeed = -1, float CellSizeCm = -1.0f)
     {
         if (!World) return nullptr;
 
@@ -102,6 +110,10 @@ namespace
             if (RngSeed >= 0)
             {
                 Manager->RngBaseSeed = RngSeed;
+            }
+            if (CellSizeCm > 0.0f)
+            {
+                Manager->CellSize = CellSizeCm;
             }
             Manager->DispatchBeginPlay();
         }

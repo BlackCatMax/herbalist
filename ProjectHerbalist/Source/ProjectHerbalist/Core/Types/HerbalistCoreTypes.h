@@ -127,8 +127,8 @@ enum class EWardEffectType : uint8
     // (ShrineCoherenceBonus, PipelineV2.cpp::ProcessApplyCommand).
     BrewBoost,
     // Слабая версия Шапки-невидимки — подавляет НОВЫЕ проявления сущностей
-    // в маленьком радиусе вокруг игрока, пока оберег активен (WardConcealmentRadius,
-    // заметно меньше InvisibilityCapRadius — "слабый", не полноценный артефакт).
+    // в маленьком радиусе вокруг игрока, пока оберег активен (WardConcealmentRadiusMeters,
+    // заметно меньше InvisibilityCapRadiusMeters — "слабый", не полноценный артефакт).
     EntityConceal,
     // Куриный бог — снижает воспринятое искажение (ComputePerceptionDistortion,
     // "Морок") в маленьком радиусе вокруг места активации (тот же Center+Radius

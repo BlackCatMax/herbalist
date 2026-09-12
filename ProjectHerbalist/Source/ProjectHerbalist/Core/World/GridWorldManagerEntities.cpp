@@ -734,7 +734,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float GnilnikiThreshold   = Settings ? Settings->GnilnikiCorruptionThreshold      : 0.6f;
     const float GnilnikiNudgeRate   = Settings ? Settings->GnilnikiNudgeRate                : 0.01f;
     const float HistoryPurityRate   = Settings ? Settings->HistoryPurityLerpRate            : 0.02f;
-    const int32 ShrineInfluenceRadius = Settings ? Settings->ShrineInfluenceRadius          : 3;
+    const int32 ShrineInfluenceRadiusCells = GetCellRadius(Settings ? Settings->ShrineInfluenceRadiusMeters : 30.0f);
     const float NightHorrorDistortionRate = Settings ? Settings->NightHorrorDistortionRate  : 0.003f;
     const float NightHorrorCorruptionRate = Settings ? Settings->NightHorrorCorruptionRate  : 0.002f;
     const float NightHorrorSpiritRate     = Settings ? Settings->NightHorrorSpiritRate      : 0.003f;
@@ -932,7 +932,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // масштабированная на конкретный биом клетки, не всю сетку.
             // Оберег EntityConceal (Плакун-камень, §2.4, 2026-09-04) — та же
             // проверка, что и Шапка, но заметно меньшим радиусом
-            // (WardConcealmentRadius) — слабая, но непрерывная версия того же
+            // (WardConcealmentRadiusMeters) — слабая, но непрерывная версия того же
             // укрытия. IsCrowdedBySameEntity -- последним в цепочке
             // намеренно: это единственная проверка с обходом соседей (радиус
             // в клетках), и короткое замыкание && не даёт ей выполниться,
@@ -1035,7 +1035,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 bool bShrineEligible = false;
                 if (Def.bHasShrinePath)
                 {
-                    const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineInfluenceRadius);
+                    const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(FIntPoint(Cell.X, Cell.Y), Shrines, ShrineInfluenceRadiusCells);
                     bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, Def.ShrineThreshold, HysteresisMargin);
                 }
                 // Тот же гейт, что у Низшего ранга выше -- Берегиня и любая
@@ -1336,7 +1336,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 bool bShrineEligible = false;
                 if (Def.bHasShrinePath)
                 {
-                    const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(*Anchor, Shrines, ShrineInfluenceRadius);
+                    const float ShrineInfluence = HerbalistCore::Shrine::GetInfluenceAt(*Anchor, Shrines, ShrineInfluenceRadiusCells);
                     bShrineEligible = PassesHysteresisThreshold(bWasActive, ShrineInfluence, Def.ShrineThreshold, HysteresisMargin);
                 }
                 // Тот же гейт, что у остальных рангов — Благой полюс

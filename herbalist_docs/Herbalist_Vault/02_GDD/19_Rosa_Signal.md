@@ -105,7 +105,7 @@ State этой конкретной клетки. Игрок в первые ч�
 Первое (и только первое, `SetZaryanaCellIfUnset`) размещение `ZaryanaCell`
 сеет реальную расстановку — `SeedRosaCorruptedCircle`
 (`GridWorldManagerZaryana.cpp`): Distortion/Corruption клеток в радиусе
-`RosaCorruptedCircleRadius` (черновое — 3 клетки) вокруг стартовой позиции,
+`RosaCorruptedCircleRadiusMeters` (черновое — 30 м, 3 клетки при клетке 10 м) вокруг стартовой позиции,
 спадающие линейно к краю (`RosaCorruptedCirclePeakDistortion`/
 `PeakCorruption`, черновые — 0.5/0.4). Клетки помечаются грязными
 (`MarkCellDirty`) и переживают сохранение. Текстовая версия сцены

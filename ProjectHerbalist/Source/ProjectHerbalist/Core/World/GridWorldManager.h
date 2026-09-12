@@ -162,6 +162,15 @@ public:
     // Дальность самого дальнобойного локального механизма, в метрах.
     static float GetLongestLocalMechanicMeters();
 
+    // Радиус в клетках для величины в метрах на клетке этой сетки (радиусы
+    // капищ, оберегов, Шапки, Соловья, Росы -- в метрах с 2026-09-12).
+    int32 GetCellRadius(float Meters) const;
+
+    // Скорость, с которой State клетки идёт к TargetState, в долях в секунду
+    // (0.05%, линейный шаг в RegenerateCellParameters). Она же задаёт скорость
+    // фронта порчи -- см. ContagionSpreadRate в HerbalistSettings.h.
+    static constexpr float StateRelaxationPerSecond = 0.0005f;
+
     // Пересчитывать разметку при каждом сохранении менеджера в редакторе.
     UPROPERTY(EditAnywhere, Category = "World|Layout")
     bool bSyncLayoutOnSave = true;
@@ -1304,7 +1313,7 @@ public:
     // Шапка-невидимка (Баба-Яга) — временное, повторно используемое:
     // пока активно, подавляет НОВЫЕ проявления Низшего/Легендарного ранга
     // в НАСТОЯЩЕЙ зоне (2026-09-02, "чиним до настоящей зоны" — Chebyshev-
-    // радиус InvisibilityCapRadius вокруг клетки игрока в момент
+    // радиус InvisibilityCapRadiusMeters вокруг клетки игрока в момент
     // применения, IsInvisibilityCapActive(Cell) ниже), не по всей сетке,
     // как раньше. Не снимает уже проявленное (это Гребень) — только не
     // даёт проявиться новому.
@@ -1411,7 +1420,7 @@ public:
 
     // EntityConceal (Плакун-камень) — та же настоящая зона, что и у Шапки
     // (Center фиксируется в момент активации), но заметно меньше радиусом
-    // (WardConcealmentRadius) — общая проверка без геометрии + проверка
+    // (WardConcealmentRadiusMeters) — общая проверка без геометрии + проверка
     // конкретной клетки, тот же парный API, что уже IsInvisibilityCapActive().
     bool ActivateWardConcealment(const FIntPoint& Center);
     bool IsWardConcealmentActive() const;
