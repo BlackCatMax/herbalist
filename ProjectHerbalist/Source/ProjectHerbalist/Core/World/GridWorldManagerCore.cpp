@@ -6,6 +6,7 @@
 #include "WorldPartition/WorldPartitionStreamingSource.h"
 #include "Landscape.h"
 #include "LandscapeProxy.h"
+#include "LandscapeComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Core/Entities/HerbalistEntityActor.h"
 #include "Core/World/HomesteadMarkerActor.h"
@@ -732,40 +733,24 @@ void AGridWorldManager::CatchUpActivatedChunks()
         *Last = Now;
     }
 
-    PreviousActiveChunks = ActiveChunks;
-
-    // Материализация/усыпление акторов (юнит 3) -- с 2026-09-12 не по смене
-    // активности, а через UpdateMaterializedChunks: активный чанк без
-    // загруженной земли под ним акторов не держит.
-    UpdateMaterializedChunks();
-}
-
-void AGridWorldManager::GetResourceFadeFrame(float& OutStartCm, float& OutEndCm) const
-{
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
-    const float ChunkSpan = FMath::Max(CellSize * ChunkSize, KINDA_SMALL_NUMBER);
-
-    const int32 Radius = GetActiveRadiusInChunks();
-    if (Radius < 0)
+    // Сущности уходят на границе симуляции (2026-09-12, второй заход): ресурсы
+    // стоят, пока под ними загружена земля, а поведение сущностей считается
+    // только в активных чанках -- за этой границей актор стоял бы
+    // замороженным. ManifestedEntityID остаётся, и актор проявится снова, как
+    // только чанк опять станет активным (см. DespawnChunkEntities в .h).
+    for (const FIntPoint& Chunk : PreviousActiveChunks)
     {
-        // Стриминг выключен -- ресурсы не исчезают вовсе, затухать нечему.
-        // Полоса уводится дальше любого мира; начало и конец не совпадают,
-        // иначе SmoothStep в материале делил бы на ноль.
-        OutStartCm = 1.0e9f;
-        OutEndCm = OutStartCm + ChunkSpan;
-        return;
+        if (!ActiveChunks.Contains(Chunk))
+        {
+            DespawnChunkEntities(Chunk);
+        }
     }
 
-    // Материализованы чанки не дальше Radius от чанка игрока, значит граница
-    // лежит в Radius x ChunkSpan от краёв его чанка -- ближе этого ресурс не
-    // исчезнет ни в одном направлении, где бы в чанке игрок ни стоял. Ширина
-    // полосы -- один чанк: граница двигается целыми чанками, и новый ряд
-    // появляется не ближе конца полосы, то есть уже полностью сжатым.
-    // При Radius = 0 начало уходит в минус -- всё, кроме точки под игроком,
-    // сжато: граница может проходить прямо рядом с ним.
-    OutEndCm = Radius * ChunkSpan;
-    OutStartCm = OutEndCm - ChunkSpan;
+    PreviousActiveChunks = ActiveChunks;
+
+    // Материализация/усыпление акторов ресурсов -- через
+    // UpdateMaterializedChunks: по загруженной земле, а не по активности.
+    UpdateMaterializedChunks();
 }
 
 FIntPoint AGridWorldManager::WorldPositionToChunk(const FVector& WorldPos) const
@@ -796,10 +781,6 @@ bool AGridWorldManager::IsCellMaterialized(const FGridCell& Cell) const
 
 bool AGridWorldManager::IsChunkGroundLoaded(const FIntPoint& Chunk) const
 {
-    if (GroundLoadedOverride)
-    {
-        return GroundLoadedOverride(Chunk);
-    }
     if (!bGroundCoverageKnown)
     {
         return true;
@@ -812,10 +793,10 @@ bool AGridWorldManager::IsChunkGroundLoaded(const FIntPoint& Chunk) const
     const FVector2D Min(Origin.X + Chunk.X * Span, Origin.Y + Chunk.Y * Span);
     const FVector2D Max = Min + FVector2D(Span, Span);
 
-    // Углы и центр: ячейки World Partition много крупнее чанка (8 м против
-    // десятков метров), так что дыру посередине чанка при покрытых углах
-    // даёт только ячейка мельче самого чанка. Включительные границы -- чанк
-    // на стыке двух ячеек покрыт обеими.
+    // Углы и центр: прямоугольники земли (прокси ландшафта, ячейки World
+    // Partition) много крупнее чанка, так что дыру посередине чанка при
+    // покрытых углах даёт только прямоугольник мельче самого чанка.
+    // Включительные границы -- чанк на стыке двух прямоугольников покрыт обоими.
     const FVector2D Points[] = { Min, FVector2D(Max.X, Min.Y), FVector2D(Min.X, Max.Y), Max, (Min + Max) * 0.5 };
     for (const FVector2D& Point : Points)
     {
@@ -831,76 +812,119 @@ bool AGridWorldManager::IsChunkGroundLoaded(const FIntPoint& Chunk) const
     return true;
 }
 
-void AGridWorldManager::RefreshGroundCoverage(const TSet<FIntPoint>& Chunks)
+void AGridWorldManager::RefreshGroundCoverage()
 {
     GroundCoverage.Reset();
     bGroundCoverageKnown = false;
 
+    if (GroundCoverageOverride.IsSet())
+    {
+        GroundCoverage = GroundCoverageOverride.GetValue();
+        bGroundCoverageKnown = true;
+        return;
+    }
+
     UWorld* World = GetWorld();
     const UWorldPartition* WorldPartition = World ? World->GetWorldPartition() : nullptr;
     if (!World || !World->IsGameWorld() || !WorldPartition || !WorldPartition->IsStreamingEnabled()
-        || !WorldPartition->RuntimeHash || Chunks.Num() == 0)
+        || !WorldPartition->RuntimeHash)
     {
         return;
     }
     bGroundCoverageKnown = true;
 
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
-    const double Span = static_cast<double>(CellSize) * ChunkSize;
-    const FVector Origin = GetActorLocation();
-
-    FBox2D Region(ForceInit);
-    for (const FIntPoint& Chunk : Chunks)
+    // Земля -- это загруженный ландшафт (2026-09-12, второй заход). Ячейки
+    // World Partition для этого не годятся: крупный актор (регион-сплайн,
+    // водоём) попадает в ячейку старшего уровня размером в сотни метров, и
+    // она активна целиком, пока задевает дальность загрузки, -- в том числе
+    // там, где плитки ландшафта уже выгружены. Пока ресурсы жили в радиусе
+    // симуляции, края таких ячеек до них не доходили; ресурсы до границы
+    // земли повисли бы как раз на них. Компоненты прокси регистрируются,
+    // только когда их ячейка видима, -- ровно "земля есть".
+    bool bWorldHasLandscape = false;
+    for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
     {
-        const FVector2D Min(Origin.X + Chunk.X * Span, Origin.Y + Chunk.Y * Span);
-        Region += Min;
-        Region += Min + FVector2D(Span, Span);
-    }
-
-    // Шар запроса -- на высоте земли в центре области: ячейки World Partition
-    // трёхмерные, шар должен их задевать. Вне сетки -- высота менеджера.
-    const FVector2D Centre = Region.GetCenter();
-    double CentreZ = Origin.Z;
-    int32 CellX = 0;
-    int32 CellY = 0;
-    if (WorldPositionToCell(FVector(Centre, Origin.Z), CellX, CellY))
-    {
-        CentreZ = GetCellHeight(CellX, CellY);
-    }
-
-    // RuntimeHash напрямую, а не UWorldPartition::IsStreamingCompleted: тот
-    // на каждый вызов сдвигает StreamingStateEpoch и заставляет партишен
-    // заново пересчитывать источники.
-    FWorldPartitionStreamingQuerySource Query(FVector(Centre, CentreZ));
-    Query.Radius = static_cast<float>(Region.GetExtent().Size());
-    Query.bUseGridLoadingRange = false;
-    Query.bSpatialQuery = true;
-
-    TSet<const UWorldPartitionRuntimeCell*> Seen;
-    WorldPartition->RuntimeHash->ForEachStreamingCellsQuery(Query, [this, &Seen](const UWorldPartitionRuntimeCell* Cell)
-    {
-        if (Cell && !Seen.Contains(Cell))
+        bWorldHasLandscape = true;
+        FBox Bounds(ForceInit);
+        for (const TObjectPtr<ULandscapeComponent>& Component : It->LandscapeComponents)
         {
-            Seen.Add(Cell);
+            if (Component && Component->IsRegistered())
+            {
+                Bounds += Component->Bounds.GetBox();
+            }
+        }
+        if (Bounds.IsValid)
+        {
+            GroundCoverage.Add(FBox2D(FVector2D(Bounds.Min.X, Bounds.Min.Y), FVector2D(Bounds.Max.X, Bounds.Max.Y)));
+        }
+    }
+
+    // Карта без ландшафта (пол из мешей, как L_PlaytestPaint) -- землю держат
+    // ячейки World Partition; оговорка про старшие уровни выше здесь
+    // остаётся. RuntimeHash напрямую, а не UWorldPartition::IsStreamingCompleted:
+    // тот на каждый вызов сдвигает StreamingStateEpoch и заставляет партишен
+    // заново пересчитывать источники.
+    if (!bWorldHasLandscape)
+    {
+        WorldPartition->RuntimeHash->ForEachStreamingCells([this](const UWorldPartitionRuntimeCell* Cell)
+        {
             // HLOD-ячейки вблизи деактивированы по замыслу (их заменяют
-            // настоящие), всегда загруженные не привязаны к месту -- ни те, ни
-            // другие не говорят, есть ли земля в конкретной точке.
-            if (!Cell->GetIsHLOD() && !Cell->IsAlwaysLoaded()
+            // настоящие), всегда загруженные не привязаны к месту -- ни те,
+            // ни другие не говорят, есть ли земля в конкретной точке.
+            if (Cell && !Cell->GetIsHLOD() && !Cell->IsAlwaysLoaded()
                 && Cell->GetCurrentState() == EWorldPartitionRuntimeCellState::Activated)
             {
                 const FBox Bounds = Cell->GetCellBounds();
                 GroundCoverage.Add(FBox2D(FVector2D(Bounds.Min.X, Bounds.Min.Y), FVector2D(Bounds.Max.X, Bounds.Max.Y)));
             }
-        }
-        return true;
-    });
+            return true;
+        });
+    }
 
     if (GroundCoverage.Num() == 0 && !bLoggedEmptyGroundCoverage)
     {
         UE_LOG(LogHerbalistWorld, Log,
-            TEXT("[Streaming] Под активной областью нет активных ячеек World Partition -- ресурсы и сущности не материализуются, пока земля не загрузится"));
+            TEXT("[Streaming] Загруженной земли пока нет (%s) -- ресурсы и сущности не материализуются, пока она не загрузится"),
+            bWorldHasLandscape ? TEXT("ландшафт") : TEXT("ячейки World Partition"));
         bLoggedEmptyGroundCoverage = true;
+    }
+}
+
+void AGridWorldManager::CollectGroundCoveredChunks(TSet<FIntPoint>& OutChunks) const
+{
+    OutChunks.Reset();
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const double Span = FMath::Max(static_cast<double>(CellSize) * ChunkSize, UE_DOUBLE_KINDA_SMALL_NUMBER);
+    const FVector Origin = GetActorLocation();
+    const int32 MaxChunkX = FMath::DivideAndRoundUp(FMath::Max(GridSizeX, 0), ChunkSize) - 1;
+    const int32 MaxChunkY = FMath::DivideAndRoundUp(FMath::Max(GridSizeY, 0), ChunkSize) - 1;
+
+    // Обходятся только чанки сетки, задетые хотя бы одним прямоугольником;
+    // покрытие решает та же IsChunkGroundLoaded (углы и центр), что и у
+    // одиночного вопроса. Клэмп до перевода в int: ячейки старших уровней
+    // бывают размером с весь мир.
+    for (const FBox2D& Box : GroundCoverage)
+    {
+        const double Low = -1.0;
+        const double HighX = static_cast<double>(MaxChunkX) + 1.0;
+        const double HighY = static_cast<double>(MaxChunkY) + 1.0;
+        const int32 MinX = FMath::Max(FMath::FloorToInt(FMath::Clamp((Box.Min.X - Origin.X) / Span, Low, HighX)), 0);
+        const int32 MaxX = FMath::Min(FMath::FloorToInt(FMath::Clamp((Box.Max.X - Origin.X) / Span, Low, HighX)), MaxChunkX);
+        const int32 MinY = FMath::Max(FMath::FloorToInt(FMath::Clamp((Box.Min.Y - Origin.Y) / Span, Low, HighY)), 0);
+        const int32 MaxY = FMath::Min(FMath::FloorToInt(FMath::Clamp((Box.Max.Y - Origin.Y) / Span, Low, HighY)), MaxChunkY);
+        for (int32 Y = MinY; Y <= MaxY; ++Y)
+        {
+            for (int32 X = MinX; X <= MaxX; ++X)
+            {
+                const FIntPoint Chunk(X, Y);
+                if (!OutChunks.Contains(Chunk) && IsChunkGroundLoaded(Chunk))
+                {
+                    OutChunks.Add(Chunk);
+                }
+            }
+        }
     }
 }
 
@@ -911,23 +935,60 @@ void AGridWorldManager::UpdateMaterializedChunks()
         return;   // стриминг выключен: всё заселено при старте, усыплять нечего
     }
 
+    RefreshGroundCoverage();
+
     const bool bHaveCentres = ActiveChunkCenters.Num() > 0;
-    if (!bHaveCentres && !bMaterializationTracked)
+    if (!bHaveCentres && !bMaterializationTracked && !bGroundCoverageKnown)
     {
-        return;   // игрока ещё не было -- прежнее поведение
+        return;   // игрока ещё не было и земля неизвестна -- прежнее поведение
     }
     bMaterializationTracked = true;
 
-    // Кандидаты: при живых центрах -- активные чанки. В кадр без центров --
-    // то, что уже материализовано: не сбрасываем, иначе ресурсы моргали бы и
-    // вставали на новые места, но землю под ними проверяем всё равно.
-    const TSet<FIntPoint> Candidates = bHaveCentres ? ActiveChunks : MaterializedChunks;
-    RefreshGroundCoverage(Candidates);
+    // Кандидаты. Земля известна -- всё, что на ней стоит; радиус симуляции ни
+    // при чём (решение пользователя 2026-09-12: "ресурсы пропадают раньше" --
+    // радиус ~100 м, ландшафт L_TestDev грузится на 252 м). Земля неизвестна
+    // (вне игрового мира, без стриминга) -- активные чанки, а в кадр без
+    // центров то, что уже материализовано: не сбрасываем, иначе ресурсы
+    // моргали бы и вставали на новые места.
+    TSet<FIntPoint> Candidates;
+    if (bGroundCoverageKnown)
+    {
+        // Земля грузится и выгружается редко, а вопрос задаётся каждый кадр:
+        // пока прямоугольники и сетка те же, набор уже верный.
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const FVector Origin = GetActorLocation();
+        uint32 Hash = GetTypeHash(Settings ? Settings->ChunkSizeInCells : 32);
+        Hash = HashCombineFast(Hash, GetTypeHash(CellSize));
+        Hash = HashCombineFast(Hash, GetTypeHash(GridSizeX));
+        Hash = HashCombineFast(Hash, GetTypeHash(GridSizeY));
+        Hash = HashCombineFast(Hash, GetTypeHash(Origin.X));
+        Hash = HashCombineFast(Hash, GetTypeHash(Origin.Y));
+        Hash = HashCombineFast(Hash, GetTypeHash(GroundCoverage.Num()));
+        for (const FBox2D& Box : GroundCoverage)
+        {
+            Hash = HashCombineFast(Hash, GetTypeHash(Box.Min.X));
+            Hash = HashCombineFast(Hash, GetTypeHash(Box.Min.Y));
+            Hash = HashCombineFast(Hash, GetTypeHash(Box.Max.X));
+            Hash = HashCombineFast(Hash, GetTypeHash(Box.Max.Y));
+        }
+        if (bCoverageCacheValid && Hash == CoverageCacheHash)
+        {
+            return;
+        }
+        CoverageCacheHash = Hash;
+        bCoverageCacheValid = true;
+        CollectGroundCoveredChunks(Candidates);
+    }
+    else
+    {
+        bCoverageCacheValid = false;
+        Candidates = bHaveCentres ? ActiveChunks : MaterializedChunks;
+    }
 
     TArray<FIntPoint> ToSleep;
     for (const FIntPoint& Chunk : MaterializedChunks)
     {
-        if (!Candidates.Contains(Chunk) || !IsChunkGroundLoaded(Chunk))
+        if (!Candidates.Contains(Chunk))
         {
             ToSleep.Add(Chunk);
         }
@@ -937,17 +998,15 @@ void AGridWorldManager::UpdateMaterializedChunks()
         MaterializedChunks.Remove(Chunk);
         SetChunkResourcesActive(Chunk, false);
 
-        // Найдено пользователем 2026-09-03: ресурсы резались чанками
-        // корректно, проявленные сущности (капище-заглушки-деревья и т.п.) --
-        // нет, оставались висеть в мире независимо от дистанции. Активная
-        // сторона отдельной функции не нужна -- см. довод у объявления
-        // DespawnChunkEntities в .h.
+        // Земля ушла -- заглушки сущностей на ней тоже (найдено пользователем
+        // 2026-09-03: они оставались висеть в мире). На границе симуляции их
+        // отдельно снимает CatchUpActivatedChunks.
         DespawnChunkEntities(Chunk);
     }
 
     for (const FIntPoint& Chunk : Candidates)
     {
-        if (!MaterializedChunks.Contains(Chunk) && IsChunkGroundLoaded(Chunk))
+        if (!MaterializedChunks.Contains(Chunk))
         {
             // Сначала в набор, потом спавн: спавн сам сверяется с набором.
             MaterializedChunks.Add(Chunk);

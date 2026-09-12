@@ -27,12 +27,6 @@ AHerbalistResourceActor::AHerbalistResourceActor()
     MeshComponent->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
     MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-    // Значение по умолчанию, а не рантайм-значение: движок копирует его в
-    // рантайм сам (UPrimitiveComponent::ResetCustomPrimitiveData в
-    // PostInitProperties/PostLoad), так метку получает и заспавненный актор,
-    // и расставленный на уровне.
-    MeshComponent->SetDefaultCustomPrimitiveDataFloat(DistanceFadeDataIndex, 1.0f);
-
     HarvestSphere = CreateDefaultSubobject<USphereComponent>(TEXT("HarvestSphere"));
     HarvestSphere->SetupAttachment(RootComponent);
     HarvestSphere->SetSphereRadius(70.0f);

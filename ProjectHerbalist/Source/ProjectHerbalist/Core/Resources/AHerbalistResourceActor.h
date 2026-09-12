@@ -19,14 +19,6 @@ class PROJECTHERBALIST_API AHerbalistResourceActor : public AActor
 
 public:
     AHerbalistResourceActor();
-
-    // Метка затухания по расстоянию (2026-09-12) в Custom Primitive Data меша.
-    // Ресурсы исчезают на границе материализации (радиус симуляции) раньше
-    // ландшафта; материалы ресурсов сжимают их к основанию на подходе к этой
-    // границе (рамка -- ResourceFadeFrame в MPC_WorldStateFields). Мастер-
-    // материалы общие с декором паков, поэтому сжимается только помеченное:
-    // у декора метка 0, и он не меняется.
-    static constexpr int32 DistanceFadeDataIndex = 0;
 	
 	FRealState GetBaseState() const { return BaseState; }
 	float GetResilience() const { return Resilience; }

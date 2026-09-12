@@ -214,7 +214,7 @@ void AGridWorldManager::UpdateWorldStateMap()
 {
     // Рамка карты -- отдельно от самой выгрузки и ДО проверки цели: она
     // нужна материалу, даже если render target ещё не назначен, и стоит
-    // ровно ничего (три записи в MPC раз в секунду).
+    // ровно ничего (две записи в MPC раз в секунду).
     if (UWorld* CurrentWorld = GetWorld())
     {
         if (UMaterialParameterCollection* Frame = WorldStateFrameCollection.LoadSynchronous())
@@ -229,16 +229,6 @@ void AGridWorldManager::UpdateWorldStateMap()
             UKismetMaterialLibrary::SetVectorParameterValue(CurrentWorld, Frame,
                 TEXT("WorldStateMapSize"),
                 FLinearColor(WorldSize.X, WorldSize.Y, 0.0f, 0.0f));
-
-            // Полоса затухания ресурсов (2026-09-12) -- см. GetResourceFadeFrame.
-            // Тот же такт раз в секунду достаточен: полоса меняется только с
-            // настройками стриминга, не с движением игрока.
-            float FadeStartCm = 0.0f;
-            float FadeEndCm = 0.0f;
-            GetResourceFadeFrame(FadeStartCm, FadeEndCm);
-            UKismetMaterialLibrary::SetVectorParameterValue(CurrentWorld, Frame,
-                TEXT("ResourceFadeFrame"),
-                FLinearColor(FadeStartCm, FadeEndCm, 0.0f, 0.0f));
         }
     }
 

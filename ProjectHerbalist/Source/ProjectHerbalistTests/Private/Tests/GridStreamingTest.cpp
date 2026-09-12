@@ -55,6 +55,19 @@ namespace
             Settings->ChunkSizeInCells = SavedChunkSize;
         }
     };
+
+    // Прямоугольник загруженной земли, накрывающий чанки [MinChunk..MaxChunk]
+    // включительно, в мировых координатах -- в том виде, в каком его собирает
+    // RefreshGroundCoverage из прокси ландшафта или ячеек партишена.
+    FBox2D ChunkRangeCoverage(AGridWorldManager* Manager, int32 ChunkSize, const FIntPoint& MinChunk, const FIntPoint& MaxChunk)
+    {
+        const double CellSpan = Manager->GetCellWorldPositionFlat(1, 0).X - Manager->GetCellWorldPositionFlat(0, 0).X;
+        const double Span = CellSpan * ChunkSize;
+        const FVector Origin = Manager->GetActorLocation();
+        return FBox2D(
+            FVector2D(Origin.X + MinChunk.X * Span, Origin.Y + MinChunk.Y * Span),
+            FVector2D(Origin.X + (MaxChunk.X + 1) * Span, Origin.Y + (MaxChunk.Y + 1) * Span));
+    }
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_ChunkCoordMathAndDefaultAllActive,
@@ -646,8 +659,9 @@ bool FHerbalistGridStreaming_ActiveRadiusCoversTheLongestLocalMechanic::RunTest(
 // ---------------------------------------------------------------------------
 // Материализация акторов (2026-09-12). Найдено пользователем: "ресурсы
 // остались там, откуда вы ушли, висящими в воздухе, под ними отстримился
-// ландшафт". В editor-мире партишен не стримит, поэтому состояние земли
-// подменяется SetGroundLoadedOverrideForTests.
+// ландшафт". В editor-мире партишен не стримит, поэтому загруженная земля
+// подаётся прямоугольниками через SetGroundCoverageForTests -- тем же
+// видом, каким её собирает сам менеджер.
 // ---------------------------------------------------------------------------
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_ActiveChunkWithoutGroundIsNotMaterialized,
@@ -663,8 +677,8 @@ bool FHerbalistGridStreaming_ActiveChunkWithoutGroundIsNotMaterialized::RunTest(
 
     {
         FScopedChunkSettings Scoped(/*RadiusMeters=*/4.0f, /*ChunkSize=*/4);
-        bool bEastLoaded = false;
-        Manager->SetGroundLoadedOverrideForTests([&bEastLoaded](const FIntPoint& Chunk) { return Chunk != FIntPoint(1, 0) || bEastLoaded; });
+        // Земля только под чанком (0,0); у соседа (1,0) с ней лишь общий край.
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(0, 0)) });
         Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
         Manager->CatchUpActivatedChunks();
 
@@ -672,11 +686,12 @@ bool FHerbalistGridStreaming_ActiveChunkWithoutGroundIsNotMaterialized::RunTest(
         TestTrue(TEXT("Chunk (0,0) with ground under it is materialized"), Manager->IsChunkMaterialized(FIntPoint(0, 0)));
         TestFalse(TEXT("Chunk (1,0) without ground is not materialized"), Manager->IsChunkMaterialized(FIntPoint(1, 0)));
 
-        bEastLoaded = true;
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(0, 0)),
+                                             ChunkRangeCoverage(Manager, 4, FIntPoint(1, 0), FIntPoint(1, 0)) });
         Manager->CatchUpActivatedChunks();
         TestTrue(TEXT("Once its ground loads, chunk (1,0) materializes"), Manager->IsChunkMaterialized(FIntPoint(1, 0)));
 
-        Manager->SetGroundLoadedOverrideForTests(nullptr);
+        Manager->ClearGroundCoverageForTests();
     }
 
     Manager->Destroy();
@@ -696,8 +711,7 @@ bool FHerbalistGridStreaming_GroundUnloadingSleepsResourcesStandingOnIt::RunTest
 
     {
         FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
-        bool bGround = true;
-        Manager->SetGroundLoadedOverrideForTests([&bGround](const FIntPoint&) { return bGround; });
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(0, 0)) });
         Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
         Manager->CatchUpActivatedChunks();
 
@@ -706,7 +720,7 @@ bool FHerbalistGridStreaming_GroundUnloadingSleepsResourcesStandingOnIt::RunTest
         AHerbalistResourceActor* Grown = World->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), Pos, FRotator::ZeroRotator);
         if (!TestNotNull(TEXT("Cell exists"), Cell) || !TestNotNull(TEXT("Resource actor spawned"), Grown))
         {
-            Manager->SetGroundLoadedOverrideForTests(nullptr);
+            Manager->ClearGroundCoverageForTests();
             Manager->Destroy();
             return false;
         }
@@ -716,13 +730,13 @@ bool FHerbalistGridStreaming_GroundUnloadingSleepsResourcesStandingOnIt::RunTest
         TestEqual(TEXT("A resource stands on loaded ground"), Cell->ResourceActors.Num(), 1);
 
         // Игрок рядом, чанк активен, но партишен выгрузил землю.
-        bGround = false;
+        Manager->SetGroundCoverageForTests({});
         Manager->CatchUpActivatedChunks();
         TestEqual(TEXT("No actor is left hanging over unloaded ground"), Cell->ResourceActors.Num(), 0);
         TestTrue(TEXT("The resource is remembered as dormant"), Cell->DormantResourceIDs.Contains(FName(TEXT("GroundTestHerb"))));
         TestTrue(TEXT("The chunk still counts as active for simulation"), Manager->GetActiveChunks().Contains(FIntPoint(0, 0)));
 
-        Manager->SetGroundLoadedOverrideForTests(nullptr);
+        Manager->ClearGroundCoverageForTests();
     }
 
     Manager->Destroy();
@@ -744,8 +758,7 @@ bool FHerbalistGridStreaming_LosingCentresNeitherLeaksNorFlickers::RunTest(const
 
     {
         FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
-        bool bGround = true;
-        Manager->SetGroundLoadedOverrideForTests([&bGround](const FIntPoint&) { return bGround; });
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(0, 0)) });
         Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
         Manager->CatchUpActivatedChunks();
 
@@ -754,7 +767,7 @@ bool FHerbalistGridStreaming_LosingCentresNeitherLeaksNorFlickers::RunTest(const
         AHerbalistResourceActor* Grown = World->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), Pos, FRotator::ZeroRotator);
         if (!TestNotNull(TEXT("Cell exists"), Cell) || !TestNotNull(TEXT("Resource actor spawned"), Grown))
         {
-            Manager->SetGroundLoadedOverrideForTests(nullptr);
+            Manager->ClearGroundCoverageForTests();
             Manager->Destroy();
             return false;
         }
@@ -767,12 +780,12 @@ bool FHerbalistGridStreaming_LosingCentresNeitherLeaksNorFlickers::RunTest(const
         TestEqual(TEXT("A frame without centres does not tear resources down"), Cell->ResourceActors.Num(), 1);
         TestTrue(TEXT("...and keeps the chunk materialized"), Manager->IsChunkMaterialized(FIntPoint(0, 0)));
 
-        bGround = false;
+        Manager->SetGroundCoverageForTests({});
         Manager->CatchUpActivatedChunks();
         TestEqual(TEXT("Ground unloaded with no centres: the resource sleeps, not left behind"), Cell->ResourceActors.Num(), 0);
         TestTrue(TEXT("...and is remembered as dormant"), Cell->DormantResourceIDs.Contains(FName(TEXT("CentreTestHerb"))));
 
-        Manager->SetGroundLoadedOverrideForTests(nullptr);
+        Manager->ClearGroundCoverageForTests();
     }
 
     Manager->Destroy();
@@ -792,7 +805,8 @@ bool FHerbalistGridStreaming_LoadingSaveIntoSleepingChunkPlacesNoActors::RunTest
 
     {
         FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
-        Manager->SetGroundLoadedOverrideForTests([](const FIntPoint&) { return true; });
+        // Земля загружена только вокруг игрока.
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(4, 4), FIntPoint(4, 4)) });
         Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });   // игрок далеко от клетки (1,1)
         Manager->CatchUpActivatedChunks();
         TestFalse(TEXT("Chunk (0,0) is asleep"), Manager->IsChunkMaterialized(FIntPoint(0, 0)));
@@ -811,7 +825,7 @@ bool FHerbalistGridStreaming_LoadingSaveIntoSleepingChunkPlacesNoActors::RunTest
             TestTrue(TEXT("The saved resource waits as dormant"), Cell->DormantResourceIDs.Contains(FName(TEXT("SavedFarHerb"))));
         }
 
-        Manager->SetGroundLoadedOverrideForTests(nullptr);
+        Manager->ClearGroundCoverageForTests();
     }
 
     Manager->Destroy();
@@ -833,7 +847,8 @@ bool FHerbalistGridStreaming_RegrowthInSleepingChunkIsRemembered::RunTest(const 
 
     {
         FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
-        Manager->SetGroundLoadedOverrideForTests([](const FIntPoint&) { return true; });
+        // Земля загружена только вокруг игрока.
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(4, 4), FIntPoint(4, 4)) });
         Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });
         Manager->CatchUpActivatedChunks();
 
@@ -853,7 +868,7 @@ bool FHerbalistGridStreaming_RegrowthInSleepingChunkIsRemembered::RunTest(const 
             TestTrue(TEXT("What regrew is remembered as dormant"), Cell->DormantResourceIDs.Contains(FName(TEXT("PlantedFarHerb"))));
         }
 
-        Manager->SetGroundLoadedOverrideForTests(nullptr);
+        Manager->ClearGroundCoverageForTests();
     }
 
     Manager->Destroy();
@@ -896,6 +911,175 @@ bool FHerbalistGridStreaming_CentreOutsideTheGridStillReachesItsEdge::RunTest(co
         Manager->CatchUpActivatedChunks();
         TestEqual(TEXT("A centre far outside the grid activates nothing"), Manager->GetActiveChunks().Num(), 0);
         TestFalse(TEXT("...and the edge cell sleeps"), EdgeCell && Manager->IsCellActive(*EdgeCell));
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+
+// ---------------------------------------------------------------------------
+// Ресурсы до границы земли (2026-09-12, второй заход). Пользователь:
+// "ресурсы пропадают раньше" -- радиус симуляции ~100 м, ландшафт L_TestDev
+// грузится на 252 м. Решение пользователя: ресурс стоит, пока под ним
+// загружена земля, независимо от радиуса симуляции. Сущности -- по-прежнему
+// до границы симуляции.
+// ---------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_ResourcesStayWhileGroundIsLoaded,
+    "Herbalist.GridStreaming.ResourcesStayWhileGroundIsLoaded",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_ResourcesStayWhileGroundIsLoaded::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        // Радиус 0 -- активен только чанк игрока. Земля -- полоса чанков (0..4, 0):
+        // сетка теста 20x20, чанк 4 клетки, (4,0) -- последний чанк ряда.
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(4, 0)) });
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+        Manager->CatchUpActivatedChunks();
+
+        TestFalse(TEXT("Chunk (4,0) is outside the simulation radius"), Manager->GetActiveChunks().Contains(FIntPoint(4, 0)));
+        TestTrue(TEXT("...yet it stands on loaded ground and is materialized"), Manager->IsChunkMaterialized(FIntPoint(4, 0)));
+        TestFalse(TEXT("Chunk (0,1) has no ground under it and is not"), Manager->IsChunkMaterialized(FIntPoint(0, 1)));
+
+        // Клетка (17,1) лежит в чанке (4,0).
+        FGridCell* Cell = Manager->GetCell(17, 1);
+        const FVector Pos = Manager->GetCellWorldPosition(17, 1);
+        AHerbalistResourceActor* Far = World->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(), Pos, FRotator::ZeroRotator);
+        if (!TestNotNull(TEXT("Cell (17,1) exists"), Cell) || !TestNotNull(TEXT("Resource actor spawned"), Far))
+        {
+            Manager->ClearGroundCoverageForTests();
+            Manager->Destroy();
+            return false;
+        }
+        FRealState Dummy;
+        Far->Init(FName(TEXT("FarGroundHerb")), FText::GetEmpty(), nullptr, Dummy, Pos, Manager, 17, 1);
+        Cell->bResourcesSeeded = true;
+
+        // Игрок уходит ещё дальше, земля под ресурсом по-прежнему загружена.
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 3) });
+        Manager->CatchUpActivatedChunks();
+        TestEqual(TEXT("The resource stays while its ground is loaded"), Cell->ResourceActors.Num(), 1);
+
+        // Партишен выгрузил землю под дальним чанком.
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(1, 0)) });
+        Manager->CatchUpActivatedChunks();
+        TestEqual(TEXT("...and leaves together with the ground"), Cell->ResourceActors.Num(), 0);
+        TestTrue(TEXT("...remembered as dormant"), Cell->DormantResourceIDs.Contains(FName(TEXT("FarGroundHerb"))));
+
+        Manager->ClearGroundCoverageForTests();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_EntitiesLeaveWithSimulationEvenOnLoadedGround,
+    "Herbalist.GridStreaming.EntitiesLeaveWithSimulationEvenOnLoadedGround",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_EntitiesLeaveWithSimulationEvenOnLoadedGround::RunTest(const FString& Parameters)
+{
+    // Поведение сущности считается только в активных чанках: за границей
+    // симуляции её актор стоял бы замороженным, хоть земля под ним и есть.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(3, 0)) });
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+        Manager->CatchUpActivatedChunks();
+
+        FGridCell* Cell = Manager->GetCell(1, 1);
+        AHerbalistEntityActor* Placeholder = World->SpawnActor<AHerbalistEntityActor>();
+        if (!TestNotNull(TEXT("Cell exists"), Cell) || !TestNotNull(TEXT("Placeholder actor spawned"), Placeholder))
+        {
+            Manager->ClearGroundCoverageForTests();
+            Manager->Destroy();
+            return false;
+        }
+        Cell->ManifestedEntityID = FName(TEXT("TestSpirit"));
+        Cell->ManifestedEntityActor = Placeholder;
+
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(3, 0) });
+        Manager->CatchUpActivatedChunks();
+
+        TestTrue(TEXT("Chunk (0,0) still stands on loaded ground"), Manager->IsChunkMaterialized(FIntPoint(0, 0)));
+        TestFalse(TEXT("The entity actor left with the simulation"), IsValid(Placeholder));
+        TestEqual(TEXT("ManifestedEntityID survives -- it's data, not presence"),
+            Cell->ManifestedEntityID, FName(TEXT("TestSpirit")));
+
+        Manager->ClearGroundCoverageForTests();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_MovedGroundIsNoticedAtOnce,
+    "Herbalist.GridStreaming.MovedGroundIsNoticedAtOnce",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_MovedGroundIsNoticedAtOnce::RunTest(const FString& Parameters)
+{
+    // Набор чанков пересобирается, только когда земля изменилась. Столько же
+    // прямоугольников, но в другом месте -- отпечаток обязан смениться.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(0, 0), FIntPoint(0, 0)) });
+        Manager->CatchUpActivatedChunks();
+        TestTrue(TEXT("Chunk (0,0) is materialized on its ground"), Manager->IsChunkMaterialized(FIntPoint(0, 0)));
+
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(2, 0), FIntPoint(2, 0)) });
+        Manager->CatchUpActivatedChunks();
+        TestFalse(TEXT("Ground moved away: chunk (0,0) sleeps"), Manager->IsChunkMaterialized(FIntPoint(0, 0)));
+        TestTrue(TEXT("...and chunk (2,0) materializes"), Manager->IsChunkMaterialized(FIntPoint(2, 0)));
+
+        Manager->CatchUpActivatedChunks();
+        TestEqual(TEXT("The same ground again changes nothing"), Manager->GetMaterializedChunks().Num(), 1);
+
+        Manager->ClearGroundCoverageForTests();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_UnknownGroundFollowsSimulation,
+    "Herbalist.GridStreaming.UnknownGroundFollowsSimulation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_UnknownGroundFollowsSimulation::RunTest(const FString& Parameters)
+{
+    // Вне игрового мира землю спросить не у кого (editor-мир автотеста не
+    // стримит) -- материализованы активные чанки, как до правила про землю.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+        Manager->CatchUpActivatedChunks();
+        TestTrue(TEXT("The active chunk is materialized"), Manager->IsChunkMaterialized(FIntPoint(0, 0)));
+        TestFalse(TEXT("A chunk outside the simulation is not"), Manager->IsChunkMaterialized(FIntPoint(4, 0)));
     }
 
     Manager->Destroy();

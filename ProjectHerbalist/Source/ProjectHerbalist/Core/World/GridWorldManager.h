@@ -220,11 +220,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Visualization")
     void GetWorldStateMapFrame(FVector& OutOrigin, FVector2D& OutWorldSize) const;
 
-    // Полоса затухания ресурсов, в сантиметрах от игрока (2026-09-12). Конец --
-    // ближайшее расстояние, на котором ресурс может исчезнуть (граница
-    // материализации); ширина -- один чанк. Уходит в MPC как ResourceFadeFrame.
-    void GetResourceFadeFrame(float& OutStartCm, float& OutEndCm) const;
-
     UFUNCTION(BlueprintCallable, Category = "Visualization")
     void UpdateWorldStateMap();
 
@@ -501,28 +496,34 @@ public:
 
     // ---- Материализация акторов (2026-09-12) ----
     // Активность решает, считается ли симуляция клетки; материализация --
-    // существуют ли в мире АКТОРЫ её ресурсов и проявленных сущностей.
-    // Найдено пользователем: "ресурсы остались там, откуда вы ушли, висящими
-    // в воздухе, под ними отстримился ландшафт". Акторы сетки созданы в
+    // существуют ли в мире АКТОРЫ её ресурсов. Акторы сетки созданы в
     // рантайме и в ячейки World Partition не входят -- сам партишен их не
-    // выгружает, а радиус симуляции с его дальностью загрузки не связан
-    // (довод у ActiveSimulationRadiusMeters). Правило: актор существует
-    // только там, где под ним загружена земля.
+    // выгружает. Правило: ресурс стоит, пока под ним загружена земля, --
+    // независимо от радиуса симуляции (второй заход того же дня, решение
+    // пользователя: "ресурсы пропадают раньше" -- радиус ~100 м, ландшафт
+    // L_TestDev грузится на 252 м).
     //
-    // Чанк материализован, если он активен И его углы и центр лежат на
-    // активных ячейках World Partition (не HLOD, не всегда загруженных).
-    // Вне игрового мира и без стриминга партишена земля считается
-    // загруженной. Всё, что спавнится в нематериализованную клетку
-    // (отрастание, загрузка сейва), уходит в DormantResourceIDs, а не в мир.
-    // Вызывается из CatchUpActivatedChunks.
+    // Земля -- зарегистрированные компоненты прокси ландшафта; на карте без
+    // ландшафта -- активные ячейки World Partition (не HLOD, не всегда
+    // загруженные). Чанк материализован, если его углы и центр на земле.
+    // Вне игрового мира и без стриминга партишена земля неизвестна --
+    // материализованы активные чанки, как до этого правила. Сущности уходят
+    // на границе симуляции, а не земли (CatchUpActivatedChunks): их поведение
+    // считается только в активных чанках. Всё, что спавнится в
+    // нематериализованную клетку (отрастание, загрузка сейва), уходит в
+    // DormantResourceIDs, а не в мир. Вызывается из CatchUpActivatedChunks.
     void UpdateMaterializedChunks();
     bool IsChunkMaterialized(const FIntPoint& Chunk) const;
     bool IsCellMaterialized(const FGridCell& Cell) const;
     bool IsChunkGroundLoaded(const FIntPoint& Chunk) const;
     const TSet<FIntPoint>& GetMaterializedChunks() const { return MaterializedChunks; }
 
-    // В editor-мире теста партишен не стримит -- подменить проверку земли.
-    void SetGroundLoadedOverrideForTests(TFunction<bool(const FIntPoint&)> InOverride) { GroundLoadedOverride = MoveTemp(InOverride); }
+    // В editor-мире теста партишен не стримит -- подать загруженную землю
+    // прямоугольниками в мировых координатах, как их собрал бы
+    // RefreshGroundCoverage. Пустой массив -- земля известна, но не загружена
+    // нигде; Clear -- снова спрашивать мир.
+    void SetGroundCoverageForTests(const TArray<FBox2D>& InCoverage) { GroundCoverageOverride = InCoverage; }
+    void ClearGroundCoverageForTests() { GroundCoverageOverride.Reset(); }
 
     // Чанк мировой точки в координатах сетки -- в том числе за её пределами:
     // источник стриминга за краем сетки всё равно даёт центр активности.
@@ -1925,15 +1926,21 @@ private:
 
     // Материализованные чанки (2026-09-12) -- см. UpdateMaterializedChunks.
     TSet<FIntPoint> MaterializedChunks;
-    // Отслеживание включается с первым непустым набором центров; до этого
-    // (headless-тесты, кадры до появления игрока) спавн идёт как раньше.
+    // Отслеживание включается с первым непустым набором центров или с первой
+    // известной землёй; до этого (headless-тесты, кадры до появления игрока в
+    // мире без стриминга) спавн идёт как раньше.
     bool bMaterializationTracked = false;
-    // Прямоугольники активных ячеек World Partition на текущий кадр.
+    // Прямоугольники загруженной земли на текущий кадр (XY, мировые).
     TArray<FBox2D> GroundCoverage;
     bool bGroundCoverageKnown = false;
     bool bLoggedEmptyGroundCoverage = false;
-    TFunction<bool(const FIntPoint&)> GroundLoadedOverride;
-    void RefreshGroundCoverage(const TSet<FIntPoint>& Chunks);
+    TOptional<TArray<FBox2D>> GroundCoverageOverride;
+    // Отпечаток земли, по которому последний раз собран набор чанков: пока
+    // прямоугольники те же, пересобирать нечего.
+    uint32 CoverageCacheHash = 0;
+    bool bCoverageCacheValid = false;
+    void RefreshGroundCoverage();
+    void CollectGroundCoveredChunks(TSet<FIntPoint>& OutChunks) const;
 
     // Игровое время последнего прогона чанка. У неактивного чанка тут
     // остаётся момент, когда он перестал считаться, — разница с текущим

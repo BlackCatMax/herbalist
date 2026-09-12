@@ -86,6 +86,11 @@ public:
     // (bUseGridLoadingRange=true). Дальность партишена настраивается своей
     // консольной переменной (wp.Runtime.OverrideRuntimeSpatialHashLoadingRange),
     // и держать её отдельно от этой -- сознательный выбор, не недоделка.
+    //
+    // Ресурсов этот радиус не ограничивает (2026-09-12): их акторы стоят,
+    // пока под ними загружена земля (AGridWorldManager::UpdateMaterializedChunks),
+    // иначе они пропадали на ~100 м при ландшафте на 252 м. Симуляция и
+    // сущности -- по-прежнему только в этом радиусе.
     UPROPERTY(config, EditAnywhere, Category = "Performance", meta = (ClampMin = "-1.0"))
     float ActiveSimulationRadiusMeters = -1.0f;
 
