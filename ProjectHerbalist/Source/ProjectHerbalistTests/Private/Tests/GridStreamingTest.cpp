@@ -63,7 +63,7 @@ namespace
     {
         const double CellSpan = Manager->GetCellWorldPositionFlat(1, 0).X - Manager->GetCellWorldPositionFlat(0, 0).X;
         const double Span = CellSpan * ChunkSize;
-        const FVector Origin = Manager->GetActorLocation();
+        const FVector Origin = Manager->GetGridOrigin();
         return FBox2D(
             FVector2D(Origin.X + MinChunk.X * Span, Origin.Y + MinChunk.Y * Span),
             FVector2D(Origin.X + (MaxChunk.X + 1) * Span, Origin.Y + (MaxChunk.Y + 1) * Span));
@@ -612,7 +612,6 @@ bool FHerbalistGridStreaming_ActiveRadiusCoversTheLongestLocalMechanic::RunTest(
     if (!TestNotNull(TEXT("Settings CDO available"), Settings)) return false;
 
     const float RadiusMeters = Settings->ActiveSimulationRadiusMeters;
-    const int32 ChunkCells = Settings->ChunkSizeInCells;
 
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
@@ -620,6 +619,8 @@ bool FHerbalistGridStreaming_ActiveRadiusCoversTheLongestLocalMechanic::RunTest(
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
     const float CellSize = Manager->CellSize;
+    // Чанк -- у менеджера: с разметкой он выводится, а не берётся из настроек.
+    const int32 ChunkCells = Manager->GetChunkSizeInCells();
     const float ChunkSpanMeters = CellSize * ChunkCells / 100.0f;
     const int32 RadiusInChunks = Manager->GetActiveRadiusInChunks();
     Manager->Destroy();
@@ -890,7 +891,7 @@ bool FHerbalistGridStreaming_CentreOutsideTheGridStillReachesItsEdge::RunTest(co
         FScopedChunkSettings Scoped(/*RadiusMeters=*/4.0f, /*ChunkSize=*/4);
 
         // Полчанка за западным краем сетки (чанк = 4 клетки по 1 м).
-        const FVector JustOutside = Manager->GetActorLocation() + FVector(-200.0, 50.0, 0.0);
+        const FVector JustOutside = Manager->GetGridOrigin() + FVector(-200.0, 50.0, 0.0);
         const FIntPoint Centre = Manager->WorldPositionToChunk(JustOutside);
         TestEqual(TEXT("A point just past the grid edge maps to chunk (-1,0)"), Centre, FIntPoint(-1, 0));
 

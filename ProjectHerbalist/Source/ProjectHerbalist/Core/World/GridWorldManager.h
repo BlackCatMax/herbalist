@@ -25,6 +25,7 @@
 // не только в GridWorldManagerSave.cpp/GridWorldManagerCore.cpp. Циклической
 // зависимости нет — HerbalistSaveTypes.h ничего не включает из этого файла.
 #include "Core/Save/HerbalistSaveTypes.h"
+#include "Core/World/WorldLayout.h"
 #include "GridWorldManager.generated.h"
 
 class AHerbalistResourceActor;
@@ -104,6 +105,74 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World")
     float CellHeight = 10.0f;
+
+    // ---- Разметка мира (2026-09-12, DESIGN_World_Layout.md) ----
+    // Сетка увязана с ландшафтом и World Partition. Исходные величины
+    // запекаются в редакторе кнопкой «Сверить с World Partition» (в собранной
+    // игре границ мира нет), итог пересчитывается при сверке и при старте
+    // игры -- чанк зависит от радиуса симуляции в настройках. Без ландшафта в
+    // исходных величинах разметка не выводится, и GridSizeX/GridSizeY/CellSize
+    // с положением актора остаются ручными, как до разметки.
+    UPROPERTY(VisibleAnywhere, Category = "World|Layout")
+    FHerbalistWorldLayoutSource BakedLayoutSource;
+
+    UPROPERTY(EditAnywhere, Category = "World|Layout")
+    FHerbalistWorldLayoutOverrides LayoutOverrides;
+
+    // Итог не сохраняется: пересчитывается в PostInitializeComponents, при
+    // старте и при сверке -- сохранённый итог устаревал бы вместе с настройками.
+    UPROPERTY(VisibleAnywhere, Transient, Category = "World|Layout")
+    FHerbalistWorldLayout ResolvedLayout;
+
+    // Пересчитать ResolvedLayout из BakedLayoutSource, ручных значений и
+    // действующего радиуса симуляции. Сетку не трогает.
+    bool ResolveWorldLayout(TArray<FString>& OutWarnings);
+
+    // Записать итог в GridSizeX/GridSizeY/CellSize. Актор не двигается:
+    // начало сетки при выведенной разметке -- GetGridOrigin().
+    void ApplyResolvedLayout();
+
+    // Мировая XY угла сетки по разметке: начало отсчёта + MinCell клеток.
+    FVector2D GetLayoutGridOrigin() const;
+
+    // Угол клетки (0, 0) в мире. С разметкой -- из неё (у C++-класса менеджера
+    // нет корневого компонента, положение актора ничего не значит); без
+    // разметки -- положение актора, как было всегда.
+    FVector GetGridOrigin() const;
+
+    // Совпадают ли поля сетки (клетка и размер) с разметкой. Незапечённый
+    // менеджер -- всегда да.
+    bool IsGridMatchingResolvedLayout() const;
+
+    virtual void PostInitializeComponents() override;
+
+    // Чанк активности в клетках: из разметки, если она выведена, иначе из
+    // настроек (ChunkSizeInCells).
+    int32 GetChunkSizeInCells() const;
+
+    // Дальность самого дальнобойного локального механизма, в метрах.
+    static float GetLongestLocalMechanicMeters();
+
+    // Пересчитывать разметку при каждом сохранении менеджера в редакторе.
+    UPROPERTY(EditAnywhere, Category = "World|Layout")
+    bool bSyncLayoutOnSave = true;
+
+    // Кнопка: собрать исходные величины с ландшафта и World Partition,
+    // пересчитать разметку и применить к сетке. То же делает коммандлет
+    // WorldLayoutSyncBuilder для карты целиком.
+    UFUNCTION(CallInEditor, Category = "World|Layout")
+    void SyncWithWorldPartition();
+
+    virtual void PreSave(FObjectPreSaveContext ObjectSaveContext) override;
+
+#if WITH_EDITOR
+    // Исходные величины из мира редактора: первый ландшафт (границы через
+    // GetCompleteBounds), разбиение World Partition, в которое он попадает.
+    static FHerbalistWorldLayoutSource GatherWorldLayoutSource(UWorld* World, TArray<FString>& OutWarnings);
+
+    // Собрать, пересчитать и применить. true -- что-то изменилось.
+    bool SyncWorldLayoutFromWorld(UWorld* World, TArray<FString>& OutWarnings, bool bMarkModified);
+#endif
 
     // Автоматический периодический снимок GetGridCorruptionReport() в лог
     // (2026-09-06, прямой запрос пользователя: "мне останется только
@@ -1872,6 +1941,11 @@ protected:
     // ---- Инициализация ----
     UFUNCTION(BlueprintCallable, Category = "World|Init")
     void InitializeCells();
+
+    // Разметка при старте игры: пересчёт, применение, если поля разошлись с
+    // ней, сверка с ландшафтом и ячейками стриминга, строка в лог.
+    void InitializeWorldLayoutForPlay();
+    void VerifyWorldLayoutAgainstWorld(TArray<FString>& OutWarnings) const;
 
     // ---- Маркеры состояния ----
     void MarkCellDirty(int32 X, int32 Y) { DirtyCellIndices.Add(Y * GridSizeX + X); }

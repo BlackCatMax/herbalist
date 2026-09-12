@@ -121,7 +121,7 @@ bool FHerbalistWorldStateMap_UVAgreesWithWorldPositionToCell::RunTest(const FStr
         {
             for (float Frac : Offsets)
             {
-                const FVector WorldPos = Manager->GetActorLocation()
+                const FVector WorldPos = Manager->GetGridOrigin()
                     + FVector((X + Frac) * CellSize, (Y + Frac) * CellSize, 0.0f);
 
                 int32 SimX = -1, SimY = -1;
@@ -156,7 +156,7 @@ bool FHerbalistWorldStateMap_UVAgreesWithWorldPositionToCell::RunTest(const FStr
     // Точка заведомо снаружи сетки не должна считаться попавшей в карту --
     // иначе материал красил бы край сетки бесконечно во все стороны.
     FVector2D OutsideUV;
-    const FVector Outside = Manager->GetActorLocation() - FVector(CellSize, CellSize, 0.0f);
+    const FVector Outside = Manager->GetGridOrigin() - FVector(CellSize, CellSize, 0.0f);
     TestFalse(TEXT("A position outside the grid is reported as outside the map"),
         Manager->GetWorldStateMapUV(Outside, OutsideUV));
 
@@ -180,7 +180,7 @@ bool FHerbalistWorldStateMap_FrameMatchesGridExtent::RunTest(const FString& Para
     FVector2D WorldSize;
     Manager->GetWorldStateMapFrame(Origin, WorldSize);
 
-    TestEqual(TEXT("Frame origin is the manager location"), Origin, Manager->GetActorLocation());
+    TestEqual(TEXT("Frame origin is the manager location"), Origin, Manager->GetGridOrigin());
     // Приведение к float явное: FVector2D в UE5 хранит double, а размеры
     // сетки -- float, и без приведения перегрузка TestEqual неоднозначна.
     TestEqual(TEXT("Frame width covers the whole grid"),

@@ -76,7 +76,7 @@ void AGridWorldManager::CacheCellHeights()
         return;
     }
 
-    FVector GridOrigin = GetActorLocation();
+    FVector GridOrigin = GetGridOrigin();
     for (int32 Y = 0; Y < GridSizeY; ++Y)
     {
         for (int32 X = 0; X < GridSizeX; ++X)
@@ -101,7 +101,7 @@ float AGridWorldManager::GetCellHeight(int32 X, int32 Y) const
 
 FVector AGridWorldManager::GetCellWorldPositionFlat(int32 X, int32 Y) const
 {
-    return GetActorLocation() + FVector(X * CellSize, Y * CellSize, 0.f);
+    return GetGridOrigin() + FVector(X * CellSize, Y * CellSize, 0.f);
 }
 
 FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
@@ -117,7 +117,7 @@ bool AGridWorldManager::WorldPositionToCell(const FVector& WorldPos, int32& OutX
     OutX = -1;
     OutY = -1;
 
-    const FVector LocalLoc = WorldPos - GetActorLocation();
+    const FVector LocalLoc = WorldPos - GetGridOrigin();
     const int32 X = FMath::FloorToInt(LocalLoc.X / CellSize);
     const int32 Y = FMath::FloorToInt(LocalLoc.Y / CellSize);
 
@@ -244,8 +244,7 @@ FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
 
 FIntPoint AGridWorldManager::GetChunkCoordForCell(int32 CellX, int32 CellY) const
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 ChunkSize = GetChunkSizeInCells();
     // FloorDiv, не целочисленное деление: у отрицательных координат (их не
     // бывает в текущей сетке, но GetCell честно принимает любые) обычное
     // деление тянет к нулю и склеивает чанк -1 с чанком 0.
@@ -449,7 +448,16 @@ int32 AGridWorldManager::GetActiveRadiusInChunks() const
     const float RadiusMeters = Settings ? Settings->ActiveSimulationRadiusMeters : -1.0f;
     if (RadiusMeters < 0.0f) return -1;   // механизм выключен
 
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    // С разметкой радиус урезан до дальности загрузки и кратен чанку (найдено
+    // ревью: здесь брался радиус прямо из настроек и мог выйти за загруженные
+    // страницы). Тот же итог, что показывает лог разметки.
+    if (ResolvedLayout.bValid && ResolvedLayout.EffectiveSimulationRadiusMeters >= 0.0)
+    {
+        const double ChunkMeters = ResolvedLayout.GetChunkSizeCm() / 100.0;
+        return ChunkMeters > 0.0 ? FMath::RoundToInt32(ResolvedLayout.EffectiveSimulationRadiusMeters / ChunkMeters) : 0;
+    }
+
+    const int32 ChunkSize = GetChunkSizeInCells();
     const float ChunkSpanCm = FMath::Max(KINDA_SMALL_NUMBER, CellSize * ChunkSize);
     // Floor, не ceil: радиус меньше одного чанка честно означает "только свой
     // чанк" (0), а не "и соседние тоже".
@@ -493,8 +501,7 @@ void AGridWorldManager::ForEachCellInChunk(const FIntPoint& Chunk, TFunctionRef<
     // GetCell() сам отбрасывает координаты вне сетки (IsValidIndex), так
     // что клэмпить MaxX/MaxY здесь не нужно: последний чанк ряда, не
     // кратного ChunkSizeInCells, просто получит меньше валидных клеток.
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 ChunkSize = GetChunkSizeInCells();
 
     const int32 MinX = Chunk.X * ChunkSize;
     const int32 MinY = Chunk.Y * ChunkSize;
@@ -583,8 +590,7 @@ void AGridWorldManager::UpdateActiveChunkCenters()
 
 void AGridWorldManager::SetChunkResourcesActive(const FIntPoint& Chunk, bool bActive)
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 ChunkSize = GetChunkSizeInCells();
 
     const int32 MinX = Chunk.X * ChunkSize;
     const int32 MinY = Chunk.Y * ChunkSize;
@@ -666,8 +672,7 @@ TSet<FIntPoint> AGridWorldManager::ComputeChunksWithinRadius(const TArray<FIntPo
     // Только чанки, у которых есть клетки (2026-09-12): центр теперь может
     // лежать за краем сетки, и без отсечения игрок, гуляющий вне сетки,
     // плодил бы записи ChunkLastSimulatedGameTime для пустых чанков.
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 ChunkSize = GetChunkSizeInCells();
     const int32 MaxChunkX = FMath::DivideAndRoundUp(FMath::Max(GridSizeX, 0), ChunkSize) - 1;
     const int32 MaxChunkY = FMath::DivideAndRoundUp(FMath::Max(GridSizeY, 0), ChunkSize) - 1;
 
@@ -755,10 +760,9 @@ void AGridWorldManager::CatchUpActivatedChunks()
 
 FIntPoint AGridWorldManager::WorldPositionToChunk(const FVector& WorldPos) const
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 ChunkSize = GetChunkSizeInCells();
     const double ChunkSpan = FMath::Max(static_cast<double>(CellSize) * ChunkSize, UE_DOUBLE_KINDA_SMALL_NUMBER);
-    const FVector Local = WorldPos - GetActorLocation();
+    const FVector Local = WorldPos - GetGridOrigin();
     // Для точек внутри сетки совпадает с GetChunkCoordForCell(WorldPositionToCell):
     // floor(floor(x / c) / n) == floor(x / (c * n)).
     return FIntPoint(FMath::FloorToInt(Local.X / ChunkSpan), FMath::FloorToInt(Local.Y / ChunkSpan));
@@ -786,10 +790,9 @@ bool AGridWorldManager::IsChunkGroundLoaded(const FIntPoint& Chunk) const
         return true;
     }
 
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 ChunkSize = GetChunkSizeInCells();
     const double Span = static_cast<double>(CellSize) * ChunkSize;
-    const FVector Origin = GetActorLocation();
+    const FVector Origin = GetGridOrigin();
     const FVector2D Min(Origin.X + Chunk.X * Span, Origin.Y + Chunk.Y * Span);
     const FVector2D Max = Min + FVector2D(Span, Span);
 
@@ -894,10 +897,9 @@ void AGridWorldManager::CollectGroundCoveredChunks(TSet<FIntPoint>& OutChunks) c
 {
     OutChunks.Reset();
 
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 ChunkSize = GetChunkSizeInCells();
     const double Span = FMath::Max(static_cast<double>(CellSize) * ChunkSize, UE_DOUBLE_KINDA_SMALL_NUMBER);
-    const FVector Origin = GetActorLocation();
+    const FVector Origin = GetGridOrigin();
     const int32 MaxChunkX = FMath::DivideAndRoundUp(FMath::Max(GridSizeX, 0), ChunkSize) - 1;
     const int32 MaxChunkY = FMath::DivideAndRoundUp(FMath::Max(GridSizeY, 0), ChunkSize) - 1;
 
@@ -955,9 +957,8 @@ void AGridWorldManager::UpdateMaterializedChunks()
     {
         // Земля грузится и выгружается редко, а вопрос задаётся каждый кадр:
         // пока прямоугольники и сетка те же, набор уже верный.
-        const UHerbalistSettings* Settings = GetHerbalistSettings();
-        const FVector Origin = GetActorLocation();
-        uint32 Hash = GetTypeHash(Settings ? Settings->ChunkSizeInCells : 32);
+        const FVector Origin = GetGridOrigin();
+        uint32 Hash = GetTypeHash(GetChunkSizeInCells());
         Hash = HashCombineFast(Hash, GetTypeHash(CellSize));
         Hash = HashCombineFast(Hash, GetTypeHash(GridSizeX));
         Hash = HashCombineFast(Hash, GetTypeHash(GridSizeY));
@@ -1261,12 +1262,23 @@ AGridWorldManager::AGridWorldManager()
     PrimaryActorTick.bStartWithTickEnabled = false;
 
     PerceptionComponent = CreateDefaultSubobject<UPerceptionComponent>(TEXT("PerceptionComp"));
+
+#if WITH_EDITORONLY_DATA
+    // Менеджер держит симуляцию всего мира и не должен выгружаться вместе со
+    // своей ячейкой стриминга, когда игрок уходит (найдено ревью разметки
+    // мира, 2026-09-12). Размещённый на L_TestDev экземпляр значение не
+    // переопределяет -- подхватит новое значение по умолчанию.
+    bIsSpatiallyLoaded = false;
+#endif
 }
 
 void AGridWorldManager::BeginPlay()
 {
     Super::BeginPlay();
     WorldRNG.Initialize(RngBaseSeed);
+
+    // Разметка мира -- до клеток: она задаёт их размер, число и начало.
+    InitializeWorldLayoutForPlay();
 
     if (Cells.Num() == 0)
     {

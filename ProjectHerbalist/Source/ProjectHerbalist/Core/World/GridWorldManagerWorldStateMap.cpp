@@ -190,13 +190,13 @@ bool AGridWorldManager::GetWorldStateMapUV(const FVector& WorldPosition, FVector
     }
 
     // Та же система отсчёта, что у WorldPositionToCell: локальные
-    // координаты от GetActorLocation(), деление на CellSize, пол.
+    // координаты от GetGridOrigin(), деление на CellSize, пол.
     // GetCellWorldPositionFlat отдаёт УГОЛ клетки, а не центр (клетка X
     // занимает [X*CellSize, (X+1)*CellSize)) -- если бы карта считала
     // от центра, она разъехалась бы с симуляцией на полклетки. Это
     // проверяется тестом WorldStateMapTest.UVAgreesWithWorldPositionToCell,
     // а не оставлено на веру.
-    const FVector Local = WorldPosition - GetActorLocation();
+    const FVector Local = WorldPosition - GetGridOrigin();
     OutUV = FVector2D(
         Local.X / (GridSizeX * CellSize),
         Local.Y / (GridSizeY * CellSize));
@@ -206,7 +206,7 @@ bool AGridWorldManager::GetWorldStateMapUV(const FVector& WorldPosition, FVector
 
 void AGridWorldManager::GetWorldStateMapFrame(FVector& OutOrigin, FVector2D& OutWorldSize) const
 {
-    OutOrigin = GetActorLocation();
+    OutOrigin = GetGridOrigin();
     OutWorldSize = FVector2D(GridSizeX * CellSize, GridSizeY * CellSize);
 }
 

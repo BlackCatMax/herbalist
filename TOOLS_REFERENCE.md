@@ -15,6 +15,7 @@
 | `-run=PlaytestMapResize [-size=N] [-dryrun]` | Перекладывает биом-полосы под новый размер сетки; без `-size` — размер сохраняется, только пересчёт | 2026-09-07 |
 | `-run=ArtifactIngredientAppendCommandlet` | Добавляет ряды артефактов/перьев (§21.3, §16.4) в `DT_IngredientClass` как невыпадающие невидимо портящиеся предметы | 2026-09-02 |
 | `-run=WorldStateMapSetup [-map=<путь>]` | Создаёт `RT_WorldStateMap` (размер = сетке, линейная гамма, билинейный, clamp), заводит в `MPC_WorldStateFields` параметры рамки карты (`WorldStateMapOrigin`/`WorldStateMapSize`) и назначает всё менеджеру на карте (по умолчанию `L_TestDev`). На карте World Partition менеджер — внешний актор, коммандлет его не находит и карту не трогает. Идемпотентен | 2026-09-08 |
+| `-run=WorldPartitionBuilderCommandlet <карта> -Builder=WorldLayoutSyncBuilder [-ReportOnly]` | Разметка мира (`DESIGN_World_Layout.md`): собирает с карты ландшафт и сетку стриминга World Partition, пересчитывает разметку менеджера сетки (клетка, размер, начало, страница, чанк) и сохраняет его внешний актор. `-ReportOnly` — только печатает исходные величины и разметку, ничего не сохраняя. То же, что кнопка «Сверить с World Partition» на менеджере | 2026-09-12 |
 | `-run=TrampleMapSetup` | Создаёт `RT_TrampleMap` (1024×1024, RGBA8, линейная гамма, билинейный, **wrap**) и заводит в `MPC_WorldStateFields` параметры `TrampleMapFrame`/`TramplePlayerPosition`. Карты не трогает — пути лежат в Herbalist Settings. Идемпотентен | 2026-09-12 |
 
 ## Python-скрипты (`herbalist_docs/`)

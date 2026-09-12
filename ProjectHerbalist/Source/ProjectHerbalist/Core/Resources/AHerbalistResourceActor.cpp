@@ -55,7 +55,7 @@ void AHerbalistResourceActor::BeginPlay()
 
     if ((GridX == -1 || GridY == -1) && WorldManager)
     {
-        FVector LocalLoc = GetActorLocation() - WorldManager->GetActorLocation();
+        FVector LocalLoc = GetActorLocation() - WorldManager->GetGridOrigin();
         GridX = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
         GridY = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
         UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: Auto-assigned to cell (%d,%d)"),
