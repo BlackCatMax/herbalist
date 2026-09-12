@@ -1,5 +1,9 @@
 // Core/World/GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
+#include "WorldPartition/WorldPartition.h"
+#include "WorldPartition/WorldPartitionRuntimeCell.h"
+#include "WorldPartition/WorldPartitionRuntimeHash.h"
+#include "WorldPartition/WorldPartitionStreamingSource.h"
 #include "Landscape.h"
 #include "LandscapeProxy.h"
 #include "Engine/OverlapResult.h"
@@ -539,13 +543,15 @@ void AGridWorldManager::UpdateActiveChunkCenters()
     UWorld* World = GetWorld();
     if (!World) return;
 
+    // Центр -- чанк в координатах сетки, В ТОМ ЧИСЛЕ за её пределами
+    // (2026-09-12). Раньше источник вне сетки не давал центра вовсе: стоя в
+    // паре метров за краем, игрок не видел ресурсов у самого края, а ушедший
+    // далеко -- оставлял за собой вечно висящие акторы (центров нет, см.
+    // CatchUpActivatedChunks). Чанки за краем отсекает
+    // ComputeChunksWithinRadius.
     auto AddCenterFromWorldLocation = [this](const FVector& WorldLocation)
     {
-        int32 X, Y;
-        if (WorldPositionToCell(WorldLocation, X, Y))
-        {
-            ActiveChunkCenters.AddUnique(GetChunkCoordForCell(X, Y));
-        }
+        ActiveChunkCenters.AddUnique(WorldPositionToChunk(WorldLocation));
     };
 
     // Основной путь: спрашиваем сам World Partition, вокруг чего он сейчас
@@ -600,12 +606,17 @@ void AGridWorldManager::SetChunkResourcesActive(const FIntPoint& Chunk, bool bAc
                 }
                 else
                 {
-                    // Возврат игрока: поднимаем ровно то, что стояло.
-                    for (FName IngredientID : Cell->DormantResourceIDs)
+                    // Возврат игрока: поднимаем ровно то, что стояло. Список
+                    // забирается целиком ДО спавна (2026-09-12): спавн в
+                    // нематериализованную клетку сам дописывает в
+                    // DormantResourceIDs, и правка массива посреди обхода
+                    // была бы неопределённым поведением.
+                    TArray<FName> ToWake = MoveTemp(Cell->DormantResourceIDs);
+                    Cell->DormantResourceIDs.Reset();
+                    for (FName IngredientID : ToWake)
                     {
                         SpawnResourceActor(IngredientID, X, Y);
                     }
-                    Cell->DormantResourceIDs.Reset();
                 }
             }
             else
@@ -651,14 +662,26 @@ void AGridWorldManager::DespawnChunkEntities(const FIntPoint& Chunk)
 
 TSet<FIntPoint> AGridWorldManager::ComputeChunksWithinRadius(const TArray<FIntPoint>& Centers, int32 Radius) const
 {
+    // Только чанки, у которых есть клетки (2026-09-12): центр теперь может
+    // лежать за краем сетки, и без отсечения игрок, гуляющий вне сетки,
+    // плодил бы записи ChunkLastSimulatedGameTime для пустых чанков.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const int32 MaxChunkX = FMath::DivideAndRoundUp(FMath::Max(GridSizeX, 0), ChunkSize) - 1;
+    const int32 MaxChunkY = FMath::DivideAndRoundUp(FMath::Max(GridSizeY, 0), ChunkSize) - 1;
+
     TSet<FIntPoint> Result;
     for (const FIntPoint& Center : Centers)
     {
-        for (int32 dy = -Radius; dy <= Radius; ++dy)
+        const int32 MinX = FMath::Max(Center.X - Radius, 0);
+        const int32 MaxX = FMath::Min(Center.X + Radius, MaxChunkX);
+        const int32 MinY = FMath::Max(Center.Y - Radius, 0);
+        const int32 MaxY = FMath::Min(Center.Y + Radius, MaxChunkY);
+        for (int32 Y = MinY; Y <= MaxY; ++Y)
         {
-            for (int32 dx = -Radius; dx <= Radius; ++dx)
+            for (int32 X = MinX; X <= MaxX; ++X)
             {
-                Result.Add(FIntPoint(Center.X + dx, Center.Y + dy));
+                Result.Add(FIntPoint(X, Y));
             }
         }
     }
@@ -675,6 +698,11 @@ void AGridWorldManager::CatchUpActivatedChunks()
     {
         ActiveChunks.Reset();
         PreviousActiveChunks.Reset();
+        // Раньше здесь был просто return, и всё материализованное вокруг
+        // последней позиции игрока навсегда оставалось в мире (2026-09-12,
+        // "ресурсы остались там, откуда вы ушли, висящими в воздухе").
+        // Материализация ведётся отдельно и сама решает, что усыпить.
+        UpdateMaterializedChunks();
         return;
     }
 
@@ -704,30 +732,200 @@ void AGridWorldManager::CatchUpActivatedChunks()
         *Last = Now;
     }
 
-    // Материализация/усыпление ресурсов по смене активности (юнит 3).
-    for (const FIntPoint& Chunk : ActiveChunks)
+    PreviousActiveChunks = ActiveChunks;
+
+    // Материализация/усыпление акторов (юнит 3) -- с 2026-09-12 не по смене
+    // активности, а через UpdateMaterializedChunks: активный чанк без
+    // загруженной земли под ним акторов не держит.
+    UpdateMaterializedChunks();
+}
+
+FIntPoint AGridWorldManager::WorldPositionToChunk(const FVector& WorldPos) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const double ChunkSpan = FMath::Max(static_cast<double>(CellSize) * ChunkSize, UE_DOUBLE_KINDA_SMALL_NUMBER);
+    const FVector Local = WorldPos - GetActorLocation();
+    // Для точек внутри сетки совпадает с GetChunkCoordForCell(WorldPositionToCell):
+    // floor(floor(x / c) / n) == floor(x / (c * n)).
+    return FIntPoint(FMath::FloorToInt(Local.X / ChunkSpan), FMath::FloorToInt(Local.Y / ChunkSpan));
+}
+
+bool AGridWorldManager::IsChunkMaterialized(const FIntPoint& Chunk) const
+{
+    // Стриминг выключен или игрока ещё не было -- как до механизма.
+    if (!bMaterializationTracked || GetActiveRadiusInChunks() < 0)
     {
-        if (!PreviousActiveChunks.Contains(Chunk))
+        return true;
+    }
+    return MaterializedChunks.Contains(Chunk);
+}
+
+bool AGridWorldManager::IsCellMaterialized(const FGridCell& Cell) const
+{
+    return IsChunkMaterialized(GetChunkCoordForCell(Cell.X, Cell.Y));
+}
+
+bool AGridWorldManager::IsChunkGroundLoaded(const FIntPoint& Chunk) const
+{
+    if (GroundLoadedOverride)
+    {
+        return GroundLoadedOverride(Chunk);
+    }
+    if (!bGroundCoverageKnown)
+    {
+        return true;
+    }
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const double Span = static_cast<double>(CellSize) * ChunkSize;
+    const FVector Origin = GetActorLocation();
+    const FVector2D Min(Origin.X + Chunk.X * Span, Origin.Y + Chunk.Y * Span);
+    const FVector2D Max = Min + FVector2D(Span, Span);
+
+    // Углы и центр: ячейки World Partition много крупнее чанка (8 м против
+    // десятков метров), так что дыру посередине чанка при покрытых углах
+    // даёт только ячейка мельче самого чанка. Включительные границы -- чанк
+    // на стыке двух ячеек покрыт обеими.
+    const FVector2D Points[] = { Min, FVector2D(Max.X, Min.Y), FVector2D(Min.X, Max.Y), Max, (Min + Max) * 0.5 };
+    for (const FVector2D& Point : Points)
+    {
+        const bool bCovered = GroundCoverage.ContainsByPredicate([&Point](const FBox2D& Box)
         {
+            return Point.X >= Box.Min.X && Point.X <= Box.Max.X && Point.Y >= Box.Min.Y && Point.Y <= Box.Max.Y;
+        });
+        if (!bCovered)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void AGridWorldManager::RefreshGroundCoverage(const TSet<FIntPoint>& Chunks)
+{
+    GroundCoverage.Reset();
+    bGroundCoverageKnown = false;
+
+    UWorld* World = GetWorld();
+    const UWorldPartition* WorldPartition = World ? World->GetWorldPartition() : nullptr;
+    if (!World || !World->IsGameWorld() || !WorldPartition || !WorldPartition->IsStreamingEnabled()
+        || !WorldPartition->RuntimeHash || Chunks.Num() == 0)
+    {
+        return;
+    }
+    bGroundCoverageKnown = true;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const int32 ChunkSize = FMath::Max(1, Settings ? Settings->ChunkSizeInCells : 32);
+    const double Span = static_cast<double>(CellSize) * ChunkSize;
+    const FVector Origin = GetActorLocation();
+
+    FBox2D Region(ForceInit);
+    for (const FIntPoint& Chunk : Chunks)
+    {
+        const FVector2D Min(Origin.X + Chunk.X * Span, Origin.Y + Chunk.Y * Span);
+        Region += Min;
+        Region += Min + FVector2D(Span, Span);
+    }
+
+    // Шар запроса -- на высоте земли в центре области: ячейки World Partition
+    // трёхмерные, шар должен их задевать. Вне сетки -- высота менеджера.
+    const FVector2D Centre = Region.GetCenter();
+    double CentreZ = Origin.Z;
+    int32 CellX = 0;
+    int32 CellY = 0;
+    if (WorldPositionToCell(FVector(Centre, Origin.Z), CellX, CellY))
+    {
+        CentreZ = GetCellHeight(CellX, CellY);
+    }
+
+    // RuntimeHash напрямую, а не UWorldPartition::IsStreamingCompleted: тот
+    // на каждый вызов сдвигает StreamingStateEpoch и заставляет партишен
+    // заново пересчитывать источники.
+    FWorldPartitionStreamingQuerySource Query(FVector(Centre, CentreZ));
+    Query.Radius = static_cast<float>(Region.GetExtent().Size());
+    Query.bUseGridLoadingRange = false;
+    Query.bSpatialQuery = true;
+
+    TSet<const UWorldPartitionRuntimeCell*> Seen;
+    WorldPartition->RuntimeHash->ForEachStreamingCellsQuery(Query, [this, &Seen](const UWorldPartitionRuntimeCell* Cell)
+    {
+        if (Cell && !Seen.Contains(Cell))
+        {
+            Seen.Add(Cell);
+            // HLOD-ячейки вблизи деактивированы по замыслу (их заменяют
+            // настоящие), всегда загруженные не привязаны к месту -- ни те, ни
+            // другие не говорят, есть ли земля в конкретной точке.
+            if (!Cell->GetIsHLOD() && !Cell->IsAlwaysLoaded()
+                && Cell->GetCurrentState() == EWorldPartitionRuntimeCellState::Activated)
+            {
+                const FBox Bounds = Cell->GetCellBounds();
+                GroundCoverage.Add(FBox2D(FVector2D(Bounds.Min.X, Bounds.Min.Y), FVector2D(Bounds.Max.X, Bounds.Max.Y)));
+            }
+        }
+        return true;
+    });
+
+    if (GroundCoverage.Num() == 0 && !bLoggedEmptyGroundCoverage)
+    {
+        UE_LOG(LogHerbalistWorld, Log,
+            TEXT("[Streaming] Под активной областью нет активных ячеек World Partition -- ресурсы и сущности не материализуются, пока земля не загрузится"));
+        bLoggedEmptyGroundCoverage = true;
+    }
+}
+
+void AGridWorldManager::UpdateMaterializedChunks()
+{
+    if (GetActiveRadiusInChunks() < 0)
+    {
+        return;   // стриминг выключен: всё заселено при старте, усыплять нечего
+    }
+
+    const bool bHaveCentres = ActiveChunkCenters.Num() > 0;
+    if (!bHaveCentres && !bMaterializationTracked)
+    {
+        return;   // игрока ещё не было -- прежнее поведение
+    }
+    bMaterializationTracked = true;
+
+    // Кандидаты: при живых центрах -- активные чанки. В кадр без центров --
+    // то, что уже материализовано: не сбрасываем, иначе ресурсы моргали бы и
+    // вставали на новые места, но землю под ними проверяем всё равно.
+    const TSet<FIntPoint> Candidates = bHaveCentres ? ActiveChunks : MaterializedChunks;
+    RefreshGroundCoverage(Candidates);
+
+    TArray<FIntPoint> ToSleep;
+    for (const FIntPoint& Chunk : MaterializedChunks)
+    {
+        if (!Candidates.Contains(Chunk) || !IsChunkGroundLoaded(Chunk))
+        {
+            ToSleep.Add(Chunk);
+        }
+    }
+    for (const FIntPoint& Chunk : ToSleep)
+    {
+        MaterializedChunks.Remove(Chunk);
+        SetChunkResourcesActive(Chunk, false);
+
+        // Найдено пользователем 2026-09-03: ресурсы резались чанками
+        // корректно, проявленные сущности (капище-заглушки-деревья и т.п.) --
+        // нет, оставались висеть в мире независимо от дистанции. Активная
+        // сторона отдельной функции не нужна -- см. довод у объявления
+        // DespawnChunkEntities в .h.
+        DespawnChunkEntities(Chunk);
+    }
+
+    for (const FIntPoint& Chunk : Candidates)
+    {
+        if (!MaterializedChunks.Contains(Chunk) && IsChunkGroundLoaded(Chunk))
+        {
+            // Сначала в набор, потом спавн: спавн сам сверяется с набором.
+            MaterializedChunks.Add(Chunk);
             SetChunkResourcesActive(Chunk, true);
         }
     }
-    for (const FIntPoint& Chunk : PreviousActiveChunks)
-    {
-        if (!ActiveChunks.Contains(Chunk))
-        {
-            SetChunkResourcesActive(Chunk, false);
-
-            // Найдено пользователем 2026-09-03: ресурсы резались чанками
-            // корректно, проявленные сущности (капище-заглушки-деревья и
-            // т.п.) -- нет, оставались висеть в мире независимо от
-            // дистанции. Активная сторона отдельной функции не нужна --
-            // см. довод у объявления DespawnChunkEntities в .h.
-            DespawnChunkEntities(Chunk);
-        }
-    }
-
-    PreviousActiveChunks = ActiveChunks;
 }
 
 const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
@@ -1520,6 +1718,15 @@ bool AGridWorldManager::SpawnOneResourceInCell(FGridCell& Cell, const FHarvestCo
     }
     if (IngredientID.IsNone()) return false;
 
+    // Спящая клетка (2026-09-12): выросшее запоминается, а не ставится в мир
+    // -- под клеткой может не быть загруженной земли. Место подберётся при
+    // материализации чанка (SetChunkResourcesActive).
+    if (!IsCellMaterialized(Cell))
+    {
+        Cell.DormantResourceIDs.Add(IngredientID);
+        return true;
+    }
+
     // Позиция внутри формы биома (2026-09-02) + посадка на поверхность и
     // отбраковка занятых точек (2026-09-03). Свободного места нет --
     // клетка остаётся пустой: лучше так, чем трава внутри валуна.
@@ -1619,6 +1826,15 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
 {
     FGridCell* Cell = GetCell(X, Y);
     if (!Cell) return;
+
+    // Спящая клетка (2026-09-12): загрузка сейва и прочие вызовы не ставят
+    // актор туда, где под ним может не быть земли, -- ресурс запоминается и
+    // появится при материализации чанка.
+    if (!IsCellMaterialized(*Cell))
+    {
+        Cell->DormantResourceIDs.Add(IngredientID);
+        return;
+    }
 
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
@@ -1853,46 +2069,55 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     FTimerHandle TimerHandle;
     GetWorldTimerManager().SetTimer(TimerHandle, [this, &Cell, RegrowthTime]()
     {
-        --Cell.PendingRegrowthCount;
-
-        // Регион мог перестать заявлять клетку или переключиться на PCG-граф
-        // за время ожидания (минуты, не тики) -- та же проверка, что
-        // SpawnResourcesInCell делает для первичного заселения, здесь нужна
-        // явно: SpawnOneResourceInCell её не делает вовсе (её вызывающая
-        // сторона решает, применимо ли расти тут в принципе).
-        if (!IsCellClaimedByBiomeRegion(Cell)) return;
-
-        ABiomeRegionVolume* Region = GetClaimingRegion(Cell);
-        if (Region && !Region->bSpawnResourcesFromGrid) return;
-
-        UGameInstance* GameInstance = GetGameInstance();
-        UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
-
-        // Окно условий на МОМЕНТ отрастания, не на момент сбора (см.
-        // комментарий у BuildHarvestContextForCell) -- за 5-10 минут
-        // ожидания сезон/луна/погода могли уже смениться.
-        const FHarvestContext Context = BuildHarvestContextForCell(Cell);
-        const EGardenNiche* PlotNiche = Cell.bIsWater ? nullptr : GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
-
-        if (SpawnOneResourceInCell(Cell, Context, PlotNiche, Region, IngredientSubsystem))
-        {
-            // В отличие от исходного броска в InitializeCells (тот безопасно
-            // переигрывается заново из RngBaseSeed), это отросшее — не то же
-            // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
-            MarkCellDirty(Cell.X, Cell.Y);
-
-            // Найдено 2026-09-06 (прямой запрос пользователя: "проверь что с
-            // отрастанием ресурсов") -- реальный спавн логируется только на
-            // Verbose (SpawnResourceActor, невидим по умолчанию), а таймер по
-            // умолчанию 420с (7 минут) -- ни разу не подтверждалось видимым
-            // логом, что отрастание вообще срабатывает. Одна строка на Log,
-            // именно на факт УСПЕШНОГО отрастания (не на попытку -- ранние
-            // return выше уже покрыты собственными путями, спамить на каждую
-            // клетку сетки при обычной игре не должно).
-            UE_LOG(LogHerbalistWorld, Log, TEXT("[Regrowth] Cell (%d,%d) regrew a resource after %.0fs"),
-                Cell.X, Cell.Y, RegrowthTime);
-        }
+        CompleteRegrowth(Cell, RegrowthTime);
     }, RegrowthTime, false);
+}
+
+void AGridWorldManager::CompleteRegrowth(FGridCell& Cell, float RegrowthTime)
+{
+    // Тело таймера StartRegeneration (вынесено 2026-09-12 ради прямой
+    // проверки). Спящая клетка актор не получает: SpawnOneResourceInCell
+    // сама кладёт выросшее в DormantResourceIDs. Раньше таймер ставил
+    // ресурс в клетку, от которой игрок уже ушёл, и тот висел там вечно.
+    Cell.PendingRegrowthCount = FMath::Max(Cell.PendingRegrowthCount - 1, 0);
+
+    // Регион мог перестать заявлять клетку или переключиться на PCG-граф
+    // за время ожидания (минуты, не тики) -- та же проверка, что
+    // SpawnResourcesInCell делает для первичного заселения, здесь нужна
+    // явно: SpawnOneResourceInCell её не делает вовсе (её вызывающая
+    // сторона решает, применимо ли расти тут в принципе).
+    if (!IsCellClaimedByBiomeRegion(Cell)) return;
+
+    ABiomeRegionVolume* Region = GetClaimingRegion(Cell);
+    if (Region && !Region->bSpawnResourcesFromGrid) return;
+
+    UGameInstance* GameInstance = GetGameInstance();
+    UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+
+    // Окно условий на МОМЕНТ отрастания, не на момент сбора (см.
+    // комментарий у BuildHarvestContextForCell) -- за 5-10 минут
+    // ожидания сезон/луна/погода могли уже смениться.
+    const FHarvestContext Context = BuildHarvestContextForCell(Cell);
+    const EGardenNiche* PlotNiche = Cell.bIsWater ? nullptr : GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
+
+    if (SpawnOneResourceInCell(Cell, Context, PlotNiche, Region, IngredientSubsystem))
+    {
+        // В отличие от исходного броска в InitializeCells (тот безопасно
+        // переигрывается заново из RngBaseSeed), это отросшее — не то же
+        // самое, что дало бы InitializeCells на старте. Сейв должен его помнить.
+        MarkCellDirty(Cell.X, Cell.Y);
+
+        // Найдено 2026-09-06 (прямой запрос пользователя: "проверь что с
+        // отрастанием ресурсов") -- реальный спавн логируется только на
+        // Verbose (SpawnResourceActor, невидим по умолчанию), а таймер по
+        // умолчанию 420с (7 минут) -- ни разу не подтверждалось видимым
+        // логом, что отрастание вообще срабатывает. Одна строка на Log,
+        // именно на факт УСПЕШНОГО отрастания (не на попытку -- ранние
+        // return выше уже покрыты собственными путями, спамить на каждую
+        // клетку сетки при обычной игре не должно).
+        UE_LOG(LogHerbalistWorld, Log, TEXT("[Regrowth] Cell (%d,%d) regrew a resource after %.0fs%s"),
+            Cell.X, Cell.Y, RegrowthTime, IsCellMaterialized(Cell) ? TEXT("") : TEXT(" (chunk asleep, kept as dormant)"));
+    }
 }
 
 void AGridWorldManager::OnResourceCollected(AHerbalistResourceActor* Actor)

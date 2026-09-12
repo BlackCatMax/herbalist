@@ -492,6 +492,41 @@ public:
     // это данные "что должно проявиться", переживают деактивацию.
     void DespawnChunkEntities(const FIntPoint& Chunk);
 
+    const TSet<FIntPoint>& GetActiveChunks() const { return ActiveChunks; }
+
+    // ---- Материализация акторов (2026-09-12) ----
+    // Активность решает, считается ли симуляция клетки; материализация --
+    // существуют ли в мире АКТОРЫ её ресурсов и проявленных сущностей.
+    // Найдено пользователем: "ресурсы остались там, откуда вы ушли, висящими
+    // в воздухе, под ними отстримился ландшафт". Акторы сетки созданы в
+    // рантайме и в ячейки World Partition не входят -- сам партишен их не
+    // выгружает, а радиус симуляции с его дальностью загрузки не связан
+    // (довод у ActiveSimulationRadiusMeters). Правило: актор существует
+    // только там, где под ним загружена земля.
+    //
+    // Чанк материализован, если он активен И его углы и центр лежат на
+    // активных ячейках World Partition (не HLOD, не всегда загруженных).
+    // Вне игрового мира и без стриминга партишена земля считается
+    // загруженной. Всё, что спавнится в нематериализованную клетку
+    // (отрастание, загрузка сейва), уходит в DormantResourceIDs, а не в мир.
+    // Вызывается из CatchUpActivatedChunks.
+    void UpdateMaterializedChunks();
+    bool IsChunkMaterialized(const FIntPoint& Chunk) const;
+    bool IsCellMaterialized(const FGridCell& Cell) const;
+    bool IsChunkGroundLoaded(const FIntPoint& Chunk) const;
+    const TSet<FIntPoint>& GetMaterializedChunks() const { return MaterializedChunks; }
+
+    // В editor-мире теста партишен не стримит -- подменить проверку земли.
+    void SetGroundLoadedOverrideForTests(TFunction<bool(const FIntPoint&)> InOverride) { GroundLoadedOverride = MoveTemp(InOverride); }
+
+    // Чанк мировой точки в координатах сетки -- в том числе за её пределами:
+    // источник стриминга за краем сетки всё равно даёт центр активности.
+    FIntPoint WorldPositionToChunk(const FVector& WorldPos) const;
+
+    // Тело таймера StartRegeneration -- публично ради прямой проверки: сам
+    // таймер на автотесте не дождаться.
+    void CompleteRegrowth(FGridCell& Cell, float RegrowthTime);
+
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
@@ -1882,6 +1917,18 @@ private:
     // «только что активированные», которым нужен догон.
     TSet<FIntPoint> ActiveChunks;
     TSet<FIntPoint> PreviousActiveChunks;
+
+    // Материализованные чанки (2026-09-12) -- см. UpdateMaterializedChunks.
+    TSet<FIntPoint> MaterializedChunks;
+    // Отслеживание включается с первым непустым набором центров; до этого
+    // (headless-тесты, кадры до появления игрока) спавн идёт как раньше.
+    bool bMaterializationTracked = false;
+    // Прямоугольники активных ячеек World Partition на текущий кадр.
+    TArray<FBox2D> GroundCoverage;
+    bool bGroundCoverageKnown = false;
+    bool bLoggedEmptyGroundCoverage = false;
+    TFunction<bool(const FIntPoint&)> GroundLoadedOverride;
+    void RefreshGroundCoverage(const TSet<FIntPoint>& Chunks);
 
     // Игровое время последнего прогона чанка. У неактивного чанка тут
     // остаётся момент, когда он перестал считаться, — разница с текущим

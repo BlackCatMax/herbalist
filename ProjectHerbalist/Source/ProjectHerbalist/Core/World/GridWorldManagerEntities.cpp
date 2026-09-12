@@ -696,6 +696,11 @@ void AGridWorldManager::SyncManifestedEntityActor(FGridCell& Cell, TSubclassOf<A
 
     if (Cell.ManifestedEntityID.IsNone() || !GetWorld()) return;
 
+    // Нематериализованная клетка (2026-09-12): под ней может не быть земли.
+    // ManifestedEntityID остаётся -- актор появится, когда чанк материализуется
+    // и UpdateEntityManifestations пройдёт по клетке снова.
+    if (!IsCellMaterialized(Cell)) return;
+
     const TSubclassOf<AHerbalistEntityActor> ClassToSpawn = RequestedClass ? RequestedClass : DefaultClass;
     // Позиция внутри формы биома (2026-09-02), не мёртвый центр клетки --
     // тот же приём, что уже SpawnResourcesInCell, см. GetSpawnPositionWithinBiome.
