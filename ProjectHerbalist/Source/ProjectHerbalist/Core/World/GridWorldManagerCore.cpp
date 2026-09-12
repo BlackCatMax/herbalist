@@ -1782,6 +1782,53 @@ bool AGridWorldManager::ApplyFertilizerToCell(const FIntPoint& CellCoord)
     return true;
 }
 
+float AGridWorldManager::GetRegrowthDelaySeconds(const FGridCell& Cell) const
+{
+    // Базовое время -- пер-региональная настройка
+    // (ABiomeRegionVolume::ResourceRegrowthTimeSeconds, 2026-09-02), если
+    // клетка реально заявлена регионом; без регионов на уровне -- глобальный
+    // ResourceRegrowthTime.
+    const ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(Cell);
+    const float BaseSeconds = ClaimingRegion ? ClaimingRegion->ResourceRegrowthTimeSeconds : ResourceRegrowthTime;
+
+    // Истощённая клетка отращивает дольше (2026-09-12, прямой запрос: "на
+    // клетках с высоким стрессом растения должны восстанавливаться
+    // медленнее"). До этого HarvestStress на отрастание не влиял вовсе.
+    //
+    // Надбавка не подобрана, а выведена из уже существующих констант --
+    // свободных параметров здесь нет:
+    //
+    //     T = T_база + HarvestStress x (HarvestStressIncrement x ПолноеЗарастание)
+    //
+    // Одной фразой: полностью истощённая клетка отдаёт следующее растение
+    // только после того, как земля отпустила ровно один сбор. При дефолтах
+    // (база 420 с, сутки 32 мин, зарастание 7 суток = 13440 с, шаг сбора 0.1,
+    // биом и сезон 1.0): стресс 0 -- 7 мин без изменений, 0.5 -- 18 мин,
+    // 1.0 -- 29 мин (потолок 4.2x).
+    //
+    // Форма аддитивная, а не T/(1-стресс): вторая расходится при стрессе 1.0
+    // и потребовала бы произвольного потолка -- ровно того числа с потолка,
+    // которого вывод выше избегает. Выбрано явно (вариант A), ужесточать --
+    // по результатам игры.
+    //
+    // ПолноеЗарастание -- та же функция, что гонит спад HarvestStress в
+    // RegenerateCellParameters, не копия, поэтому биом, сезон и Лесное
+    // капище наследуются сами: болото держит след дольше -- и отрастает
+    // дольше, зимой дольше, весной быстрее.
+    //
+    // Про одно отставание: OnResourceCollected ставит сбор в очередь
+    // (QueueCommand) и зовёт StartRegeneration СРАЗУ, а HarvestStress растёт
+    // позже, в ProcessHarvestCommand. Значит здесь виден стресс ДО текущего
+    // сбора. Это намеренно: запрошено свойство КЛЕТКИ ("на клетках с высоким
+    // стрессом"), а не штраф за само действие, и нетронутая клетка обязана
+    // отрастить за базовое время.
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float StressStep = Settings ? Settings->HarvestStressIncrement : 0.1f;
+    const float Stress = FMath::Clamp(Cell.HarvestStress, 0.0f, 1.0f);
+
+    return BaseSeconds + Stress * StressStep * GetStressRecoverySecondsForCell(Cell);
+}
+
 void AGridWorldManager::StartRegeneration(FGridCell& Cell)
 {
     // Поресурсно, не по клетке (2026-09-04, "а можно отрастание сделать
@@ -1793,12 +1840,9 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     // слот = один таймер на один новый ресурс: собрали один из трёх --
     // отрастает именно один, остальные два не тронуты.
     //
-    // Время возрождения -- пер-региональная настройка
-    // (ABiomeRegionVolume::ResourceRegrowthTimeSeconds, 2026-09-02), если
-    // клетка реально заявлена регионом; без регионов на уровне -- глобальный
-    // ResourceRegrowthTime, как раньше.
-    ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(Cell);
-    const float RegrowthTime = ClaimingRegion ? ClaimingRegion->ResourceRegrowthTimeSeconds : ResourceRegrowthTime;
+    // Время возрождения -- базовое пер-региональное плюс надбавка за
+    // истощение клетки, см. GetRegrowthDelaySeconds.
+    const float RegrowthTime = GetRegrowthDelaySeconds(Cell);
 
     // Наблюдаемый счётчик (2026-09-04) -- см. комментарий у поля в
     // HerbalistCoreTypes.h. Растёт здесь, падает в лямбде ниже независимо
@@ -2026,6 +2070,63 @@ void AGridWorldManager::DrawGridDebug()
 // ЭКОЛОГИЯ: ВОССТАНОВЛЕНИЕ ПАРАМЕТРОВ КЛЕТОК
 // ============================================================================
 
+// Сколько секунд клетка со стрессом 1.0 зарастает полностью. Было
+// лямбдой внутри RegenerateCellParameters до 2026-09-12; вынесено, когда
+// то же число понадобилось StartRegeneration (см. там).
+//
+// Множители здесь — множители ВРЕМЕНИ, не скорости: больше = дольше
+// заживает. Биом — FBiomeRow::StressRecoveryMultiplier (болото со стоячей
+// водой держит след дольше, пойма промывает быстрее). Сезон —
+// 15_Cycles_And_Shrines.md §15.4: Весна "временный бонус к скорости
+// зарастания клеток во всех биомах" (< 1.0, короче срок), Зима
+// "клетки заживают медленнее" (> 1.0), Лето намеренно 1.0 (см.
+// комментарий у GetSeason() в GridWorldManagerEntities.cpp). Сезон УМНОЖАЕТ
+// биомный множитель, а не заменяет его.
+float AGridWorldManager::GetStressRecoverySecondsForBiome(EBiomeType Biome) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float RecoveryDays = Settings ? Settings->StressRecoveryGameDays : 7.0f;
+    const float DaySeconds = (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f;
+
+    float Multiplier = 1.0f;
+    if (const FBiomeRow* Row = FBiomeDefaults::GetBiomeRow(Biome))
+    {
+        Multiplier = FMath::Max(Row->StressRecoveryMultiplier, 0.05f);
+    }
+
+    switch (GetSeason())
+    {
+    case ESeason::Spring: Multiplier *= Settings ? Settings->SpringStressRecoveryMultiplier : 0.7f; break;
+    case ESeason::Winter: Multiplier *= Settings ? Settings->WinterStressRecoveryMultiplier : 1.6f; break;
+    default: break;
+    }
+
+    return FMath::Max(RecoveryDays * DaySeconds * Multiplier, KINDA_SMALL_NUMBER);
+}
+
+// То же для конкретной клетки. Эффект 3, Лесное капище (Велес, §15.5):
+// "ускоряет заживление клеток" — в RegenerateCellParameters это записано как
+// умножение СКОРОСТИ на (1 + HealBonus×Restoration); здесь величина
+// обратная — время, поэтому ДЕЛЕНИЕ на тот же коэффициент.
+float AGridWorldManager::GetStressRecoverySecondsForCell(const FGridCell& Cell) const
+{
+    float Seconds = GetStressRecoverySecondsForBiome(Cell.Biome);
+
+    if (Shrines.Num() > 0)
+    {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const FShrine* DominantShrine = HerbalistCore::Shrine::FindDominantShrine(
+            FIntPoint(Cell.X, Cell.Y), Shrines, Settings ? Settings->ShrineInfluenceRadius : 3);
+        if (DominantShrine && DominantShrine->Type == EShrineType::Forest && DominantShrine->Restoration > 0.0f)
+        {
+            const float HealBonus = Settings ? Settings->ShrineForestHealBonus : 0.5f;
+            Seconds /= FMath::Max(1.0f + HealBonus * DominantShrine->Restoration, KINDA_SMALL_NUMBER);
+        }
+    }
+
+    return FMath::Max(Seconds, KINDA_SMALL_NUMBER);
+}
+
 void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoint* OnlyChunk)
 {
     const float RegenerationRate = 0.0005f;   // 0.05% в секунду
@@ -2035,29 +2136,12 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
     // StressRecoveryGameDays игровых суток, умноженные на множитель биома
     // (болото со стоячей водой держит след дольше, пойма промывает быстрее).
     const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float RecoveryDays = Settings ? Settings->StressRecoveryGameDays : 7.0f;
-    const float DaySeconds = (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f;
-
-    // Сезонный множитель (15_Cycles_And_Shrines.md §15.4): Весна — "временный
-    // бонус к скорости зарастания клеток во всех биомах", Зима — "клетки
-    // заживают медленнее" — отсюда умножение на биомный множитель ниже, а не
-    // замена его. Лето — намеренно 1.0 (см. комментарий у GetSeason() в
-    // GridWorldManagerEntities.cpp). Множитель здесь — время полного
-    // восстановления (RecoveryDays × DaySeconds × Multiplier ниже), не
-    // скорость: Весна < 1.0 (короче срок = быстрее), Зима > 1.0 (длиннее
-    // срок = медленнее) — см. оговорку у HerbalistSettings.h.
-    float SeasonMultiplier = 1.0f;
-    switch (GetSeason())
-    {
-    case ESeason::Spring: SeasonMultiplier = Settings ? Settings->SpringStressRecoveryMultiplier : 0.7f; break;
-    case ESeason::Winter: SeasonMultiplier = Settings ? Settings->WinterStressRecoveryMultiplier : 1.6f; break;
-    default: break;
-    }
 
     // Множитель биома зависит только от типа, а не от клетки — тянем строку
-    // DataTable один раз на биом, а не 400 раз за кадр. Сезон одинаков для
-    // всей сетки в рамках одного вызова, поэтому безопасно замкнуть его в
-    // тот же кэш через SeasonMultiplier из внешней области видимости.
+    // DataTable один раз на биом, а не 400 раз за кадр. Сезон одинаков для всей
+    // сетки в рамках одного вызова и читается внутри
+    // GetStressRecoverySecondsForBiome, поэтому кэш по одному биому
+    // остаётся верным на всю длину вызова.
     TMap<EBiomeType, float> StressDecayPerSecond;
     auto GetStressDecay = [&](EBiomeType Biome) -> float
     {
@@ -2065,13 +2149,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         {
             return *Cached;
         }
-        float Multiplier = 1.0f;
-        if (const FBiomeRow* Row = FBiomeDefaults::GetBiomeRow(Biome))
-        {
-            Multiplier = FMath::Max(Row->StressRecoveryMultiplier, 0.05f);
-        }
-        Multiplier *= SeasonMultiplier;
-        const float Decay = 1.0f / FMath::Max(RecoveryDays * DaySeconds * Multiplier, KINDA_SMALL_NUMBER);
+        const float Decay = 1.0f / FMath::Max(GetStressRecoverySecondsForBiome(Biome), KINDA_SMALL_NUMBER);
         StressDecayPerSecond.Add(Biome, Decay);
         return Decay;
     };

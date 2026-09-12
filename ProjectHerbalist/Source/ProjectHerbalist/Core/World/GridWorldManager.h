@@ -83,6 +83,11 @@ public:
     // SpawnResourcesInCell и StartRegeneration, вынесено сюда (2026-09-04).
     struct FHarvestContext BuildHarvestContextForCell(const FGridCell& Cell) const;
     void StartRegeneration(FGridCell& Cell);
+    // Через сколько секунд отрастёт ресурс, собранный с этой клетки сейчас:
+    // базовое время региона плюс надбавка за истощение (2026-09-12). Вынесено
+    // из StartRegeneration ради прямой проверки -- сам таймер на автотесте не
+    // дождаться, а его длительность иначе нигде не наблюдаема.
+    float GetRegrowthDelaySeconds(const FGridCell& Cell) const;
 
     // ---- Command Algebra ----
     void QueueCommand(const FCommandEntry& Cmd);
@@ -611,6 +616,25 @@ public:
     // активации, CatchUpActivatedChunks). Обычный вызов из Tick оставляет
     // nullptr и идёт по всем активным клеткам, как раньше.
     void RegenerateCellParameters(float DeltaTime, const FIntPoint* OnlyChunk = nullptr);
+
+    // Полное время зарастания: за сколько секунд HarvestStress 1.0 спадает до
+    // нуля. Обратная величина к спаду, который считает RegenerateCellParameters
+    // -- вынесена сюда (2026-09-12), потому что то же число понадобилось
+    // отрастанию ресурсов (StartRegeneration). Два независимых выражения одной
+    // величины разъезжаются при первой же правке любого множителя, а множителей
+    // здесь три: биом, сезон и Лесное капище.
+    //
+    // Биомная версия (биом x сезон) отделена ради горячего цикла релаксации:
+    // строка DataTable тянется раз на биом, а не раз на клетку каждый кадр,
+    // и вызывающая сторона кэширует результат сама.
+    float GetStressRecoverySecondsForBiome(EBiomeType Biome) const;
+
+    // Та же величина для конкретной клетки: биомная, делённая на ускорение от
+    // Лесного капища (15_Cycles_And_Shrines.md §15.5, "ускоряет заживление
+    // клеток") -- ровно то, что RegenerateCellParameters накладывает поверх
+    // биомного кэша. Дороже биомной на поиск доминирующего капища, поэтому в
+    // горячем цикле не используется.
+    float GetStressRecoverySecondsForCell(const FGridCell& Cell) const;
 
     // ---- Проявление сущностей (02_GDD/16_Entity_Manifestation.md, вертикальный срез) ----
     // Внепайплайновый канал, как и RegenerateCellParameters/ApplyBiomeInfluences —
