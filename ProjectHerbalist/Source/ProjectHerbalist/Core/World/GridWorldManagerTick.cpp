@@ -380,7 +380,7 @@ void AGridWorldManager::RunSimulationStep()
     // капищам/хозяевам выше: UpdateRosaSignal (GridWorldManagerZaryana.cpp)
     // на следующем опросе должен отличить "игрок сам полил" от "роса
     // дрогнула сама", а не решать это здесь.
-    if (Delta.WorldChanges.Num() > 0 && ZaryanaCell != FIntPoint(-1, -1))
+    if (Delta.WorldChanges.Num() > 0 && HerbalistCore::IsValidCell(ZaryanaCell))
     {
         for (const FCommandEntry& Cmd : CommandsCopy)
         {

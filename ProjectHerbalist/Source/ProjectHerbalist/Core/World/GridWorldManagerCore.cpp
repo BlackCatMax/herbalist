@@ -93,6 +93,9 @@ void AGridWorldManager::CacheCellHeights()
 
 float AGridWorldManager::GetCellHeight(int32 X, int32 Y) const
 {
+    // Границы до умножения (найдено ревью этапа 6а): координата вне сетки, в
+    // том числе InvalidCell, переполняла int32 в Y * GridSizeX.
+    if (X < 0 || X >= GridSizeX || Y < 0 || Y >= GridSizeY) return 0.f;
     int32 Idx = Y * GridSizeX + X;
     if (CachedCellHeights.IsValidIndex(Idx))
         return CachedCellHeights[Idx];
@@ -114,8 +117,8 @@ FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
 
 bool AGridWorldManager::WorldPositionToCell(const FVector& WorldPos, int32& OutX, int32& OutY) const
 {
-    OutX = -1;
-    OutY = -1;
+    OutX = HerbalistCore::InvalidCell().X;
+    OutY = HerbalistCore::InvalidCell().Y;
 
     const FVector LocalLoc = WorldPos - GetGridOrigin();
     const int32 X = FMath::FloorToInt(LocalLoc.X / CellSize);
@@ -2783,7 +2786,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         // "Архитектурный долг"): контагион/гистерезис/капища по-прежнему
         // пишут в TargetState этой клетки как обычно, сопротивление гасит
         // только скорость, с которой State за ней угонится.
-        if (GoryuchKamenSite != FIntPoint(-1, -1) && Cell.X == GoryuchKamenSite.X && Cell.Y == GoryuchKamenSite.Y)
+        if (HerbalistCore::IsValidCell(GoryuchKamenSite) && Cell.X == GoryuchKamenSite.X && Cell.Y == GoryuchKamenSite.Y)
         {
             const float Resistance = Settings ? Settings->GoryuchKamenShiftResistance : 0.5f;
             CellDeltaRegen *= Resistance;
@@ -2798,7 +2801,7 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         // (bSoloveyCalmed) плакун-травой — не растущий нудж, просто снимает
         // TargetState обратно к потолку, если он выше; сравнение перед
         // записью, тот же §7.1 паттерн, что у контагиона выше в этой функции.
-        if (SoloveySite != FIntPoint(-1, -1) && !bSoloveyCalmed)
+        if (HerbalistCore::IsValidCell(SoloveySite) && !bSoloveyCalmed)
         {
             const int32 SoloveyRadius = SoloveyRadiusCells;
             const int32 SoloveyDist = FMath::Max(FMath::Abs(Cell.X - SoloveySite.X), FMath::Abs(Cell.Y - SoloveySite.Y));

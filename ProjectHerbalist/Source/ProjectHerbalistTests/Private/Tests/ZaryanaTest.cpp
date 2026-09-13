@@ -276,7 +276,7 @@ bool FHerbalistZaryana_RosaFallsBackToS0WhenCellUnset::RunTest(const FString& Pa
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
-    // ZaryanaCell по умолчанию (-1,-1) — не размещена ни левел-дизайнером,
+    // ZaryanaCell по умолчанию HerbalistCore::InvalidCell() — не размещена ни левел-дизайнером,
     // ни AlchemyTableActor::BeginPlay (в тестовом мире стола нет).
     FRandomStream Rng(1);
     const FRealState Perceived = Manager->GetZaryanaPerceivedState(Rng);

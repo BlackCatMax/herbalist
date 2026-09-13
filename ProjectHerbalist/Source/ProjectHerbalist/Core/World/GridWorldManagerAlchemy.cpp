@@ -31,11 +31,11 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     Cmd.Apply.bWardBrewBoostActive = IsWardBrewBoostActive();
     // Горюч-камень (§4.5, DESIGN_POI_Art_And_LevelDesign.md §3, 2026-09-06)
     // -- тот же принцип "резолвится здесь, не в Pipeline", что и остальные
-    // модификаторы выше. Явная проверка на (-1,-1) -- точка не размещена
+    // модификаторы выше. Явная проверка на InvalidCell -- точка не размещена
     // (например, тест зовёт этот путь напрямую до SeedPointsOfInterest) --
-    // не даёт (-1,-1)-цели (если такая вообще возможна) ложно совпасть с
+    // не даёт незаданной цели ложно совпасть с
     // "не размещённым" сентинелом.
-    Cmd.Apply.bTargetIsGoryuchKamen = (GoryuchKamenSite != FIntPoint(-1, -1)) && (Cmd.Apply.TargetCell == GoryuchKamenSite);
+    Cmd.Apply.bTargetIsGoryuchKamen = (HerbalistCore::IsValidCell(GoryuchKamenSite)) && (Cmd.Apply.TargetCell == GoryuchKamenSite);
     if (Cmd.Apply.bTargetIsGoryuchKamen)
     {
         ++GoryuchKamenApplyAttemptCount;
@@ -48,7 +48,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     // находок). Резолвится здесь, вне Pipeline: обычное применение зелья
     // на клетку Соловья идёт своим чередом (Purity/Stability считаются как
     // у любой клетки), усмирение -- независимый побочный эффект поверх.
-    if (SoloveySite != FIntPoint(-1, -1) && Cmd.Apply.TargetCell == SoloveySite)
+    if (HerbalistCore::IsValidCell(SoloveySite) && Cmd.Apply.TargetCell == SoloveySite)
     {
         for (const FInventoryItem& Ing : Ingredients)
         {

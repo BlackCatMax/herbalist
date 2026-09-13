@@ -285,8 +285,8 @@ FText UJournalLogWidget::FormatEntry(const FJournalEntry& Entry, UIngredientRegi
     {
         const FString TypeLabel = Entry.bFragmentWasTrue ? TEXT("Воспоминание") : TEXT("Искажённое воспоминание");
         return FText::FromString(FString::Printf(
-            TEXT("[%s] \"%s\"\n     (%d,%d), %s"),
-            *TypeLabel, *Entry.FragmentText.ToString(), Entry.Cell.X, Entry.Cell.Y,
+            TEXT("[%s] \"%s\"\n     %s, %s"),
+            *TypeLabel, *Entry.FragmentText.ToString(), *HerbalistCore::CellToDisplayString(Entry.Cell),
             Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
     }
 
@@ -300,8 +300,8 @@ FText UJournalLogWidget::FormatEntry(const FJournalEntry& Entry, UIngredientRegi
     const FRealState& S = Entry.PerceivedState;
 
     return FText::FromString(FString::Printf(
-        TEXT("[%s] %s ×%d — %s (%d,%d), %s, t=%.0f\n     Сила %.2f · Искажение %.2f · Чистота %.2f · Порча %.2f"),
-        *TypeLabel, *DisplayName, Entry.Count, *BiomeLabel, Entry.Cell.X, Entry.Cell.Y,
+        TEXT("[%s] %s ×%d — %s %s, %s, t=%.0f\n     Сила %.2f · Искажение %.2f · Чистота %.2f · Порча %.2f"),
+        *TypeLabel, *DisplayName, Entry.Count, *BiomeLabel, *HerbalistCore::CellToDisplayString(Entry.Cell),
         Entry.bWasNight ? TEXT("ночь") : TEXT("день"), Entry.GameTimeSeconds,
         S.Magnitude, S.Meta.Distortion, S.Meta.Purity, S.Meta.Corruption));
 }

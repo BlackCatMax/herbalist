@@ -15,6 +15,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "Core/Shrine/ShrineTypes.h"
 #include "ShrineActor.generated.h"
@@ -54,5 +55,5 @@ protected:
     TObjectPtr<UStaticMeshComponent> MeshComponent;
 
 private:
-    FIntPoint GridCoords = FIntPoint(-1, -1);
+    FIntPoint GridCoords = HerbalistCore::InvalidCell();
 };

@@ -23,6 +23,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "Core/Interaction/Interactable.h"
 #include "HerbalistEntityActor.generated.h"
@@ -62,7 +63,7 @@ protected:
     FName EntityID;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Entity")
-    FIntPoint GridCell = FIntPoint(-1, -1);
+    FIntPoint GridCell = HerbalistCore::InvalidCell();
 
     UPROPERTY()
     TWeakObjectPtr<AGridWorldManager> WorldManagerRef;

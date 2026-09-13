@@ -22,7 +22,7 @@ namespace
     FIntPoint SeedSinglePOISite(TArray<FGridCell>& Cells, FRandomStream& WorldRNG, const TSet<FIntPoint>& Occupied)
     {
         const int32 TotalCells = Cells.Num();
-        if (TotalCells == 0) return FIntPoint(-1, -1);
+        if (TotalCells == 0) return HerbalistCore::InvalidCell();
 
         const int32 StartIndex = WorldRNG.RandRange(0, TotalCells - 1);
         for (int32 Offset = 0; Offset < TotalCells; ++Offset)
@@ -34,7 +34,7 @@ namespace
             if (Occupied.Contains(Coord)) continue;
             return Coord;
         }
-        return FIntPoint(-1, -1);
+        return HerbalistCore::InvalidCell();
     }
 }
 
@@ -68,7 +68,7 @@ void AGridWorldManager::SeedPointsOfInterest()
     }
 
     TotemSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (TotemSite != FIntPoint(-1, -1))
+    if (HerbalistCore::IsValidCell(TotemSite))
     {
         Occupied.Add(TotemSite);
         // Актор-визуал (DESIGN_POI_Art_And_LevelDesign.md §1, 2026-09-06) --
@@ -85,7 +85,7 @@ void AGridWorldManager::SeedPointsOfInterest()
     }
 
     SvetloyarSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (SvetloyarSite != FIntPoint(-1, -1))
+    if (HerbalistCore::IsValidCell(SvetloyarSite))
     {
         Occupied.Add(SvetloyarSite);
         if (UWorld* World = GetWorld())
@@ -99,7 +99,7 @@ void AGridWorldManager::SeedPointsOfInterest()
     }
 
     GoryuchKamenSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (GoryuchKamenSite != FIntPoint(-1, -1))
+    if (HerbalistCore::IsValidCell(GoryuchKamenSite))
     {
         Occupied.Add(GoryuchKamenSite);
         if (UWorld* World = GetWorld())
@@ -113,14 +113,14 @@ void AGridWorldManager::SeedPointsOfInterest()
     }
 
     SoloveySite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (SoloveySite != FIntPoint(-1, -1)) Occupied.Add(SoloveySite);
+    if (HerbalistCore::IsValidCell(SoloveySite)) Occupied.Add(SoloveySite);
 
     // Калинов мост / Трёхглавый Змей (§4.4) -- в отличие от остальных выше,
     // сразу же становится Landmark (RegisterZmeyGorynych), не просто
     // координатой: взаимодействие идёт через уже существующий TalkTo/
     // ChooseDialogueBranch, а не отдельный запрос/Activate-метод.
     KalinovMostSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
-    if (KalinovMostSite != FIntPoint(-1, -1))
+    if (HerbalistCore::IsValidCell(KalinovMostSite))
     {
         Occupied.Add(KalinovMostSite);
         RegisterZmeyGorynych(KalinovMostSite);
@@ -134,7 +134,7 @@ void AGridWorldManager::SeedPointsOfInterest()
 
 FString AGridWorldManager::GetTotemRevealText() const
 {
-    if (TotemSite == FIntPoint(-1, -1)) return TEXT("Тотем не найден на этой карте.");
+    if (!HerbalistCore::IsValidCell(TotemSite)) return TEXT("Тотем не найден на этой карте.");
 
     const FGridCell* Cell = GetCellConst(TotemSite.X, TotemSite.Y);
     if (!Cell) return TEXT("Тотем не найден на этой карте.");
@@ -173,7 +173,7 @@ bool AGridWorldManager::IsTotemMiddleTierVisible() const
 
 bool AGridWorldManager::IsSvetloyarVisible() const
 {
-    if (SvetloyarSite == FIntPoint(-1, -1)) return false;
+    if (!HerbalistCore::IsValidCell(SvetloyarSite)) return false;
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float Threshold = Settings ? Settings->SvetloyarVisibilityClarityThreshold : 0.7f;
@@ -193,7 +193,7 @@ int32 AGridWorldManager::GetSvetloyarSoundTier() const
 
 bool AGridWorldManager::ActivateSolovey()
 {
-    if (SoloveySite == FIntPoint(-1, -1)) return false;
+    if (!HerbalistCore::IsValidCell(SoloveySite)) return false;
 
     // Усмирён плакун-травой (§4.4, 2026-09-06) -- проверяется ПЕРЕД
     // bSoloveyTriggered: игрок мог усмирить Соловья, ни разу не пройдя

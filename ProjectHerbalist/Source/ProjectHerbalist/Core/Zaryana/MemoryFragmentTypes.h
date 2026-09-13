@@ -16,6 +16,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "Engine/DataTable.h"
 #include "MemoryFragmentTypes.generated.h"
 
@@ -119,6 +120,6 @@ struct FActiveMemoryFragment
     GENERATED_BODY()
 
     UPROPERTY() FName DefinitionID;
-    UPROPERTY() FIntPoint Cell = FIntPoint(-1, -1);
+    UPROPERTY() FIntPoint Cell = HerbalistCore::InvalidCell();
     UPROPERTY() bool bIsFalse = false;
 };

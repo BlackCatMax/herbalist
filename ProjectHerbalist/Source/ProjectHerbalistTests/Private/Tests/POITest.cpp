@@ -30,7 +30,7 @@ bool FHerbalistPOI_SeedingPlacesEachSingletonOnDistinctNonWaterCells::RunTest(co
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
-    const FIntPoint Unset(-1, -1);
+    const FIntPoint Unset = HerbalistCore::InvalidCell();
     const FIntPoint Totem = Manager->GetTotemSite();
     const FIntPoint Svetloyar = Manager->GetSvetloyarSite();
     const FIntPoint GoryuchKamen = Manager->GetGoryuchKamenSite();

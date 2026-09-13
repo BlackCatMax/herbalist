@@ -53,7 +53,9 @@ void AHerbalistResourceActor::BeginPlay()
     if (!WorldManager)
         FindAndSetWorldManager();
 
-    if ((GridX == -1 || GridY == -1) && WorldManager)
+    // Клетка не назначена -- InvalidCellCoord, а не -1: с глобальными
+    // координатами клеток (этап 6 разметки мира) столбец -1 -- настоящий.
+    if ((GridX == HerbalistCore::InvalidCellCoord || GridY == HerbalistCore::InvalidCellCoord) && WorldManager)
     {
         FVector LocalLoc = GetActorLocation() - WorldManager->GetGridOrigin();
         GridX = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);

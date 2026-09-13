@@ -218,15 +218,15 @@ bool AHerbalistPlayerController::RemoveArtifactFromInventory(FName ArtifactOrFea
     return false;
 }
 
-void AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const
+bool AHerbalistPlayerController::GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const
 {
-    OutX = -1;
-    OutY = -1;
+    OutX = HerbalistCore::InvalidCell().X;
+    OutY = HerbalistCore::InvalidCell().Y;
 
     AGridWorldManager* WorldManager = FindWorldManager();
-    if (!WorldManager) return;
+    if (!WorldManager) return false;
 
-    WorldManager->WorldPositionToCell(Hit.Location, OutX, OutY);
+    return WorldManager->WorldPositionToCell(Hit.Location, OutX, OutY);
 }
 
 void AHerbalistPlayerController::UpdateDistortionFromCell(int32 X, int32 Y)
@@ -327,8 +327,7 @@ void AHerbalistPlayerController::Harvest()
     }
 
     int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X < 0)
+    if (!GetCellFromHit(Hit, X, Y))
     {
         UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: точка попадания вне сетки"));
         return;
@@ -402,8 +401,7 @@ void AHerbalistPlayerController::OnRightClick()
     if (!GetHitResultFromCamera(Hit)) return;
 
     int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X < 0) return;
+    if (!GetCellFromHit(Hit, X, Y)) return;
 
     UpdateDistortionFromCell(X, Y);
 
@@ -499,8 +497,7 @@ void AHerbalistPlayerController::OnApplyAlchemyKey()
     if (!GetHitResultFromCamera(Hit)) return;
 
     int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X < 0) return;
+    if (!GetCellFromHit(Hit, X, Y)) return;
 
     ApplyTest(X, Y);
 }
@@ -529,8 +526,7 @@ void AHerbalistPlayerController::UsePotion()
     if (!GetHitResultFromCamera(Hit)) return;
 
     int32 X, Y;
-    GetCellFromHit(Hit, X, Y);
-    if (X < 0 || !WorldManager->GetCell(X, Y)) return;
+    if (!GetCellFromHit(Hit, X, Y) || !WorldManager->GetCell(X, Y)) return;
 
     WorldManager->ApplyPotionToCell(X, Y, Items[PotionIndex].State);
     InventoryComponent->RemoveItem(PotionIndex, 1);
@@ -1372,6 +1368,11 @@ void AHerbalistPlayerController::BuildHomeStorage(FString ContainerTypeName)
         return;
     }
     const FIntPoint AnchorCell = Table->GetGridCoords();
+    if (!HerbalistCore::IsValidCell(AnchorCell))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: alchemy table stands outside the grid, no home anchor cell"));
+        return;
+    }
 
     // Не давать построить второй экземпляр того же типа хранения дома —
     // простое v1-ограничение: без него повторный BuildHomeStorage cellar

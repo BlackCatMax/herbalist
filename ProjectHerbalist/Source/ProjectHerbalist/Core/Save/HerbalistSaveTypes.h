@@ -15,6 +15,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/SaveGame.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Journal/JournalTypes.h"
@@ -287,16 +288,16 @@ public:
     // одноразовым игровым эффектом, требующим отдельного флага, не только
     // координаты.
     UPROPERTY()
-    FIntPoint TotemSite = FIntPoint(-1, -1);
+    FIntPoint TotemSite = HerbalistCore::InvalidCell();
 
     UPROPERTY()
-    FIntPoint SvetloyarSite = FIntPoint(-1, -1);
+    FIntPoint SvetloyarSite = HerbalistCore::InvalidCell();
 
     UPROPERTY()
-    FIntPoint GoryuchKamenSite = FIntPoint(-1, -1);
+    FIntPoint GoryuchKamenSite = HerbalistCore::InvalidCell();
 
     UPROPERTY()
-    FIntPoint SoloveySite = FIntPoint(-1, -1);
+    FIntPoint SoloveySite = HerbalistCore::InvalidCell();
 
     UPROPERTY()
     bool bSoloveyTriggered = false;
@@ -310,7 +311,7 @@ public:
     // (юнит 2/2), сам Landmark (ЗмейГорыныч) уже сохраняется отдельно
     // через EntityLandmarks выше в этом файле, не задвоено здесь.
     UPROPERTY()
-    FIntPoint KalinovMostSite = FIntPoint(-1, -1);
+    FIntPoint KalinovMostSite = HerbalistCore::InvalidCell();
 
     // Заряна (обсуждение в сессии 2026-08-24) — Clarity/Буян/собранные ID
     // растут медленно и редко, ровно то, что должно переживать сохранение.

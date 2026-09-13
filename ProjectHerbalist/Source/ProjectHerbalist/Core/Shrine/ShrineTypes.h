@@ -21,6 +21,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "ShrineTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -39,7 +40,7 @@ struct PROJECTHERBALIST_API FShrine
     GENERATED_BODY()
 
     UPROPERTY()
-    FIntPoint Cell = FIntPoint(-1, -1);
+    FIntPoint Cell = HerbalistCore::InvalidCell();
 
     UPROPERTY()
     EShrineType Type = EShrineType::Ancestral;

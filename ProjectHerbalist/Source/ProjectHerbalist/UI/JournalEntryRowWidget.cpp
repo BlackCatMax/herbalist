@@ -25,8 +25,8 @@ void UJournalEntryRowWidget::InitializeRow(const FJournalEntry& InEntry, UIngred
     if (ContextText)
     {
         const FString BiomeLabel = FBiomeDefaults::BiomeTypeToName(InEntry.Biome).ToString();
-        ContextText->SetText(FText::FromString(FString::Printf(TEXT("(%d,%d) %s, %s, t=%.0f"),
-            InEntry.Cell.X, InEntry.Cell.Y, *BiomeLabel,
+        ContextText->SetText(FText::FromString(FString::Printf(TEXT("%s %s, %s, t=%.0f"),
+            *HerbalistCore::CellToDisplayString(InEntry.Cell), *BiomeLabel,
             InEntry.bWasNight ? TEXT("ночь") : TEXT("день"), InEntry.GameTimeSeconds)));
     }
 

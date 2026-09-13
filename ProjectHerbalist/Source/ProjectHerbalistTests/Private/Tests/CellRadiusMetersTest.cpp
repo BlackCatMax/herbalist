@@ -69,7 +69,7 @@ namespace
     {
         Manager->CellSize = CellSizeCm;
         Manager->SetShrines({});
-        Manager->SetGoryuchKamenSite(FIntPoint(-1, -1));
+        Manager->SetGoryuchKamenSite(HerbalistCore::InvalidCell());
         for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
         {
             for (int32 X = 0; X < Manager->GridSizeX; ++X)

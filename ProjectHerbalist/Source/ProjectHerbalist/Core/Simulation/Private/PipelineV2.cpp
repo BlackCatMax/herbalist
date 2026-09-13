@@ -944,7 +944,7 @@ namespace Simulation
                                    FRandomStream& Rng,
                                    FStateDelta& OutDelta)
     {
-        // 0. Контекст биома клетки-цели. При крафте (вне мира, TargetCell = (-1,-1))
+        // 0. Контекст биома клетки-цели. При крафте (вне мира, TargetCell = HerbalistCore::InvalidCell())
         // контекста нет — Biome Context Injection применяется только при варке
         // непосредственно в мире, как описано в 05_Systems.md/14_Biome_Graph.md.
         const FGridCell* TargetCell = Cmd.bIsCrafting ? nullptr : WorldSnap.GridState.Find(Cmd.TargetCell);

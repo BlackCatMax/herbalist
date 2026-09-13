@@ -123,7 +123,7 @@ void AGridWorldManager::GetSelectedCellInfoBP(int32& X, int32& Y, FString& Resou
     Distortion = 0.0f;
     HarvestStress = 0.0f;
     ResourceName = TEXT("None");
-    if (X >= 0 && Y >= 0)
+    if (HerbalistCore::IsValidCell(FIntPoint(X, Y)))
     {
         FGridCell* Cell = GetCell(X, Y);
         if (Cell)

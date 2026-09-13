@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "Math/UnrealMathUtility.h"
 #include "HerbalistCoreTypes.generated.h"
 
@@ -459,7 +460,7 @@ struct PROJECTHERBALIST_API FEntityLandmark
     FName EntityID = NAME_None;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Entities")
-    FIntPoint Cell = FIntPoint(-1, -1);
+    FIntPoint Cell = HerbalistCore::InvalidCell();
 
     // [-1, 1]: <0 — осквернено/разгневано, >0 — благосклонно. Растёт от бережного
     // сбора (высокая Purity, низкий HarvestStress клетки), падает от истощения.
@@ -477,7 +478,7 @@ struct PROJECTHERBALIST_API FHerbalistBase
     GENERATED_BODY()
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Bases")
-    FIntPoint Cell = FIntPoint(-1, -1);
+    FIntPoint Cell = HerbalistCore::InvalidCell();
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Bases")
     EBiomeType Biome = EBiomeType::ForestSteppe;

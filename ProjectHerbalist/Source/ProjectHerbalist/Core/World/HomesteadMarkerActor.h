@@ -20,6 +20,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "HomesteadMarkerActor.generated.h"
@@ -62,6 +63,6 @@ protected:
     TObjectPtr<UStaticMeshComponent> MarkerMesh;
 
 private:
-    FIntPoint GridCell = FIntPoint(-1, -1);
+    FIntPoint GridCell = HerbalistCore::InvalidCell();
     EHomesteadMarkerKind Kind = EHomesteadMarkerKind::GardenPristroyka;
 };

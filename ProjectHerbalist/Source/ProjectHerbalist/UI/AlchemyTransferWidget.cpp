@@ -147,11 +147,11 @@ void UAlchemyTransferWidget::OnMixClicked()
 
     FCommandEntry Cmd;
     Cmd.Primitive = ECommandPrimitive::Apply;
-    // Клетка котла, не (-1,-1) — капище (15_Cycles_And_Shrines §15.5) должно
+    // Клетка котла, не InvalidCell — капище (15_Cycles_And_Shrines §15.5) должно
     // видеть, где именно происходит подношение; котлы всегда стоят в строго
     // определённых, привязанных к клетке местах (жилище игрока, будущие
     // мастерские), это не случайная точка на карте.
-    Cmd.Apply.TargetCell = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : FIntPoint(-1, -1);
+    Cmd.Apply.TargetCell = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : HerbalistCore::InvalidCell();
     Cmd.Apply.Ingredients = Ingredients;
     // Coherence считается Pipeline'ом из Ingredients (ComputeIntentCoherence).
     Cmd.Apply.bIsCrafting = true;

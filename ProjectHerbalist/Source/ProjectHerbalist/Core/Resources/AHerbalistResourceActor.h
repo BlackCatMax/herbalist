@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "AHerbalistResourceActor.generated.h"
@@ -110,10 +111,10 @@ protected:
     FName IngredientID;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
-    int32 GridX = -1;
+    int32 GridX = HerbalistCore::InvalidCellCoord;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
-    int32 GridY = -1;
+    int32 GridY = HerbalistCore::InvalidCellCoord;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Resource")
     FText DisplayName;

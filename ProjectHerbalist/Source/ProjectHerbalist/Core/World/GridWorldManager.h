@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "TimerManager.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -1132,7 +1133,7 @@ public:
     void TryTriggerCoherentBrewFragment(const FIntPoint& Cell, float Coherence, float Distortion, float Purity);
 
     // Вызывается из AMemoryFragmentActor::OnInteract.
-    void CollectMemoryFragment(FName DefinitionID, bool bIsFalse, AHerbalistPlayerController* PC, const FIntPoint& Cell = FIntPoint(-1, -1));
+    void CollectMemoryFragment(FName DefinitionID, bool bIsFalse, AHerbalistPlayerController* PC, const FIntPoint& Cell = HerbalistCore::InvalidCell());
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Zaryana")
     float GetGlobalPerceptionClarity() const { return GlobalPerceptionClarity; }
@@ -1889,9 +1890,9 @@ protected:
     float InvisibilityCapExpiryGameSeconds = 0.0f;
 
     // Центр настоящей зоны Шапки (2026-09-02) — клетка игрока в момент
-    // применения. (-1,-1) = никогда не применялась (тот же сентинел, что
+    // применения. InvalidCell() = никогда не применялась (тот же сентинел, что
     // уже ZaryanaCell использует для "не размещена").
-    FIntPoint InvisibilityCapCenter = FIntPoint(-1, -1);
+    FIntPoint InvisibilityCapCenter = HerbalistCore::InvalidCell();
 
     // ---- Обереги (кристаллы Пещеры, §2.4, 2026-09-04) — тот же
     // GameClockSeconds-сентинел, что и все поля выше. Не персистятся
@@ -1900,9 +1901,9 @@ protected:
     // — часть текущей игровой сессии, не долгоживущий прогресс. ----
     float WardBrewBoostExpiryGameSeconds = 0.0f;
     float WardConcealmentExpiryGameSeconds = 0.0f;
-    FIntPoint WardConcealmentCenter = FIntPoint(-1, -1);
+    FIntPoint WardConcealmentCenter = HerbalistCore::InvalidCell();
     float WardMorokReductionExpiryGameSeconds = 0.0f;
-    FIntPoint WardMorokReductionCenter = FIntPoint(-1, -1);
+    FIntPoint WardMorokReductionCenter = HerbalistCore::InvalidCell();
 
     // ---- Тиражные обереги (награда ритуалов перехода ярусов биомов,
     // 2026-09-04, GridWorldManagerWards.cpp::ActivateTieredWard) -- НЕТ
@@ -1930,19 +1931,19 @@ protected:
     TMap<FIntPoint, FName> KurganSites;
 
     // ---- Точки интереса, §4 (см. POITypes.h) -- по одной клетке на вид,
-    // FIntPoint(-1,-1) значит "не размещена" (та же сигнальная величина,
+    // HerbalistCore::InvalidCell() значит "не размещена" (та же сигнальная величина,
     // что уже ZaryanaCell/InvisibilityCapCenter/WardConcealmentCenter выше
     // в этом файле, не новая придуманная). Персистентны (Save/Load) --
     // детерминированный сев зависит от порядка вызовов WorldRNG, повторный
     // сев при загрузке дал бы другие клетки, если что-то ещё в
     // InitializeCells успело измениться между сохранением и загрузкой.
-    FIntPoint TotemSite = FIntPoint(-1, -1);
-    FIntPoint SvetloyarSite = FIntPoint(-1, -1);
-    FIntPoint GoryuchKamenSite = FIntPoint(-1, -1);
-    FIntPoint SoloveySite = FIntPoint(-1, -1);
+    FIntPoint TotemSite = HerbalistCore::InvalidCell();
+    FIntPoint SvetloyarSite = HerbalistCore::InvalidCell();
+    FIntPoint GoryuchKamenSite = HerbalistCore::InvalidCell();
+    FIntPoint SoloveySite = HerbalistCore::InvalidCell();
     bool bSoloveyTriggered = false;
     bool bSoloveyCalmed = false;
-    FIntPoint KalinovMostSite = FIntPoint(-1, -1);
+    FIntPoint KalinovMostSite = HerbalistCore::InvalidCell();
     int32 GoryuchKamenApplyAttemptCount = 0;
     bool bKalinovMostDealPending = false;
 
@@ -1987,10 +1988,10 @@ protected:
     void SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoint& Cell, bool bIsFalse);
 
     // ---- Роса Заряны (19_Rosa_Signal.md §19.2) ----
-    // (-1,-1) = не размещена — SetZaryanaCellIfUnset (AAlchemyTableActor::
+    // InvalidCell() = не размещена — SetZaryanaCellIfUnset (AAlchemyTableActor::
     // BeginPlay) или ручная расстановка в редакторе задают реальное значение.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Herbalist|Zaryana")
-    FIntPoint ZaryanaCell = FIntPoint(-1, -1);
+    FIntPoint ZaryanaCell = HerbalistCore::InvalidCell();
 
     // Слой 2 — состояние опроса, не игровой прогресс: намеренно не
     // персистится (тот же класс полей, что FragmentStateCheckAccumulator
@@ -2097,5 +2098,5 @@ private:
     TArray<FCommandEntry> PendingCommands;
 
     // ---- Выделение клетки (отладка) ----
-    int32 SelectedX = -1, SelectedY = -1;
+    int32 SelectedX = HerbalistCore::InvalidCell().X, SelectedY = HerbalistCore::InvalidCell().Y;
 };

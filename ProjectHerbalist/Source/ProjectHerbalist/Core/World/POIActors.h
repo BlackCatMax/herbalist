@@ -17,6 +17,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "POIActors.generated.h"
 
@@ -69,8 +70,8 @@ protected:
     bool bUpperTierVisible = false;
 
 private:
-    int32 GridX = -1;
-    int32 GridY = -1;
+    int32 GridX = HerbalistCore::InvalidCellCoord;
+    int32 GridY = HerbalistCore::InvalidCellCoord;
 
     UPROPERTY()
     TObjectPtr<AGridWorldManager> WorldManager = nullptr;
@@ -111,8 +112,8 @@ protected:
     bool bCityVisible = false;
 
 private:
-    int32 GridX = -1;
-    int32 GridY = -1;
+    int32 GridX = HerbalistCore::InvalidCellCoord;
+    int32 GridY = HerbalistCore::InvalidCellCoord;
 
     UPROPERTY()
     TObjectPtr<AGridWorldManager> WorldManager = nullptr;
@@ -149,8 +150,8 @@ protected:
     void OnThud();
 
 private:
-    int32 GridX = -1;
-    int32 GridY = -1;
+    int32 GridX = HerbalistCore::InvalidCellCoord;
+    int32 GridY = HerbalistCore::InvalidCellCoord;
     int32 LastSeenAttemptCount = 0;
 
     UPROPERTY()

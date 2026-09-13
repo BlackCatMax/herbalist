@@ -148,7 +148,7 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     const float KhlebSolSustained = Settings ? Settings->KhlebSolSustainedSeconds : 30.0f;
     const bool bKhlebSolSustainedLongEnough = HerbalistCore::Math::TickSustainedCondition(
         KhlebSolSustainedMolvaSeconds, Molva >= HighMolvaThreshold, CheckInterval, KhlebSolSustained);
-    if (bKhlebSolSustainedLongEnough && ZaryanaCell != FIntPoint(-1, -1))
+    if (bKhlebSolSustainedLongEnough && HerbalistCore::IsValidCell(ZaryanaCell))
     {
         const FMemoryFragmentDefinition* BreadSaltDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("KHLEB_SOL")));
         if (BreadSaltDef && !CollectedFragmentIDs.Contains(BreadSaltDef->ID))
@@ -320,6 +320,11 @@ void AGridWorldManager::SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoin
 {
     const FMemoryFragmentDefinition* Def = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(DefinitionID);
     if (!Def) return;
+
+    // Клетка вне сетки (варка без стола даёт InvalidCell) -- фрагмент не
+    // появляется: он встал бы за краем мира, где его не подобрать, а слот
+    // ActiveFragment был бы занят (найдено ревью этапа 6а).
+    if (!GetCellConst(Cell.X, Cell.Y)) return;
 
     // "При высоком глобальном Morok фрагмент может проявиться как искажённый" —
     // подлинный триггер всё равно рискует стать ложным версией того же ID.
@@ -523,7 +528,7 @@ FName AGridWorldManager::GetActiveFragmentDefinitionID() const
 
 void AGridWorldManager::SetZaryanaCellIfUnset(const FIntPoint& Cell)
 {
-    if (ZaryanaCell == FIntPoint(-1, -1))
+    if (!HerbalistCore::IsValidCell(ZaryanaCell))
     {
         ZaryanaCell = Cell;
         SeedRosaCorruptedCircle(Cell);

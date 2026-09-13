@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "Core/Interaction/Interactable.h"
 #include "MemoryFragmentActor.generated.h"
@@ -46,8 +47,8 @@ private:
     FName DefinitionID;
     bool bIsFalse = false;
     float RemainingLifetime = 0.0f;
-    int32 GridX = -1;
-    int32 GridY = -1;
+    int32 GridX = HerbalistCore::InvalidCellCoord;
+    int32 GridY = HerbalistCore::InvalidCellCoord;
 
     UPROPERTY()
     AGridWorldManager* WorldManager = nullptr;

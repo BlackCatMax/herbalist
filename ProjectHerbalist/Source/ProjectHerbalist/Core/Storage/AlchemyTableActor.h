@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "Core/Interaction/Interactable.h"
 #include "AlchemyTableActor.generated.h"
@@ -33,5 +34,5 @@ protected:
     UPROPERTY()
     UAlchemyTransferWidget* AlchemyWidgetInstance = nullptr;
 
-    FIntPoint GridCoords;
+    FIntPoint GridCoords = HerbalistCore::InvalidCell();
 };

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "Math/RandomStream.h"
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
@@ -139,7 +140,9 @@ public:
     bool CanHarvestActor(AActor* TargetActor) const;
 	
     AGridWorldManager* FindWorldManager() const;
-    void GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
+    // false -- точка вне сетки (не отрицательная координата: с 2026-09-13
+    // координаты клеток от начала сетки World Partition бывают отрицательными).
+    bool GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
     void UpdateDistortionFromCell(int32 X, int32 Y);
 
     // Свой фиксированный сид, не WorldRNG — тот же приём, что уже
@@ -578,5 +581,5 @@ private:
     // намеренно.
     FName CurrentDialogueID = NAME_None;
     FName CurrentDialogueNodeID = NAME_None;
-    FIntPoint CurrentDialogueCell = FIntPoint(-1, -1);
+    FIntPoint CurrentDialogueCell = HerbalistCore::InvalidCell();
 };

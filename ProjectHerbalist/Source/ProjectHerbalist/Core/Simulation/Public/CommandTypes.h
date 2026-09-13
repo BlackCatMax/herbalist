@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "Core/Types/HerbalistCoreTypes.h"      // FRealState, FIntent, FRngState
 #include "Core/Types/BiomeTypes.h"              // EBiomeType
 
@@ -49,7 +50,7 @@ struct FTransferCommand
 struct FApplyCommand
 {
     ECommandPrimitive Type = ECommandPrimitive::Apply;
-    FIntPoint TargetCell;
+    FIntPoint TargetCell = HerbalistCore::InvalidCell();
     TArray<FInventoryItem> Ingredients;
     FIntent Intent;
     bool bIsCrafting = false;   // true = крафт в инвентарь, false = применение на клетку
@@ -140,7 +141,7 @@ struct FApplyCommand
 struct FHarvestCommand
 {
     ECommandPrimitive Type = ECommandPrimitive::Harvest;
-    FIntPoint TargetCell;
+    FIntPoint TargetCell = HerbalistCore::InvalidCell();
     FName IngredientID;
     int32 Amount = 1;
 

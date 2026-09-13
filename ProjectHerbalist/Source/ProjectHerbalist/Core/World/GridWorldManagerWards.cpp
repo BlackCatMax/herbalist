@@ -112,12 +112,12 @@ void AGridWorldManager::ResetSessionOnlyWardTimers()
     AlkonostSuppressionExpiryGameSeconds = 0.0f;
     YouthAppleClarityBoostExpiryGameSeconds = 0.0f;
     InvisibilityCapExpiryGameSeconds = 0.0f;
-    InvisibilityCapCenter = FIntPoint(-1, -1);
+    InvisibilityCapCenter = HerbalistCore::InvalidCell();
     WardBrewBoostExpiryGameSeconds = 0.0f;
     WardConcealmentExpiryGameSeconds = 0.0f;
-    WardConcealmentCenter = FIntPoint(-1, -1);
+    WardConcealmentCenter = HerbalistCore::InvalidCell();
     WardMorokReductionExpiryGameSeconds = 0.0f;
-    WardMorokReductionCenter = FIntPoint(-1, -1);
+    WardMorokReductionCenter = HerbalistCore::InvalidCell();
 }
 
 // ============================================================================

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "Core/Interaction/Interactable.h"
 #include "KurganActor.generated.h"
@@ -49,8 +50,8 @@ protected:
     TObjectPtr<USphereComponent> InteractionSphere;
 
 private:
-    int32 GridX = -1;
-    int32 GridY = -1;
+    int32 GridX = HerbalistCore::InvalidCellCoord;
+    int32 GridY = HerbalistCore::InvalidCellCoord;
     FName GrantedIngredientID;
     bool bLooted = false;
 

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "JournalTypes.generated.h"
@@ -51,7 +52,7 @@ struct PROJECTHERBALIST_API FJournalEntry
     FRealState PerceivedState;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
-    FIntPoint Cell = FIntPoint(-1, -1);
+    FIntPoint Cell = HerbalistCore::InvalidCell();
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
     EBiomeType Biome = EBiomeType::MixedForest;

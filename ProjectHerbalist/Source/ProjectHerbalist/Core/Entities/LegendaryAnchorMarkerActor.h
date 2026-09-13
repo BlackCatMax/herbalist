@@ -11,6 +11,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/Types/HerbalistCellCoord.h"
 #include "GameFramework/Actor.h"
 #include "LegendaryAnchorMarkerActor.generated.h"
 
@@ -37,5 +38,5 @@ protected:
 
 private:
     FName EntityID;
-    FIntPoint GridCell = FIntPoint(-1, -1);
+    FIntPoint GridCell = HerbalistCore::InvalidCell();
 };

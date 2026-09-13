@@ -252,7 +252,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetKurganSites(Save->KurganSites);
 
     // Точки интереса, §4 (2026-09-06) -- сейв без этих полей (старее этого
-    // прохода) даёт FIntPoint(-1,-1)/false по дефолту UPROPERTY, то же самое,
+    // прохода) даёт HerbalistCore::InvalidCell()/false по дефолту UPROPERTY, то же самое,
     // что "точка ещё не сеялась" -- ничего специально не проверяем.
     WorldManager->SetTotemSite(Save->TotemSite);
     WorldManager->SetSvetloyarSite(Save->SvetloyarSite);
