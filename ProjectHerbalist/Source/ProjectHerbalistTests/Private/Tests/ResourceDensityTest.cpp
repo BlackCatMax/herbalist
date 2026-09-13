@@ -10,7 +10,6 @@
 #include "Core/World/BiomeRegionVolume.h"
 #include "Misc/AutomationTest.h"
 #include "Math/RandomStream.h"
-#include "UObject/UnrealType.h"
 
 #if WITH_AUTOMATION_TESTS
 
@@ -123,28 +122,6 @@ bool FHerbalistResourceDensity_TenMeterCellKeepsAuthoredRange::RunTest(const FSt
         SwappedTotal += AGridWorldManager::RollResourceCount(3.0f, 1.0f, 900.0, Swapped);
     }
     TestEqual(TEXT("Min и Max перепутаны местами -- ровно то же самое"), SwappedTotal, StraightTotal);
-    return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistResourceDensity_OldPerCellFieldsRedirect,
-    "Herbalist.ResourceDensity.OldPerCellFieldsRedirect",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
-
-bool FHerbalistResourceDensity_OldPerCellFieldsRedirect::RunTest(const FString& Parameters)
-{
-    // Уже расставленные регионы сохранены с MinResourcesPerCell /
-    // MaxResourcesPerCell. Проверяется тем же путём, каким имя ищет загрузчик
-    // тегированных свойств (FProperty::FindRedirectedPropertyName по классу), а
-    // не разбором строки из ini (найдено ревью: тот тест проверял сам себя).
-    // Целое в float движок переводит при загрузке сам
-    // (TProperty_Numeric::ConvertFromType).
-    const UClass* RegionClass = ABiomeRegionVolume::StaticClass();
-    const FName NewMin = FProperty::FindRedirectedPropertyName(RegionClass, FName(TEXT("MinResourcesPerCell")));
-    const FName NewMax = FProperty::FindRedirectedPropertyName(RegionClass, FName(TEXT("MaxResourcesPerCell")));
-    TestEqual(TEXT("MinResourcesPerCell -> MinResourcesPer100SquareMeters"), NewMin, FName(TEXT("MinResourcesPer100SquareMeters")));
-    TestEqual(TEXT("MaxResourcesPerCell -> MaxResourcesPer100SquareMeters"), NewMax, FName(TEXT("MaxResourcesPer100SquareMeters")));
-    TestNotNull(TEXT("Новое поле Min существует и дробное"), FindFProperty<FFloatProperty>(RegionClass, NewMin));
-    TestNotNull(TEXT("Новое поле Max существует и дробное"), FindFProperty<FFloatProperty>(RegionClass, NewMax));
     return true;
 }
 

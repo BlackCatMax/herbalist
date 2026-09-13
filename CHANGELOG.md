@@ -13502,3 +13502,42 @@ Clamp) — проверить в PIE на этапе 9; окно считает�
   - граф `BP_GridWorldManager`: вызывает ли он `InitializeCells` после
     `BeginPlay` (ревью этапа 8б видит вызов по строкам ассета) — если да,
     сетка инициализируется дважды и расходует `WorldRNG` второй раз.
+
+---
+
+## 2026-09-13 — редиректы: высотный пояс ингредиентов исправлен, редирект плотности регионов снят
+
+Решения пользователя после этапа 9: «Редирект FIngredientTableRow с префиксом F
+по-прежнему не срабатывает — добить» и «Старые поля плотности регионов ещё
+читаются через редирект… ок, фиксим».
+
+### Что сделано
+
+- **Редиректы высотного пояса ингредиентов работают.** В `DefaultEngine.ini`
+  путь был `/Script/ProjectHerbalist.FIngredientTableRow.MinAltitudeMeters`.
+  Загрузчик тегированных свойств (`Class.cpp` движка) ищет редирект через
+  `FProperty::FindRedirectedPropertyName` по имени `UScriptStruct` — а оно без
+  префикса F, `IngredientTableRow`. Строки с F не находились никогда. Путь
+  исправлен у трёх полей: `MinAltitudeMeters → MinAltitudeCentimeters`,
+  `MaxAltitudeMeters → MaxAltitudeCentimeters`,
+  `AltitudeFalloffMeters → AltitudeFalloffCentimeters`. Значения переносятся
+  как есть, без пересчёта: по записи в ini их и вводили в сантиметрах.
+- **Редирект плотности регионов снят**
+  (`BiomeRegionVolume.MinResourcesPerCell` / `MaxResourcesPerCell` →
+  `…Per100SquareMeters`). Регионы `L_TestDev` пересохранены на этапе 9; поиск
+  по всем `.uasset` и `.umap` в `Content` старых имён не находит ни на одной
+  карте. Тест `Herbalist.ResourceDensity.OldPerCellFieldsRedirect` удалён
+  вместе с редиректом, комментарий у полей региона обновлён.
+
+Старых имён высотного пояса в ассетах тоже нет: редирект нужен только строкам,
+сохранённым до переименования (2026-09-03), если такие вернутся из старой копии
+таблицы.
+
+### Проверка
+
+- Новый тест `Herbalist.Altitude.OldMeterFieldsRedirectToCentimeters`: для
+  трёх старых имён `FProperty::FindRedirectedPropertyName` по структуре строки
+  возвращает новое имя, и поле с новым именем существует. Тем же вызовом имя
+  ищет загрузчик.
+- Полный набор автотестов: 599 тестов, **599/599, два чистых
+  прогона**.

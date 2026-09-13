@@ -15,6 +15,7 @@
 #include "Misc/AutomationTest.h"
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
+#include "UObject/UnrealType.h"
 
 #if WITH_AUTOMATION_TESTS
 
@@ -218,6 +219,34 @@ bool FHerbalistAltitude_SoleCandidateOutsideItsBandYieldsNothing::RunTest(const 
     TestTrue(TEXT("Outside its band with no other candidate, the result is NAME_None, not the excluded herb itself"),
         Result.IsNone());
 
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAltitude_OldMeterFieldsRedirectToCentimeters,
+    "Herbalist.Altitude.OldMeterFieldsRedirectToCentimeters",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAltitude_OldMeterFieldsRedirectToCentimeters::RunTest(const FString& Parameters)
+{
+    // Строки DT_IngredientClass, сохранённые до переименования (2026-09-03), несут
+    // MinAltitudeMeters / MaxAltitudeMeters / AltitudeFalloffMeters. Проверяется
+    // тем же путём, каким имя ищет загрузчик тегированных свойств структуры
+    // (FProperty::FindRedirectedPropertyName по UScriptStruct). Редирект с
+    // префиксом F в пути (/Script/ProjectHerbalist.FIngredientTableRow...) здесь
+    // не находился: имя структуры в движке -- без префикса.
+    const UScriptStruct* RowStruct = FIngredientTableRow::StaticStruct();
+    struct FRename { const TCHAR* OldName; const TCHAR* NewName; };
+    const FRename Renames[] = {
+        { TEXT("MinAltitudeMeters"), TEXT("MinAltitudeCentimeters") },
+        { TEXT("MaxAltitudeMeters"), TEXT("MaxAltitudeCentimeters") },
+        { TEXT("AltitudeFalloffMeters"), TEXT("AltitudeFalloffCentimeters") },
+    };
+    for (const FRename& Rename : Renames)
+    {
+        const FName Redirected = FProperty::FindRedirectedPropertyName(RowStruct, FName(Rename.OldName));
+        TestEqual(FString::Printf(TEXT("%s -> %s"), Rename.OldName, Rename.NewName), Redirected, FName(Rename.NewName));
+        TestNotNull(FString::Printf(TEXT("Поле %s существует"), Rename.NewName), FindFProperty<FFloatProperty>(RowStruct, FName(Rename.NewName)));
+    }
     return true;
 }
 
