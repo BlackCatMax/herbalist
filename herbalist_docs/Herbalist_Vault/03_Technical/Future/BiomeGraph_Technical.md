@@ -25,7 +25,7 @@ UBiomeGraphSubsystem : public UWorldSubsystem
 - `FBiomeGraphNode` – авторские параметры + runtime-поля (`MorokField`, `ZaryanaField`) + `FBiomeMemory`.
 - `FBiomeGraphEdge` – `FromBiome`, `ToBiome`, `MorokLeak`, `ZaryanaFlow`.
 - `FBiomeGraphNodeEntry` – запись для DataAsset (связь `BiomeID` → `FBiomeGraphNode`).
-- `FGridBiomeSample` – контракт для передачи данных из Grid в Graph.
+- `FHerbalistBiomeFieldSum` (`Core/World/ChunkSummaryTypes.h`) – суммы по биому из сводок чанков, контракт Grid → Graph (до 2026-09-13 — `FGridBiomeSample`).
 
 ## Инициализация
 
@@ -37,14 +37,14 @@ UBiomeGraphSubsystem : public UWorldSubsystem
 
 - **Фиксированный шаг:** `FixedTimeStep` (по умолчанию 0.2 сек).
 - Внутренний цикл `InternalStep`:
-  1. `RecalculateFieldsFromGrid` – агрегация `FGridBiomeSample` от `AGridWorldManager`.
+  1. `RecalculateFieldsFromGrid` – средние по биому из `AGridWorldManager::GetBiomeFieldSums()`.
   2. `PropagateWaves` – delta-based распространение.
   3. `ApplyFieldsToGrid` – вызов `AGridWorldManager::ApplyBiomeInfluences`.
   4. `UpdateMemories` – decay памяти.
 
 ## Контракт с GridWorldManager
 
-- `GetBiomeSamples()` – возвращает массив `FGridBiomeSample` для всех клеток.
+- `GetBiomeFieldSums()` – суммы по биому из сводок чанков (живые чанки пересчитываются, неживые — из кэша до `MarkCellDirty`).
 - `ApplyBiomeInfluences(MorokFields, ZaryanaFields, GlobalScale)` – применяет поля к `TargetState` клеток.
 - `GetBiomeCenters()` – возвращает средние позиции биомов (для визуализации).
 

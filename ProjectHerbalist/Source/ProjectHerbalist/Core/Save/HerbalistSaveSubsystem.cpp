@@ -47,7 +47,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // видимой строкой здесь, а не тихим переносом дефолта.
     // v2 (2026-09-07): сменилась СЕМАНТИКА BiomeGraphNodes.MorokField/
     // ZaryanaField -- из абсолютных уровней они стали знаковыми отклонениями
-    // от природы биома (см. GetBiomeSamples, GridWorldManagerCore.cpp).
+    // от природы биома (см. BuildChunkSummary, GridWorldManagerCore.cpp).
     // Формат полей тот же, смысл другой -- ровно тот "случай посложнее
     // простого добавления поля", ради которого версия и заводилась.
     // v3 (2026-09-12, разметка мира, этап 4): основа клетки -- из потоков

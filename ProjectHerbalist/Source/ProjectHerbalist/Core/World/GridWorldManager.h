@@ -19,6 +19,7 @@
 #include "Core/Entities/ArtifactTypes.h"
 #include "Core/Alchemy/RitualTypes.h"
 #include "Core/World/POITypes.h"
+#include "Core/World/ChunkSummaryTypes.h"
 // Полное определение, не форвард-декларация (аудит 2026-09-05, CellBaselines
 // ниже): TArray<FSavedCellState> — данные-член по значению, его конструктору/
 // деструктору (в т.ч. авто-сгенерированному UHT в GridWorldManager.gen.cpp)
@@ -594,6 +595,8 @@ public:
 
     // Явно задать центры (тесты и отладка) — обходит поиск источников.
     void SetActiveChunkCentersForTests(const TArray<FIntPoint>& InCenters) { ActiveChunkCenters = InCenters; }
+    void MarkCellDirtyForTests(int32 X, int32 Y) { MarkCellDirty(X, Y); }
+    void InvalidateAllChunkSummariesForTests() { InvalidateAllChunkSummaries(); }
 
     const TArray<FIntPoint>& GetActiveChunkCenters() const { return ActiveChunkCenters; }
 
@@ -778,8 +781,17 @@ public:
     void GetSelectedCellInfoBP(int32& X, int32& Y, FString& ResourceName, float& RegrowthTimer, float& Distortion, float& HarvestStress);
 
     // ---- Биомы ----
-    TArray<FGridBiomeSample> GetBiomeSamples() const;
+    // Суммы по биому для графа биомов и центры биомов -- из сводок чанков
+    // (разметка мира, этап 7), а не обходом всех клеток.
+    TMap<FName, FHerbalistBiomeFieldSum> GetBiomeFieldSums() const;
     TMap<FName, FVector> GetBiomeCenters() const;
+
+    // Сводки всех чанков сетки. Живой чанк (в активной области; без центров
+    // активности -- все, как у ForEachActiveCell) пересчитывается при каждом
+    // запросе: только там идёт релаксация и влияние графа. Неживой берётся из
+    // кэша, пока клетку в нём не пометит MarkCellDirty. Только игровой поток;
+    // Func получает ссылку в кэш и сам сводки не запрашивает.
+    void ForEachChunkSummary(TFunctionRef<void(const FHerbalistChunkSummary&)> Func) const;
     void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale, float DeltaTime);
 
     // ---- Ресурсы ----
@@ -1804,6 +1816,17 @@ protected:
     // сверять на выходе "а не совпало ли снова с базой ровно".
     TSet<int32> DirtyCellIndices;
 
+    // Сводки чанков (разметка мира, этап 7): кэш неживых чанков и чанки, чья
+    // сводка устарела. mutable -- кэш заполняется в const-запросах.
+    mutable TMap<FIntPoint, FHerbalistChunkSummary> ChunkSummaries;
+    mutable TSet<FIntPoint> StaleChunkSummaries;
+    // Нарезка, под которую собран кэш (ревью этапа 7): без разметки размер
+    // чанка читается из настроек и меняется на лету.
+    mutable int32 ChunkSummaryChunkSize = 0;
+    mutable FIntPoint ChunkSummaryMinCell = FIntPoint::ZeroValue;
+    mutable FIntPoint ChunkSummaryGridSize = FIntPoint::ZeroValue;
+    mutable bool bIteratingChunkSummaries = false;
+
     // Baseline на клетку (аудит 2026-09-05, решение пользователя: полноценный
     // откат вместо тихого игнорирования). Снимок КАЖДОЙ клетки сразу после
     // InitializeCells — до единого тика симуляции, до единого игрового
@@ -2031,6 +2054,18 @@ protected:
         // Координата за краем попала бы на клетку соседней строки (ревью этапа 6).
         if (!IsCellInGrid(X, Y)) return;
         DirtyCellIndices.Add(GetCellIndex(X, Y));
+        // Сводка чанка устарела (этап 7): неживой чанк иначе отдал бы кэш.
+        StaleChunkSummaries.Add(GetChunkCoordForCell(X, Y));
+    }
+
+    // Сводка одного чанка обходом его клеток (этап 7).
+    FHerbalistChunkSummary BuildChunkSummary(const FIntPoint& Chunk) const;
+
+    // Клетки созданы или заменены целиком -- все сводки считаются заново.
+    void InvalidateAllChunkSummaries()
+    {
+        ChunkSummaries.Reset();
+        StaleChunkSummaries.Reset();
     }
 
     // Локальный индекс в массивах клеток для глобальной координаты (этап 6).

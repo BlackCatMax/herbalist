@@ -493,7 +493,7 @@ bool FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes::RunTe
     // ровно то поле, которое у него уже есть, чтобы блендинг ничего не
     // менял и в балансе остались только диффузия и декей.
     //
-    // ВАЖНО: GetBiomeSamples отдаёт Морок как ОТКЛОНЕНИЕ Distortion от
+    // ВАЖНО: BuildChunkSummary отдаёт Морок как ОТКЛОНЕНИЕ Distortion от
     // дефолта биома (2026-09-07), поэтому нейтральная клетка стоит на
     // "дефолт + поле", а не на голом поле. Раньше здесь было просто
     // `= Node->MorokField`: при нулевых дефолтах биомов, на которых до
@@ -502,7 +502,7 @@ bool FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes::RunTe
     // каждый узел, и сумма Морока падала на 24% за шаг вместо 0.2%
     // (замер: 4.000 -> 3.039 при ожидаемых 3.992). Диффузия при этом была
     // и осталась консервативной; неверна была подготовка мира в тесте.
-    // Водяные клетки берут СВОЙ дефолт -- ровно как GetBiomeSamples.
+    // Водяные клетки берут СВОЙ дефолт -- ровно как BuildChunkSummary.
     for (int32 Y = 0; Y < Manager->GridSizeY; ++Y)
     {
         for (int32 X = 0; X < Manager->GridSizeX; ++X)

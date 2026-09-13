@@ -4,26 +4,6 @@
 #include "CoreMinimal.h"
 #include "BiomeGraphTypes.generated.h"
 
-// Контракт для получения данных от Grid
-USTRUCT(BlueprintType)
-struct FGridBiomeSample
-{
-    GENERATED_BODY()
-
-    UPROPERTY()
-    FName BiomeID;
-
-    UPROPERTY()
-    float MorokValue = 0.f;     // Distortion
-
-    UPROPERTY()
-    // Знаковое ОТКЛОНЕНИЕ Stability клетки от дефолта её биома, [-1,1]
-    // (2026-09-07, вариант "а" по выбору пользователя; было `1 - Distortion`,
-    // из-за чего Заряна была зеркалом Морока, а Purity/Stability уезжали от
-    // собственных дефолтов биома -- MATH_REFERENCE.md §6.2).
-    float ZaryanaValue = 0.f;
-};
-
 USTRUCT(BlueprintType)
 struct FBiomeMemory
 {

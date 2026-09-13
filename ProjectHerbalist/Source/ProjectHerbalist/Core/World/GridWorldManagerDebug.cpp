@@ -88,26 +88,37 @@ FString AGridWorldManager::GetGridCorruptionReport() const
 {
     if (Cells.Num() == 0) return TEXT("Grid empty");
 
+    // Из сводок чанков (разметка мира, этап 7), а не обходом всех клеток.
+    // Делитель -- клетки сводок, а не Cells.Num(): сумма и число из одного
+    // источника (ревью этапа 7).
+    int32 CellCount = 0;
     int32 DegradingCount = 0;
     float MinDistortion = 1.0f;
     float MaxDistortion = 0.0f;
     double DistortionSum = 0.0;
-
-    for (const FGridCell& Cell : Cells)
+    ForEachChunkSummary([&CellCount, &DegradingCount, &MinDistortion, &MaxDistortion, &DistortionSum](const FHerbalistChunkSummary& Summary)
     {
-        if (Cell.Memory.bDegrading) ++DegradingCount;
-        const float Distortion = Cell.State.Meta.Distortion;
-        MinDistortion = FMath::Min(MinDistortion, Distortion);
-        MaxDistortion = FMath::Max(MaxDistortion, Distortion);
-        DistortionSum += Distortion;
+        if (Summary.CellCount == 0)
+        {
+            return;
+        }
+        CellCount += Summary.CellCount;
+        DegradingCount += Summary.DegradingCount;
+        MinDistortion = FMath::Min(MinDistortion, Summary.DistortionMin);
+        MaxDistortion = FMath::Max(MaxDistortion, Summary.DistortionMax);
+        DistortionSum += Summary.DistortionSum;
+    });
+    if (CellCount == 0)
+    {
+        return TEXT("Grid empty");
     }
 
-    const float AvgDistortion = static_cast<float>(DistortionSum / Cells.Num());
-    const float DegradingPercent = 100.0f * DegradingCount / Cells.Num();
+    const float AvgDistortion = static_cast<float>(DistortionSum / CellCount);
+    const float DegradingPercent = 100.0f * DegradingCount / CellCount;
 
     return FString::Printf(
         TEXT("%d cells, %d degrading (%.1f%%), Distortion avg=%.3f min=%.3f max=%.3f"),
-        Cells.Num(), DegradingCount, DegradingPercent, AvgDistortion, MinDistortion, MaxDistortion);
+        CellCount, DegradingCount, DegradingPercent, AvgDistortion, MinDistortion, MaxDistortion);
 }
 
 bool AGridWorldManager::IsGridCorruptionAutoReportScheduled() const

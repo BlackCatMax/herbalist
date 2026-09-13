@@ -191,29 +191,15 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid, fl
 {
     if (!Grid) return;
 
-    TMap<FName, float> MorokSum, ZaryanaSum;
-    TMap<FName, int32> CountMap;
-
-    for (const auto& Pair : Nodes)
-    {
-        MorokSum.Add(Pair.Key, 0.f);
-        ZaryanaSum.Add(Pair.Key, 0.f);
-        CountMap.Add(Pair.Key, 0);
-    }
-
-    TArray<FGridBiomeSample> Samples = Grid->GetBiomeSamples();
-    for (const FGridBiomeSample& Sample : Samples)
-    {
-        if (!Nodes.Contains(Sample.BiomeID)) continue;
-        MorokSum[Sample.BiomeID] += Sample.MorokValue;
-        ZaryanaSum[Sample.BiomeID] += Sample.ZaryanaValue;
-        CountMap[Sample.BiomeID]++;
-    }
+    // Суммы по биому -- из сводок чанков сетки (разметка мира, этап 7), а не
+    // обходом всех клеток на каждом шаге графа.
+    const TMap<FName, FHerbalistBiomeFieldSum> Sums = Grid->GetBiomeFieldSums();
 
     for (auto& Pair : Nodes)
     {
         FName BiomeID = Pair.Key;
-        int32 Count = CountMap[BiomeID];
+        const FHerbalistBiomeFieldSum* Sum = Sums.Find(BiomeID);
+        const int32 Count = Sum ? Sum->CellCount : 0;
         if (Count > 0)
         {
             // Смешиваем со средним по гриду, а не перезаписываем: иначе вклад
@@ -221,12 +207,12 @@ void UBiomeGraphSubsystem::RecalculateFieldsFromGrid(AGridWorldManager* Grid, fl
             // здесь же на следующем шаге, и поле не может по-настоящему
             // распространяться дальше одного узла за раз (см. аудит математики).
             // ZaryanaField -- ЗНАКОВОЕ отклонение Stability от дефолта биома
-            // (2026-09-07, см. GetBiomeSamples): диапазон [-1,1], не [0,1].
+            // (2026-09-07, см. AGridWorldManager::BuildChunkSummary): диапазон [-1,1], не [0,1].
             // Прежний кламп в [0,1] срезал бы всю отрицательную половину --
             // "биом хуже своей природы" стало бы неотличимо от "ровно в своей
             // природе". MorokField остаётся абсолютным уровнем в [0,1].
-            const float GridAvgMorok = FMath::Clamp(MorokSum[BiomeID] / Count, -1.f, 1.f);
-            const float GridAvgZaryana = FMath::Clamp(ZaryanaSum[BiomeID] / Count, -1.f, 1.f);
+            const float GridAvgMorok = FMath::Clamp(static_cast<float>(Sum->MorokSum / Count), -1.f, 1.f);
+            const float GridAvgZaryana = FMath::Clamp(static_cast<float>(Sum->ZaryanaSum / Count), -1.f, 1.f);
 
             // GridBlendFactor исторически задан "за шаг" -- приводим к
             // "в секунду" через опорный шаг (§6.3 MATH_REFERENCE.md). При
@@ -387,7 +373,7 @@ void UBiomeGraphSubsystem::UpdateMemories(float StepDeltaTime)
         // узлов (без единого вычитания), а ApplyBiomeInfluences
         // (GridWorldManagerCore.cpp) складывает поле в TargetState.Distortion
         // клеток -- замкнутый контур с положительной обратной связью
-        // (GetBiomeSamples читает Cell.State.Distortion обратно как
+        // (BuildChunkSummary читает Cell.State.Distortion обратно как
         // MorokValue) и без единого тормоза. GlobalMorokDecay/GlobalZaryanaDecay
         // уже существовали, но применялись только к отдельному Memory.*History,
         // не к самому MorokField/ZaryanaField, который реально толкает сетку --

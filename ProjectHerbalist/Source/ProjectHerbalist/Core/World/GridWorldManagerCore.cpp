@@ -1061,73 +1061,186 @@ const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
 // БИОМЫ
 // ============================================================================
 
-TArray<FGridBiomeSample> AGridWorldManager::GetBiomeSamples() const
+FHerbalistChunkSummary AGridWorldManager::BuildChunkSummary(const FIntPoint& Chunk) const
 {
-    TArray<FGridBiomeSample> Samples;
-    for (const FGridCell& Cell : Cells)
+    FHerbalistChunkSummary Summary;
+    const int32 ChunkSize = GetChunkSizeInCells();
+    const int32 MinX = Chunk.X * ChunkSize;
+    const int32 MinY = Chunk.Y * ChunkSize;
+
+    for (int32 Y = MinY; Y < MinY + ChunkSize; ++Y)
     {
-        FGridBiomeSample Sample;
-        Sample.BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
+        for (int32 X = MinX; X < MinX + ChunkSize; ++X)
+        {
+            const FGridCell* Cell = GetCellConst(X, Y);
+            if (!Cell)
+            {
+                continue;
+            }
+            ++Summary.CellCount;
 
-        // Морок как ОТКЛОНЕНИЕ Distortion от дефолта биома (2026-09-07,
-        // вторым заходом, симметрично Заряне ниже). Абсолютный уровень
-        // здесь не годился по двум причинам, обе проверены:
-        //  1) у поля не было якоря на природе биома -- Болото со своими
-        //     0.70 медленно уезжало туда, куда скажет затухающее поле;
-        //  2) при настоящей таблице биомов ветка Морока дёргала ВСЕ 400
-        //     клеток каждый шаг (падал Save.BiomeInfluencesWithZeroFieldsStaySparse),
-        //     потому что "ведро" всегда тянуло Distortion от дефолта к нулю.
-        // На отклонениях покой даёт ровно ноль -- ни записи, ни дрейфа.
-        //
-        // Отдельно: НЕЛЬЗЯ было оставить абсолют и просто релаксировать поле
-        // к дефолту биома (более дешёвая на вид альтернатива). Диффузия по
-        // рёбрам (PropagateWaves) переносит АБСОЛЮТНЫЕ значения со скоростью
-        // MorokLeak (0.15 за шаг = 0.75/с), что на два порядка сильнее
-        // релаксации (0.01/с): соседние биомы просто усреднились бы, и
-        // Болото перестало бы отличаться от Поймы. На отклонениях в покое
-        // переносить нечего -- диффундирует только реальный избыток.
-        const FRealState BiomeDefault = Cell.bIsWater
-            ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
-            : FBiomeDefaults::GetDefaultState(Cell.Biome);
-        Sample.MorokValue = Cell.State.Meta.Distortion - BiomeDefault.Meta.Distortion;
+            // Морок как ОТКЛОНЕНИЕ Distortion от дефолта биома (2026-09-07,
+            // вторым заходом, симметрично Заряне ниже). Абсолютный уровень
+            // здесь не годился по двум причинам, обе проверены:
+            //  1) у поля не было якоря на природе биома -- Болото со своими
+            //     0.70 медленно уезжало туда, куда скажет затухающее поле;
+            //  2) при настоящей таблице биомов ветка Морока дёргала ВСЕ 400
+            //     клеток каждый шаг (падал Save.BiomeInfluencesWithZeroFieldsStaySparse),
+            //     потому что "ведро" всегда тянуло Distortion от дефолта к нулю.
+            // На отклонениях покой даёт ровно ноль -- ни записи, ни дрейфа.
+            //
+            // Отдельно: НЕЛЬЗЯ было оставить абсолют и просто релаксировать поле
+            // к дефолту биома (более дешёвая на вид альтернатива). Диффузия по
+            // рёбрам (PropagateWaves) переносит АБСОЛЮТНЫЕ значения со скоростью
+            // MorokLeak (0.15 за шаг = 0.75/с), что на два порядка сильнее
+            // релаксации (0.01/с): соседние биомы просто усреднились бы, и
+            // Болото перестало бы отличаться от Поймы. На отклонениях в покое
+            // переносить нечего -- диффундирует только реальный избыток.
+            const FRealState BiomeDefault = Cell->bIsWater
+                ? FBiomeDefaults::GetDefaultWaterState(Cell->Biome)
+                : FBiomeDefaults::GetDefaultState(Cell->Biome);
 
-        // Заряна как ОТКЛОНЕНИЕ Stability от дефолта биома (2026-09-07,
-        // выбор пользователя, вариант "а" из ROADMAP.md; было
-        // `1 - Distortion`). Прежнее определение делало Заряну зеркалом
-        // Морока, а не самостоятельной величиной, и ветка Заряны в
-        // ApplyBiomeInfluences тянула Purity/Stability к f(Distortion)
-        // безотносительно их собственных дефолтов: Тайга с природным
-        // Purity 0.8 уезжала к 0.375 без единой внешней причины
-        // (замер: 0.70 -> 0.55 за 300с, MATH_REFERENCE.md §6.2).
-        //
-        // Знаковое отклонение, не абсолютный уровень: ноль означает "биом
-        // в своей природе", плюс/минус -- насколько его увели от неё. Тогда
-        // затухание поля (UpdateMemories) означает возврат к дефолту биома,
-        // а не сползание к нулю. Читается и применяется в ОДНОЙ системе
-        // отсчёта (см. ApplyBiomeInfluences) -- ровно то, чего не хватало
-        // сломанной правке 2026-09-07 по Distortion (двойной счёт).
-        // BiomeDefault объявлен выше, в блоке Морока -- он общий для обеих осей.
-        Sample.ZaryanaValue = Cell.State.Meta.Stability - BiomeDefault.Meta.Stability;
-        Samples.Add(Sample);
+            const int32 BiomeIndex = static_cast<int32>(Cell->Biome);
+            if (!ensureMsgf(BiomeIndex < HerbalistBiomeTypeCount, TEXT("EBiomeType %d вне HerbalistBiomeTypeCount"), BiomeIndex))
+            {
+                continue;
+            }
+            FHerbalistBiomeFieldSum& BiomeSum = Summary.Biomes[BiomeIndex];
+            BiomeSum.MorokSum += Cell->State.Meta.Distortion - BiomeDefault.Meta.Distortion;
+
+            // Заряна как ОТКЛОНЕНИЕ Stability от дефолта биома (2026-09-07,
+            // выбор пользователя, вариант "а" из ROADMAP.md; было
+            // `1 - Distortion`). Прежнее определение делало Заряну зеркалом
+            // Морока, а не самостоятельной величиной, и ветка Заряны в
+            // ApplyBiomeInfluences тянула Purity/Stability к f(Distortion)
+            // безотносительно их собственных дефолтов: Тайга с природным
+            // Purity 0.8 уезжала к 0.375 без единой внешней причины
+            // (замер: 0.70 -> 0.55 за 300с, MATH_REFERENCE.md §6.2).
+            //
+            // Знаковое отклонение, не абсолютный уровень: ноль означает "биом
+            // в своей природе", плюс/минус -- насколько его увели от неё. Тогда
+            // затухание поля (UpdateMemories) означает возврат к дефолту биома,
+            // а не сползание к нулю. Читается и применяется в ОДНОЙ системе
+            // отсчёта (см. ApplyBiomeInfluences) -- ровно то, чего не хватало
+            // сломанной правке 2026-09-07 по Distortion (двойной счёт).
+            BiomeSum.ZaryanaSum += Cell->State.Meta.Stability - BiomeDefault.Meta.Stability;
+            BiomeSum.PositionSum += GetCellWorldPositionFlat(Cell->X, Cell->Y);
+            ++BiomeSum.CellCount;
+
+            const float Distortion = Cell->State.Meta.Distortion;
+            Summary.DegradingCount += Cell->Memory.bDegrading ? 1 : 0;
+            Summary.DistortionSum += Distortion;
+            Summary.DistortionMin = FMath::Min(Summary.DistortionMin, Distortion);
+            Summary.DistortionMax = FMath::Max(Summary.DistortionMax, Distortion);
+            if (!Cell->bIsWater)
+            {
+                ++Summary.LandCellCount;
+                Summary.LandDistortionSum += Distortion;
+            }
+            Summary.DistanceWithHistorySum += HerbalistCore::Math::DistanceWithHistory(Cell->State, Cell->Memory.AverageCoherence);
+        }
     }
-    return Samples;
+    return Summary;
+}
+
+void AGridWorldManager::ForEachChunkSummary(TFunctionRef<void(const FHerbalistChunkSummary&)> Func) const
+{
+    check(IsInGameThread());
+    if (Cells.Num() == 0)
+    {
+        return;
+    }
+
+    // Func получает ссылку в ChunkSummaries: запрос сводок изнутри перестроил
+    // бы таблицу под ней (ревью этапа 7).
+    check(!bIteratingChunkSummaries);
+    TGuardValue<bool> IterationGuard(bIteratingChunkSummaries, true);
+
+    // Кэш собран под размер чанка и прямоугольник сетки (ревью этапа 7): без
+    // разметки размер чанка читается из настроек и меняется на лету.
+    const int32 ChunkSize = GetChunkSizeInCells();
+    const FIntPoint GridMin = GetGridMinCell();
+    const FIntPoint GridSize(GridSizeX, GridSizeY);
+    if (ChunkSummaryChunkSize != ChunkSize || ChunkSummaryMinCell != GridMin || ChunkSummaryGridSize != GridSize)
+    {
+        ChunkSummaries.Reset();
+        StaleChunkSummaries.Reset();
+        ChunkSummaryChunkSize = ChunkSize;
+        ChunkSummaryMinCell = GridMin;
+        ChunkSummaryGridSize = GridSize;
+    }
+
+    FIntPoint MinChunk;
+    FIntPoint MaxChunk;
+    GetGridChunkRange(MinChunk, MaxChunk);
+
+    // Те же две ветки «живо всё», что у ForEachActiveCell: без центров
+    // активности релаксация идёт по всей сетке, и кэш не нужен.
+    const int32 Radius = GetActiveRadiusInChunks();
+    const bool bAllLive = Radius < 0 || ActiveChunkCenters.Num() == 0;
+    const TSet<FIntPoint> LiveChunks = bAllLive ? TSet<FIntPoint>() : ComputeChunksWithinRadius(ActiveChunkCenters, Radius);
+
+    for (int32 ChunkY = MinChunk.Y; ChunkY <= MaxChunk.Y; ++ChunkY)
+    {
+        for (int32 ChunkX = MinChunk.X; ChunkX <= MaxChunk.X; ++ChunkX)
+        {
+            const FIntPoint Chunk(ChunkX, ChunkY);
+            if (bAllLive)
+            {
+                Func(BuildChunkSummary(Chunk));
+                continue;
+            }
+
+            const FHerbalistChunkSummary* Cached = ChunkSummaries.Find(Chunk);
+            if (!Cached || LiveChunks.Contains(Chunk) || StaleChunkSummaries.Contains(Chunk))
+            {
+                FHerbalistChunkSummary& Slot = ChunkSummaries.FindOrAdd(Chunk);
+                Slot = BuildChunkSummary(Chunk);
+                StaleChunkSummaries.Remove(Chunk);
+                Cached = &Slot;
+            }
+            Func(*Cached);
+        }
+    }
+}
+
+TMap<FName, FHerbalistBiomeFieldSum> AGridWorldManager::GetBiomeFieldSums() const
+{
+    FHerbalistBiomeFieldSum Totals[HerbalistBiomeTypeCount];
+    ForEachChunkSummary([&Totals](const FHerbalistChunkSummary& Summary)
+    {
+        for (int32 BiomeIndex = 0; BiomeIndex < HerbalistBiomeTypeCount; ++BiomeIndex)
+        {
+            const FHerbalistBiomeFieldSum& Part = Summary.Biomes[BiomeIndex];
+            FHerbalistBiomeFieldSum& Total = Totals[BiomeIndex];
+            Total.MorokSum += Part.MorokSum;
+            Total.ZaryanaSum += Part.ZaryanaSum;
+            Total.PositionSum += Part.PositionSum;
+            Total.CellCount += Part.CellCount;
+        }
+    });
+
+    // Наружу -- только биомы, у которых есть клетки, как у прежнего обхода.
+    TMap<FName, FHerbalistBiomeFieldSum> Sums;
+    for (int32 BiomeIndex = 0; BiomeIndex < HerbalistBiomeTypeCount; ++BiomeIndex)
+    {
+        if (Totals[BiomeIndex].CellCount > 0)
+        {
+            Sums.Add(FBiomeDefaults::BiomeTypeToName(static_cast<EBiomeType>(BiomeIndex)), Totals[BiomeIndex]);
+        }
+    }
+    return Sums;
 }
 
 TMap<FName, FVector> AGridWorldManager::GetBiomeCenters() const
 {
     TMap<FName, FVector> Centers;
-    TMap<FName, int32> Counts;
-    for (const FGridCell& Cell : Cells)
+    for (const TPair<FName, FHerbalistBiomeFieldSum>& Pair : GetBiomeFieldSums())
     {
-        FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell.Biome);
-        FVector Pos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
-        Centers.FindOrAdd(BiomeID) += Pos;
-        Counts.FindOrAdd(BiomeID)++;
-    }
-    for (auto& Pair : Centers)
-    {
-        int32 Cnt = Counts[Pair.Key];
-        if (Cnt > 0) Pair.Value /= Cnt;
+        if (Pair.Value.CellCount > 0)
+        {
+            Centers.Add(Pair.Key, Pair.Value.PositionSum / Pair.Value.CellCount);
+        }
     }
     return Centers;
 }
@@ -1238,7 +1351,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         // 2. Влияние Заряны на Stability/Purity -- "дырявое ведро" по
         // ОТКЛОНЕНИЮ от дефолта биома (2026-09-07, выбор пользователя,
         // вариант "а"). ZaryanaField теперь тоже отклонение
-        // (GetBiomeSamples выше), то есть читается и применяется в одной
+        // (BuildChunkSummary выше), то есть читается и применяется в одной
         // системе отсчёта -- двойного счёта, погубившего аналогичную
         // правку по Distortion, здесь нет.
         //
@@ -1793,6 +1906,9 @@ void AGridWorldManager::InitializeCells()
     {
         CellBaselines[Index] = CaptureCellState(Cells[Index]);
     }
+
+    // Клетки созданы заново -- сводки чанков считаются заново (этап 7).
+    InvalidateAllChunkSummaries();
 
     SetActorTickEnabled(true);
 }
@@ -2913,7 +3029,10 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
 
         // Сохранения (Core/Save/): релаксация — единственный писатель State/
         // HarvestStress вне ApplyStateDelta, помечаем клетку тронутой отдельно.
-        if (bChanged || DirDeviation > KINDA_SMALL_NUMBER || bStressDecaying)
+        // Переход гистерезиса -- тоже изменение (ревью этапа 7): у клетки,
+        // стоящей ровно на цели, иначе флаг распада не попал бы ни в сейв, ни
+        // в сводку чанка.
+        if (bChanged || DirDeviation > KINDA_SMALL_NUMBER || bStressDecaying || Cell.Memory.bDegrading != bWasDegrading)
         {
             MarkCellDirty(Cell.X, Cell.Y);
         }

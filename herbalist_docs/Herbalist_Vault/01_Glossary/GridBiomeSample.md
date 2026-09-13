@@ -5,9 +5,9 @@ status: ✅
 
 # GridBiomeSample
 
-**GDD:** Контрактная структура для передачи данных из клеточного мира (`GridWorldManager`) в биомный граф. Агрегированное состояние всех клеток, относящихся к одному биому, включая усреднённые поля `Morok`, `Zaryana`, а также параметры среды и памяти.
+**GDD:** Контракт передачи данных из клеточного мира (`GridWorldManager`) в биомный граф: по каждому биому — отклонения полей `Morok` и `Zaryana` от природы биома, усреднённые по его клеткам.
 
-**Tech:** Структура `FGridBiomeSample` (определена в `BiomeGraphTypes.h`, строки 9-21). Содержит всего 3 поля: `BiomeID`, `MorokValue`, `ZaryanaValue`. Заполняется в `UBiomeGraphSubsystem::RecalculateFieldsFromGrid` вызовом `AGridWorldManager::GetBiomeSamples()`.
+**Tech:** Удалено 2026-09-13 (разметка мира, этап 7). Раньше — структура `FGridBiomeSample` на клетку и `AGridWorldManager::GetBiomeSamples()`, обход всех клеток на каждом шаге графа. Теперь граф берёт `AGridWorldManager::GetBiomeFieldSums()` — суммы по биому (`FHerbalistBiomeFieldSum`: сумма Морока, сумма Заряны, сумма позиций, число клеток) из сводок чанков (`FHerbalistChunkSummary`, `Core/World/ChunkSummaryTypes.h`) — и делит на число клеток. Центры биомов — оттуда же.
 
 **Восприятие:** Не воспринимается напрямую. Обеспечивает связь между видимым клеточным миром и скрытой графовой симуляцией.
 

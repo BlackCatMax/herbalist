@@ -335,15 +335,15 @@ void AGridWorldManager::SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoin
     bool bActuallyFalse = bIsFalse;
     if (!bActuallyFalse && Def->Trigger != EMemoryFragmentTrigger::ShrineRestored)
     {
-        float SumDistortion = 0.0f;
+        // Из сводок чанков (разметка мира, этап 7).
+        double SumDistortion = 0.0;
         int32 Count = 0;
-        for (const FGridCell& C : Cells)
+        ForEachChunkSummary([&SumDistortion, &Count](const FHerbalistChunkSummary& Summary)
         {
-            if (C.bIsWater) continue;
-            SumDistortion += C.State.Meta.Distortion;
-            ++Count;
-        }
-        const float AvgDistortion = Count > 0 ? SumDistortion / Count : 0.0f;
+            SumDistortion += Summary.LandDistortionSum;
+            Count += Summary.LandCellCount;
+        });
+        const float AvgDistortion = Count > 0 ? static_cast<float>(SumDistortion / Count) : 0.0f;
         const float FalseRisk = Settings ? Settings->MemoryFragmentFalseRiskGlobalDistortion : 0.5f;
         if (AvgDistortion > FalseRisk && WorldRNG.FRand() < (AvgDistortion - FalseRisk))
         {
@@ -437,12 +437,17 @@ void AGridWorldManager::CheckBuyanCondition()
     // — Буян измеряет Distance_итог (с историей Coherence), не голый
     // снимок: мир, добравшийся до тех же чисел через согласованные варки,
     // должен быть заметно ближе к порогу, чем тот же мир через хаос.
-    float SumDistance = 0.0f;
-    for (const FGridCell& Cell : Cells)
+    // Из сводок чанков (разметка мира, этап 7), а не обходом всех клеток.
+    // Делитель -- клетки сводок (ревью этапа 7).
+    double SumDistance = 0.0;
+    int32 CellCount = 0;
+    ForEachChunkSummary([&SumDistance, &CellCount](const FHerbalistChunkSummary& Summary)
     {
-        SumDistance += HerbalistCore::Math::DistanceWithHistory(Cell.State, Cell.Memory.AverageCoherence);
-    }
-    const float AvgDistance = SumDistance / Cells.Num();
+        SumDistance += Summary.DistanceWithHistorySum;
+        CellCount += Summary.CellCount;
+    });
+    if (CellCount == 0) return;
+    const float AvgDistance = static_cast<float>(SumDistance / CellCount);
 
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float DistanceThreshold = Settings ? Settings->BuyanAverageDistanceThreshold : 0.5f;

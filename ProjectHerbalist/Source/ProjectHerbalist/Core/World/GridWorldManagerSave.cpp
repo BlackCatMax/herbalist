@@ -163,6 +163,9 @@ void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     // сессии, загрузившей этот же сейв с нуля. Дальнейшая игра после
     // загрузки продолжит помечать клетки как обычно поверх этого набора.
     DirtyCellIndices = MoveTemp(SavedIndices);
+
+    // Клетки заменены сейвом и базой -- сводки чанков считаются заново (этап 7).
+    InvalidateAllChunkSummaries();
 }
 
 TArray<FSavedHomeStorage> AGridWorldManager::CaptureHomeStorages() const

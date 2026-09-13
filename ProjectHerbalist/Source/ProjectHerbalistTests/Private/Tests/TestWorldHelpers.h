@@ -121,7 +121,7 @@ namespace
     }
 
     // Дефолт биома ДЛЯ КОНКРЕТНОЙ КЛЕТКИ -- ровно тот выбор land/water, что
-    // делают и GetBiomeSamples, и ApplyBiomeInfluences (GridWorldManagerCore.cpp).
+    // делают и BuildChunkSummary, и ApplyBiomeInfluences (GridWorldManagerCore.cpp).
     // Нужен любому тесту, который считает ожидание для математики на
     // ОТКЛОНЕНИЯХ от дефолта биома (Морок/Заряна, 2026-09-07): у водяных
     // клеток дефолт свой, и у Болота он заметно другой (0.75 против 0.70 по

@@ -50,7 +50,7 @@ struct FBiomeFieldContext
 {
     // ВНИМАНИЕ: MorokField/ZaryanaField с 2026-09-07 -- ЗНАКОВЫЕ ОТКЛОНЕНИЯ
     // от природных значений биома, а не абсолютные уровни (см. довод у
-    // GetBiomeSamples, GridWorldManagerCore.cpp). Ноль означает "биом в своей
+    // BuildChunkSummary, GridWorldManagerCore.cpp). Ноль означает "биом в своей
     // природе". Для сравнения с авторскими АБСОЛЮТНЫМИ порогами и для
     // "насколько это место испорчено" бери AmbientMorok ниже.
     float MorokField = 0.f;
