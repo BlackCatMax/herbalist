@@ -179,6 +179,12 @@ bool FHerbalistAmbientEntity_DecorativeEntitiesManifestWithoutEffect::RunTest(co
     SplashCell->Biome = EBiomeType::Floodplain;
     SplashCell->bIsWater = true;
     SplashCell->State.Meta.Purity = 0.5f;
+    // Гейт Плескунов -- Nature >= 0.40 (AmbientGatesPatchCommandlet). Тест меняет
+    // клетке биом и воду, но не Direction: та остаётся от рождения клетки. Пока
+    // клетку (2, 0) заливали пятна воды, Nature у неё была водной и порог
+    // проходила; с 2026-09-13 вода только из регионов воды, клетка рождается
+    // сушей фолбэка -- тот же случай, что у Трясинных духов выше.
+    SplashCell->State.Direction.Nature = 0.5f;
     Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("Плескуны manifest in shallow water during the day"), SplashCell->ManifestedEntityID, FName(TEXT("Плескуны")));
 

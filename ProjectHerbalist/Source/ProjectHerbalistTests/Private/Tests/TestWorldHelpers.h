@@ -19,6 +19,7 @@
 #include "CoreMinimal.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/BiomeRegionVolume.h"
+#include "Core/World/WaterRegionVolume.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Engine/DataTable.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
@@ -128,11 +129,39 @@ namespace
     // Distortion). Тест, зашивший число одного из двух вариантов, молча
     // зависел бы от того, водной ли оказалась клетка (0,0) в этом мире --
     // ровно на этом и попались два теста при включении настоящей таблицы.
+    // С 2026-09-13 -- тот же вызов, что у менеджера: у воды на стыке биомов
+    // умолчание -- смесь по долям.
     FRealState BiomeDefaultStateForCell(const FGridCell& Cell)
     {
-        return Cell.bIsWater
-            ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
-            : FBiomeDefaults::GetDefaultState(Cell.Biome);
+        return AGridWorldManager::GetCellDefaultState(Cell);
+    }
+
+    // Регион воды прямоугольником -- тот же приём, что SpawnRegionCoveringWorldRect.
+    // Перенесён из GridWorldManagerWaterRegionTest.cpp, когда потребителей стало
+    // два (CellPageStreamingTest.cpp).
+    AWaterRegionVolume* SpawnWaterRegionCoveringWorldRect(UWorld* World,
+        float MinX, float MinY, float MaxX, float MaxY)
+    {
+        if (!World) return nullptr;
+        AWaterRegionVolume* Region = World->SpawnActor<AWaterRegionVolume>();
+        if (!Region) return nullptr;
+
+        if (USplineComponent* Spline = Region->FindComponentByClass<USplineComponent>())
+        {
+            const TArray<FVector> Corners = {
+                FVector(MinX, MinY, 0.0f), FVector(MaxX, MinY, 0.0f),
+                FVector(MaxX, MaxY, 0.0f), FVector(MinX, MaxY, 0.0f),
+            };
+            Spline->SetSplinePoints(Corners, ESplineCoordinateSpace::World, false);
+            for (int32 i = 0; i < Corners.Num(); ++i)
+            {
+                Spline->SetSplinePointType(i, ESplinePointType::Linear, false);
+            }
+            Spline->SetClosedLoop(true, false);
+            Spline->UpdateSpline();
+        }
+        Region->UpdateCachedPoints();
+        return Region;
     }
 
     // Тот же ODR-урок, что и у SpawnAndBeginPlay выше -- было продублировано

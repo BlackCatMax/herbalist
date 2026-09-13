@@ -714,10 +714,17 @@ bool FHerbalistSystemInteraction_LegendarySweepAcrossAllBiomes::RunTest(const FS
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
+    // Вода с 2026-09-13 -- только из регионов воды (пятен больше нет). Регион
+    // на строки Y 0..9: при блоках фолбэка 5x5 и ширине 20 клеток в этих строках
+    // есть вода всех восьми биомов, в строках 10..19 -- суша всех восьми. Без
+    // него водные существа (Водяной царь) молча уходили в пропуск ниже.
+    AWaterRegionVolume* SweepWater = SpawnWaterRegionCoveringWorldRect(World, -50.f, -50.f, 1950.f, 950.f);
+    if (!TestNotNull(TEXT("Water region spawned"), SweepWater)) return false;
+
     int32 Tested = 0, Skipped = 0, Incoherent = 0;
     for (const FLegendaryEntityDefinition& Def : GetLegendaryEntityDefinitions())
     {
-        AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+        AGridWorldManager* Manager = SpawnAndBeginPlay(World, { SweepWater });
         if (!TestNotNull(TEXT("Manager spawned"), Manager)) continue;
         Manager->SetGameClockSeconds(10.0f * 60.0f);
 
@@ -731,6 +738,10 @@ bool FHerbalistSystemInteraction_LegendarySweepAcrossAllBiomes::RunTest(const FS
             // клетка для КАЖДОГО существа сразу -- молчаливый no-op в самом
             // коде (см. SeedLegendaryAnchors), здесь просто помечаем пропуск.
             AddInfo(FString::Printf(TEXT("[%s] SKIPPED -- no seeded anchor cell in this grid"), *Def.EntityID.ToString()));
+            // Берегиня (bUsesCellHistoryPurity) якоря не имеет по построению --
+            // её пропуск ожидаем и был до пятен и после.
+            TestFalse(FString::Printf(TEXT("[%s] водному существу якорь находится: в мире теста есть регион воды"), *Def.EntityID.ToString()),
+                Def.bWaterOnly && !Def.bUsesCellHistoryPurity);
             ++Skipped;
             Graph->Deinitialize();
             Manager->Destroy();
@@ -786,6 +797,7 @@ bool FHerbalistSystemInteraction_LegendarySweepAcrossAllBiomes::RunTest(const FS
     }
 
     AddInfo(FString::Printf(TEXT("Legendary sweep summary: %d tested, %d skipped, %d incoherent"), Tested, Skipped, Incoherent));
+    SweepWater->Destroy();
     return true;
 }
 

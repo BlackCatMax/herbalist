@@ -99,7 +99,8 @@ M ← clamp(M_prev + ΔM, 0, 1)                 // :311
 dD ← dD + (M·Push     − Decay·dD)·dt ;  D = clamp(дефолт_D + dD, 0, 1)
 dS ← dS + (Z·Push     − Decay·dS)·dt ;  S = clamp(дефолт_S + dS, 0, 1)
 dP ← dP + (Z·Push·0.5 − Decay·dP)·dt ;  P = clamp(дефолт_P + dP, 0, 1)
-   где dX = X − дефолт_X (для воды — GetDefaultWaterState)
+   где dX = X − дефолт_X (GetCellDefaultState: у воды — смесь
+   GetDefaultWaterState биомов клетки по долям BiomeWeights)
 ```
 `MorokDistortionPushRate = MorokDistortionDecayRate = 0.01`,
 `ZaryanaEffectPushRate = ZaryanaEffectDecayRate = 0.01`

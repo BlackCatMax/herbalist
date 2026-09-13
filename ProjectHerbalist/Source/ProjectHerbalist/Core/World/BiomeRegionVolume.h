@@ -112,11 +112,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.1"))
     float ResourceRegrowthTimeSeconds = 420.0f;
 
-    // Было: TargetWaterCount = TotalCells / 5 в InitializeCells -- 20% воды
-    // без учёта биома вообще (степь и болото заливались одинаково).
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Density", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float WaterDensity = 0.2f;
-
     // ---- Случайная трансформация ресурсов этого региона (2026-09-03,
     // прямой запрос: "как у PCG в ноде Transform") ----
     // До этой правки каждый ресурсный актор ставился с FRotator::ZeroRotator

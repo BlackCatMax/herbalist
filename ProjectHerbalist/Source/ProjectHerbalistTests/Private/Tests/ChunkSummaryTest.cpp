@@ -176,7 +176,8 @@ bool FHerbalistChunkSummary_SummariesMatchFullWalk::RunTest(const FString& Param
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
     // Разнообразим мир: порча, распад, история -- по детерминированному потоку.
-    // Вода -- пятнами при инициализации (регионов нет).
+    // Вода -- явно, строка из пяти клеток: с 2026-09-13 вода только из регионов
+    // воды, а регионов здесь нет.
     const FIntPoint GridMin = Manager->GetGridMinCell();
     FRandomStream Rng(2026);
     for (int32 Step = 0; Step < 60; ++Step)
@@ -188,6 +189,13 @@ bool FHerbalistChunkSummary_SummariesMatchFullWalk::RunTest(const FString& Param
             Cell->State.Meta.Stability = Rng.FRand();
             Cell->Memory.bDegrading = Rng.FRand() < 0.3f;
             Cell->Memory.AverageCoherence = Rng.FRand();
+        }
+    }
+    for (int32 X = 0; X < 5; ++X)
+    {
+        if (FGridCell* Cell = Manager->GetCell(GridMin.X + X, GridMin.Y))
+        {
+            Cell->bIsWater = true;
         }
     }
 

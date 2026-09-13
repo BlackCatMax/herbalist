@@ -8,24 +8,25 @@
 // (сплайн + point-in-polygon), что и у ABiomeRegionVolume -- наследуется
 // напрямую, чтобы не дублировать UpdateCachedPoints/IsPointInside.
 //
-// Biome/MinResourcesPer100SquareMeters/MaxResourcesPer100SquareMeters/ResourceRegrowthTimeSeconds/
-// WaterDensity, унаследованные от родителя, здесь НЕ используются (вода не
-// спавнит ресурсы вовсе -- SpawnResourcesInCell в InitializeCells вызывается
-// только для !Cell.bIsWater) -- остаются видимыми в Details как безвредный,
+// Biome/MinResourcesPer100SquareMeters/MaxResourcesPer100SquareMeters/ResourceRegrowthTimeSeconds,
+// унаследованные от родителя, здесь НЕ используются (водную клетку засевает
+// аквапул водных растений в SpawnResourcesInCell, а плотность и отрастание
+// берутся у земляного региона) -- остаются видимыми в Details как безвредный,
 // не идеальный побочный эффект переиспользования готовой геометрии, не
 // стоящий дублирования спланового кода ради чистоты панели.
 //
-// Клетка внутри формы этого региона получает bIsWater=true БЕЗУСЛОВНО (вес
-// всегда 1, не участвует в вероятностной WaterDensity-раскладке обычных
-// ABiomeRegionVolume) -- WaterTypeID при этом резолвится от УЖЕ
-// определённого Cell.Biome (тот приходит от обычных, "земляных"
-// ABiomeRegionVolume, покрывающих ту же клетку, независимо от воды) --
-// тем же UWaterTypeRegistrySubsystem::GetRandomWaterType, что уже
-// использует случайная (density-based) вода. AWaterRegionVolume НЕ
-// участвует в проходе InitializeCells по земляным регионам (явно исключается
-// по типу в GridWorldManagerCore.cpp) -- иначе унаследованный дефолтный
-// Biome=MixedForest ошибочно застолбил бы себе долю в Cell.BiomeWeights,
-// подменяя собой земляной биом, а не просто заливая его водой поверх.
+// Регион воды -- единственный источник воды (2026-09-13, решение
+// пользователя: пятна воды по плотности региона убраны). Клетка внутри формы
+// получает bIsWater=true БЕЗУСЛОВНО (вес всегда 1), а вода берётся от УЖЕ
+// определённых биомов клетки -- их дают обычные, "земляные"
+// ABiomeRegionVolume, покрывающие ту же клетку: тип воды для сбора -- от
+// доминирующего биома, состояние -- смесь воды биомов по долям BiomeWeights,
+// и на стыке биомов вода смешивается (AGridWorldManager::RollWaterStateForCell).
+// AWaterRegionVolume НЕ участвует в проходе InitializeCells по земляным
+// регионам (явно исключается по типу в GridWorldManagerCore.cpp) -- иначе
+// унаследованный дефолтный Biome=MixedForest ошибочно застолбил бы себе долю
+// в Cell.BiomeWeights, подменяя собой земляной биом, а не просто заливая его
+// водой поверх.
 #pragma once
 
 #include "CoreMinimal.h"

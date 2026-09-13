@@ -512,9 +512,7 @@ bool FHerbalistBiomeGraph_PropagateWavesConservesTotalMorokAcrossAllNodes::RunTe
             const FName BiomeID = FBiomeDefaults::BiomeTypeToName(Cell->Biome);
             if (const FBiomeGraphNode* Node = Graph->GetNode(BiomeID))
             {
-                const FRealState BiomeDefault = Cell->bIsWater
-                    ? FBiomeDefaults::GetDefaultWaterState(Cell->Biome)
-                    : FBiomeDefaults::GetDefaultState(Cell->Biome);
+                const FRealState BiomeDefault = AGridWorldManager::GetCellDefaultState(*Cell);
                 Cell->State.Meta.Distortion = BiomeDefault.Meta.Distortion + Node->MorokField;
             }
         }

@@ -1314,9 +1314,7 @@ FHerbalistChunkSummary AGridWorldManager::BuildChunkSummary(const FIntPoint& Chu
             // релаксации (0.01/с): соседние биомы просто усреднились бы, и
             // Болото перестало бы отличаться от Поймы. На отклонениях в покое
             // переносить нечего -- диффундирует только реальный избыток.
-            const FRealState BiomeDefault = Cell->bIsWater
-                ? FBiomeDefaults::GetDefaultWaterState(Cell->Biome)
-                : FBiomeDefaults::GetDefaultState(Cell->Biome);
+            const FRealState BiomeDefault = GetCellDefaultState(*Cell);
 
             const int32 BiomeIndex = static_cast<int32>(Cell->Biome);
             if (!ensureMsgf(BiomeIndex < HerbalistBiomeTypeCount, TEXT("EBiomeType %d вне HerbalistBiomeTypeCount"), BiomeIndex))
@@ -1559,9 +1557,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             // Раньше "ведро" тянуло абсолютный Distortion к затухающему полю,
             // то есть к нулю, и заодно метило грязными все 400 клеток каждый
             // шаг при настоящих дефолтах биомов.
-            const FRealState MorokBiomeDefault = Cell.bIsWater
-                ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
-                : FBiomeDefaults::GetDefaultState(Cell.Biome);
+            const FRealState MorokBiomeDefault = GetCellDefaultState(Cell);
             const float DistortionDeviation = NewTarget.Meta.Distortion - MorokBiomeDefault.Meta.Distortion;
             const float NewDistortionDeviation = DistortionDeviation
                 + (*MorokField * PushRate * GlobalScale - DecayRate * DistortionDeviation) * DeltaTime;
@@ -1591,9 +1587,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             const float PushRate = Settings ? Settings->ZaryanaEffectPushRate : 0.01f;
             const float DecayRate = Settings ? Settings->ZaryanaEffectDecayRate : 0.01f;
 
-            const FRealState BiomeDefault = Cell.bIsWater
-                ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
-                : FBiomeDefaults::GetDefaultState(Cell.Biome);
+            const FRealState BiomeDefault = GetCellDefaultState(Cell);
 
             const float StabilityDeviation = NewTarget.Meta.Stability - BiomeDefault.Meta.Stability;
             const float NewStabilityDeviation = StabilityDeviation
@@ -1695,16 +1689,101 @@ void AGridWorldManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 // ИНИЦИАЛИЗАЦИЯ МИРА
 // ============================================================================
 
+namespace
+{
+    // Взвешенная сумма состояний. Доли BiomeWeights в сумме дают 1, а смесь
+    // одного биома с долей 1 совпадает с его состоянием точно.
+    void AddWeightedCellState(FRealState& Sum, const FRealState& State, float Weight)
+    {
+        Sum.Magnitude += State.Magnitude * Weight;
+        Sum.Direction.Body += State.Direction.Body * Weight;
+        Sum.Direction.Mind += State.Direction.Mind * Weight;
+        Sum.Direction.Spirit += State.Direction.Spirit * Weight;
+        Sum.Direction.Nature += State.Direction.Nature * Weight;
+        Sum.Meta.Distortion += State.Meta.Distortion * Weight;
+        Sum.Meta.Stability += State.Meta.Stability * Weight;
+        Sum.Meta.Purity += State.Meta.Purity * Weight;
+        Sum.Meta.Potency += State.Meta.Potency * Weight;
+        Sum.Meta.Resonance += State.Meta.Resonance * Weight;
+        Sum.Meta.Corruption += State.Meta.Corruption * Weight;
+    }
+}
+
 FName AGridWorldManager::RollWaterTypeForCell(const FGridCell& Cell, const UWaterTypeRegistrySubsystem* WaterSubsystem) const
 {
+    return RollWaterTypeForBiome(Cell.X, Cell.Y, Cell.Biome, WaterSubsystem);
+}
+
+FName AGridWorldManager::RollWaterTypeForBiome(int32 X, int32 Y, EBiomeType Biome, const UWaterTypeRegistrySubsystem* WaterSubsystem) const
+{
     // Поток клетки, не общий WorldRNG (этап 4 разметки мира): тип воды не
-    // зависит от того, сколько клеток и в каком порядке залито раньше.
+    // зависит от того, сколько клеток и в каком порядке залито раньше. У всех
+    // биомов клетки поток один и тот же.
     if (!WaterSubsystem)
     {
         return NAME_None;
     }
-    FRandomStream WaterRng = MakeCellRandomStream(Cell.X, Cell.Y, FWorldLayoutSolver::ECellRandomPurpose::WaterType);
-    return WaterSubsystem->GetRandomWaterType(Cell.Biome, WaterRng);
+    FRandomStream WaterRng = MakeCellRandomStream(X, Y, FWorldLayoutSolver::ECellRandomPurpose::WaterType);
+    return WaterSubsystem->GetRandomWaterType(Biome, WaterRng);
+}
+
+FRealState AGridWorldManager::RollWaterStateForCell(const FGridCell& Cell, const UWaterTypeRegistrySubsystem* WaterSubsystem) const
+{
+    // Решение пользователя 2026-09-13: вода берёт воду биома, в котором лежит,
+    // а на границах биомов смешивается. Состояние -- смесь состояний типов воды
+    // биомов клетки по долям BiomeWeights; у клетки без долей (блочный фолбэк)
+    // -- вода одного Cell.Biome.
+    const auto WaterStateForBiome = [this, &Cell, WaterSubsystem](EBiomeType Biome)
+    {
+        FRealState State = FBiomeDefaults::GetDefaultWaterState(Biome);
+        if (WaterSubsystem)
+        {
+            if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(RollWaterTypeForBiome(Cell.X, Cell.Y, Biome, WaterSubsystem)))
+            {
+                State.Meta.Purity      = WaterRow->BasePurity;
+                State.Meta.Distortion  = WaterRow->BaseDistortion;
+                State.Meta.Stability   = WaterRow->BaseStability;
+                State.Meta.Potency     = WaterRow->BasePotency;
+                State.Meta.Corruption  = WaterRow->BaseCorruption;
+            }
+        }
+        return State;
+    };
+
+    if (Cell.BiomeWeights.Num() == 0)
+    {
+        return WaterStateForBiome(Cell.Biome);
+    }
+    FRealState Mixed;
+    for (const FBiomeWeightEntry& Entry : Cell.BiomeWeights)
+    {
+        AddWeightedCellState(Mixed, WaterStateForBiome(Entry.Biome), Entry.Weight);
+    }
+    return Mixed;
+}
+
+FRealState AGridWorldManager::GetCellDefaultState(const FGridCell& Cell)
+{
+    // Умолчание, к которому клетку тянут Морок, Заряна и выход из испорченного
+    // полюса. У суши -- умолчание доминирующего биома. У воды -- смесь по тем же
+    // долям, что при заливке, но из умолчаний воды биомов: иначе вода на стыке
+    // сползала бы к воде доминирующего биома. Без реестра воды совпадает с
+    // заливкой точно; с реестром заливка берёт величины строк типа воды, и
+    // клетка тянется от них к умолчаниям -- так было и до смеси (ревью 2026-09-13).
+    if (!Cell.bIsWater)
+    {
+        return FBiomeDefaults::GetDefaultState(Cell.Biome);
+    }
+    if (Cell.BiomeWeights.Num() == 0)
+    {
+        return FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
+    }
+    FRealState Mixed;
+    for (const FBiomeWeightEntry& Entry : Cell.BiomeWeights)
+    {
+        AddWeightedCellState(Mixed, FBiomeDefaults::GetDefaultWaterState(Entry.Biome), Entry.Weight);
+    }
+    return Mixed;
 }
 
 void AGridWorldManager::InitializeCells()
@@ -1726,7 +1805,6 @@ void AGridWorldManager::InitializeCells()
 
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
-    UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
 
     // Заливка водой и основа клетки -- члены менеджера (ApplyWaterToCell,
     // BuildCellBase, этап 8в): те же функции собирают страницу при загрузке.
@@ -1754,20 +1832,19 @@ void AGridWorldManager::InitializeCells()
         UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: ни одного ABiomeRegionVolume не найдено в уровне -- вся сетка идёт по блочному фолбэку (5x5)"));
     }
 
-    // Явные регионы воды (2026-09-02, прямой запрос пользователя) -- вода
-    // как отдельный, вручную нарисованный "биом", всегда побеждающий (вес 1,
-    // не размешивается с земляными регионами) для флага bIsWater конкретной
-    // клетки, но НЕ подменяющий собой Cell.Biome (тот резолвится обычным
-    // путём выше, из земляных регионов) -- WaterTypeID ниже берётся именно
-    // из уже определённого Cell.Biome, поэтому вода поверх болота
-    // автоматически получает болотный тип воды, поверх тундры -- тундровый.
-    TArray<AWaterRegionVolume*> WaterRegions;
+    // Регионы воды (2026-09-02, прямой запрос пользователя) -- с 2026-09-13
+    // единственный источник воды (решение пользователя: пятна воды убраны).
+    // Вода побеждает всегда (вес 1, не размешивается с земляными регионами)
+    // для флага bIsWater, но НЕ подменяет Cell.Biome: тот резолвится из
+    // земляных регионов, а вода берёт воду биомов клетки
+    // (RollWaterStateForCell). Список нужен и основе страницы при загрузке.
+    CachedWaterRegions.Reset();
     for (TActorIterator<AWaterRegionVolume> It(GetWorld()); It; ++It)
     {
         AWaterRegionVolume* Region = *It;
         if (!Region) continue;
         Region->UpdateCachedPoints();
-        WaterRegions.Add(Region);
+        CachedWaterRegions.Add(Region);
     }
 
     // Сохраняем для GetSpawnPositionWithinBiome — тот же список пригодится
@@ -1787,13 +1864,6 @@ void AGridWorldManager::InitializeCells()
     const FHerbalistCellBaseContext BaseContext = MakeCellBaseContext();
     int32 FallbackCellCount = 0;
 
-    // Регион, реально заявивший каждую клетку (2026-09-02, для
-    // пер-региональной плотности воды ниже) -- параллельно Cells, тот же
-    // индекс. nullptr -- клетка вне всех регионов (блочный фолбэк) ИЛИ
-    // регионов на уровне нет вовсе.
-    TArray<ABiomeRegionVolume*> CellRegion;
-    CellRegion.SetNumZeroed(TotalCells);
-
     // Координаты клеток -- глобальные, от начала сетки World Partition (этап 6
     // разметки мира); X, Y цикла -- локальный индекс в массиве.
     const FIntPoint GridMin = GetGridMinCell();
@@ -1804,27 +1874,11 @@ void AGridWorldManager::InitializeCells()
             int32 Index = Y * GridSizeX + X;
             FGridCell& Cell = *GetCellByGridIndex(Index);
 
-            // Основа клетки -- та же функция, что собирает страницу при
-            // загрузке (этап 8в). Вода пятнами ещё не разложена: маска
-            // строится ниже, после неё.
-            ABiomeRegionVolume* ClaimingRegion = BuildCellBase(GridMin.X + X, GridMin.Y + Y, Cell, BaseContext, ECellBaseWater::None);
-            CellRegion[Index] = ClaimingRegion;
-            if (!ClaimingRegion)
+            // Основа клетки, вода из регионов воды включительно -- та же
+            // функция, что собирает страницу при загрузке (этап 8в).
+            if (!BuildCellBase(GridMin.X + X, GridMin.Y + Y, Cell, BaseContext))
             {
                 ++FallbackCellCount;
-            }
-
-            // Явный регион воды (2026-09-02) -- вес всегда 1, безусловно
-            // заливает клетку поверх уже определённого Cell.Biome, не
-            // участвует в вероятностной WaterDensity-раскладке ниже.
-            const FVector CellWorldPos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
-            for (AWaterRegionVolume* WaterRegion : WaterRegions)
-            {
-                if (WaterRegion && WaterRegion->IsPointInside(CellWorldPos))
-                {
-                    ApplyWaterToCell(Cell, WaterSubsystem);
-                    break;
-                }
             }
         }
     }
@@ -1840,149 +1894,8 @@ void AGridWorldManager::InitializeCells()
             FallbackCellCount, TotalCells, TotalCells > 0 ? 100.0f * FallbackCellCount / TotalCells : 0.0f);
     }
 
-    // ------------------------------------------------------------------------
-    // Размещение водоёмов -- пер-региональная плотность
-    // (ABiomeRegionVolume::WaterDensity, 2026-09-02, прямой запрос
-    // пользователя "настройки под все дела в этих волюмах"). Было: единое
-    // TotalCells/5 (=20%) без учёта биома вообще (степь и болото заливались
-    // одинаково). Каждый регион -- свой пул клеток (плюс отдельный
-    // "фолбэк"-пул: клетки вне всех регионов, включая случай "регионов на
-    // уровне нет вовсе" -- у него дефолт 0.2, то же число, что раньше было
-    // TotalCells/5 для всей сетки). Блок (1x1..2x2, как раньше) не
-    // пересекает границу пула -- случайная точка-затравка берётся ИЗ
-    // списка клеток пула, не из всей сетки: на большой сетке с маленьким
-    // регионом равномерный бросок по всей сетке почти никогда не попадал бы
-    // в маленький пул, сходимость была бы неприемлемо медленной.
-    //
-    // БЕЗ регионов на уровне -- прежний алгоритм пятен (тот же порядок бросков
-    // WorldRNG за пятнами; тип воды с 2026-09-12 -- из потока клетки, и при том
-    // же сиде раскладка другая, чем до этапа 4 разметки мира), не через пул: этот путь используют
-    // практически ВСЕ существующие тесты (SpawnAndBeginPlay без регионов),
-    // многие неявно зависят от точной раскладки воды при дефолтном
-    // RngBaseSeed. Найдено регрессией: единый пуловый алгоритм ниже даёт
-    // другую раскладку даже с одним пулом на всю сетку (иной порядок
-    // потребления Rng -- сид-затравка через RandRange по списку клеток
-    // пула, а не W/H/StartX/StartY подряд), что различным образом смещает,
-    // какие именно клетки становятся водой -- и это меняет исход конкретных
-    // тестов, рассчитанных на то, что определённая клетка ОСТАЁТСЯ водой
-    // (например, Herbalist.AmbientEntity.DecorativeEntitiesManifestWithoutEffect
-    // держится на воде на клетке вне явно заданных, защищающей её от
-    // ошибочной сухопутной сущности).
-    // ------------------------------------------------------------------------
-    // Затравка из уже проставленного bIsWater -- явные регионы воды
-    // (2026-09-02) могли заранее залить часть клеток безусловно, до того,
-    // как этот блок вообще начал работать; без явных регионов на уровне
-    // (сегодняшний путь абсолютного большинства тестов) Cell.bIsWater
-    // сейчас false у всех, так что это ничем не отличается от Init(false, ...).
-    TArray<bool> IsWaterAlready;
-    IsWaterAlready.SetNumUninitialized(TotalCells);
-    for (int32 Idx = 0; Idx < TotalCells; ++Idx)
-    {
-        IsWaterAlready[Idx] = GetCellByGridIndex(Idx)->bIsWater;
-    }
-
-    if (BiomeRegions.Num() == 0)
-    {
-        int32 TargetWaterCount = FMath::Max(TotalCells / 5, 1);
-        int32 PlacedWater = 0;
-
-        while (PlacedWater < TargetWaterCount)
-        {
-            int32 W = (WorldRNG.FRand() < 0.5f) ? 1 : 2;
-            int32 H = (WorldRNG.FRand() < 0.5f) ? 1 : 2;
-            int32 StartX = WorldRNG.RandRange(0, GridSizeX - W);
-            int32 StartY = WorldRNG.RandRange(0, GridSizeY - H);
-
-            bool bAreaFree = true;
-            for (int32 dy = 0; dy < H && bAreaFree; ++dy)
-                for (int32 dx = 0; dx < W; ++dx)
-                    if (IsWaterAlready[(StartY + dy) * GridSizeX + (StartX + dx)])
-                        { bAreaFree = false; break; }
-
-            if (!bAreaFree) continue;
-
-            for (int32 dy = 0; dy < H; ++dy)
-            {
-                for (int32 dx = 0; dx < W; ++dx)
-                {
-                    int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    ApplyWaterToCell(*GetCellByGridIndex(Idx), WaterSubsystem);
-                    IsWaterAlready[Idx] = true;
-                    PlacedWater++;
-                }
-            }
-            if (PlacedWater >= TargetWaterCount) break;
-        }
-    }
-    else
-    {
-    TMap<ABiomeRegionVolume*, TArray<int32>> CellsByPool;
-    for (int32 Idx = 0; Idx < TotalCells; ++Idx)
-    {
-        CellsByPool.FindOrAdd(CellRegion[Idx]).Add(Idx);
-    }
-
-    for (const TPair<ABiomeRegionVolume*, TArray<int32>>& PoolPair : CellsByPool)
-    {
-        ABiomeRegionVolume* PoolRegion = PoolPair.Key;
-        const TArray<int32>& PoolCells = PoolPair.Value;
-        if (PoolCells.Num() == 0) continue;
-
-        const float Density = PoolRegion ? PoolRegion->WaterDensity : 0.2f;
-        const int32 TargetForPool = FMath::Clamp(FMath::RoundToInt(PoolCells.Num() * Density), 0, PoolCells.Num());
-        if (TargetForPool <= 0) continue;
-
-        int32 PlacedInPool = 0;
-        // Запас попыток -- маленький пул с плотной застройкой блоками
-        // сходится медленнее одной большой сетки, но не бесконечно:
-        // безопасный предел вместо потенциального зависания.
-        const int32 MaxAttempts = PoolCells.Num() * 20 + 50;
-        for (int32 Attempt = 0; PlacedInPool < TargetForPool && Attempt < MaxAttempts; ++Attempt)
-        {
-            const int32 SeedIdx = PoolCells[WorldRNG.RandRange(0, PoolCells.Num() - 1)];
-            const int32 StartX = SeedIdx % GridSizeX;
-            const int32 StartY = SeedIdx / GridSizeX;
-
-            const int32 W = (WorldRNG.FRand() < 0.5f) ? 1 : 2;
-            const int32 H = (WorldRNG.FRand() < 0.5f) ? 1 : 2;
-            if (StartX + W > GridSizeX || StartY + H > GridSizeY) continue;
-
-            // Свободна ли область И целиком внутри того же пула -- блок не
-            // пересекает границу региона.
-            bool bAreaFree = true;
-            for (int32 dy = 0; dy < H && bAreaFree; ++dy)
-            {
-                for (int32 dx = 0; dx < W; ++dx)
-                {
-                    const int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    if (IsWaterAlready[Idx] || CellRegion[Idx] != PoolRegion) { bAreaFree = false; break; }
-                }
-            }
-            if (!bAreaFree) continue;
-
-            for (int32 dy = 0; dy < H; ++dy)
-            {
-                for (int32 dx = 0; dx < W; ++dx)
-                {
-                    const int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    ApplyWaterToCell(*GetCellByGridIndex(Idx), WaterSubsystem);
-                    IsWaterAlready[Idx] = true;
-                    ++PlacedInPool;
-                }
-            }
-        }
-    }
-    }
-
-    // Маска воды (этап 8в): пятна воды разложены общим WorldRNG по пулам всей
-    // сетки и чистой функцией страницы не являются -- основа страницы при
-    // загрузке берёт воду отсюда. Дельты и отложенные отрастания прошлой сетки
-    // к этой не относятся.
-    BakedWaterMask.Init(false, TotalCells);
-    for (int32 Idx = 0; Idx < TotalCells; ++Idx)
-    {
-        BakedWaterMask[Idx] = IsWaterAlready[Idx];
-    }
+    // Дельты, засеянные клетки и отложенные отрастания прошлой сетки к этой не
+    // относятся (этап 8в).
     UnloadedCellDeltas.Reset();
     SeededCellMask.Init(false, TotalCells);
     UnloadedCellRosters.Reset();
@@ -2023,7 +1936,8 @@ void AGridWorldManager::InitializeCells()
     SeedLegendaryAnchors();
 
     // Точки интереса (§4, 2026-09-06) — детерминированная расстановка общим
-    // WorldRNG, тем же, что пятна воды выше (тип воды и ресурсы -- потоки клеток); ДО снимков страниц
+    // WorldRNG, тем же, что хозяева мест и якоря выше (тип воды и ресурсы --
+    // потоки клеток); ДО снимков страниц
     // ниже, тот же довод: baseline должен увидеть уже финальную, а не
     // частично засеянную сетку (курганы/Тотем/Светлояр/Горюч-камень/Соловей
     // сами по себе не трогают Cell.State при севе, но порядок здесь общий
@@ -2079,32 +1993,21 @@ FHerbalistCellBaseContext AGridWorldManager::MakeCellBaseContext() const
 
 void AGridWorldManager::ApplyWaterToCell(FGridCell& Cell, const UWaterTypeRegistrySubsystem* WaterSubsystem) const
 {
-    // Общая точка заливки клетки водой -- явные регионы воды, пятна воды и
-    // основа страницы из маски (2026-09-02, членом менеджера с этапа 8в).
-    // Читает уже выставленный Cell.Biome -- вода поверх болота получает
-    // болотный WaterTypeID, поверх тундры -- тундровый, автоматически.
+    // Общая точка заливки клетки водой -- регионы воды при старте и при
+    // загрузке страницы (2026-09-02, членом менеджера с этапа 8в). Читает уже
+    // выставленные Cell.Biome и доли BiomeWeights: тип воды для сбора -- от
+    // доминирующего биома, состояние -- смесь воды биомов клетки по долям
+    // (решение пользователя 2026-09-13).
     Cell.bIsWater = true;
     Cell.WaterTypeID = RollWaterTypeForCell(Cell, WaterSubsystem);
-
-    FRealState WaterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
-    if (WaterSubsystem)
-    {
-        if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
-        {
-            WaterState.Meta.Purity      = WaterRow->BasePurity;
-            WaterState.Meta.Distortion  = WaterRow->BaseDistortion;
-            WaterState.Meta.Stability   = WaterRow->BaseStability;
-            WaterState.Meta.Potency     = WaterRow->BasePotency;
-            WaterState.Meta.Corruption  = WaterRow->BaseCorruption;
-        }
-    }
+    const FRealState WaterState = RollWaterStateForCell(Cell, WaterSubsystem);
     Cell.State = WaterState;
     Cell.TargetState = WaterState;
     Cell.HarvestStress = 0.0f;
     Cell.ResourceActors.Empty();
 }
 
-ABiomeRegionVolume* AGridWorldManager::BuildCellBase(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context, ECellBaseWater Water) const
+ABiomeRegionVolume* AGridWorldManager::BuildCellBase(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context) const
 {
     // Какие регионы содержат клетку -- равная доля на каждый (0.5/0.5 на двух,
     // 1/3 на трёх и т.д., без авторского "усиления" региона -- вертикальный
@@ -2181,12 +2084,15 @@ ABiomeRegionVolume* AGridWorldManager::BuildCellBase(int32 X, int32 Y, FGridCell
     OutCell.bIsWater      = false;
     OutCell.WaterTypeID   = NAME_None;
 
-    if (Water == ECellBaseWater::FromBakedMask)
+    // Регион воды заливает клетку поверх биома. Вода -- только из регионов
+    // воды (решение пользователя 2026-09-13, пятна воды убраны).
+    for (const TWeakObjectPtr<AWaterRegionVolume>& WeakWaterRegion : CachedWaterRegions)
     {
-        const int32 GridIndex = GetCellIndex(X, Y);
-        if (BakedWaterMask.IsValidIndex(GridIndex) && BakedWaterMask[GridIndex])
+        const AWaterRegionVolume* WaterRegion = WeakWaterRegion.Get();
+        if (WaterRegion && WaterRegion->IsPointInside(CellWorldPos))
         {
             ApplyWaterToCell(OutCell, Context.WaterSubsystem);
+            break;
         }
     }
     return ClaimingRegion;
@@ -2203,7 +2109,7 @@ bool AGridWorldManager::BuildUnloadedCell(int32 X, int32 Y, FGridCell& OutCell, 
     {
         return false;
     }
-    BuildCellBase(X, Y, OutCell, Context, ECellBaseWater::FromBakedMask);
+    BuildCellBase(X, Y, OutCell, Context);
     if (const FSavedCellState* Delta = UnloadedCellDeltas.Find(GetCellIndex(X, Y)))
     {
         CopySavedCellFields(OutCell, *Delta);
@@ -2259,7 +2165,7 @@ void AGridWorldManager::LoadCellPage(FHerbalistCellPage& Page)
         for (int32 LocalX = 0; LocalX < Page.Size.X; ++LocalX)
         {
             FGridCell& Cell = Page.Cells[LocalY * Page.Size.X + LocalX];
-            BuildCellBase(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY, Cell, Context, ECellBaseWater::FromBakedMask);
+            BuildCellBase(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY, Cell, Context);
             Page.Baselines.Add(CaptureCellState(Cell));
         }
     }
@@ -3462,11 +3368,9 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
             else
             {
                 // Игрок продавил Corruption ниже порога выхода — цель
-                // возвращается к здоровому умолчанию биома (или воды,
-                // у неё отдельная таблица default-состояний).
-                const FRealState Healthy = Cell.bIsWater
-                    ? FBiomeDefaults::GetDefaultWaterState(Cell.Biome)
-                    : FBiomeDefaults::GetDefaultState(Cell.Biome);
+                // возвращается к здоровому умолчанию клетки (у воды -- смесь
+                // умолчаний воды её биомов, GetCellDefaultState).
+                const FRealState Healthy = GetCellDefaultState(Cell);
                 Cell.TargetState.Meta.Corruption = Healthy.Meta.Corruption;
                 Cell.TargetState.Meta.Purity     = Healthy.Meta.Purity;
                 Cell.TargetState.Meta.Distortion = Healthy.Meta.Distortion;

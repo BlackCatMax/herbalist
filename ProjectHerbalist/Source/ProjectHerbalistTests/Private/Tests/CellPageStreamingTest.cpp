@@ -13,6 +13,8 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/WorldLayout.h"
+#include "Core/World/BiomeRegionVolume.h"
+#include "Core/World/WaterRegionVolume.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
@@ -22,6 +24,8 @@
 #include "EngineUtils.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
+
+#include "TestWorldHelpers.h"
 
 namespace
 {
@@ -510,6 +514,96 @@ bool FHerbalistCellPageStreaming_RosterComesBackAsleep::RunTest(const FString& P
 
     StopStreaming(Manager);
     Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCellPageStreaming_WaterFromRegionsRebuildsFromBase,
+    "Herbalist.WorldLayout.PageStreaming.WaterFromRegionsRebuildsFromBase",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCellPageStreaming_WaterFromRegionsRebuildsFromBase::RunTest(const FString& Parameters)
+{
+    // Вода только из регионов воды, на стыке биомов -- смесь (решения
+    // пользователя 2026-09-13). Основа выгруженной страницы собирается без
+    // запечённой маски воды: вода, её смесь и суша возвращаются один в один.
+    // Клетка 9 м, глобальная клетка X -- мировые X * 900 см. Страница (0, 0):
+    // Болото X 0..9, Степь X 4..13 (перекрытие 4..9), вода Y 0..4.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World))
+    {
+        return false;
+    }
+    for (TActorIterator<ABiomeRegionVolume> It(World); It; ++It)
+    {
+        It->Destroy();
+    }
+    ABiomeRegionVolume* BogRegion = SpawnRegionCoveringWorldRect(World, EBiomeType::Bog, -450.f, -450.f, 8550.f, 12150.f);
+    ABiomeRegionVolume* SteppeRegion = SpawnRegionCoveringWorldRect(World, EBiomeType::Steppe, 3150.f, -450.f, 12150.f, 12150.f);
+    AWaterRegionVolume* WaterRegion = SpawnWaterRegionCoveringWorldRect(World, -450.f, -450.f, 12150.f, 4050.f);
+    const auto DestroyRegions = [BogRegion, SteppeRegion, WaterRegion]()
+    {
+        if (BogRegion) BogRegion->Destroy();
+        if (SteppeRegion) SteppeRegion->Destroy();
+        if (WaterRegion) WaterRegion->Destroy();
+    };
+    if (!TestNotNull(TEXT("Bog region spawned"), BogRegion) || !TestNotNull(TEXT("Steppe region spawned"), SteppeRegion)
+        || !TestNotNull(TEXT("Water region spawned"), WaterRegion))
+    {
+        DestroyRegions();
+        return false;
+    }
+
+    FScopedStreamingTestRadius ScopedRadius;
+    AGridWorldManager* Manager = SpawnStreamingTestManager(World, 6300.0);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager))
+    {
+        DestroyRegions();
+        return false;
+    }
+
+    TArray<FCellBaseSnapshot> Before;
+    int32 WaterCells = 0;
+    int32 MixedWaterCells = 0;
+    int32 LandCells = 0;
+    for (int32 Y = 0; Y < 14; ++Y)
+    {
+        for (int32 X = 0; X < 14; ++X)
+        {
+            if (const FGridCell* Cell = Manager->GetCellConst(X, Y))
+            {
+                Before.Add(SnapshotCellBase(Manager, *Cell));
+                WaterCells += Cell->bIsWater ? 1 : 0;
+                MixedWaterCells += (Cell->bIsWater && Cell->BiomeWeights.Num() == 2) ? 1 : 0;
+                LandCells += Cell->bIsWater ? 0 : 1;
+            }
+        }
+    }
+    AddInfo(FString::Printf(TEXT("Страница (0, 0): воды %d, из неё на стыке %d, суши %d"), WaterCells, MixedWaterCells, LandCells));
+    if (!TestTrue(TEXT("Sanity: на странице есть вода, вода на стыке биомов и суша"), WaterCells > 0 && MixedWaterCells > 0 && LandCells > 0))
+    {
+        Manager->Destroy();
+        DestroyRegions();
+        return false;
+    }
+
+    StreamTo(Manager, GroundUnderWestPage, FIntPoint(-2, -2));
+    TestNull(TEXT("Клетка (0, 0) выгружена"), Manager->GetCellConst(0, 0));
+    StreamTo(Manager, GroundUnderWholeSmallGrid, FIntPoint(1, 1));
+
+    int32 Mismatches = 0;
+    for (const FCellBaseSnapshot& Snapshot : Before)
+    {
+        const FGridCell* Cell = Manager->GetCellConst(Snapshot.Cell.X, Snapshot.Cell.Y);
+        if (!Cell || !SameCellBase(Snapshot, SnapshotCellBase(Manager, *Cell)))
+        {
+            ++Mismatches;
+        }
+    }
+    TestEqual(TEXT("Вода, её смесь и суша страницы пересобраны один в один"), Mismatches, 0);
+
+    StopStreaming(Manager);
+    Manager->Destroy();
+    DestroyRegions();
     return true;
 }
 

@@ -37,6 +37,7 @@ class AHerbalistEntityActor;
 class AHerbalistPlayerController;
 class ALandscape;
 class ABiomeRegionVolume;
+class AWaterRegionVolume;
 class AStorageContainer;
 class UMaterialParameterCollection;
 struct FWorldSnapshot;
@@ -74,8 +75,20 @@ public:
     // GameInstance. nullptr -- подсистема из GameInstance.
     void SpawnResourcesInCell(FGridCell& Cell, class UIngredientRegistrySubsystem* IngredientSubsystemOverride = nullptr);
 
-    // Тип воды клетки из её собственного потока (этап 4 разметки мира).
+    // Тип воды клетки из её собственного потока (этап 4 разметки мира): у
+    // клетки -- по доминирующему биому, RollWaterTypeForBiome -- по любому.
     FName RollWaterTypeForCell(const FGridCell& Cell, const class UWaterTypeRegistrySubsystem* WaterSubsystem) const;
+    FName RollWaterTypeForBiome(int32 X, int32 Y, EBiomeType Biome, const class UWaterTypeRegistrySubsystem* WaterSubsystem) const;
+
+    // Состояние воды клетки: смесь состояний типов воды её биомов по долям
+    // BiomeWeights (решение пользователя 2026-09-13); без реестра воды -- смесь
+    // умолчаний воды биомов. Клетка без долей -- вода одного Cell.Biome.
+    FRealState RollWaterStateForCell(const FGridCell& Cell, const class UWaterTypeRegistrySubsystem* WaterSubsystem) const;
+
+    // Умолчание клетки, к которому её тянут Морок, Заряна и выход из
+    // испорченного полюса: у суши -- биома, у воды -- смесь умолчаний воды её
+    // биомов по долям.
+    static FRealState GetCellDefaultState(const FGridCell& Cell);
 
     // Сколько ресурсов положить в клетку: плотность на 100 м² (случайная между
     // Min и Max) × площадь клетки × DensityScale (затухание к краю региона);
@@ -209,8 +222,8 @@ public:
 
     // Поток случайных чисел клетки (этап 4 разметки мира): тот же результат
     // при любом порядке обхода. Основа клетки -- тип воды, число, виды и места
-    // ресурсов -- берётся отсюда; мировые выборы (пятна воды, хозяева мест,
-    // курганы, места силы) пока остаются на общем WorldRNG.
+    // ресурсов -- берётся отсюда; мировые выборы (хозяева мест, курганы,
+    // места силы) пока остаются на общем WorldRNG.
     FRandomStream MakeCellRandomStream(int32 X, int32 Y, FWorldLayoutSolver::ECellRandomPurpose Purpose, int32 Salt = 0) const;
 
     // Скорость, с которой State клетки идёт к TargetState, в долях в секунду
@@ -535,7 +548,7 @@ public:
 
     // Какой именно регион реально заявил эту клетку (2026-09-02, для
     // пер-региональных настроек плотности -- MinResourcesPer100SquareMeters/
-    // MaxResourcesPer100SquareMeters/ResourceRegrowthTimeSeconds/WaterDensity на самом
+    // MaxResourcesPer100SquareMeters/ResourceRegrowthTimeSeconds на самом
     // ABiomeRegionVolume). nullptr — клетка вне всех регионов ИЛИ регионов
     // на уровне вообще нет (в обоих случаях вызывающая сторона откатывается
     // на прежние глобальные дефолты). Если клетку перекрывают несколько
@@ -1650,7 +1663,7 @@ public:
     // IngredientID награды; разграбленный курган удаляется из карты целиком
     // (не отдельный bool bLooted -- нечего проверять на второй попытке, курган
     // просто больше не в KurganSites). Засеивается один раз в InitializeCells
-    // детерминированным WorldRNG (тот же генератор, что заливка воды/ресурсов
+    // детерминированным WorldRNG (тот же генератор, что хозяева мест и якоря
     // в этой же функции) -- не отдельный, несинхронизированный источник
     // случайности. Никакого актора на уровне -- v1 консольный (LootKurgan),
     // тот же принцип, что у SetGardenPlot/ActivateWard: обнаружение места --
@@ -1822,12 +1835,6 @@ protected:
     int32 LoadedCellCount = 0;
     FRandomStream WorldRNG;
 
-    // Вода пятнами (общий WorldRNG по пулам всей сетки) -- не чистая функция
-    // страницы: раскладка запекается при инициализации в маску по линейному
-    // индексу сетки (этап 8в). Бит на клетку: L_TestDev 50 176 бит (6 КБ),
-    // предел сетки 4 млн клеток -- 500 КБ.
-    TBitArray<> BakedWaterMask;
-
     // Отклонения клеток выгруженных страниц от основы, по линейному индексу
     // сетки (этап 8в).
     TMap<int32, FSavedCellState> UnloadedCellDeltas;
@@ -1907,6 +1914,11 @@ protected:
     // редакторе между сборкой этого кэша и следующим спавном ресурса.
     UPROPERTY()
     TArray<TWeakObjectPtr<ABiomeRegionVolume>> CachedBiomeRegions;
+
+    // Регионы воды -- тот же довод: по ним основа страницы при загрузке
+    // заливает воду (вода только из регионов воды, 2026-09-13).
+    UPROPERTY()
+    TArray<TWeakObjectPtr<AWaterRegionVolume>> CachedWaterRegions;
 
     // ---- Вспомогательные данные ----
     TMap<int32, float> LastHarvestTimeMap;
@@ -2157,9 +2169,9 @@ protected:
     FHerbalistCellBaseContext MakeCellBaseContext() const;
 
     // Основа клетки -- чистая функция координаты: биом и веса по регионам,
-    // блочный фолбэк, умолчания, при ECellBaseWater::FromBakedMask -- вода из маски.
+    // блочный фолбэк, умолчания, вода по регионам воды.
     // Возвращает регион, заявивший клетку (nullptr -- блочный фолбэк).
-    ABiomeRegionVolume* BuildCellBase(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context, ECellBaseWater Water) const;
+    ABiomeRegionVolume* BuildCellBase(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context) const;
     void ApplyWaterToCell(FGridCell& Cell, const UWaterTypeRegistrySubsystem* WaterSubsystem) const;
 
     // Клетка выгруженной страницы: основа плюс её дельта, без акторов. false --
