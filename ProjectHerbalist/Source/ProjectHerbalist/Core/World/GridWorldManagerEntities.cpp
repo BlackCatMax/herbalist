@@ -498,14 +498,14 @@ void AGridWorldManager::SeedTestLandmarks()
         };
 
         int32 Candidates = 0;
-        for (const FGridCell& Cell : Cells)
+        for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             if (IsSuitable(Cell)) ++Candidates;
         }
         if (Candidates == 0) continue;
 
         int32 Pick = WorldRNG.RandRange(0, Candidates - 1);
-        for (const FGridCell& Cell : Cells)
+        for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             if (!IsSuitable(Cell)) continue;
             if (Pick-- > 0) continue;
@@ -597,14 +597,14 @@ void AGridWorldManager::SeedLegendaryAnchors()
         };
 
         int32 Candidates = 0;
-        for (const FGridCell& Cell : Cells)
+        for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             if (IsSuitable(Cell)) ++Candidates;
         }
         if (Candidates == 0) continue;
 
         int32 Pick = WorldRNG.RandRange(0, Candidates - 1);
-        for (const FGridCell& Cell : Cells)
+        for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             if (!IsSuitable(Cell)) continue;
             if (Pick-- > 0) continue;

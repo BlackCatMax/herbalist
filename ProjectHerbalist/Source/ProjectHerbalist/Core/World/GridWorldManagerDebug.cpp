@@ -86,10 +86,10 @@ FString AGridWorldManager::GetSelectedCellInfo() const
 
 FString AGridWorldManager::GetGridCorruptionReport() const
 {
-    if (Cells.Num() == 0) return TEXT("Grid empty");
+    if (!HasCellPages()) return TEXT("Grid empty");
 
     // Из сводок чанков (разметка мира, этап 7), а не обходом всех клеток.
-    // Делитель -- клетки сводок, а не Cells.Num(): сумма и число из одного
+    // Делитель -- клетки сводок, а не размер сетки: сумма и число из одного
     // источника (ревью этапа 7).
     int32 CellCount = 0;
     int32 DegradingCount = 0;

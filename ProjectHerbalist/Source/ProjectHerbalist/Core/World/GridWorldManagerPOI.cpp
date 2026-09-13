@@ -19,15 +19,17 @@ namespace
     // (тем же WorldRNG) сдвига, ещё не занятая другим POI. Не retry-цикл со
     // случайными координатами (гарантированно завершается за один проход
     // по сетке даже на маленькой тестовой сетке).
-    FIntPoint SeedSinglePOISite(TArray<FGridCell>& Cells, FRandomStream& WorldRNG, const TSet<FIntPoint>& Occupied)
+    FIntPoint SeedSinglePOISite(const AGridWorldManager& Manager, FRandomStream& WorldRNG, const TSet<FIntPoint>& Occupied)
     {
-        const int32 TotalCells = Cells.Num();
+        const int32 TotalCells = Manager.GetGridCellCount();
         if (TotalCells == 0) return HerbalistCore::InvalidCell();
 
         const int32 StartIndex = WorldRNG.RandRange(0, TotalCells - 1);
         for (int32 Offset = 0; Offset < TotalCells; ++Offset)
         {
-            const FGridCell& Cell = Cells[(StartIndex + Offset) % TotalCells];
+            const FGridCell* CellPtr = Manager.GetCellByGridIndex((StartIndex + Offset) % TotalCells);
+            if (!CellPtr) continue;
+            const FGridCell& Cell = *CellPtr;
             if (Cell.bIsWater) continue;
 
             const FIntPoint Coord(Cell.X, Cell.Y);
@@ -67,7 +69,7 @@ void AGridWorldManager::SeedPointsOfInterest()
         Occupied.Add(Pair.Value);
     }
 
-    TotemSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
+    TotemSite = SeedSinglePOISite(*this, WorldRNG, Occupied);
     if (HerbalistCore::IsValidCell(TotemSite))
     {
         Occupied.Add(TotemSite);
@@ -84,7 +86,7 @@ void AGridWorldManager::SeedPointsOfInterest()
         }
     }
 
-    SvetloyarSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
+    SvetloyarSite = SeedSinglePOISite(*this, WorldRNG, Occupied);
     if (HerbalistCore::IsValidCell(SvetloyarSite))
     {
         Occupied.Add(SvetloyarSite);
@@ -98,7 +100,7 @@ void AGridWorldManager::SeedPointsOfInterest()
         }
     }
 
-    GoryuchKamenSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
+    GoryuchKamenSite = SeedSinglePOISite(*this, WorldRNG, Occupied);
     if (HerbalistCore::IsValidCell(GoryuchKamenSite))
     {
         Occupied.Add(GoryuchKamenSite);
@@ -112,14 +114,14 @@ void AGridWorldManager::SeedPointsOfInterest()
         }
     }
 
-    SoloveySite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
+    SoloveySite = SeedSinglePOISite(*this, WorldRNG, Occupied);
     if (HerbalistCore::IsValidCell(SoloveySite)) Occupied.Add(SoloveySite);
 
     // Калинов мост / Трёхглавый Змей (§4.4) -- в отличие от остальных выше,
     // сразу же становится Landmark (RegisterZmeyGorynych), не просто
     // координатой: взаимодействие идёт через уже существующий TalkTo/
     // ChooseDialogueBranch, а не отдельный запрос/Activate-метод.
-    KalinovMostSite = SeedSinglePOISite(Cells, WorldRNG, Occupied);
+    KalinovMostSite = SeedSinglePOISite(*this, WorldRNG, Occupied);
     if (HerbalistCore::IsValidCell(KalinovMostSite))
     {
         Occupied.Add(KalinovMostSite);
@@ -224,7 +226,7 @@ bool AGridWorldManager::ActivateSolovey()
     const int32 Radius = GetCellRadius(Settings ? Settings->SoloveyCorruptionRadiusMeters : 30.0f);
     const float Burst = Settings ? Settings->SoloveyCorruptionBurst : 0.3f;
 
-    for (FGridCell& Cell : Cells)
+    for (FGridCell& Cell : GetCellsInGridOrder())
     {
         const int32 Dist = FMath::Max(FMath::Abs(Cell.X - SoloveySite.X), FMath::Abs(Cell.Y - SoloveySite.Y));
         if (Dist > Radius) continue;

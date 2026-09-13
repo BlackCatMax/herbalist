@@ -29,7 +29,7 @@ void AGridWorldManager::SeedKurganSites()
     // именно этих двух карточек.
     static const TArray<FName> Loot = { FName(TEXT("Костяной нож")), FName(TEXT("Серебряный оберег")) };
 
-    const int32 TotalCells = Cells.Num();
+    const int32 TotalCells = GetGridCellCount();
     if (TotalCells == 0) return;
 
     // Детерминированный старт-сдвиг общим WorldRNG, тем же, что пятна воды
@@ -44,7 +44,9 @@ void AGridWorldManager::SeedKurganSites()
 
     for (int32 Offset = 0; Offset < TotalCells && LootIndex < Loot.Num(); ++Offset)
     {
-        const FGridCell& Cell = Cells[(StartIndex + Offset) % TotalCells];
+        const FGridCell* CellPtr = GetCellByGridIndex((StartIndex + Offset) % TotalCells);
+        if (!CellPtr) continue;
+        const FGridCell& Cell = *CellPtr;
         if (Cell.bIsWater) continue;
 
         const FIntPoint Coord(Cell.X, Cell.Y);

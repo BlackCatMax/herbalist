@@ -20,8 +20,9 @@
 #include "Core/Alchemy/RitualTypes.h"
 #include "Core/World/POITypes.h"
 #include "Core/World/ChunkSummaryTypes.h"
-// Полное определение, не форвард-декларация (аудит 2026-09-05, CellBaselines
-// ниже): TArray<FSavedCellState> — данные-член по значению, его конструктору/
+#include "Core/World/CellPageTypes.h"
+// Полное определение, не форвард-декларация (аудит 2026-09-05; снимки клеток
+// с этапа 8 -- в страницах): TArray<FSavedCellState> — данные-член по значению, его конструктору/
 // деструктору (в т.ч. авто-сгенерированному UHT в GridWorldManager.gen.cpp)
 // нужен полный тип в КАЖДОЙ единице трансляции, включающей этот заголовок,
 // не только в GridWorldManagerSave.cpp/GridWorldManagerCore.cpp. Циклической
@@ -432,6 +433,32 @@ public:
     // ---- Доступ к клеткам ----
     FGridCell* GetCell(int32 X, int32 Y);
     const FGridCell* GetCellConst(int32 X, int32 Y) const;
+
+    // Клетка по линейному индексу прямоугольника сетки -- построчно от первой
+    // клетки (этап 8). nullptr -- индекс вне сетки или страница не загружена.
+    FGridCell* GetCellByGridIndex(int32 GridIndex);
+    const FGridCell* GetCellByGridIndex(int32 GridIndex) const;
+    int32 GetGridCellCount() const { return FMath::Max(GridSizeX, 0) * FMath::Max(GridSizeY, 0); }
+
+    // Клетки загруженных страниц (этап 8).
+    int32 GetLoadedCellCount() const { return LoadedCellCount; }
+
+    // Сетка создана -- страницы есть, даже если все выгружены (этап 8). Для
+    // вопроса «есть ли сетка», а не «сколько клеток в памяти».
+    bool HasCellPages() const { return CellPages.Num() > 0; }
+
+    // Обходу строками нужны страницы напрямую.
+    template<typename ManagerType, typename CellType> friend class TGridCellRange;
+
+    // Обход клеток сетки построчно для range-for (этап 8) -- порядок единого
+    // массива до страниц: от него зависит расход WorldRNG при посеве мест.
+    TGridCellRange<AGridWorldManager, FGridCell> GetCellsInGridOrder() { return TGridCellRange<AGridWorldManager, FGridCell>(this); }
+    TGridCellRange<const AGridWorldManager, const FGridCell> GetCellsInGridOrder() const { return TGridCellRange<const AGridWorldManager, const FGridCell>(this); }
+
+    // Для тестов адресации страниц.
+    int32 GetCellPageCountForTests() const { return CellPages.Num(); }
+    bool GetCellPageBoundsForTests(int32 X, int32 Y, FIntPoint& OutMinCell, FIntPoint& OutSize) const;
+    bool GetCellBaselineCellForTests(int32 GridIndex, FIntPoint& OutCell) const;
     FVector GetCellWorldPosition(int32 X, int32 Y) const;
     FVector GetCellWorldPositionFlat(int32 X, int32 Y) const;
     float GetCellHeight(int32 X, int32 Y) const;
@@ -1771,18 +1798,25 @@ public:
     template<typename TFunc>
     void ForEachCell(TFunc&& Func)
     {
-        for (FGridCell& Cell : Cells) Func(Cell);
+        for (FGridCell& Cell : GetCellsInGridOrder()) Func(Cell);
     }
 
     template<typename TFunc>
     void ForEachCell(TFunc&& Func) const
     {
-        for (const FGridCell& Cell : Cells) Func(Cell);
+        for (const FGridCell& Cell : GetCellsInGridOrder()) Func(Cell);
     }
 
 protected:
     // ---- Данные мира ----
-    TArray<FGridCell> Cells;
+    // Клетки страницами (этап 8). Таблица страниц -- прямоугольник страниц
+    // сетки построчно от CellPageTableMin (в страницах); CellPageSize -- клеток
+    // на сторону страницы, 0 -- одна страница во всю сетку (без разметки).
+    TArray<FHerbalistCellPage> CellPages;
+    FIntPoint CellPageTableMin = FIntPoint::ZeroValue;
+    FIntPoint CellPageTableSize = FIntPoint::ZeroValue;
+    int32 CellPageSize = 0;
+    int32 LoadedCellCount = 0;
     FRandomStream WorldRNG;
 
     // Хэндл таймера GridCorruptionReportIntervalSeconds выше -- остановлен в
@@ -1796,8 +1830,8 @@ protected:
     FTimerHandle WorldStateMapTimerHandle;
 
     // Показываемое состояние мира: то же, что в клетках, но догоняющее их с
-    // ограниченной скоростью. Параллелен Cells по индексу (Y*GridSizeX+X),
-    // как и DirtyCellIndices. НЕ сохраняется намеренно -- это состояние
+    // ограниченной скоростью. Индекс -- построчно от угла окна карты
+    // (этап 7). НЕ сохраняется намеренно -- это состояние
     // картинки, а не мира; при загрузке оно приравнивается к настоящему
     // (SnapWorldStateMapDisplayToWorld).
     // XYZW = Distortion / Corruption / HarvestStress / ShrineRestoration.
@@ -1832,8 +1866,8 @@ protected:
     UPROPERTY()
     TObjectPtr<ALandscape> CachedLandscape;
 
-    UPROPERTY()
-    TArray<float> CachedCellHeights;
+    // Высоты клеток лежат в страницах (FHerbalistCellPage::Heights, этап 8).
+    bool bCellHeightsCached = false;
 
     void FindAndCacheLandscape();
     void CacheCellHeights();
@@ -1874,7 +1908,7 @@ protected:
     // Baseline на клетку (аудит 2026-09-05, решение пользователя: полноценный
     // откат вместо тихого игнорирования). Снимок КАЖДОЙ клетки сразу после
     // InitializeCells — до единого тика симуляции, до единого игрового
-    // действия. Параллельный Cells по индексу (Y*GridSizeX+X), не сохраняется
+    // действия. Лежит в странице рядом с клеткой (Baselines, этап 8), не сохраняется
     // сам по себе: как и Biome/вода, это чистая функция RngBaseSeed +
     // расставленных на уровне ABiomeRegionVolume, пересчитывается заново при
     // каждом InitializeCells. Используется ТОЛЬКО в ApplySaveCells — клетка,
@@ -1882,7 +1916,6 @@ protected:
     // DirtyCellIndices (см. довод там же) была нетронутой на момент
     // сохранения, то есть равнялась ровно этому снимку — не сохранённое
     // "среднее", а буквально то, чем была клетка, пока её не тронули.
-    TArray<FSavedCellState> CellBaselines;
 
     // Отслеживаемое среднее качество каждого вида, реально прошедшего через
     // общину (Подношение + предложенная сторона Обмена) — аудит 2026-09-05,
@@ -2087,6 +2120,12 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "World|Init")
     void InitializeCells();
 
+    // Страницы под текущую сетку и разметку, все загружены (этап 8).
+    void CreateCellPages();
+    FHerbalistCellPage* FindCellPage(int32 X, int32 Y);
+    const FHerbalistCellPage* FindCellPage(int32 X, int32 Y) const;
+    const FSavedCellState* FindCellBaselineByGridIndex(int32 GridIndex) const;
+
     // Разметка при старте игры: пересчёт, применение, если поля разошлись с
     // ней, сверка с ландшафтом и ячейками стриминга, строка в лог.
     void InitializeWorldLayoutForPlay();
@@ -2121,7 +2160,7 @@ protected:
 
     // Общая точка записи FSavedCellState в живую клетку — используется и
     // обычным восстановлением из сейва (ApplySaveCells), и откатом клеток,
-    // тронутых после сейва, к CellBaselines (аудит 2026-09-05). Определение —
+    // тронутых после сейва, к снимку страницы (аудит 2026-09-05). Определение —
     // GridWorldManagerSave.cpp.
     void ApplyCellStateAndRespawnResources(FGridCell& Cell, const FSavedCellState& Saved);
 
@@ -2129,7 +2168,7 @@ protected:
     // TargetState/HarvestStress/Memory/ManifestedEntityID/bEternallyPure/
     // PlantedSpeciesID/bResourcesSeeded/ResourceIngredientIDs). Общая для
     // CaptureSaveCells (реальный сейв, GridWorldManagerSave.cpp) и
-    // InitializeCells (CellBaselines, GridWorldManagerCore.cpp) — одна
+    // InitializeCells (снимки страниц, GridWorldManagerCore.cpp) — одна
     // формула, не две разные копии одной идеи. Static — чистая функция от
     // параметра, this не трогает.
     static FSavedCellState CaptureCellState(const FGridCell& Cell);

@@ -293,7 +293,7 @@ void AGridWorldManager::SyncWithWorldPartition()
     // перенумеровал бы живые клетки (найдено ревью). Сверка -- в редакторе,
     // до запуска игры.
     const UWorld* CurrentWorld = GetWorld();
-    if ((CurrentWorld && CurrentWorld->IsGameWorld()) || Cells.Num() > 0)
+    if ((CurrentWorld && CurrentWorld->IsGameWorld()) || HasCellPages())
     {
         UE_LOG(LogHerbalistWorld, Warning, TEXT("[Layout] Сверка с World Partition недоступна у запущенной сетки: разметка задаёт номера её клеток"));
         return;

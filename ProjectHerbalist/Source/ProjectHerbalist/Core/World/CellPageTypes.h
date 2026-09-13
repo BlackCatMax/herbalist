@@ -1,0 +1,135 @@
+// Core/World/CellPageTypes.h
+//
+// Страницы клеток (разметка мира, этап 8, DESIGN_World_Layout.md §6): клетки
+// хранятся не единым массивом, а страницами -- квадратами PageSizeInCells
+// клеток от глобальной клетки (0, 0). Страница -- единица загрузки и выгрузки.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Save/HerbalistSaveTypes.h"
+
+struct FHerbalistCellPage
+{
+    // Первая клетка страницы и её размер в клетках. Страница обрезана сеткой:
+    // с разметкой сетка кратна странице, без разметки страница одна.
+    FIntPoint MinCell = FIntPoint::ZeroValue;
+    FIntPoint Size = FIntPoint::ZeroValue;
+
+    bool bLoaded = false;
+
+    // Построчно от MinCell, индекс -- GetLocalIndex. Высоты и снимки клеток
+    // сразу после инициализации (откат при загрузке сейва) -- рядом, тем же
+    // индексом.
+    TArray<FGridCell> Cells;
+    TArray<float> Heights;
+    TArray<FSavedCellState> Baselines;
+
+    int32 GetLocalIndex(int32 X, int32 Y) const
+    {
+        return (Y - MinCell.Y) * Size.X + (X - MinCell.X);
+    }
+};
+
+// Обход клеток сетки построчно (Y, затем X) для range-for: тот же порядок, что
+// у единого массива до страниц. Идёт отрезками строки внутри страницы -- поиск
+// страницы один раз на отрезок, а не на клетку, выгруженная страница
+// пропускается целиком (ревью этапа 8б). ManagerType -- AGridWorldManager или
+// const AGridWorldManager (итератору нужны его страницы, он друг менеджера).
+template<typename ManagerType, typename CellType>
+class TGridCellRange
+{
+    using PageType = std::conditional_t<std::is_const_v<ManagerType>, const FHerbalistCellPage, FHerbalistCellPage>;
+
+public:
+    class FIterator
+    {
+    public:
+        // bEnd -- итератор конца: текущей клетки нет.
+        FIterator(ManagerType* InManager, bool bEnd)
+            : Manager(InManager)
+        {
+            if (bEnd || !Manager)
+            {
+                return;
+            }
+            GridMin = Manager->GetGridMinCell();
+            GridEnd = GridMin + FIntPoint(FMath::Max(Manager->GridSizeX, 0), FMath::Max(Manager->GridSizeY, 0));
+            X = GridMin.X;
+            Y = GridMin.Y;
+            if (GridEnd.X > GridMin.X && GridEnd.Y > GridMin.Y)
+            {
+                FindSegment();
+            }
+        }
+
+        CellType& operator*() const { return *Current; }
+
+        FIterator& operator++()
+        {
+            ++Current;
+            ++X;
+            if (X >= SegmentEndX)
+            {
+                FindSegment();
+            }
+            return *this;
+        }
+
+        bool operator!=(const FIterator& Other) const { return Current != Other.Current; }
+
+    private:
+        // Первый отрезок загруженной страницы, начиная с (X, Y).
+        void FindSegment()
+        {
+            while (true)
+            {
+                if (X >= GridEnd.X)
+                {
+                    X = GridMin.X;
+                    ++Y;
+                }
+                if (Y >= GridEnd.Y)
+                {
+                    Current = nullptr;
+                    return;
+                }
+                PageType* Page = Manager->FindCellPage(X, Y);
+                if (!Page)
+                {
+                    X = GridEnd.X;
+                    continue;
+                }
+                const int32 PageEndX = Page->MinCell.X + Page->Size.X;
+                if (!Page->bLoaded)
+                {
+                    X = PageEndX;
+                    continue;
+                }
+                Current = &Page->Cells[Page->GetLocalIndex(X, Y)];
+                SegmentEndX = FMath::Min(PageEndX, GridEnd.X);
+                return;
+            }
+        }
+
+        ManagerType* Manager = nullptr;
+        FIntPoint GridMin = FIntPoint::ZeroValue;
+        FIntPoint GridEnd = FIntPoint::ZeroValue;
+        int32 X = 0;
+        int32 Y = 0;
+        int32 SegmentEndX = 0;
+        CellType* Current = nullptr;
+    };
+
+    explicit TGridCellRange(ManagerType* InManager)
+        : Manager(InManager)
+    {
+    }
+
+    FIterator begin() const { return FIterator(Manager, false); }
+    FIterator end() const { return FIterator(Manager, true); }
+
+private:
+    ManagerType* Manager;
+};

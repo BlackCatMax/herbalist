@@ -55,7 +55,7 @@ bool AGridWorldManager::IsLegendaryManifested(FName EntityID) const
     // карточка (bUsesCellHistoryPurity=true), у неё никогда не было
     // фиксированной клетки: сканируем все (было отдельным методом
     // IsBereginyaManifested(), поглощено сюда).
-    for (const FGridCell& Cell : Cells)
+    for (const FGridCell& Cell : GetCellsInGridOrder())
     {
         if (Cell.ManifestedEntityID == EntityID) return true;
     }

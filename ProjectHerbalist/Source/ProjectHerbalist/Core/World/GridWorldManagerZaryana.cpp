@@ -240,7 +240,7 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
         TArray<FIntPoint> EligibleCellsQuiet;
         TArray<FIntPoint> EligibleCellsTishina;
         TArray<FIntPoint> EligibleCellsBuri;
-        for (const FGridCell& Cell : Cells)
+        for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             if (Cell.bIsWater) continue;
             const FIntPoint CellCoord(Cell.X, Cell.Y);
@@ -431,7 +431,7 @@ void AGridWorldManager::CheckBuyanCondition()
 {
     if (bBuyanReached) return;   // не переоцениваем — Буян не мигает туда-обратно
 
-    if (Cells.Num() == 0) return;
+    if (!HasCellPages()) return;
 
     // Метрика мира с историей (15_Cycles_And_Shrines.md §15.5.1, 2026-09-06)
     // — Буян измеряет Distance_итог (с историей Coherence), не голый

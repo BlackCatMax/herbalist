@@ -67,39 +67,59 @@ void AGridWorldManager::FindAndCacheLandscape()
 void AGridWorldManager::CacheCellHeights()
 {
     FindAndCacheLandscape();
-    const int32 TotalCells = GridSizeX * GridSizeY;
-    CachedCellHeights.SetNum(TotalCells);
 
-    if (!CachedLandscape)
+    // Высоты -- в странице рядом с клетками (этап 8): страница загружается и
+    // выгружается вместе с ними.
+    int32 CachedCount = 0;
+    for (FHerbalistCellPage& Page : CellPages)
     {
-        for (int32 i = 0; i < TotalCells; ++i) CachedCellHeights[i] = 0.f;
-        return;
-    }
-
-    FVector GridOrigin = GetGridOrigin();
-    for (int32 Y = 0; Y < GridSizeY; ++Y)
-    {
-        for (int32 X = 0; X < GridSizeX; ++X)
+        if (!Page.bLoaded)
         {
-            FVector WorldPoint(GridOrigin.X + X * CellSize, GridOrigin.Y + Y * CellSize, 0.f);
-            TOptional<float> OptHeight = CachedLandscape->GetHeightAtLocation(WorldPoint);
-            float Z = OptHeight.IsSet() ? OptHeight.GetValue() : 0.f;
-            int32 Idx = Y * GridSizeX + X;
-            CachedCellHeights[Idx] = Z;
+            continue;
         }
+        // Reset до SetNumZeroed: при том же размере SetNumZeroed старые
+        // значения не трогает (ревью этапа 8б).
+        Page.Heights.Reset();
+        Page.Heights.SetNumZeroed(Page.Cells.Num());
+        if (!CachedLandscape)
+        {
+            continue;
+        }
+        for (int32 LocalY = 0; LocalY < Page.Size.Y; ++LocalY)
+        {
+            for (int32 LocalX = 0; LocalX < Page.Size.X; ++LocalX)
+            {
+                FVector WorldPoint = GetCellWorldPositionFlat(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY);
+                WorldPoint.Z = 0.f;
+                const TOptional<float> OptHeight = CachedLandscape->GetHeightAtLocation(WorldPoint);
+                Page.Heights[LocalY * Page.Size.X + LocalX] = OptHeight.IsSet() ? OptHeight.GetValue() : 0.f;
+            }
+        }
+        CachedCount += Page.Cells.Num();
     }
-    UE_LOG(LogHerbalistWorld, Log, TEXT("Cached %d cell heights from landscape"), TotalCells);
+    bCellHeightsCached = true;
+
+    if (CachedLandscape)
+    {
+        UE_LOG(LogHerbalistWorld, Log, TEXT("Cached %d cell heights from landscape"), CachedCount);
+    }
 }
 
 float AGridWorldManager::GetCellHeight(int32 X, int32 Y) const
 {
     // Границы до умножения (найдено ревью этапа 6а): координата вне сетки, в
     // том числе InvalidCell, переполняла int32 в Y * GridSizeX.
-    if (!IsCellInGrid(X, Y)) return 0.f;
-    const int32 Idx = GetCellIndex(X, Y);
-    if (CachedCellHeights.IsValidIndex(Idx))
-        return CachedCellHeights[Idx];
-    return 0.f;
+    if (!IsCellInGrid(X, Y))
+    {
+        return 0.f;
+    }
+    const FHerbalistCellPage* Page = FindCellPage(X, Y);
+    if (!Page || !Page->bLoaded)
+    {
+        return 0.f;
+    }
+    const int32 LocalIndex = Page->GetLocalIndex(X, Y);
+    return Page->Heights.IsValidIndex(LocalIndex) ? Page->Heights[LocalIndex] : 0.f;
 }
 
 FVector AGridWorldManager::GetCellWorldPositionFlat(int32 X, int32 Y) const
@@ -229,25 +249,31 @@ ABiomeRegionVolume* AGridWorldManager::GetClaimingRegion(const FGridCell& Cell) 
 
 FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
 {
-    // Cells.IsValidIndex, не только сравнение с GridSizeX/GridSizeY (2026-09-02):
+    // Проверка клеток, не только сравнение с GridSizeX/GridSizeY (2026-09-02):
     // GridSizeX/GridSizeY -- это НАМЕРЕНИЕ (EditAnywhere-свойство актора,
-    // валидно сразу после конструктора), а Cells реально заполняется только
+    // валидно сразу после конструктора), а клетки (страницы) создаются только
     // в InitializeCells() (BeginPlay). Актор, размещённый на уровне, но ещё
     // не прошедший BeginPlay в этой конкретной игровой сессии (например,
     // редакторский предпросмотр без Play, или другой AGridWorldManager,
     // случайно найденный через TActorIterator раньше "правильного") имел бы
-    // валидный по GridSizeX/Y индекс, но Cells.Num()==0 -- падение с
+    // валидный по GridSizeX/Y индекс, но ни одной клетки -- падение с
     // Array index out of bounds вместо честного nullptr. Нашёл
     // AHerbalistResourceActor::RegisterOnCell(), вызываемый из BeginPlay
     // ресурсного актора, спавненного PCG-графом раньше, чем менеджер успел
     // инициализировать сетку.
     // Границы до индекса (ревью этапа 6): координата далеко за краем, в том
     // числе InvalidCell, переполняла бы int32 в GetCellIndex.
-    if (!IsCellInGrid(X, Y)) return nullptr;
-    const int32 Index = GetCellIndex(X, Y);
-    if (Cells.IsValidIndex(Index))
-        return &Cells[Index];
-    return nullptr;
+    if (!IsCellInGrid(X, Y))
+    {
+        return nullptr;
+    }
+    FHerbalistCellPage* Page = FindCellPage(X, Y);
+    if (!Page || !Page->bLoaded)
+    {
+        return nullptr;
+    }
+    const int32 LocalIndex = Page->GetLocalIndex(X, Y);
+    return Page->Cells.IsValidIndex(LocalIndex) ? &Page->Cells[LocalIndex] : nullptr;
 }
 
 FIntPoint AGridWorldManager::GetChunkCoordForCell(int32 CellX, int32 CellY) const
@@ -258,12 +284,7 @@ FIntPoint AGridWorldManager::GetChunkCoordForCell(int32 CellX, int32 CellY) cons
     // деление тянет к нулю и склеивает чанк -1 с чанком 0.
     // Целочисленно, без float (ревью этапа 6): точно на любых координатах и
     // дешевле на горячем пути IsCellActive.
-    auto FloorDiv = [ChunkSize](int32 Value)
-    {
-        const int32 Quotient = Value / ChunkSize;
-        return (Value % ChunkSize != 0 && Value < 0) ? Quotient - 1 : Quotient;
-    };
-    return FIntPoint(FloorDiv(CellX), FloorDiv(CellY));
+    return FIntPoint(HerbalistCore::FloorDivCoord(CellX, ChunkSize), HerbalistCore::FloorDivCoord(CellY, ChunkSize));
 }
 
 bool AGridWorldManager::IsSpawnPointBlocked(const FVector& Point) const
@@ -514,7 +535,7 @@ bool AGridWorldManager::IsCellActive(const FGridCell& Cell) const
 void AGridWorldManager::ForEachCellInChunk(const FIntPoint& Chunk, TFunctionRef<void(FGridCell&)> Func)
 {
     // Те же границы чанка, что уже считает SetChunkResourcesActive --
-    // GetCell() сам отбрасывает координаты вне сетки (IsValidIndex), так
+    // GetCell() сам отбрасывает координаты вне сетки и загруженных страниц, так
     // что клэмпить MaxX/MaxY здесь не нужно: последний чанк ряда, не
     // кратного ChunkSizeInCells, просто получит меньше валидных клеток.
     const int32 ChunkSize = GetChunkSizeInCells();
@@ -542,7 +563,7 @@ void AGridWorldManager::ForEachActiveCell(TFunctionRef<void(FGridCell&)> Func)
     // ОДИН раз для всего вызова, а не 250 000 раз внутри цикла.
     if (Radius < 0 || ActiveChunkCenters.Num() == 0)
     {
-        for (FGridCell& Cell : Cells)
+        for (FGridCell& Cell : GetCellsInGridOrder())
         {
             Func(Cell);
         }
@@ -1050,11 +1071,181 @@ const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
 {
     // Границы до индекса (ревью этапа 6): координата далеко за краем, в том
     // числе InvalidCell, переполняла бы int32 в GetCellIndex.
-    if (!IsCellInGrid(X, Y)) return nullptr;
-    const int32 Index = GetCellIndex(X, Y);
-    if (Cells.IsValidIndex(Index))
-        return &Cells[Index];
-    return nullptr;
+    if (!IsCellInGrid(X, Y))
+    {
+        return nullptr;
+    }
+    const FHerbalistCellPage* Page = FindCellPage(X, Y);
+    if (!Page || !Page->bLoaded)
+    {
+        return nullptr;
+    }
+    const int32 LocalIndex = Page->GetLocalIndex(X, Y);
+    return Page->Cells.IsValidIndex(LocalIndex) ? &Page->Cells[LocalIndex] : nullptr;
+}
+
+FGridCell* AGridWorldManager::GetCellByGridIndex(int32 GridIndex)
+{
+    return const_cast<FGridCell*>(static_cast<const AGridWorldManager*>(this)->GetCellByGridIndex(GridIndex));
+}
+
+const FGridCell* AGridWorldManager::GetCellByGridIndex(int32 GridIndex) const
+{
+    if (GridIndex < 0 || GridIndex >= GetGridCellCount())
+    {
+        return nullptr;
+    }
+    const FIntPoint GridMin = GetGridMinCell();
+    return GetCellConst(GridMin.X + GridIndex % GridSizeX, GridMin.Y + GridIndex / GridSizeX);
+}
+
+void AGridWorldManager::CreateCellPages()
+{
+    // Повторная инициализация (InitializeCells вызывается и из Blueprint):
+    // акторы клеток прежних страниц не должны остаться в мире без клетки,
+    // которая могла бы их убрать (ревью этапа 8б).
+    for (FHerbalistCellPage& OldPage : CellPages)
+    {
+        for (FGridCell& Cell : OldPage.Cells)
+        {
+            for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
+            {
+                if (ResourceActor.IsValid() && ResourceActor->WasSpawnedByGrid())
+                {
+                    ResourceActor->Destroy();
+                }
+            }
+            if (AHerbalistEntityActor* EntityActor = Cell.ManifestedEntityActor.Get())
+            {
+                EntityActor->Destroy();
+            }
+        }
+    }
+    CellPages.Reset();
+    CellPageTableMin = FIntPoint::ZeroValue;
+    CellPageTableSize = FIntPoint::ZeroValue;
+    CellPageSize = 0;
+    LoadedCellCount = 0;
+    bCellHeightsCached = false;
+    if (GridSizeX <= 0 || GridSizeY <= 0)
+    {
+        return;
+    }
+
+    // Страница -- из разметки (ячейка стриминга в целых клетках); без разметки
+    // -- одна страница во всю сетку, как единый массив до этапа 8.
+    const FIntPoint GridMin = GetGridMinCell();
+    const FIntPoint GridEnd = GridMin + FIntPoint(GridSizeX, GridSizeY);
+    CellPageSize = ResolvedLayout.bValid ? FMath::Max(ResolvedLayout.PageSizeInCells, 0) : 0;
+    if (CellPageSize <= 0)
+    {
+        CellPageTableSize = FIntPoint(1, 1);
+        FHerbalistCellPage& Page = CellPages.AddDefaulted_GetRef();
+        Page.MinCell = GridMin;
+        Page.Size = FIntPoint(GridSizeX, GridSizeY);
+    }
+    else
+    {
+        CellPageTableMin = FIntPoint(HerbalistCore::FloorDivCoord(GridMin.X, CellPageSize), HerbalistCore::FloorDivCoord(GridMin.Y, CellPageSize));
+        const FIntPoint TableMax(HerbalistCore::FloorDivCoord(GridEnd.X - 1, CellPageSize), HerbalistCore::FloorDivCoord(GridEnd.Y - 1, CellPageSize));
+        CellPageTableSize = TableMax - CellPageTableMin + FIntPoint(1, 1);
+        CellPages.SetNum(CellPageTableSize.X * CellPageTableSize.Y);
+
+        // Страница -- три массива. При мелкой странице (ручной размер) их
+        // накладные расходы сравнимы с самими клетками (ревью этапа 8б); порог --
+        // впятеро больше страниц, чем у сетки-предела 4 млн клеток при странице
+        // 14 клеток (20 тыс.).
+        if (CellPages.Num() > 100000)
+        {
+            UE_LOG(LogHerbalistWorld, Warning, TEXT("[Pages] %d страниц по %d клеток на сторону -- накладные расходы страниц велики, проверь размер страницы разметки"),
+                CellPages.Num(), CellPageSize);
+        }
+        for (int32 PageY = 0; PageY < CellPageTableSize.Y; ++PageY)
+        {
+            for (int32 PageX = 0; PageX < CellPageTableSize.X; ++PageX)
+            {
+                FHerbalistCellPage& Page = CellPages[PageY * CellPageTableSize.X + PageX];
+                const FIntPoint PageMin((CellPageTableMin.X + PageX) * CellPageSize, (CellPageTableMin.Y + PageY) * CellPageSize);
+                // Разметка расширяет сетку до целых страниц; обрезка -- защита
+                // сетки, изменённой после разметки (например из Blueprint).
+                Page.MinCell = FIntPoint(FMath::Max(PageMin.X, GridMin.X), FMath::Max(PageMin.Y, GridMin.Y));
+                const FIntPoint PageEnd(FMath::Min(PageMin.X + CellPageSize, GridEnd.X), FMath::Min(PageMin.Y + CellPageSize, GridEnd.Y));
+                Page.Size = PageEnd - Page.MinCell;
+            }
+        }
+    }
+
+    for (FHerbalistCellPage& Page : CellPages)
+    {
+        Page.Cells.SetNum(Page.Size.X * Page.Size.Y);
+        Page.bLoaded = true;
+        LoadedCellCount += Page.Cells.Num();
+    }
+}
+
+FHerbalistCellPage* AGridWorldManager::FindCellPage(int32 X, int32 Y)
+{
+    return const_cast<FHerbalistCellPage*>(static_cast<const AGridWorldManager*>(this)->FindCellPage(X, Y));
+}
+
+const FHerbalistCellPage* AGridWorldManager::FindCellPage(int32 X, int32 Y) const
+{
+    if (CellPages.Num() == 0)
+    {
+        return nullptr;
+    }
+    if (CellPageSize <= 0)
+    {
+        return &CellPages[0];
+    }
+    const int32 PageX = HerbalistCore::FloorDivCoord(X, CellPageSize) - CellPageTableMin.X;
+    const int32 PageY = HerbalistCore::FloorDivCoord(Y, CellPageSize) - CellPageTableMin.Y;
+    if (PageX < 0 || PageX >= CellPageTableSize.X || PageY < 0 || PageY >= CellPageTableSize.Y)
+    {
+        return nullptr;
+    }
+    return &CellPages[PageY * CellPageTableSize.X + PageX];
+}
+
+const FSavedCellState* AGridWorldManager::FindCellBaselineByGridIndex(int32 GridIndex) const
+{
+    if (GridIndex < 0 || GridIndex >= GetGridCellCount())
+    {
+        return nullptr;
+    }
+    const FIntPoint GridMin = GetGridMinCell();
+    const int32 X = GridMin.X + GridIndex % GridSizeX;
+    const int32 Y = GridMin.Y + GridIndex / GridSizeX;
+    const FHerbalistCellPage* Page = FindCellPage(X, Y);
+    if (!Page || !Page->bLoaded)
+    {
+        return nullptr;
+    }
+    const int32 LocalIndex = Page->GetLocalIndex(X, Y);
+    return Page->Baselines.IsValidIndex(LocalIndex) ? &Page->Baselines[LocalIndex] : nullptr;
+}
+
+bool AGridWorldManager::GetCellBaselineCellForTests(int32 GridIndex, FIntPoint& OutCell) const
+{
+    const FSavedCellState* Baseline = FindCellBaselineByGridIndex(GridIndex);
+    if (!Baseline)
+    {
+        return false;
+    }
+    OutCell = FIntPoint(Baseline->X, Baseline->Y);
+    return true;
+}
+
+bool AGridWorldManager::GetCellPageBoundsForTests(int32 X, int32 Y, FIntPoint& OutMinCell, FIntPoint& OutSize) const
+{
+    const FHerbalistCellPage* Page = IsCellInGrid(X, Y) ? FindCellPage(X, Y) : nullptr;
+    if (!Page)
+    {
+        return false;
+    }
+    OutMinCell = Page->MinCell;
+    OutSize = Page->Size;
+    return true;
 }
 
 // ============================================================================
@@ -1146,7 +1337,7 @@ FHerbalistChunkSummary AGridWorldManager::BuildChunkSummary(const FIntPoint& Chu
 void AGridWorldManager::ForEachChunkSummary(TFunctionRef<void(const FHerbalistChunkSummary&)> Func) const
 {
     check(IsInGameThread());
-    if (Cells.Num() == 0)
+    if (!HasCellPages())
     {
         return;
     }
@@ -1426,7 +1617,7 @@ void AGridWorldManager::BeginPlay()
     // Разметка мира -- до клеток: она задаёт их размер, число и начало.
     InitializeWorldLayoutForPlay();
 
-    if (Cells.Num() == 0)
+    if (!HasCellPages())
     {
         InitializeCells();
     }
@@ -1484,8 +1675,13 @@ FName AGridWorldManager::RollWaterTypeForCell(const FGridCell& Cell, const UWate
 
 void AGridWorldManager::InitializeCells()
 {
-    const int32 TotalCells = GridSizeX * GridSizeY;
-    Cells.SetNum(TotalCells);
+    const int32 TotalCells = GetGridCellCount();
+    CreateCellPages();
+    if (TotalCells == 0)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: сетка %d x %d пуста -- клеток нет"), GridSizeX, GridSizeY);
+        return;
+    }
 
     // Точка отсчёта простоя чанков (2026-09-03, стриминг): чанк, который
     // игрок не посещал ни разу, простаивал именно с этого момента.
@@ -1609,7 +1805,7 @@ void AGridWorldManager::InitializeCells()
         for (int32 X = 0; X < GridSizeX; ++X)
         {
             int32 Index = Y * GridSizeX + X;
-            FGridCell& Cell = Cells[Index];
+            FGridCell& Cell = *GetCellByGridIndex(Index);
             const int32 CellX = GridMin.X + X;
             const int32 CellY = GridMin.Y + Y;
 
@@ -1753,7 +1949,7 @@ void AGridWorldManager::InitializeCells()
     IsWaterAlready.SetNumUninitialized(TotalCells);
     for (int32 Idx = 0; Idx < TotalCells; ++Idx)
     {
-        IsWaterAlready[Idx] = Cells[Idx].bIsWater;
+        IsWaterAlready[Idx] = GetCellByGridIndex(Idx)->bIsWater;
     }
 
     if (BiomeRegions.Num() == 0)
@@ -1781,7 +1977,7 @@ void AGridWorldManager::InitializeCells()
                 for (int32 dx = 0; dx < W; ++dx)
                 {
                     int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    ApplyWaterToCell(Cells[Idx]);
+                    ApplyWaterToCell(*GetCellByGridIndex(Idx));
                     IsWaterAlready[Idx] = true;
                     PlacedWater++;
                 }
@@ -1840,7 +2036,7 @@ void AGridWorldManager::InitializeCells()
                 for (int32 dx = 0; dx < W; ++dx)
                 {
                     const int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    ApplyWaterToCell(Cells[Idx]);
+                    ApplyWaterToCell(*GetCellByGridIndex(Idx));
                     IsWaterAlready[Idx] = true;
                     ++PlacedInPool;
                 }
@@ -1870,7 +2066,7 @@ void AGridWorldManager::InitializeCells()
         const bool bStreamingEnabled = GetActiveRadiusInChunks() >= 0;
         if (!bStreamingEnabled)
         {
-            for (FGridCell& Cell : Cells)
+            for (FGridCell& Cell : GetCellsInGridOrder())
             {
                 SpawnResourcesInCell(Cell);
                 Cell.bResourcesSeeded = true;
@@ -1884,7 +2080,7 @@ void AGridWorldManager::InitializeCells()
     SeedLegendaryAnchors();
 
     // Точки интереса (§4, 2026-09-06) — детерминированная расстановка общим
-    // WorldRNG, тем же, что пятна воды выше (тип воды и ресурсы -- потоки клеток); ДО CellBaselines
+    // WorldRNG, тем же, что пятна воды выше (тип воды и ресурсы -- потоки клеток); ДО снимков страниц
     // ниже, тот же довод: baseline должен увидеть уже финальную, а не
     // частично засеянную сетку (курганы/Тотем/Светлояр/Горюч-камень/Соловей
     // сами по себе не трогают Cell.State при севе, но порядок здесь общий
@@ -1901,10 +2097,13 @@ void AGridWorldManager::InitializeCells()
     // SeedLegendaryAnchors выше не трогают Cell.ManifestedEntityID (это
     // поле пишет только UpdateEntityManifestations, тикового происхождения,
     // см. GridWorldManagerEntities.cpp) -- порядок относительно них не важен.
-    CellBaselines.SetNum(TotalCells);
-    for (int32 Index = 0; Index < TotalCells; ++Index)
+    for (FHerbalistCellPage& Page : CellPages)
     {
-        CellBaselines[Index] = CaptureCellState(Cells[Index]);
+        Page.Baselines.Reset(Page.Cells.Num());
+        for (const FGridCell& Cell : Page.Cells)
+        {
+            Page.Baselines.Add(CaptureCellState(Cell));
+        }
     }
 
     // Клетки созданы заново -- сводки чанков считаются заново (этап 7).
@@ -1946,7 +2145,7 @@ FHarvestContext AGridWorldManager::BuildHarvestContextForCell(const FGridCell& C
     // заполнялись в редакторе сантиметрами по привычке (стандартная единица
     // UE для любого другого расстояния) -- пояс сравнивался с числом в 100
     // раз меньше настоящей высоты и никогда не совпадал.
-    Context.bAltitudeKnown = CachedLandscape != nullptr && CachedCellHeights.Num() > 0;
+    Context.bAltitudeKnown = CachedLandscape != nullptr && bCellHeightsCached;
     Context.AltitudeCentimeters = Context.bAltitudeKnown ? GetCellHeight(Cell.X, Cell.Y) : 0.0f;
 
     return Context;
@@ -2558,7 +2757,7 @@ FRealState AGridWorldManager::CollectWater(int32 X, int32 Y)
 FWorldSnapshot AGridWorldManager::CaptureState() const
 {
     FWorldSnapshot Snapshot;
-    for (const FGridCell& Cell : Cells)
+    for (const FGridCell& Cell : GetCellsInGridOrder())
     {
         Snapshot.GridState.Add(FIntPoint(Cell.X, Cell.Y), Cell);
     }
@@ -2641,7 +2840,7 @@ const FPerceivedInventory* AGridWorldManager::GetPerceivedInventory() const
 void AGridWorldManager::DrawGridDebug()
 {
     if (!bEnableDebugDraw) return;
-    for (const FGridCell& Cell : Cells)
+    for (const FGridCell& Cell : GetCellsInGridOrder())
     {
         FVector Center = GetCellWorldPosition(Cell.X, Cell.Y);
         FVector Extent = FVector(CellSize / 2.0f, CellSize / 2.0f, CellHeight / 2.0f);
@@ -3094,7 +3293,7 @@ void AGridWorldManager::DrawBiomeGraphDebug()
 
     if (bShowCellDistortion || bShowCellInfluence)
     {
-        for (const FGridCell& Cell : Cells)
+        for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             FVector Pos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
             Pos.Z = GetCellHeight(Cell.X, Cell.Y) + 30.0f;

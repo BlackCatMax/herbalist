@@ -60,8 +60,9 @@ TArray<FSavedCellState> AGridWorldManager::CaptureSaveCells() const
 
     for (int32 Index : DirtyCellIndices)
     {
-        if (!Cells.IsValidIndex(Index)) continue;
-        Result.Add(CaptureCellState(Cells[Index]));
+        const FGridCell* Cell = GetCellByGridIndex(Index);
+        if (!Cell) continue;
+        Result.Add(CaptureCellState(*Cell));
     }
 
     return Result;
@@ -144,7 +145,7 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     // очищается, см. довод у объявления в GridWorldManager.h): если клетка
     // грязная СЕЙЧАС, но отсутствует в самом сейве, значит на МОМЕНТ
     // сохранения она ещё ни разу не была тронута — то есть в точности
-    // равнялась CellBaselines[Index], снятому в InitializeCells до единого
+    // равнялась снимку своей страницы (Baselines), снятому в InitializeCells до единого
     // действия игрока. Это не приближение, а точный факт: единственные пути
     // пометить клетку грязной (ApplyStateDelta/OnResourceCollected/
     // StartResourceRegrowth/проявление сущностей/Заряна/перья Жар-птицы)
@@ -155,9 +156,11 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     for (int32 Index : DirtyCellIndices)
     {
         if (SavedIndices.Contains(Index)) continue;
-        if (!Cells.IsValidIndex(Index) || !CellBaselines.IsValidIndex(Index)) continue;
+        FGridCell* Cell = GetCellByGridIndex(Index);
+        const FSavedCellState* Baseline = FindCellBaselineByGridIndex(Index);
+        if (!Cell || !Baseline) continue;
 
-        ApplyCellStateAndRespawnResources(Cells[Index], CellBaselines[Index]);
+        ApplyCellStateAndRespawnResources(*Cell, *Baseline);
     }
 
     // DirtyCellIndices живёт только в памяти этой сессии и не сохраняется

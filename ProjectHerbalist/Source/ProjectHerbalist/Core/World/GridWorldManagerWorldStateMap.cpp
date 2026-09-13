@@ -240,7 +240,7 @@ void AGridWorldManager::SnapWorldStateMapDisplayToWorld()
     FIntPoint Min;
     FIntPoint Size;
     GetWorldStateWindow(Min, Size);
-    if (Size.X <= 0 || Size.Y <= 0 || Cells.Num() == 0)
+    if (Size.X <= 0 || Size.Y <= 0 || !HasCellPages())
     {
         DisplayedWorldState.Reset();
         return;
@@ -293,7 +293,7 @@ void AGridWorldManager::AdvanceWorldStateMapDisplay(float DeltaSeconds)
     FIntPoint Min;
     FIntPoint Size;
     GetWorldStateWindow(Min, Size);
-    if (Size.X <= 0 || Size.Y <= 0 || Cells.Num() == 0)
+    if (Size.X <= 0 || Size.Y <= 0 || !HasCellPages())
     {
         return;
     }
@@ -349,7 +349,7 @@ TArray<FColor> AGridWorldManager::BuildWorldStateMapPixels() const
     FIntPoint Min;
     FIntPoint Size;
     GetWorldStateWindow(Min, Size);
-    if (Size.X <= 0 || Size.Y <= 0 || Cells.Num() == 0)
+    if (Size.X <= 0 || Size.Y <= 0 || !HasCellPages())
     {
         return Pixels;
     }
