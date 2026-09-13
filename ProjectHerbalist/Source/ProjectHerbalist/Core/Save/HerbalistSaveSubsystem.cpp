@@ -52,7 +52,9 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // простого добавления поля", ради которого версия и заводилась.
     // v3 (2026-09-12, разметка мира, этап 4): основа клетки -- из потоков
     // клеток, у ресурсов появились слоты мест (FSavedCellState::ResourceSlots).
-    Save->SaveVersion = 3;
+    // v4 (2026-09-13, разметка мира, этап 6): координаты клеток -- глобальные,
+    // от начала сетки World Partition.
+    Save->SaveVersion = 4;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
     Save->GridSizeY = WorldManager->GridSizeY;
@@ -173,9 +175,9 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     // новой версией игры), отклоняется явно, а не десериализуется вслепую с
     // риском тихо потерять/неверно истолковать поля, которых эта версия ещё
     // не знает.
-    if (Save->SaveVersion > 3)
+    if (Save->SaveVersion > 4)
     {
-        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (3), aborted"),
+        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (4), aborted"),
             *Slot, Save->SaveVersion);
         return false;
     }
@@ -185,9 +187,11 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     // пятнами и всё, что сеется после неё (хозяева мест, якоря, курганы, места
     // силы), другое, чем в сейве старее. Такой сейв грузится, но его клетки и
     // места могут лечь не на тот мир. Отказ по отпечатку разметки -- этап 8.
-    if (Save->SaveVersion < 3)
+    // v4 (этап 6): координаты клеток в сейве глобальные; на карте с разметкой
+    // сейв старее ляжет со сдвигом на первую клетку сетки (найдено ревью).
+    if (Save->SaveVersion < 4)
     {
-        UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: slot '%s' has SaveVersion %d, written before per-cell seeds (3): water, sites and resources may not match this world"),
+        UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: slot '%s' has SaveVersion %d, written before per-cell seeds (3) and global cell coordinates (4): water, sites, resources and cell positions may not match this world"),
             *Slot, Save->SaveVersion);
     }
 

@@ -58,8 +58,10 @@ void AHerbalistResourceActor::BeginPlay()
     if ((GridX == HerbalistCore::InvalidCellCoord || GridY == HerbalistCore::InvalidCellCoord) && WorldManager)
     {
         FVector LocalLoc = GetActorLocation() - WorldManager->GetGridOrigin();
-        GridX = FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
-        GridY = FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
+        // Индекс от угла сетки плюс её первая клетка -- глобальная координата
+        // (этап 6 разметки мира).
+        GridX = WorldManager->GetGridMinCell().X + FMath::RoundToInt(LocalLoc.X / WorldManager->CellSize);
+        GridY = WorldManager->GetGridMinCell().Y + FMath::RoundToInt(LocalLoc.Y / WorldManager->CellSize);
         UE_LOG(LogHerbalistHarvest, Verbose, TEXT("%s: Auto-assigned to cell (%d,%d)"),
             *GetName(), GridX, GridY);
     }

@@ -246,17 +246,11 @@ bool FHerbalistCellSeed_StreamFollowsGlobalCoordinate::RunTest(const FString& Pa
         return false;
     }
 
-    TestTrue(TEXT("Без разметки глобальная координата -- индекс"), Manager->GetGlobalCellCoord(3, 4) == FIntPoint(3, 4));
-    const FRandomStream Unshifted = Manager->MakeCellRandomStream(0, 0, ECellPurposeForSeedTest::ResourceSpecies);
-
-    Manager->ResolvedLayout.bValid = true;
-    Manager->ResolvedLayout.MinCell = FIntPoint(-112, -112);
-    TestTrue(TEXT("Сетка от (-112,-112): клетка массива (112,112) -- глобальная (0,0)"),
-        Manager->GetGlobalCellCoord(112, 112) == FIntPoint(0, 0));
-    const FRandomStream Shifted = Manager->MakeCellRandomStream(112, 112, ECellPurposeForSeedTest::ResourceSpecies);
-    TestEqual(TEXT("Та же глобальная клетка -- тот же поток"), Shifted.GetInitialSeed(), Unshifted.GetInitialSeed());
-
-    Manager->ResolvedLayout = FHerbalistWorldLayout();
+    // С этапа 6 координаты клеток глобальные: поток клетки -- функция её
+    // координаты и сида мира, от сдвига сетки он не зависит.
+    const FRandomStream Unshifted = Manager->MakeCellRandomStream(-5, 7, ECellPurposeForSeedTest::ResourceSpecies);
+    TestEqual(TEXT("Поток клетки -- сид от её координаты"), Unshifted.GetInitialSeed(),
+        FWorldLayoutSolver::MakeCellSeed(Manager->RngBaseSeed, FIntPoint(-5, 7), ECellPurposeForSeedTest::ResourceSpecies, 0));
     Manager->Destroy();
     return true;
 }

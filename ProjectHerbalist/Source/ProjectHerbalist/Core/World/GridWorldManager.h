@@ -189,9 +189,21 @@ public:
     // капищ, оберегов, Шапки, Соловья, Росы -- в метрах с 2026-09-12).
     int32 GetCellRadius(float Meters) const;
 
-    // Глобальная координата клетки: от начала сетки World Partition, когда
-    // разметка выведена (решение пользователя 13), иначе индекс в массиве.
-    FIntPoint GetGlobalCellCoord(int32 X, int32 Y) const;
+    // Первая клетка сетки в глобальных координатах (разметка мира, этап 6):
+    // начало разметки или (0,0) без неё. Cell.X/Cell.Y и все функции с (X, Y)
+    // принимают глобальные координаты -- от начала сетки World Partition
+    // (решение пользователя 13); массивы клеток -- локальный индекс.
+    FIntPoint GetGridMinCell() const { return ResolvedLayout.bValid ? ResolvedLayout.MinCell : FIntPoint::ZeroValue; }
+
+    bool IsCellInGrid(int32 X, int32 Y) const
+    {
+        const FIntPoint Min = GetGridMinCell();
+        return X >= Min.X && X < Min.X + GridSizeX && Y >= Min.Y && Y < Min.Y + GridSizeY;
+    }
+
+    // Диапазон чанков сетки в глобальных координатах чанков, включительно. У
+    // пустой сетки максимум меньше минимума.
+    void GetGridChunkRange(FIntPoint& OutMinChunk, FIntPoint& OutMaxChunk) const;
 
     // Поток случайных чисел клетки (этап 4 разметки мира): тот же результат
     // при любом порядке обхода. Основа клетки -- тип воды, число, виды и места
@@ -2014,9 +2026,19 @@ protected:
     void VerifyWorldLayoutAgainstWorld(TArray<FString>& OutWarnings) const;
 
     // ---- Маркеры состояния ----
-    void MarkCellDirty(int32 X, int32 Y) { DirtyCellIndices.Add(Y * GridSizeX + X); }
+    void MarkCellDirty(int32 X, int32 Y)
+    {
+        // Координата за краем попала бы на клетку соседней строки (ревью этапа 6).
+        if (!IsCellInGrid(X, Y)) return;
+        DirtyCellIndices.Add(GetCellIndex(X, Y));
+    }
 
-    inline int32 GetCellIndex(int32 X, int32 Y) const { return Y * GridSizeX + X; }
+    // Локальный индекс в массивах клеток для глобальной координаты (этап 6).
+    inline int32 GetCellIndex(int32 X, int32 Y) const
+    {
+        const FIntPoint Min = GetGridMinCell();
+        return (Y - Min.Y) * GridSizeX + (X - Min.X);
+    }
 
     // Общая точка записи FSavedCellState в живую клетку — используется и
     // обычным восстановлением из сейва (ApplySaveCells), и откатом клеток,

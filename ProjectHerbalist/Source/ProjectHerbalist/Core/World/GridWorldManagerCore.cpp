@@ -95,8 +95,8 @@ float AGridWorldManager::GetCellHeight(int32 X, int32 Y) const
 {
     // Границы до умножения (найдено ревью этапа 6а): координата вне сетки, в
     // том числе InvalidCell, переполняла int32 в Y * GridSizeX.
-    if (X < 0 || X >= GridSizeX || Y < 0 || Y >= GridSizeY) return 0.f;
-    int32 Idx = Y * GridSizeX + X;
+    if (!IsCellInGrid(X, Y)) return 0.f;
+    const int32 Idx = GetCellIndex(X, Y);
     if (CachedCellHeights.IsValidIndex(Idx))
         return CachedCellHeights[Idx];
     return 0.f;
@@ -104,7 +104,8 @@ float AGridWorldManager::GetCellHeight(int32 X, int32 Y) const
 
 FVector AGridWorldManager::GetCellWorldPositionFlat(int32 X, int32 Y) const
 {
-    return GetGridOrigin() + FVector(X * CellSize, Y * CellSize, 0.f);
+    const FIntPoint Min = GetGridMinCell();
+    return GetGridOrigin() + FVector((X - Min.X) * CellSize, (Y - Min.Y) * CellSize, 0.f);
 }
 
 FVector AGridWorldManager::GetCellWorldPosition(int32 X, int32 Y) const
@@ -121,10 +122,11 @@ bool AGridWorldManager::WorldPositionToCell(const FVector& WorldPos, int32& OutX
     OutY = HerbalistCore::InvalidCell().Y;
 
     const FVector LocalLoc = WorldPos - GetGridOrigin();
-    const int32 X = FMath::FloorToInt(LocalLoc.X / CellSize);
-    const int32 Y = FMath::FloorToInt(LocalLoc.Y / CellSize);
+    const FIntPoint Min = GetGridMinCell();
+    const int32 X = Min.X + FMath::FloorToInt(LocalLoc.X / CellSize);
+    const int32 Y = Min.Y + FMath::FloorToInt(LocalLoc.Y / CellSize);
 
-    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY)
+    if (IsCellInGrid(X, Y))
     {
         OutX = X;
         OutY = Y;
@@ -239,8 +241,11 @@ FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
     // AHerbalistResourceActor::RegisterOnCell(), вызываемый из BeginPlay
     // ресурсного актора, спавненного PCG-графом раньше, чем менеджер успел
     // инициализировать сетку.
-    const int32 Index = Y * GridSizeX + X;
-    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY && Cells.IsValidIndex(Index))
+    // Границы до индекса (ревью этапа 6): координата далеко за краем, в том
+    // числе InvalidCell, переполняла бы int32 в GetCellIndex.
+    if (!IsCellInGrid(X, Y)) return nullptr;
+    const int32 Index = GetCellIndex(X, Y);
+    if (Cells.IsValidIndex(Index))
         return &Cells[Index];
     return nullptr;
 }
@@ -248,11 +253,17 @@ FGridCell* AGridWorldManager::GetCell(int32 X, int32 Y)
 FIntPoint AGridWorldManager::GetChunkCoordForCell(int32 CellX, int32 CellY) const
 {
     const int32 ChunkSize = GetChunkSizeInCells();
-    // FloorDiv, не целочисленное деление: у отрицательных координат (их не
-    // бывает в текущей сетке, но GetCell честно принимает любые) обычное
+    // FloorDiv, не целочисленное деление: у отрицательных координат (с этапа 6
+    // разметки мира -- клетки западнее и южнее начала сетки World Partition) обычное
     // деление тянет к нулю и склеивает чанк -1 с чанком 0.
-    return FIntPoint(FMath::FloorToInt(static_cast<float>(CellX) / ChunkSize),
-                     FMath::FloorToInt(static_cast<float>(CellY) / ChunkSize));
+    // Целочисленно, без float (ревью этапа 6): точно на любых координатах и
+    // дешевле на горячем пути IsCellActive.
+    auto FloorDiv = [ChunkSize](int32 Value)
+    {
+        const int32 Quotient = Value / ChunkSize;
+        return (Value % ChunkSize != 0 && Value < 0) ? Quotient - 1 : Quotient;
+    };
+    return FIntPoint(FloorDiv(CellX), FloorDiv(CellY));
 }
 
 bool AGridWorldManager::IsSpawnPointBlocked(const FVector& Point) const
@@ -388,11 +399,12 @@ void AGridWorldManager::PreviewResourceSpawnPoints()
     const float TraceHalf = Settings ? FMath::Max(0.0f, Settings->SpawnTraceHalfHeight) : 5000.0f;
 
     int32 Considered = 0, Free = 0, Blocked = 0;
+    const FIntPoint GridMin = GetGridMinCell();
     for (int32 Y = 0; Y < GridSizeY && Considered < PreviewMaxCells; ++Y)
     {
         for (int32 X = 0; X < GridSizeX && Considered < PreviewMaxCells; ++X)
         {
-            FVector Base = GetCellWorldPositionFlat(X, Y);
+            FVector Base = GetCellWorldPositionFlat(GridMin.X + X, GridMin.Y + Y);
 
             // Только клетки внутри нарисованных регионов — остальной мир
             // ресурсов биома и не получит (см. IsCellClaimedByBiomeRegion).
@@ -670,22 +682,32 @@ void AGridWorldManager::DespawnChunkEntities(const FIntPoint& Chunk)
     });
 }
 
+void AGridWorldManager::GetGridChunkRange(FIntPoint& OutMinChunk, FIntPoint& OutMaxChunk) const
+{
+    const FIntPoint Min = GetGridMinCell();
+    OutMinChunk = GetChunkCoordForCell(Min.X, Min.Y);
+    OutMaxChunk = GridSizeX > 0 && GridSizeY > 0
+        ? GetChunkCoordForCell(Min.X + GridSizeX - 1, Min.Y + GridSizeY - 1)
+        : OutMinChunk - FIntPoint(1, 1);
+}
+
 TSet<FIntPoint> AGridWorldManager::ComputeChunksWithinRadius(const TArray<FIntPoint>& Centers, int32 Radius) const
 {
     // Только чанки, у которых есть клетки (2026-09-12): центр теперь может
     // лежать за краем сетки, и без отсечения игрок, гуляющий вне сетки,
-    // плодил бы записи ChunkLastSimulatedGameTime для пустых чанков.
-    const int32 ChunkSize = GetChunkSizeInCells();
-    const int32 MaxChunkX = FMath::DivideAndRoundUp(FMath::Max(GridSizeX, 0), ChunkSize) - 1;
-    const int32 MaxChunkY = FMath::DivideAndRoundUp(FMath::Max(GridSizeY, 0), ChunkSize) - 1;
+    // плодил бы записи ChunkLastSimulatedGameTime для пустых чанков. Границы --
+    // глобальные координаты чанков (этап 6 разметки мира).
+    FIntPoint MinChunk;
+    FIntPoint MaxChunk;
+    GetGridChunkRange(MinChunk, MaxChunk);
 
     TSet<FIntPoint> Result;
     for (const FIntPoint& Center : Centers)
     {
-        const int32 MinX = FMath::Max(Center.X - Radius, 0);
-        const int32 MaxX = FMath::Min(Center.X + Radius, MaxChunkX);
-        const int32 MinY = FMath::Max(Center.Y - Radius, 0);
-        const int32 MaxY = FMath::Min(Center.Y + Radius, MaxChunkY);
+        const int32 MinX = FMath::Max(Center.X - Radius, MinChunk.X);
+        const int32 MaxX = FMath::Min(Center.X + Radius, MaxChunk.X);
+        const int32 MinY = FMath::Max(Center.Y - Radius, MinChunk.Y);
+        const int32 MaxY = FMath::Min(Center.Y + Radius, MaxChunk.Y);
         for (int32 Y = MinY; Y <= MaxY; ++Y)
         {
             for (int32 X = MinX; X <= MaxX; ++X)
@@ -765,8 +787,9 @@ FIntPoint AGridWorldManager::WorldPositionToChunk(const FVector& WorldPos) const
 {
     const int32 ChunkSize = GetChunkSizeInCells();
     const double ChunkSpan = FMath::Max(static_cast<double>(CellSize) * ChunkSize, UE_DOUBLE_KINDA_SMALL_NUMBER);
-    const FVector Local = WorldPos - GetGridOrigin();
-    // Для точек внутри сетки совпадает с GetChunkCoordForCell(WorldPositionToCell):
+    // От мировой точки глобальной клетки (0,0) (этап 6 разметки мира). Для точек
+    // внутри сетки совпадает с GetChunkCoordForCell(WorldPositionToCell):
+    const FVector Local = WorldPos - GetCellWorldPositionFlat(0, 0);
     // floor(floor(x / c) / n) == floor(x / (c * n)).
     return FIntPoint(FMath::FloorToInt(Local.X / ChunkSpan), FMath::FloorToInt(Local.Y / ChunkSpan));
 }
@@ -795,7 +818,8 @@ bool AGridWorldManager::IsChunkGroundLoaded(const FIntPoint& Chunk) const
 
     const int32 ChunkSize = GetChunkSizeInCells();
     const double Span = static_cast<double>(CellSize) * ChunkSize;
-    const FVector Origin = GetGridOrigin();
+    // Чанки считаются от мировой точки глобальной клетки (0,0) (этап 6).
+    const FVector Origin = GetCellWorldPositionFlat(0, 0);
     const FVector2D Min(Origin.X + Chunk.X * Span, Origin.Y + Chunk.Y * Span);
     const FVector2D Max = Min + FVector2D(Span, Span);
 
@@ -902,9 +926,11 @@ void AGridWorldManager::CollectGroundCoveredChunks(TSet<FIntPoint>& OutChunks) c
 
     const int32 ChunkSize = GetChunkSizeInCells();
     const double Span = FMath::Max(static_cast<double>(CellSize) * ChunkSize, UE_DOUBLE_KINDA_SMALL_NUMBER);
-    const FVector Origin = GetGridOrigin();
-    const int32 MaxChunkX = FMath::DivideAndRoundUp(FMath::Max(GridSizeX, 0), ChunkSize) - 1;
-    const int32 MaxChunkY = FMath::DivideAndRoundUp(FMath::Max(GridSizeY, 0), ChunkSize) - 1;
+    // Чанки считаются от мировой точки глобальной клетки (0,0) (этап 6).
+    const FVector Origin = GetCellWorldPositionFlat(0, 0);
+    FIntPoint MinChunk;
+    FIntPoint MaxChunk;
+    GetGridChunkRange(MinChunk, MaxChunk);
 
     // Обходятся только чанки сетки, задетые хотя бы одним прямоугольником;
     // покрытие решает та же IsChunkGroundLoaded (углы и центр), что и у
@@ -912,13 +938,14 @@ void AGridWorldManager::CollectGroundCoveredChunks(TSet<FIntPoint>& OutChunks) c
     // бывают размером с весь мир.
     for (const FBox2D& Box : GroundCoverage)
     {
-        const double Low = -1.0;
-        const double HighX = static_cast<double>(MaxChunkX) + 1.0;
-        const double HighY = static_cast<double>(MaxChunkY) + 1.0;
-        const int32 MinX = FMath::Max(FMath::FloorToInt(FMath::Clamp((Box.Min.X - Origin.X) / Span, Low, HighX)), 0);
-        const int32 MaxX = FMath::Min(FMath::FloorToInt(FMath::Clamp((Box.Max.X - Origin.X) / Span, Low, HighX)), MaxChunkX);
-        const int32 MinY = FMath::Max(FMath::FloorToInt(FMath::Clamp((Box.Min.Y - Origin.Y) / Span, Low, HighY)), 0);
-        const int32 MaxY = FMath::Min(FMath::FloorToInt(FMath::Clamp((Box.Max.Y - Origin.Y) / Span, Low, HighY)), MaxChunkY);
+        const double LowX = static_cast<double>(MinChunk.X) - 1.0;
+        const double LowY = static_cast<double>(MinChunk.Y) - 1.0;
+        const double HighX = static_cast<double>(MaxChunk.X) + 1.0;
+        const double HighY = static_cast<double>(MaxChunk.Y) + 1.0;
+        const int32 MinX = FMath::Max(FMath::FloorToInt(FMath::Clamp((Box.Min.X - Origin.X) / Span, LowX, HighX)), MinChunk.X);
+        const int32 MaxX = FMath::Min(FMath::FloorToInt(FMath::Clamp((Box.Max.X - Origin.X) / Span, LowX, HighX)), MaxChunk.X);
+        const int32 MinY = FMath::Max(FMath::FloorToInt(FMath::Clamp((Box.Min.Y - Origin.Y) / Span, LowY, HighY)), MinChunk.Y);
+        const int32 MaxY = FMath::Min(FMath::FloorToInt(FMath::Clamp((Box.Max.Y - Origin.Y) / Span, LowY, HighY)), MaxChunk.Y);
         for (int32 Y = MinY; Y <= MaxY; ++Y)
         {
             for (int32 X = MinX; X <= MaxX; ++X)
@@ -1021,8 +1048,11 @@ void AGridWorldManager::UpdateMaterializedChunks()
 
 const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
 {
-    const int32 Index = Y * GridSizeX + X;
-    if (X >= 0 && X < GridSizeX && Y >= 0 && Y < GridSizeY && Cells.IsValidIndex(Index))
+    // Границы до индекса (ревью этапа 6): координата далеко за краем, в том
+    // числе InvalidCell, переполняла бы int32 в GetCellIndex.
+    if (!IsCellInGrid(X, Y)) return nullptr;
+    const int32 Index = GetCellIndex(X, Y);
+    if (Cells.IsValidIndex(Index))
         return &Cells[Index];
     return nullptr;
 }
@@ -1458,12 +1488,17 @@ void AGridWorldManager::InitializeCells()
     TArray<ABiomeRegionVolume*> CellRegion;
     CellRegion.SetNumZeroed(TotalCells);
 
+    // Координаты клеток -- глобальные, от начала сетки World Partition (этап 6
+    // разметки мира); X, Y цикла -- локальный индекс в массиве.
+    const FIntPoint GridMin = GetGridMinCell();
     for (int32 Y = 0; Y < GridSizeY; ++Y)
     {
         for (int32 X = 0; X < GridSizeX; ++X)
         {
             int32 Index = Y * GridSizeX + X;
             FGridCell& Cell = Cells[Index];
+            const int32 CellX = GridMin.X + X;
+            const int32 CellY = GridMin.Y + Y;
 
             // Какие регионы содержат клетку -- равная доля на каждый
             // (0.5/0.5 на двух, 1/3 на трёх и т.д., без авторского
@@ -1473,7 +1508,7 @@ void AGridWorldManager::InitializeCells()
             // раз при определении CellRegion[Index] ниже.
             Cell.BiomeWeights.Reset();
             TArray<ABiomeRegionVolume*> MatchingRegions;
-            const FVector CellWorldPos = GetCellWorldPositionFlat(X, Y);
+            const FVector CellWorldPos = GetCellWorldPositionFlat(CellX, CellY);
             for (ABiomeRegionVolume* Region : BiomeRegions)
             {
                 if (Region && Region->IsPointInside(CellWorldPos))
@@ -1518,7 +1553,16 @@ void AGridWorldManager::InitializeCells()
             }
             else
             {
-                biome = AllBiomes[( (Y / BlockSize) * BlocksX + (X / BlockSize) ) % AllBiomes.Num()];
+                // Блоки -- от глобальной координаты (ревью этапа 6): при
+                // расширении ландшафта сетка начинается с другой клетки, а блок
+                // клетки остаётся прежним. Деление с округлением вниз -- у
+                // клеток западнее начала сетки World Partition координаты
+                // отрицательные. Ширина строки блоков BlocksX пока от размера
+                // сетки; основа по страницам (этап 8) заменит и её.
+                const int32 BlockX = FMath::FloorToInt32(static_cast<double>(CellX) / BlockSize);
+                const int32 BlockY = FMath::FloorToInt32(static_cast<double>(CellY) / BlockSize);
+                const int32 BiomeCount = AllBiomes.Num();
+                biome = AllBiomes[((BlockY * BlocksX + BlockX) % BiomeCount + BiomeCount) % BiomeCount];
                 ++FallbackCellCount;
             }
 
@@ -1527,8 +1571,8 @@ void AGridWorldManager::InitializeCells()
             Cell.TargetState  = Cell.State;
             Cell.Environment  = FBiomeDefaults::GetDefaultEnvironment(biome);
             Cell.Memory       = FMemoryState();
-            Cell.X            = X;
-            Cell.Y            = Y;
+            Cell.X            = CellX;
+            Cell.Y            = CellY;
             Cell.HarvestStress = 0.0f;
             Cell.bIsWater     = false;
             Cell.WaterTypeID  = NAME_None;

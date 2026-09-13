@@ -117,15 +117,18 @@ bool FHerbalistWorldLayoutManager_BakedSourceShapesGridAtBeginPlay::RunTest(cons
     TestTrue(TEXT("Сам актор не двигается: у C++-менеджера нет корневого компонента"), Manager->GetActorLocation().IsNearlyZero());
     TestEqual(TEXT("Чанк из разметки: 7 клеток = 63 м"), Manager->GetChunkSizeInCells(), 7);
     TestEqual(TEXT("Радиус 100 м при чанке 63 м -- 1 чанк"), Manager->GetActiveRadiusInChunks(), 1);
-    TestNotNull(TEXT("Клетки созданы по разметке: последняя (27, 27) есть"), Manager->GetCellConst(27, 27));
-    TestNull(TEXT("...а (28, 0) -- уже нет"), Manager->GetCellConst(28, 0));
+    // Координаты клеток глобальные, от начала сетки World Partition (этап 6):
+    // сетка от -14 до 13 по обеим осям.
+    TestNotNull(TEXT("Клетки созданы по разметке: первая (-14, -14) есть"), Manager->GetCellConst(-14, -14));
+    TestNotNull(TEXT("...последняя (13, 13) есть"), Manager->GetCellConst(13, 13));
+    TestNull(TEXT("...а (14, 0) -- уже нет"), Manager->GetCellConst(14, 0));
 
-    // Клетка (0, 0) начинается в углу сетки: мировая точка чуть внутри неё
-    // отвечает клеткой (0, 0), а не клеткой положения актора.
-    int32 CellX = -1;
-    int32 CellY = -1;
+    // Клетка (-14, -14) начинается в углу сетки: мировая точка чуть внутри неё
+    // отвечает этой клеткой, а не клеткой положения актора.
+    int32 CellX = 0;
+    int32 CellY = 0;
     const bool bInside = Manager->WorldPositionToCell(FVector(-12550.0, -12550.0, 0.0), CellX, CellY);
-    TestTrue(TEXT("Точка у угла сетки -- внутри"), bInside && CellX == 0 && CellY == 0);
+    TestTrue(TEXT("Точка у угла сетки -- внутри, клетка (-14, -14)"), bInside && CellX == -14 && CellY == -14);
     TestTrue(TEXT("После старта поля совпадают с разметкой"), Manager->IsGridMatchingResolvedLayout());
 
     Manager->Destroy();

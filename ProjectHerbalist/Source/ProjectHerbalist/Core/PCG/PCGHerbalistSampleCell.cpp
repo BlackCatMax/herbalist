@@ -80,10 +80,12 @@ bool FPCGHerbalistSampleCellElement::ExecuteInternal(FPCGContext* Context) const
     // показать нетронутый мир там, где состояние просто неизвестно: ошибка
     // выглядела бы нормальной картинкой. Это тот же случай, что описан в
     // шапке «Get Herbalist Grid» -- в редакторе до BeginPlay клеток нет.
-    // Признак «клетки уже есть» -- наличие самой первой. Отдельного
+    // Признак «клетки уже есть» -- наличие самой первой клетки сетки. Не
+    // (0, 0): с глобальными координатами (этап 6 разметки мира) начало сетки
+    // World Partition может лежать вне сетки (найдено ревью). Отдельного
     // счётчика менеджер наружу не отдаёт, и правильно делает: массив клеток
     // приватный.
-    if (!Manager || Manager->GetCellConst(0, 0) == nullptr)
+    if (!Manager || Manager->GetCellConst(Manager->GetGridMinCell().X, Manager->GetGridMinCell().Y) == nullptr)
     {
         PCGE_LOG(Warning, GraphAndLog, LOCTEXT("NoGrid",
             "Сетка недоступна (клетки появляются в BeginPlay) -- точки пропущены без изменений. "

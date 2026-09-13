@@ -277,19 +277,25 @@ int32 AGridWorldManager::GetCellRadius(float Meters) const
     return FWorldLayoutSolver::MetersToCellRadius(Meters, CellSize);
 }
 
-FIntPoint AGridWorldManager::GetGlobalCellCoord(int32 X, int32 Y) const
-{
-    return ResolvedLayout.bValid ? ResolvedLayout.MinCell + FIntPoint(X, Y) : FIntPoint(X, Y);
-}
-
 FRandomStream AGridWorldManager::MakeCellRandomStream(int32 X, int32 Y, FWorldLayoutSolver::ECellRandomPurpose Purpose, int32 Salt) const
 {
-    return FRandomStream(FWorldLayoutSolver::MakeCellSeed(RngBaseSeed, GetGlobalCellCoord(X, Y), Purpose, Salt));
+    // Координаты клеток уже глобальные (этап 6).
+    return FRandomStream(FWorldLayoutSolver::MakeCellSeed(RngBaseSeed, FIntPoint(X, Y), Purpose, Salt));
 }
 
 void AGridWorldManager::SyncWithWorldPartition()
 {
 #if WITH_EDITOR
+    // Разметка задаёт номера клеток (этап 6): пересчёт на уже созданной сетке
+    // перенумеровал бы живые клетки (найдено ревью). Сверка -- в редакторе,
+    // до запуска игры.
+    const UWorld* CurrentWorld = GetWorld();
+    if ((CurrentWorld && CurrentWorld->IsGameWorld()) || Cells.Num() > 0)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Layout] Сверка с World Partition недоступна у запущенной сетки: разметка задаёт номера её клеток"));
+        return;
+    }
+
     TArray<FString> Warnings;
     const bool bChanged = SyncWorldLayoutFromWorld(GetWorld(), Warnings, /*bMarkModified=*/true);
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Layout] Сверка с World Partition%s: %s"),
