@@ -145,12 +145,16 @@ bDegrading ← Hysteresis(bDegrading, State.Corruption, центр 0.75, пол�
 
 ### 4.2 Контагион (:2100)
 ```
+Rate = ContagionSpreadRate · 10 м / CellSize             (0.00045/с на клетку 10 м)
 если bDegrading: для 4 прямых соседей
-    Neighbor.Target.Corruption += ContagionSpreadRate·dt     (0.01/с)
-    Neighbor.Target.Distortion += ContagionSpreadRate·dt
-    Neighbor.Target.Purity     −= ContagionSpreadRate·dt
-    Neighbor.Target.Stability  −= ContagionSpreadRate·dt
+    Neighbor.Target.Corruption += Rate·dt
+    Neighbor.Target.Distortion += Rate·dt
+    Neighbor.Target.Purity     −= Rate·dt
+    Neighbor.Target.Stability  −= Rate·dt
 ```
+С 2026-09-13 фронт порчи — в метрах: на клетке 9 м `Rate` = 0.0005/с, ровно
+скорость релаксации (§4.3); на клетках мельче `Rate` её обгоняет, и время на
+клетку задаёт релаксация.
 
 ### 4.3 Релаксация State→TargetState (:2225)
 ```
@@ -192,7 +196,7 @@ MoveToward(S, T, DeltaRegen)  — ЛИНЕЙНЫЙ шаг, не экспонен
 | `MorokLeak` (ребро) | 0.1–0.15 /шаг | `DA_BiomeGraph` |
 | `MorokDistortionPushRate/DecayRate` | 0.01 / 0.01 | `HerbalistSettings.h` |
 | `ZaryanaEffectPushRate/DecayRate` | 0.01 / 0.01 | `HerbalistSettings.h` |
-| `ContagionSpreadRate` | 0.01 /с | `HerbalistSettings.h:905` |
+| `ContagionSpreadRate` | 0.00045 /с на клетку 10 м | `HerbalistSettings.h` |
 | `BiomeDegradeCenterCorruption` / `Margin` | 0.75 / 0.10 | `HerbalistSettings.h:885` |
 | `RegenerationRate` | 0.0005 /с | `GridWorldManagerCore.cpp:1954` |
 | `SimulationFixedTimeStep` | 0.05 с | `GridWorldManager.h:127` |

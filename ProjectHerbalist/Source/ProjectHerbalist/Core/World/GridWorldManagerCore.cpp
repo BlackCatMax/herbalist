@@ -3486,7 +3486,12 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         // реального изменения.
         if (Cell.Memory.bDegrading)
         {
-            const float ContagionRate = Settings ? Settings->ContagionSpreadRate : 0.01f;
+            // Ставка на опорную клетку, пересчитанная на клетку сетки: фронт в
+            // метрах (решение пользователя 12, довод у ContagionSpreadRate).
+            const float ReferenceRate = Settings ? Settings->ContagionSpreadRate : 0.00045f;
+            const float ContagionRate = CellSize > 0.0f
+                ? ReferenceRate * UHerbalistSettings::ContagionReferenceCellMeters * 100.0f / CellSize
+                : ReferenceRate;
             if (ContagionRate > 0.0f)
             {
                 static const FIntPoint ContagionOffsets[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
@@ -3500,10 +3505,15 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
                     const float NewDistortion = FMath::Clamp(Neighbor->TargetState.Meta.Distortion + ContagionRate * DeltaTime, 0.0f, 1.0f);
                     const float NewStability  = FMath::Clamp(Neighbor->TargetState.Meta.Stability  - ContagionRate * DeltaTime, 0.0f, 1.0f);
 
-                    if (!FMath::IsNearlyEqual(NewCorruption, Neighbor->TargetState.Meta.Corruption, KINDA_SMALL_NUMBER) ||
-                        !FMath::IsNearlyEqual(NewPurity,     Neighbor->TargetState.Meta.Purity,     KINDA_SMALL_NUMBER) ||
-                        !FMath::IsNearlyEqual(NewDistortion, Neighbor->TargetState.Meta.Distortion, KINDA_SMALL_NUMBER) ||
-                        !FMath::IsNearlyEqual(NewStability,  Neighbor->TargetState.Meta.Stability,  KINDA_SMALL_NUMBER))
+                    // Точное сравнение, не KINDA_SMALL_NUMBER (ревью 2026-09-13):
+                    // функция идёт каждый кадр с реальным DeltaTime, и толчок за
+                    // кадр на клетке 9 м -- 0.0005 × 1/60 с ≈ 8e-6, меньше эпсилона.
+                    // С эпсилоном запись пропускалась бы каждый кадр, и фронт в игре
+                    // стоял бы. Насыщенный сосед (зажат в 0 или 1) не пишется и так.
+                    if (NewCorruption != Neighbor->TargetState.Meta.Corruption ||
+                        NewPurity     != Neighbor->TargetState.Meta.Purity     ||
+                        NewDistortion != Neighbor->TargetState.Meta.Distortion ||
+                        NewStability  != Neighbor->TargetState.Meta.Stability)
                     {
                         Neighbor->TargetState.Meta.Corruption = NewCorruption;
                         Neighbor->TargetState.Meta.Purity     = NewPurity;
@@ -3560,7 +3570,10 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
             const float PullRate = Settings ? Settings->ShrineWaterPurityPullRate : 0.02f;
             const float NewTargetPurity = FMath::Clamp(
                 Cell.TargetState.Meta.Purity + PullRate * DominantShrine->Restoration * DeltaTime, 0.0f, 1.0f);
-            if (!FMath::IsNearlyEqual(NewTargetPurity, Cell.TargetState.Meta.Purity, KINDA_SMALL_NUMBER))
+            // Точное сравнение -- та же причина, что у заражения выше (ревью
+            // 2026-09-13): при Restoration ниже ~0.3 толчок за кадр 1/60 с
+            // меньше KINDA_SMALL_NUMBER и с эпсилоном не записывался бы.
+            if (NewTargetPurity != Cell.TargetState.Meta.Purity)
             {
                 Cell.TargetState.Meta.Purity = NewTargetPurity;
                 MarkCellDirty(Cell.X, Cell.Y);

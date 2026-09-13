@@ -214,8 +214,9 @@ public:
     FRandomStream MakeCellRandomStream(int32 X, int32 Y, FWorldLayoutSolver::ECellRandomPurpose Purpose, int32 Salt = 0) const;
 
     // Скорость, с которой State клетки идёт к TargetState, в долях в секунду
-    // (0.05%, линейный шаг в RegenerateCellParameters). Она же задаёт скорость
-    // фронта порчи -- см. ContagionSpreadRate в HerbalistSettings.h.
+    // (0.05%, линейный шаг в RegenerateCellParameters). Она же -- предел скорости
+    // фронта порчи: действующая ставка заражения быстрее неё фронт не ускоряет
+    // (клетки мельче 9 м) -- см. ContagionSpreadRate в HerbalistSettings.h.
     static constexpr float StateRelaxationPerSecond = 0.0005f;
 
     // Пересчитывать разметку при каждом сохранении менеджера в редакторе.

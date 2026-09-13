@@ -16,6 +16,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Shrine/ShrineTypes.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -200,6 +201,63 @@ bool FHerbalistShrineType_WaterPullsPurityOnlyForWaterCellsInRadius::RunTest(con
     // (IsNearlyEqual перед записью), что уже применён у ночного/зимнего нуджа.
     Manager->RegenerateCellParameters(1000.0f);
     TestEqual(TEXT("Purity clamps at 1.0, does not overshoot"), WaterCell->TargetState.Meta.Purity, 1.0f);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistShrineType_WaterPullFrameSizedStepsAccumulate,
+    "Herbalist.ShrineType.WaterPullFrameSizedStepsAccumulate",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistShrineType_WaterPullFrameSizedStepsAccumulate::RunTest(const FString& Parameters)
+{
+    // Притяжение Purity кадрами (ревью 2026-09-13): RegenerateCellParameters
+    // идёт каждый кадр с реальным DeltaTime, и при Restoration 0.2 толчок за
+    // кадр 1/60 с (0.02 × 0.2 / 60 ≈ 7e-5) меньше KINDA_SMALL_NUMBER. Сравнение
+    // с эпсилоном перед записью такой толчок пропускало. Тест выше шагает по
+    // 10 с и этого не видел.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 1000.0f);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    FGridCell* WaterCell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0, 0) exists"), WaterCell))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    WaterCell->Biome = EBiomeType::Bog;
+    WaterCell->bIsWater = true;
+    WaterCell->Memory.bDegrading = false;
+    WaterCell->TargetState.Meta.Purity = 0.2f;
+
+    Manager->RegisterShrine(FIntPoint(0, 0), EShrineType::Water, 0.2f);
+    const FShrine* Shrine = Manager->FindShrineAt(FIntPoint(0, 0));
+    if (!TestNotNull(TEXT("Shrine registered"), Shrine))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+    const double PullPerSecond = Settings->ShrineWaterPurityPullRate * Shrine->Restoration;
+    const float FrameSeconds = 1.0f / 60.0f;
+    const int32 Frames = 600;
+    const float PurityBefore = WaterCell->TargetState.Meta.Purity;
+    for (int32 Frame = 0; Frame < Frames; ++Frame)
+    {
+        Manager->RegenerateCellParameters(FrameSeconds);
+    }
+
+    const double Expected = PullPerSecond * Frames * FrameSeconds;
+    const double Grown = WaterCell->TargetState.Meta.Purity - PurityBefore;
+    AddInfo(FString::Printf(TEXT("Толчок за кадр %.2e, за %d кадров Purity выросла на %.6f (ожидалось %.6f)"),
+        PullPerSecond * FrameSeconds, Frames, Grown, Expected));
+    TestTrue(TEXT("Sanity: толчок за кадр меньше KINDA_SMALL_NUMBER -- тот самый случай"), PullPerSecond * FrameSeconds < KINDA_SMALL_NUMBER);
+    TestEqual(TEXT("За 600 кадров по 1/60 с Purity выросла на притяжение × 10 с"), Grown, Expected, Expected * 0.02);
 
     Manager->Destroy();
     return true;

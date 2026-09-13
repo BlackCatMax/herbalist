@@ -3,9 +3,8 @@
 // Разметка мира, этап 3 (2026-09-12) -- радиусы в метрах (решение пользователя
 // 11, DESIGN_World_Layout.md §5). Радиусы капищ, Шапки, оберегов, приманки,
 // Соловья и Росы заданы в метрах и переводятся в клетки на размере клетки
-// сетки. Отдельно -- фронт порчи: решение 12 (скорость заражения в метрах)
-// проверкой не подтвердилось, фронт идёт со скоростью релаксации, а не ставки
-// заражения (открытый вопрос в ROADMAP.md).
+// сетки. Фронт порчи тоже в метрах (решение 12, 2026-09-13): ставка заражения
+// задана для опорной клетки 10 м и пересчитывается на клетку сетки.
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/WorldLayout.h"
@@ -101,7 +100,7 @@ namespace
 
         const int32 Row = Manager->GridSizeY / 2;
         const double StepSeconds = 10.0;
-        for (double Elapsed = StepSeconds; Elapsed <= 60000.0; Elapsed += StepSeconds)
+        for (double Elapsed = StepSeconds; Elapsed <= 120000.0; Elapsed += StepSeconds)
         {
             Manager->RegenerateCellParameters(StepSeconds);
             const FGridCell* Probe = Manager->GetCell(TargetColumn, Row);
@@ -114,22 +113,20 @@ namespace
     }
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCellRadiusMeters_ContagionFrontIsLimitedByRelaxation,
-    "Herbalist.WorldLayout.Meters.ContagionFrontIsLimitedByRelaxation",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCellRadiusMeters_ContagionFrontSpeedIsSameInMeters,
+    "Herbalist.WorldLayout.Meters.ContagionFrontSpeedIsSameInMeters",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistCellRadiusMeters_ContagionFrontIsLimitedByRelaxation::RunTest(const FString& Parameters)
+bool FHerbalistCellRadiusMeters_ContagionFrontSpeedIsSameInMeters::RunTest(const FString& Parameters)
 {
-    // DESIGN_World_Layout.md §5 предполагал, что фронт порчи идёт со
-    // скоростью ставки заражения, и её пересчёт по размеру клетки удержит
-    // фронт в метрах. Проверка (2026-09-12) показала другое: ставка 0.01
-    // поднимает TargetState соседа в двадцать раз быстрее, чем State следует за
-    // ним (AGridWorldManager::StateRelaxationPerSecond, 0.0005 в секунду), и
-    // сосед перекидывается, когда до порога входа дойдёт именно State. Время
-    // на клетку -- (порог входа - здоровое значение) / 0.0005 на любом размере
-    // клетки, скорость в метрах пропорциональна клетке. Тест фиксирует это
-    // поведение, пока не решено, как держать фронт в метрах (ROADMAP.md).
-    // 60 м по оси X -- 3 клетки по 20 м, 6 по 10 м, 12 по 5 м.
+    // DESIGN_World_Layout.md §5: скорость фронта порчи в метрах за игровое время
+    // одинакова на разных клетках. Сосед перекидывается, когда до порога входа
+    // дойдёт его State; пока действующая ставка заражения не быстрее релаксации
+    // State (0.0005 в секунду), State идёт за TargetState, и время на клетку --
+    // (порог входа - здоровое значение) / действующая ставка. Действующая ставка
+    // обратно пропорциональна клетке, так что 90 м проходятся за одно и то же
+    // время: 90 м × (порог - здоровое) / (ставка × 10 м).
+    // 90 м по оси X -- 3 клетки по 30 м, 5 по 18 м, 10 по 9 м.
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
@@ -139,25 +136,38 @@ bool FHerbalistCellRadiusMeters_ContagionFrontIsLimitedByRelaxation::RunTest(con
     const double EnterThreshold = Settings->BiomeDegradeCenterCorruption + Settings->BiomeDegradeMargin;
     const double HealthyCorruption = FBiomeDefaults::GetDefaultState(EBiomeType::Taiga).Meta.Corruption;
     const double RelaxationPerSecond = AGridWorldManager::StateRelaxationPerSecond;
-    const double ExpectedSecondsPerCell = (EnterThreshold - HealthyCorruption) / RelaxationPerSecond;
+    const double DistanceMeters = 90.0;
+    const double ExpectedSeconds = DistanceMeters * (EnterThreshold - HealthyCorruption)
+        / (Settings->ContagionSpreadRate * UHerbalistSettings::ContagionReferenceCellMeters);
 
     struct FCase { float CellSizeCm; int32 Column; };
-    const FCase Cases[] = { { 2000.0f, 3 }, { 1000.0f, 6 }, { 500.0f, 12 } };
+    const FCase Cases[] = { { 3000.0f, 3 }, { 1800.0f, 5 }, { 900.0f, 10 } };
     for (const FCase& Case : Cases)
     {
         const double Seconds = MeasureContagionFrontSecondsForLayout(Manager, Case.CellSizeCm, Case.Column);
-        if (!TestTrue(FString::Printf(TEXT("Клетка %.0f м: фронт дошёл до 60 м"), Case.CellSizeCm / 100.0f), Seconds > 0.0))
+        if (!TestTrue(FString::Printf(TEXT("Клетка %.0f м: фронт дошёл до 90 м"), Case.CellSizeCm / 100.0f), Seconds > 0.0))
         {
             Manager->Destroy();
             return false;
         }
-        const double SecondsPerCell = Seconds / Case.Column;
-        AddInfo(FString::Printf(TEXT("Фронт порчи: клетка %.0f м, 60 м за %.0f с (%.0f с на клетку, %.5f м/с)"),
-            Case.CellSizeCm / 100.0f, Seconds, SecondsPerCell, 60.0 / Seconds));
+        AddInfo(FString::Printf(TEXT("Фронт порчи: клетка %.0f м, 90 м за %.0f с (%.0f с на клетку, %.5f м/с)"),
+            Case.CellSizeCm / 100.0f, Seconds, Seconds / Case.Column, DistanceMeters / Seconds));
         // Допуск 5%: шаг симуляции 10 с добавляет к каждой клетке один шаг
-        // обнаружения перехода (~10 с из ~1350).
-        TestEqual(FString::Printf(TEXT("Клетка %.0f м: время на клетку задаёт релаксация"), Case.CellSizeCm / 100.0f),
-            SecondsPerCell, ExpectedSecondsPerCell, ExpectedSecondsPerCell * 0.05);
+        // обнаружения перехода (до 10 шагов из ~13 500 с).
+        TestEqual(FString::Printf(TEXT("Клетка %.0f м: 90 м за то же время, что на любой клетке"), Case.CellSizeCm / 100.0f),
+            Seconds, ExpectedSeconds, ExpectedSeconds * 0.05);
+    }
+
+    // Клетка мельче 9 м: действующая ставка обгоняет релаксацию, время на клетку
+    // задаёт релаксация, и фронт в метрах медленнее -- предел, записанный у
+    // ContagionSpreadRate. 90 м -- 18 клеток по 5 м.
+    const double SmallCellSeconds = MeasureContagionFrontSecondsForLayout(Manager, 500.0f, 18);
+    const double RelaxationLimitedSeconds = 18.0 * (EnterThreshold - HealthyCorruption) / RelaxationPerSecond;
+    if (TestTrue(TEXT("Клетка 5 м: фронт дошёл до 90 м"), SmallCellSeconds > 0.0))
+    {
+        TestEqual(TEXT("Клетка 5 м: время на клетку задаёт релаксация"),
+            SmallCellSeconds, RelaxationLimitedSeconds, RelaxationLimitedSeconds * 0.05);
+        TestTrue(TEXT("...и фронт в метрах медленнее, чем на клетках от 9 м"), SmallCellSeconds > ExpectedSeconds * 1.05);
     }
 
     Manager->Destroy();

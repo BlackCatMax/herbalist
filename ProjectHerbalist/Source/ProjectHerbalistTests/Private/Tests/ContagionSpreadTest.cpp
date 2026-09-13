@@ -11,6 +11,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Config/HerbalistSettings.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -175,6 +176,74 @@ bool FHerbalistContagion_GridReportCountsDegradingCellsAcrossWholeGrid::RunTest(
         InfectedReport.Contains(TEXT("2 degrading")));
     TestTrue(FString::Printf(TEXT("Infected grid reports the max Distortion the two cells were set to (got '%s')"), *InfectedReport),
         InfectedReport.Contains(TEXT("max=1.000")));
+
+    Manager->Destroy();
+    return true;
+}
+
+// Толчок заражения кадрами (ревью 2026-09-13). RegenerateCellParameters идёт
+// каждый кадр с реальным DeltaTime; ставка на клетке 9 м -- 0.0005 в секунду, за
+// кадр 1/60 с это ≈ 8e-6, меньше KINDA_SMALL_NUMBER. Сравнение с эпсилоном
+// перед записью пропускало такой толчок каждый кадр, и фронт в игре стоял.
+// Остальные тесты файла шагают по секунде и этого не видели.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistContagion_FrameSizedStepsAccumulate,
+    "Herbalist.Contagion.FrameSizedStepsAccumulate",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistContagion_FrameSizedStepsAccumulate::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    // Клетка 9 м, как на L_TestDev.
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 900.0f);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+    // Без этой проверки тест, уехавший на клетку 1 м, прошёл бы тихо: толчок
+    // 7.5e-5 там тоже меньше порога, и ожидание пересчиталось бы (ревью).
+    if (!TestEqual(TEXT("Sanity: клетка 9 м"), Manager->CellSize, 900.0f))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    FGridCell* Source = Manager->GetCell(5, 5);
+    FGridCell* North = Manager->GetCell(5, 4);
+    if (!TestNotNull(TEXT("Source cell exists"), Source) || !TestNotNull(TEXT("North neighbor exists"), North))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    Source->Biome = EBiomeType::Bog;
+    Source->Memory.bDegrading = true;
+    Source->TargetState.Meta.Corruption = 1.0f;
+    Source->TargetState.Meta.Purity = 0.0f;
+    Source->State.Meta.Corruption = 1.0f;
+
+    North->Biome = EBiomeType::Taiga;
+    North->bIsWater = false;
+    North->TargetState.Meta.Corruption = 0.18f;
+    North->TargetState.Meta.Purity = 0.75f;
+    North->State.Meta.Corruption = 0.18f;
+    North->Memory.bDegrading = false;
+
+    const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
+    const double Rate = Settings->ContagionSpreadRate * UHerbalistSettings::ContagionReferenceCellMeters * 100.0 / Manager->CellSize;
+    const float FrameSeconds = 1.0f / 60.0f;
+    const int32 Frames = 600;
+    const float CorruptionBefore = North->TargetState.Meta.Corruption;
+    for (int32 Frame = 0; Frame < Frames; ++Frame)
+    {
+        Manager->RegenerateCellParameters(FrameSeconds);
+    }
+
+    const double Expected = Rate * Frames * FrameSeconds;
+    const double Grown = North->TargetState.Meta.Corruption - CorruptionBefore;
+    AddInfo(FString::Printf(TEXT("Толчок за кадр %.2e, за %d кадров вырос на %.6f (ожидалось %.6f)"),
+        Rate * FrameSeconds, Frames, Grown, Expected));
+    TestTrue(TEXT("Sanity: толчок за кадр меньше KINDA_SMALL_NUMBER -- тот самый случай"), Rate * FrameSeconds < KINDA_SMALL_NUMBER);
+    // Допуск 2%: 600 сложений во float на 0.18 теряют не больше ~5e-6 из 0.005.
+    TestEqual(TEXT("За 600 кадров по 1/60 с TargetState соседа вырос на ставку × 10 с"), Grown, Expected, Expected * 0.02);
 
     Manager->Destroy();
     return true;
