@@ -216,6 +216,11 @@ public:
     virtual void PreSave(FObjectPreSaveContext ObjectSaveContext) override;
 
 #if WITH_EDITOR
+    // Флаг пространственной загрузки в редакторе не меняется (ревью этапа 5
+    // разметки мира): менеджер, у которого галку включили обратно вручную,
+    // выгружался бы вместе со своей ячейкой -- со всей симуляцией мира.
+    virtual bool CanChangeIsSpatiallyLoadedFlag() const override { return false; }
+
     // Исходные величины из мира редактора: первый ландшафт (границы через
     // GetCompleteBounds), разбиение World Partition, в которое он попадает.
     static FHerbalistWorldLayoutSource GatherWorldLayoutSource(UWorld* World, TArray<FString>& OutWarnings);

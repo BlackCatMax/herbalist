@@ -9,6 +9,18 @@ ABiomeRegionVolume::ABiomeRegionVolume()
     SplineComponent = CreateDefaultSubobject<USplineComponent>(TEXT("SplineComponent"));
     RootComponent = SplineComponent;
     SplineComponent->SetClosedLoop(true);
+
+#if WITH_EDITORONLY_DATA
+    // Регион не загружается пространственно (2026-09-12, разметка мира,
+    // решение пользователя 8, DESIGN_World_Layout.md §7): клетки, а дальше
+    // страницы строят основу из регионов, и регион, не загруженный в этот
+    // момент, молча выпал бы из расчёта. Данных в нём мало -- сплайн и
+    // настройки. Уже расставленные регионы пересохранять не нужно: дескриптор
+    // внешнего актора хранит флаг дельтой к дескриптору класса, а тот строится
+    // из CDO (ревью этапа 5). Регион в Data Layer грузится вместе со слоем --
+    // туда регионы не класть.
+    bIsSpatiallyLoaded = false;
+#endif
 }
 
 void ABiomeRegionVolume::BeginPlay()

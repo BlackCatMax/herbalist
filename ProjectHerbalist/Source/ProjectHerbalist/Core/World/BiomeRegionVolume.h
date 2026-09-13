@@ -45,6 +45,14 @@ class PROJECTHERBALIST_API ABiomeRegionVolume : public AActor
 public:
     ABiomeRegionVolume();
 
+#if WITH_EDITOR
+    // Флаг пространственной загрузки в редакторе не меняется (2026-09-12,
+    // ревью этапа 5 разметки мира): регион, у которого галку включили обратно
+    // вручную, молча выпал бы из расчёта основы клеток. Тот же приём у
+    // ALandscape и AWorldPartitionVolume в движке.
+    virtual bool CanChangeIsSpatiallyLoadedFlag() const override { return false; }
+#endif
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome")
     EBiomeType Biome = EBiomeType::MixedForest;
 
