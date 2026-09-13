@@ -67,7 +67,12 @@ public:
     virtual void Tick(float DeltaTime) override;
 
     // ---- Инициализация ----
-    void SpawnResourcesInCell(FGridCell& Cell);
+    // IngredientSubsystemOverride -- для тестов: у editor-мира автотеста нет
+    // GameInstance. nullptr -- подсистема из GameInstance.
+    void SpawnResourcesInCell(FGridCell& Cell, class UIngredientRegistrySubsystem* IngredientSubsystemOverride = nullptr);
+
+    // Тип воды клетки из её собственного потока (этап 4 разметки мира).
+    FName RollWaterTypeForCell(const FGridCell& Cell, const class UWaterTypeRegistrySubsystem* WaterSubsystem) const;
 
     // Сколько ресурсов положить в клетку: плотность на 100 м² (случайная между
     // Min и Max) × площадь клетки × DensityScale (затухание к краю региона);
@@ -88,6 +93,23 @@ public:
     bool SpawnOneResourceInCell(FGridCell& Cell, const struct FHarvestContext& Context,
         const EGardenNiche* PlotNiche, ABiomeRegionVolume* ClaimingRegion,
         class UIngredientRegistrySubsystem* IngredientSubsystem);
+
+    // То же с явным потоком вида и слотом места. Место -- из потока клетки с
+    // солью слота (этап 4 разметки мира): слоты не зависят друг от друга, и
+    // ресурс, поставленный заново, встаёт туда же. Первичное заселение
+    // передаёт поток вида клетки и слот i; отрастание (перегрузка выше) --
+    // общий WorldRNG для вида и следующий свободный слот: отросшее -- живое
+    // состояние, его вид хранится в сейве и из сида не пересчитывается.
+    bool SpawnOneResourceInCell(FGridCell& Cell, const struct FHarvestContext& Context,
+        const EGardenNiche* PlotNiche, ABiomeRegionVolume* ClaimingRegion,
+        class UIngredientRegistrySubsystem* IngredientSubsystem, FRandomStream& SpeciesRng, int32 PlacementSlot);
+
+    // Следующий свободный слот места в клетке: на единицу больше самого
+    // большого у стоящих и спящих ресурсов.
+    static int32 AllocatePlacementSlot(const FGridCell& Cell);
+
+    // Запомнить спящий ресурс со слотом, выровняв массив слотов по списку ID.
+    static void AddDormantResource(FGridCell& Cell, FName IngredientID, int32 PlacementSlot);
     // Общее окно условий (сезон/время суток/луна/погода/высота) для всех
     // ресурсов одного момента -- было продублировано между
     // SpawnResourcesInCell и StartRegeneration, вынесено сюда (2026-09-04).
@@ -165,6 +187,16 @@ public:
     // Радиус в клетках для величины в метрах на клетке этой сетки (радиусы
     // капищ, оберегов, Шапки, Соловья, Росы -- в метрах с 2026-09-12).
     int32 GetCellRadius(float Meters) const;
+
+    // Глобальная координата клетки: от начала сетки World Partition, когда
+    // разметка выведена (решение пользователя 13), иначе индекс в массиве.
+    FIntPoint GetGlobalCellCoord(int32 X, int32 Y) const;
+
+    // Поток случайных чисел клетки (этап 4 разметки мира): тот же результат
+    // при любом порядке обхода. Основа клетки -- тип воды, число, виды и места
+    // ресурсов -- берётся отсюда; мировые выборы (пятна воды, хозяева мест,
+    // курганы, места силы) пока остаются на общем WorldRNG.
+    FRandomStream MakeCellRandomStream(int32 X, int32 Y, FWorldLayoutSolver::ECellRandomPurpose Purpose, int32 Salt = 0) const;
 
     // Скорость, с которой State клетки идёт к TargetState, в долях в секунду
     // (0.05%, линейный шаг в RegenerateCellParameters). Она же задаёт скорость
@@ -733,7 +765,17 @@ public:
     void ApplyBiomeInfluences(const TMap<FName, float>& MorokFields, const TMap<FName, float>& ZaryanaFields, float GlobalScale, float DeltaTime);
 
     // ---- Ресурсы ----
-    void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector);
+    // PlacementSlot -- слот места (этап 4 разметки мира); INDEX_NONE --
+    // следующий свободный.
+    void SpawnResourceActor(FName IngredientID, int32 X, int32 Y, const FVector& Offset = FVector::ZeroVector,
+        class UIngredientRegistrySubsystem* IngredientSubsystemOverride = nullptr, int32 PlacementSlot = INDEX_NONE);
+
+    // Ставит сохранённый ростер клетки (материализация чанка, загрузка сейва).
+    // Каждый ресурс -- на место своего слота: собранный или не вставший при
+    // заселении ресурс не сдвигает остальных. PlacementSlots короче списка --
+    // недостающим выдаются следующие свободные (сейв до слотов).
+    void SpawnResourceRoster(FGridCell& Cell, const TArray<FName>& IngredientIDs, const TArray<int32>& PlacementSlots,
+        class UIngredientRegistrySubsystem* IngredientSubsystemOverride = nullptr);
 
     // ---- Восприятие ----
     const FPerceivedWorld* GetPerceivedWorld() const;

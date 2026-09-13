@@ -277,6 +277,16 @@ int32 AGridWorldManager::GetCellRadius(float Meters) const
     return FWorldLayoutSolver::MetersToCellRadius(Meters, CellSize);
 }
 
+FIntPoint AGridWorldManager::GetGlobalCellCoord(int32 X, int32 Y) const
+{
+    return ResolvedLayout.bValid ? ResolvedLayout.MinCell + FIntPoint(X, Y) : FIntPoint(X, Y);
+}
+
+FRandomStream AGridWorldManager::MakeCellRandomStream(int32 X, int32 Y, FWorldLayoutSolver::ECellRandomPurpose Purpose, int32 Salt) const
+{
+    return FRandomStream(FWorldLayoutSolver::MakeCellSeed(RngBaseSeed, GetGlobalCellCoord(X, Y), Purpose, Salt));
+}
+
 void AGridWorldManager::SyncWithWorldPartition()
 {
 #if WITH_EDITOR

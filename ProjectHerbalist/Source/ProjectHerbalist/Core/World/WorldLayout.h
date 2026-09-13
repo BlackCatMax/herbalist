@@ -212,6 +212,22 @@ struct PROJECTHERBALIST_API FWorldLayoutSolver
     // радиус, который был ненулевым, не должен исчезать на крупной клетке.
     static int32 MetersToCellRadius(double Meters, double CellSizeCm);
 
+    // Назначение потока случайных чисел клетки (этап 4 разметки мира). У
+    // каждого назначения свой поток: бросок типа воды не сдвигает ресурсы той
+    // же клетки. Числа входят в сид -- не переставлять и не переиспользовать.
+    enum class ECellRandomPurpose : uint8
+    {
+        WaterType = 1,
+        ResourceCount = 2,
+        ResourceSpecies = 3,
+        ResourcePlacement = 4,
+    };
+
+    // Сид клетки из сида мира, глобальной координаты клетки, назначения и
+    // соли. Не зависит от порядка обхода и расхода общего WorldRNG: основа
+    // клетки пересчитывается одинаково при любой загрузке страницы (§6).
+    static int32 MakeCellSeed(int32 WorldSeed, const FIntPoint& GlobalCell, ECellRandomPurpose Purpose, int32 Salt);
+
     static uint32 ComputeFingerprint(double CellSizeCm, const FVector2D& Anchor, int32 PageSizeInCells);
 
     // Совпадают ли исходные величины с точностью до допуска. Границы

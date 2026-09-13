@@ -161,8 +161,17 @@ private:
     // Ставится только в Init(), то есть только на C++-пути спавна.
     bool bSpawnedByGrid = false;
 
+    // Слот места в клетке (2026-09-12, разметка мира, этап 4): место берётся
+    // из потока клетки с солью слота, поэтому ресурс, поставленный заново
+    // (материализация чанка, загрузка), встаёт туда же. INDEX_NONE -- актор
+    // не сетки (PCG-граф, рука левел-дизайнера).
+    int32 PlacementSlot = INDEX_NONE;
+
 public:
     // Только акторов сетки она вправе уничтожать при деактивации чанка:
     // пришедшие из PCG-графа принадлежат графу и World Partition.
     bool WasSpawnedByGrid() const { return bSpawnedByGrid; }
+
+    int32 GetPlacementSlot() const { return PlacementSlot; }
+    void SetPlacementSlot(int32 InSlot) { PlacementSlot = InSlot; }
 };

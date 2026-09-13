@@ -390,6 +390,12 @@ struct PROJECTHERBALIST_API FGridCell
     UPROPERTY()
     TArray<FName> DormantResourceIDs;
 
+    // Слоты мест спящих ресурсов, по тому же индексу, что DormantResourceIDs
+    // (2026-09-12, разметка мира, этап 4). Короче списка ID или INDEX_NONE --
+    // слот не известен, при расстановке выдаётся следующий свободный.
+    UPROPERTY()
+    TArray<int32> DormantResourceSlots;
+
     // Прошла ли клетка первичное заселение. Отличает "пусто, потому что
     // собрано" от "пусто, потому что игрок сюда ещё не заходил": со
     // стримингом первичный бросок происходит не в InitializeCells, а при

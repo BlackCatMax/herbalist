@@ -34,6 +34,7 @@ FSavedCellState AGridWorldManager::CaptureCellState(const FGridCell& Cell)
         if (ResourceActor.IsValid())
         {
             Saved.ResourceIngredientIDs.Add(ResourceActor->GetIngredientID());
+            Saved.ResourceSlots.Add(ResourceActor->GetPlacementSlot());
         }
     }
 
@@ -41,6 +42,10 @@ FSavedCellState AGridWorldManager::CaptureCellState(const FGridCell& Cell)
     // но растение есть -- без этой строки сохранение в момент, когда
     // игрок далеко, стирало бы весь дальний мир начисто.
     Saved.ResourceIngredientIDs.Append(Cell.DormantResourceIDs);
+    for (int32 Index = 0; Index < Cell.DormantResourceIDs.Num(); ++Index)
+    {
+        Saved.ResourceSlots.Add(Cell.DormantResourceSlots.IsValidIndex(Index) ? Cell.DormantResourceSlots[Index] : INDEX_NONE);
+    }
 
     return Saved;
 }
@@ -107,11 +112,9 @@ void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const
     // заменит — итог: растительность дублируется на каждый цикл
     // сейв/стриминг.
     Cell.DormantResourceIDs.Empty();
+    Cell.DormantResourceSlots.Empty();
 
-    for (FName IngredientID : Saved.ResourceIngredientIDs)
-    {
-        SpawnResourceActor(IngredientID, Cell.X, Cell.Y);
-    }
+    SpawnResourceRoster(Cell, Saved.ResourceIngredientIDs, Saved.ResourceSlots);
 }
 
 void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)

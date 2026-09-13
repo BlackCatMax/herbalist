@@ -93,6 +93,21 @@ int32 FWorldLayoutSolver::MetersToCellRadius(double Meters, double CellSizeCm)
     return FMath::Max(1, FMath::RoundToInt32(Cells));
 }
 
+int32 FWorldLayoutSolver::MakeCellSeed(int32 WorldSeed, const FIntPoint& GlobalCell, ECellRandomPurpose Purpose, int32 Salt)
+{
+    // HashCombine, а не HashCombineFast, и числа напрямую, а не GetTypeHash:
+    // по комментариям движка (Templates/TypeHash.h) HashCombine не меняется
+    // ради обратной совместимости, а HashCombineFast и GetTypeHash стабильность
+    // между версиями и запусками не обещают. Сид -- часть мира, от него
+    // зависит, что растёт в клетке после загрузки.
+    uint32 Hash = static_cast<uint32>(WorldSeed);
+    Hash = HashCombine(Hash, static_cast<uint32>(GlobalCell.X));
+    Hash = HashCombine(Hash, static_cast<uint32>(GlobalCell.Y));
+    Hash = HashCombine(Hash, static_cast<uint32>(Purpose));
+    Hash = HashCombine(Hash, static_cast<uint32>(Salt));
+    return static_cast<int32>(Hash);
+}
+
 int32 FWorldLayoutSolver::ChooseChunkCells(int32 PageSizeInCells, double CellSizeCm,
     double SimulationRadiusMeters, double LongestLocalMechanicMeters)
 {

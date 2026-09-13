@@ -56,6 +56,11 @@ struct PROJECTHERBALIST_API FSavedCellState
     UPROPERTY()
     TArray<FName> ResourceIngredientIDs;
 
+    // Слоты мест тех же ресурсов, по тому же индексу (v3, 2026-09-12, разметка
+    // мира, этап 4). В сейве старее пусто -- слоты выдаются по порядку.
+    UPROPERTY()
+    TArray<int32> ResourceSlots;
+
     // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
     // постоянная метка, обязана пережить сохранение, тот же класс поля,
     // что ManifestedEntityID выше.

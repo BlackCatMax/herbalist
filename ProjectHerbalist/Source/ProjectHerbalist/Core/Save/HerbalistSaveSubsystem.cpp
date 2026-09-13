@@ -50,7 +50,9 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // от природы биома (см. GetBiomeSamples, GridWorldManagerCore.cpp).
     // Формат полей тот же, смысл другой -- ровно тот "случай посложнее
     // простого добавления поля", ради которого версия и заводилась.
-    Save->SaveVersion = 2;
+    // v3 (2026-09-12, разметка мира, этап 4): основа клетки -- из потоков
+    // клеток, у ресурсов появились слоты мест (FSavedCellState::ResourceSlots).
+    Save->SaveVersion = 3;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
     Save->GridSizeY = WorldManager->GridSizeY;
@@ -171,11 +173,22 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     // новой версией игры), отклоняется явно, а не десериализуется вслепую с
     // риском тихо потерять/неверно истолковать поля, которых эта версия ещё
     // не знает.
-    if (Save->SaveVersion > 2)
+    if (Save->SaveVersion > 3)
     {
-        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (2), aborted"),
+        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (3), aborted"),
             *Slot, Save->SaveVersion);
         return false;
+    }
+
+    // v3 (2026-09-12, разметка мира, этап 4): тип воды, число, виды и места
+    // ресурсов берутся из потоков клеток, и при том же сиде раскладка воды
+    // пятнами и всё, что сеется после неё (хозяева мест, якоря, курганы, места
+    // силы), другое, чем в сейве старее. Такой сейв грузится, но его клетки и
+    // места могут лечь не на тот мир. Отказ по отпечатку разметки -- этап 8.
+    if (Save->SaveVersion < 3)
+    {
+        UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: slot '%s' has SaveVersion %d, written before per-cell seeds (3): water, sites and resources may not match this world"),
+            *Slot, Save->SaveVersion);
     }
 
     UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;

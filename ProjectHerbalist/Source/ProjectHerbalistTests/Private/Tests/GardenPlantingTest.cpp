@@ -179,10 +179,10 @@ bool FHerbalistGardenPlanting_OverridesProbabilisticNichePick::RunTest(const FSt
 
     const FHarvestContext Context = Manager->BuildHarvestContextForCell(*Cell);
 
-    // WorldRNG advances with each call (position jitter, and would advance
-    // further still for the weighted pick if the override were bypassed) --
-    // repeating several times over that changing internal state is enough to
-    // rule out "got lucky once", without needing to touch the RNG directly.
+    // Repeated calls: the weighted pick would draw from WorldRNG, which moves on
+    // with every call, so a bypassed override would not win eight times in a
+    // row. The position comes from the cell's placement-slot stream (world
+    // layout stage 4), not from WorldRNG.
     for (int32 i = 0; i < 8; ++i)
     {
         Cell->ResourceActors.Empty();
