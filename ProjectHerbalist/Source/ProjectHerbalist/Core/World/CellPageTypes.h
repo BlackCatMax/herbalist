@@ -10,6 +10,40 @@
 #include "Core/Types/HerbalistCoreTypes.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 
+class UWaterTypeRegistrySubsystem;
+
+// Сторона блока фолбэка биомов в клетках: клетки вне всех регионов раскрашены
+// блоками 5 x 5 (довод -- у BuildCellBase).
+inline constexpr int32 HerbalistFallbackBiomeBlockCells = 5;
+
+// Брать ли воду основы клетки из запечённой маски: при старте маска ещё не
+// построена, вода раскладывается после основы.
+enum class ECellBaseWater : uint8
+{
+    None,
+    FromBakedMask,
+};
+
+// Ростер ресурсов нетронутой клетки выгруженной страницы (этап 8в): вид
+// засеянного ресурса зависит от условий в момент заселения, и основа его не
+// воспроизводит. Полная дельта клетки -- только у тронутых и проявившихся.
+struct FHerbalistCellRoster
+{
+    TArray<FName> IngredientIDs;
+    TArray<int32> PlacementSlots;
+};
+
+// Всё, что основе клетки нужно помимо координаты и регионов менеджера (этап
+// 8в): собирается один раз на страницу, а не на клетку.
+struct FHerbalistCellBaseContext
+{
+    TArray<EBiomeType> AllBiomes;
+    const UWaterTypeRegistrySubsystem* WaterSubsystem = nullptr;
+    // Ширина строки блоков фолбэка 5 x 5 -- от размера сетки, фиксированного
+    // на сессию.
+    int32 BlocksX = 0;
+};
+
 struct FHerbalistCellPage
 {
     // Первая клетка страницы и её размер в клетках. Страница обрезана сеткой:
@@ -18,6 +52,10 @@ struct FHerbalistCellPage
     FIntPoint Size = FIntPoint::ZeroValue;
 
     bool bLoaded = false;
+
+    // Высоты сняты по загруженному ландшафту для всех клеток. Страница, загруженная
+    // раньше земли под ней, досчитывает их при материализации чанка.
+    bool bHeightsComplete = false;
 
     // Построчно от MinCell, индекс -- GetLocalIndex. Высоты и снимки клеток
     // сразу после инициализации (откат при загрузке сейва) -- рядом, тем же

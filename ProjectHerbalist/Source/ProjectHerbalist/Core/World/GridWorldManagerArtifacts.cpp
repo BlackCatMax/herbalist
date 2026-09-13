@@ -48,8 +48,14 @@ bool AGridWorldManager::IsLegendaryManifested(FName EntityID) const
 {
     if (const FIntPoint* Anchor = LegendaryAnchors.Find(EntityID))
     {
-        const FGridCell* Cell = GetCellConst(Anchor->X, Anchor->Y);
-        return Cell && Cell->ManifestedEntityID == EntityID;
+        if (const FGridCell* Cell = GetCellConst(Anchor->X, Anchor->Y))
+        {
+            return Cell->ManifestedEntityID == EntityID;
+        }
+        // Страница якоря выгружена (ревью этапа 8в; обычно она закреплена и не
+        // выгружается) -- проявление в её дельте.
+        const FSavedCellState* Delta = IsCellInGrid(Anchor->X, Anchor->Y) ? UnloadedCellDeltas.Find(GetCellIndex(Anchor->X, Anchor->Y)) : nullptr;
+        return Delta && Delta->ManifestedEntityID == EntityID;
     }
     // 2026-09-02 (унификация Берегини) -- нет якоря значит per-клеточная
     // карточка (bUsesCellHistoryPurity=true), у неё никогда не было
@@ -58,6 +64,14 @@ bool AGridWorldManager::IsLegendaryManifested(FName EntityID) const
     for (const FGridCell& Cell : GetCellsInGridOrder())
     {
         if (Cell.ManifestedEntityID == EntityID) return true;
+    }
+    // Клетки выгруженных страниц (этап 8в) -- проявление лежит в их дельтах.
+    for (const TPair<int32, FSavedCellState>& Pair : UnloadedCellDeltas)
+    {
+        if (Pair.Value.ManifestedEntityID == EntityID)
+        {
+            return true;
+        }
     }
     return false;
 }

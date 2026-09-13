@@ -73,29 +73,11 @@ void AGridWorldManager::CacheCellHeights()
     int32 CachedCount = 0;
     for (FHerbalistCellPage& Page : CellPages)
     {
-        if (!Page.bLoaded)
+        if (Page.bLoaded)
         {
-            continue;
+            CacheCellHeightsForPage(Page);
+            CachedCount += Page.Cells.Num();
         }
-        // Reset до SetNumZeroed: при том же размере SetNumZeroed старые
-        // значения не трогает (ревью этапа 8б).
-        Page.Heights.Reset();
-        Page.Heights.SetNumZeroed(Page.Cells.Num());
-        if (!CachedLandscape)
-        {
-            continue;
-        }
-        for (int32 LocalY = 0; LocalY < Page.Size.Y; ++LocalY)
-        {
-            for (int32 LocalX = 0; LocalX < Page.Size.X; ++LocalX)
-            {
-                FVector WorldPoint = GetCellWorldPositionFlat(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY);
-                WorldPoint.Z = 0.f;
-                const TOptional<float> OptHeight = CachedLandscape->GetHeightAtLocation(WorldPoint);
-                Page.Heights[LocalY * Page.Size.X + LocalX] = OptHeight.IsSet() ? OptHeight.GetValue() : 0.f;
-            }
-        }
-        CachedCount += Page.Cells.Num();
     }
     bCellHeightsCached = true;
 
@@ -748,6 +730,8 @@ void AGridWorldManager::CatchUpActivatedChunks()
     // нечему, догонять нечего.
     if (Radius < 0 || ActiveChunkCenters.Num() == 0)
     {
+        // Активные чанки ушли -- страницы под ними могли опустеть (этап 8в).
+        bCellPageUnloadCheckPending |= PreviousActiveChunks.Num() > 0;
         ActiveChunks.Reset();
         PreviousActiveChunks.Reset();
         // Раньше здесь был просто return, и всё материализованное вокруг
@@ -755,6 +739,7 @@ void AGridWorldManager::CatchUpActivatedChunks()
         // "ресурсы остались там, откуда вы ушли, висящими в воздухе").
         // Материализация ведётся отдельно и сама решает, что усыпить.
         UpdateMaterializedChunks();
+        UnloadIdleCellPagesIfPending();
         return;
     }
 
@@ -763,6 +748,13 @@ void AGridWorldManager::CatchUpActivatedChunks()
     const float Now = GameClockSeconds;
     for (const FIntPoint& Chunk : ActiveChunks)
     {
+        // Страница чанка -- до догона: он читает клетки (этап 8в). Уже
+        // активный чанк выгруженным не бывает.
+        if (!PreviousActiveChunks.Contains(Chunk))
+        {
+            EnsureChunkPagesLoaded(Chunk);
+        }
+
         // Чанк, не встречавшийся ни разу, простаивал с момента инициализации
         // сетки — не «с этой секунды». Иначе дальний мир стоял бы
         // замороженным до первого визита, и клетка, испорченная до ухода
@@ -794,6 +786,7 @@ void AGridWorldManager::CatchUpActivatedChunks()
         if (!ActiveChunks.Contains(Chunk))
         {
             DespawnChunkEntities(Chunk);
+            bCellPageUnloadCheckPending = true;
         }
     }
 
@@ -802,6 +795,7 @@ void AGridWorldManager::CatchUpActivatedChunks()
     // Материализация/усыпление акторов ресурсов -- через
     // UpdateMaterializedChunks: по загруженной земле, а не по активности.
     UpdateMaterializedChunks();
+    UnloadIdleCellPagesIfPending();
 }
 
 FIntPoint AGridWorldManager::WorldPositionToChunk(const FVector& WorldPos) const
@@ -1060,11 +1054,30 @@ void AGridWorldManager::UpdateMaterializedChunks()
     {
         if (!MaterializedChunks.Contains(Chunk))
         {
+            // Страница -- до спавна: ростер из её дельт встаёт спящим и
+            // просыпается здесь же (этап 8в).
+            EnsureChunkPagesLoaded(Chunk);
+            // Страница могла загрузиться раньше земли (активный чанк, телепорт)
+            // -- высоты досчитываются до спавна (ревью этапа 8в).
+            if (CellPageSize > 0)
+            {
+                ForEachChunkPage(Chunk, [this](FHerbalistCellPage& Page)
+                {
+                    if (Page.bLoaded && !Page.bHeightsComplete)
+                    {
+                        CacheCellHeightsForPage(Page);
+                    }
+                });
+            }
             // Сначала в набор, потом спавн: спавн сам сверяется с набором.
             MaterializedChunks.Add(Chunk);
             SetChunkResourcesActive(Chunk, true);
         }
     }
+
+    // Набор материализованных чанков пересчитан -- страницы без земли и без
+    // активных чанков выгружаются (этап 8в, UnloadIdleCellPagesIfPending).
+    bCellPageUnloadCheckPending = true;
 }
 
 const FGridCell* AGridWorldManager::GetCellConst(int32 X, int32 Y) const
@@ -1256,6 +1269,7 @@ FHerbalistChunkSummary AGridWorldManager::BuildChunkSummary(const FIntPoint& Chu
 {
     FHerbalistChunkSummary Summary;
     const int32 ChunkSize = GetChunkSizeInCells();
+    TOptional<FHerbalistCellBaseContext> UnloadedCellContext;
     const int32 MinX = Chunk.X * ChunkSize;
     const int32 MinY = Chunk.Y * ChunkSize;
 
@@ -1263,7 +1277,20 @@ FHerbalistChunkSummary AGridWorldManager::BuildChunkSummary(const FIntPoint& Chu
     {
         for (int32 X = MinX; X < MinX + ChunkSize; ++X)
         {
+            FGridCell UnloadedCell;
             const FGridCell* Cell = GetCellConst(X, Y);
+            if (!Cell && IsCellInGrid(X, Y))
+            {
+                // Клетка выгруженной страницы (этап 8в) -- основа плюс дельта.
+                if (!UnloadedCellContext.IsSet())
+                {
+                    UnloadedCellContext = MakeCellBaseContext();
+                }
+                if (BuildUnloadedCell(X, Y, UnloadedCell, UnloadedCellContext.GetValue()))
+                {
+                    Cell = &UnloadedCell;
+                }
+            }
             if (!Cell)
             {
                 continue;
@@ -1334,19 +1361,8 @@ FHerbalistChunkSummary AGridWorldManager::BuildChunkSummary(const FIntPoint& Chu
     return Summary;
 }
 
-void AGridWorldManager::ForEachChunkSummary(TFunctionRef<void(const FHerbalistChunkSummary&)> Func) const
+void AGridWorldManager::EnsureChunkSummaryCacheKey() const
 {
-    check(IsInGameThread());
-    if (!HasCellPages())
-    {
-        return;
-    }
-
-    // Func получает ссылку в ChunkSummaries: запрос сводок изнутри перестроил
-    // бы таблицу под ней (ревью этапа 7).
-    check(!bIteratingChunkSummaries);
-    TGuardValue<bool> IterationGuard(bIteratingChunkSummaries, true);
-
     // Кэш собран под размер чанка и прямоугольник сетки (ревью этапа 7): без
     // разметки размер чанка читается из настроек и меняется на лету.
     const int32 ChunkSize = GetChunkSizeInCells();
@@ -1360,6 +1376,22 @@ void AGridWorldManager::ForEachChunkSummary(TFunctionRef<void(const FHerbalistCh
         ChunkSummaryMinCell = GridMin;
         ChunkSummaryGridSize = GridSize;
     }
+}
+
+void AGridWorldManager::ForEachChunkSummary(TFunctionRef<void(const FHerbalistChunkSummary&)> Func) const
+{
+    check(IsInGameThread());
+    if (!HasCellPages())
+    {
+        return;
+    }
+
+    // Func получает ссылку в ChunkSummaries: запрос сводок изнутри перестроил
+    // бы таблицу под ней (ревью этапа 7).
+    check(!bIteratingChunkSummaries);
+    TGuardValue<bool> IterationGuard(bIteratingChunkSummaries, true);
+
+    EnsureChunkSummaryCacheKey();
 
     FIntPoint MinChunk;
     FIntPoint MaxChunk;
@@ -1376,7 +1408,9 @@ void AGridWorldManager::ForEachChunkSummary(TFunctionRef<void(const FHerbalistCh
         for (int32 ChunkX = MinChunk.X; ChunkX <= MaxChunk.X; ++ChunkX)
         {
             const FIntPoint Chunk(ChunkX, ChunkY);
-            if (bAllLive)
+            // Чанк выгруженной страницы и без центров активности не живой (этап
+            // 8в): у него последняя сводка, а не сборка основы на каждый запрос.
+            if (bAllLive && IsChunkInLoadedPage(Chunk))
             {
                 Func(BuildChunkSummary(Chunk));
                 continue;
@@ -1694,44 +1728,8 @@ void AGridWorldManager::InitializeCells()
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
     UWaterTypeRegistrySubsystem* WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
 
-    // Общая точка заливки клетки водой -- раньше было продублировано в двух
-    // местах блока случайной воды ниже, теперь ещё и в явных регионах воды
-    // (2026-09-02) -- один источник истины на все три случая. Читает уже
-    // выставленный Cell.Biome -- вода поверх болота получает болотный
-    // WaterTypeID, поверх тундры -- тундровый, автоматически.
-    auto ApplyWaterToCell = [WaterSubsystem, this](FGridCell& Cell)
-    {
-        Cell.bIsWater = true;
-        Cell.WaterTypeID = RollWaterTypeForCell(Cell, WaterSubsystem);
-
-        FRealState waterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
-        if (WaterSubsystem)
-        {
-            if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
-            {
-                waterState.Meta.Purity      = WaterRow->BasePurity;
-                waterState.Meta.Distortion  = WaterRow->BaseDistortion;
-                waterState.Meta.Stability   = WaterRow->BaseStability;
-                waterState.Meta.Potency     = WaterRow->BasePotency;
-                waterState.Meta.Corruption  = WaterRow->BaseCorruption;
-            }
-        }
-        Cell.State = waterState;
-        Cell.TargetState = waterState;
-        Cell.HarvestStress = 0.0f;
-        Cell.ResourceActors.Empty();
-    };
-
-    // Собираем все типы биомов
-    TArray<EBiomeType> AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
-    if (AllBiomes.Num() == 0)
-    {
-        AllBiomes = {
-            EBiomeType::Tundra, EBiomeType::Taiga, EBiomeType::MixedForest,
-            EBiomeType::BroadleafForest, EBiomeType::ForestSteppe,
-            EBiomeType::Steppe, EBiomeType::Floodplain, EBiomeType::Bog
-        };
-    }
+    // Заливка водой и основа клетки -- члены менеджера (ApplyWaterToCell,
+    // BuildCellBase, этап 8в): те же функции собирают страницу при загрузке.
 
     // PCG-биомы (2026-08-31) -- собираем ABiomeRegionVolume, расставленные
     // в уровне, один раз до цикла по клеткам. Явно пересчитываем кэш точек
@@ -1784,10 +1782,9 @@ void AGridWorldManager::InitializeCells()
     // Блочная раскраска 5x5 остаётся ФОЛБЭКОМ для клеток вне всех
     // размещённых регионов (не отменена, не заменена целиком) -- система
     // деградирует плавно, пока авторская расстановка регионов неполная,
-    // вместо краха/единственного дефолтного биома на пробелах.
-    const int32 BlockSize = 5;
-    const int32 BlocksX = GridSizeX / BlockSize;
-    const int32 BlocksY = GridSizeY / BlockSize;
+    // вместо краха/единственного дефолтного биома на пробелах. Сама формула --
+    // в BuildCellBase.
+    const FHerbalistCellBaseContext BaseContext = MakeCellBaseContext();
     int32 FallbackCellCount = 0;
 
     // Регион, реально заявивший каждую клетку (2026-09-02, для
@@ -1806,94 +1803,26 @@ void AGridWorldManager::InitializeCells()
         {
             int32 Index = Y * GridSizeX + X;
             FGridCell& Cell = *GetCellByGridIndex(Index);
-            const int32 CellX = GridMin.X + X;
-            const int32 CellY = GridMin.Y + Y;
 
-            // Какие регионы содержат клетку -- равная доля на каждый
-            // (0.5/0.5 на двух, 1/3 на трёх и т.д., без авторского
-            // "усиления" региона -- вертикальный срез v1, прямое решение
-            // пользователя). MatchingRegions -- тот же индекс, что и
-            // Cell.BiomeWeights, чтобы не пересчитывать IsPointInside ещё
-            // раз при определении CellRegion[Index] ниже.
-            Cell.BiomeWeights.Reset();
-            TArray<ABiomeRegionVolume*> MatchingRegions;
-            const FVector CellWorldPos = GetCellWorldPositionFlat(CellX, CellY);
-            for (ABiomeRegionVolume* Region : BiomeRegions)
+            // Основа клетки -- та же функция, что собирает страницу при
+            // загрузке (этап 8в). Вода пятнами ещё не разложена: маска
+            // строится ниже, после неё.
+            ABiomeRegionVolume* ClaimingRegion = BuildCellBase(GridMin.X + X, GridMin.Y + Y, Cell, BaseContext, ECellBaseWater::None);
+            CellRegion[Index] = ClaimingRegion;
+            if (!ClaimingRegion)
             {
-                if (Region && Region->IsPointInside(CellWorldPos))
-                {
-                    Cell.BiomeWeights.Add(FBiomeWeightEntry{ Region->Biome, 1.0f });
-                    MatchingRegions.Add(Region);
-                }
-            }
-
-            EBiomeType biome;
-            if (Cell.BiomeWeights.Num() > 0)
-            {
-                const float Share = 1.0f / Cell.BiomeWeights.Num();
-                for (FBiomeWeightEntry& Entry : Cell.BiomeWeights)
-                {
-                    Entry.Weight = Share;
-                }
-
-                // Доминанта -- наибольший вес; при точном равенстве (v1: у
-                // равных долей ВСЕГДА равенство) -- меньший порядковый
-                // номер EBiomeType. Не "первый по порядку акторов" --
-                // порядок TActorIterator зависит от порядка в Outliner/
-                // пересохранения уровня, скрытая невоспроизводимая
-                // зависимость, которой у старой блочной формулы не было.
-                int32 BestIndex = 0;
-                biome = Cell.BiomeWeights[0].Biome;
-                float BestWeight = Cell.BiomeWeights[0].Weight;
-                for (int32 i = 1; i < Cell.BiomeWeights.Num(); ++i)
-                {
-                    const FBiomeWeightEntry& Entry = Cell.BiomeWeights[i];
-                    const bool bStrictlyBetter = Entry.Weight > BestWeight + KINDA_SMALL_NUMBER;
-                    const bool bTieBrokenByOrdinal = FMath::IsNearlyEqual(Entry.Weight, BestWeight, KINDA_SMALL_NUMBER)
-                        && static_cast<uint8>(Entry.Biome) < static_cast<uint8>(biome);
-                    if (bStrictlyBetter || bTieBrokenByOrdinal)
-                    {
-                        biome = Entry.Biome;
-                        BestWeight = Entry.Weight;
-                        BestIndex = i;
-                    }
-                }
-                CellRegion[Index] = MatchingRegions[BestIndex];
-            }
-            else
-            {
-                // Блоки -- от глобальной координаты (ревью этапа 6): при
-                // расширении ландшафта сетка начинается с другой клетки, а блок
-                // клетки остаётся прежним. Деление с округлением вниз -- у
-                // клеток западнее начала сетки World Partition координаты
-                // отрицательные. Ширина строки блоков BlocksX пока от размера
-                // сетки; основа по страницам (этап 8) заменит и её.
-                const int32 BlockX = FMath::FloorToInt32(static_cast<double>(CellX) / BlockSize);
-                const int32 BlockY = FMath::FloorToInt32(static_cast<double>(CellY) / BlockSize);
-                const int32 BiomeCount = AllBiomes.Num();
-                biome = AllBiomes[((BlockY * BlocksX + BlockX) % BiomeCount + BiomeCount) % BiomeCount];
                 ++FallbackCellCount;
             }
-
-            Cell.Biome        = biome;
-            Cell.State        = FBiomeDefaults::GetDefaultState(biome);
-            Cell.TargetState  = Cell.State;
-            Cell.Environment  = FBiomeDefaults::GetDefaultEnvironment(biome);
-            Cell.Memory       = FMemoryState();
-            Cell.X            = CellX;
-            Cell.Y            = CellY;
-            Cell.HarvestStress = 0.0f;
-            Cell.bIsWater     = false;
-            Cell.WaterTypeID  = NAME_None;
 
             // Явный регион воды (2026-09-02) -- вес всегда 1, безусловно
             // заливает клетку поверх уже определённого Cell.Biome, не
             // участвует в вероятностной WaterDensity-раскладке ниже.
+            const FVector CellWorldPos = GetCellWorldPositionFlat(Cell.X, Cell.Y);
             for (AWaterRegionVolume* WaterRegion : WaterRegions)
             {
                 if (WaterRegion && WaterRegion->IsPointInside(CellWorldPos))
                 {
-                    ApplyWaterToCell(Cell);
+                    ApplyWaterToCell(Cell, WaterSubsystem);
                     break;
                 }
             }
@@ -1977,7 +1906,7 @@ void AGridWorldManager::InitializeCells()
                 for (int32 dx = 0; dx < W; ++dx)
                 {
                     int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    ApplyWaterToCell(*GetCellByGridIndex(Idx));
+                    ApplyWaterToCell(*GetCellByGridIndex(Idx), WaterSubsystem);
                     IsWaterAlready[Idx] = true;
                     PlacedWater++;
                 }
@@ -2036,7 +1965,7 @@ void AGridWorldManager::InitializeCells()
                 for (int32 dx = 0; dx < W; ++dx)
                 {
                     const int32 Idx = (StartY + dy) * GridSizeX + (StartX + dx);
-                    ApplyWaterToCell(*GetCellByGridIndex(Idx));
+                    ApplyWaterToCell(*GetCellByGridIndex(Idx), WaterSubsystem);
                     IsWaterAlready[Idx] = true;
                     ++PlacedInPool;
                 }
@@ -2044,6 +1973,20 @@ void AGridWorldManager::InitializeCells()
         }
     }
     }
+
+    // Маска воды (этап 8в): пятна воды разложены общим WorldRNG по пулам всей
+    // сетки и чистой функцией страницы не являются -- основа страницы при
+    // загрузке берёт воду отсюда. Дельты и отложенные отрастания прошлой сетки
+    // к этой не относятся.
+    BakedWaterMask.Init(false, TotalCells);
+    for (int32 Idx = 0; Idx < TotalCells; ++Idx)
+    {
+        BakedWaterMask[Idx] = IsWaterAlready[Idx];
+    }
+    UnloadedCellDeltas.Reset();
+    SeededCellMask.Init(false, TotalCells);
+    UnloadedCellRosters.Reset();
+    PendingRegrowthsOnLoad.Reset();
 
     // ========================================================================
     // ВАЖНО: сначала кешируем высоты ландшафта, потом спавним ресурсы
@@ -2115,6 +2058,486 @@ void AGridWorldManager::InitializeCells()
 // ============================================================================
 // РЕСУРСЫ
 // ============================================================================
+
+FHerbalistCellBaseContext AGridWorldManager::MakeCellBaseContext() const
+{
+    FHerbalistCellBaseContext Context;
+    Context.AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
+    if (Context.AllBiomes.Num() == 0)
+    {
+        Context.AllBiomes = {
+            EBiomeType::Tundra, EBiomeType::Taiga, EBiomeType::MixedForest,
+            EBiomeType::BroadleafForest, EBiomeType::ForestSteppe,
+            EBiomeType::Steppe, EBiomeType::Floodplain, EBiomeType::Bog
+        };
+    }
+    const UGameInstance* GameInstance = GetGameInstance();
+    Context.WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
+    Context.BlocksX = GridSizeX / HerbalistFallbackBiomeBlockCells;
+    return Context;
+}
+
+void AGridWorldManager::ApplyWaterToCell(FGridCell& Cell, const UWaterTypeRegistrySubsystem* WaterSubsystem) const
+{
+    // Общая точка заливки клетки водой -- явные регионы воды, пятна воды и
+    // основа страницы из маски (2026-09-02, членом менеджера с этапа 8в).
+    // Читает уже выставленный Cell.Biome -- вода поверх болота получает
+    // болотный WaterTypeID, поверх тундры -- тундровый, автоматически.
+    Cell.bIsWater = true;
+    Cell.WaterTypeID = RollWaterTypeForCell(Cell, WaterSubsystem);
+
+    FRealState WaterState = FBiomeDefaults::GetDefaultWaterState(Cell.Biome);
+    if (WaterSubsystem)
+    {
+        if (const FWaterTypeRow* WaterRow = WaterSubsystem->GetWaterType(Cell.WaterTypeID))
+        {
+            WaterState.Meta.Purity      = WaterRow->BasePurity;
+            WaterState.Meta.Distortion  = WaterRow->BaseDistortion;
+            WaterState.Meta.Stability   = WaterRow->BaseStability;
+            WaterState.Meta.Potency     = WaterRow->BasePotency;
+            WaterState.Meta.Corruption  = WaterRow->BaseCorruption;
+        }
+    }
+    Cell.State = WaterState;
+    Cell.TargetState = WaterState;
+    Cell.HarvestStress = 0.0f;
+    Cell.ResourceActors.Empty();
+}
+
+ABiomeRegionVolume* AGridWorldManager::BuildCellBase(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context, ECellBaseWater Water) const
+{
+    // Какие регионы содержат клетку -- равная доля на каждый (0.5/0.5 на двух,
+    // 1/3 на трёх и т.д., без авторского "усиления" региона -- вертикальный
+    // срез v1, прямое решение пользователя). MatchingRegions -- тот же индекс,
+    // что и BiomeWeights. Регионы не грузятся пространственно (этап 5), и
+    // список тот же, что при старте.
+    OutCell.BiomeWeights.Reset();
+    TArray<ABiomeRegionVolume*, TInlineAllocator<4>> MatchingRegions;
+    const FVector CellWorldPos = GetCellWorldPositionFlat(X, Y);
+    for (const TWeakObjectPtr<ABiomeRegionVolume>& WeakRegion : CachedBiomeRegions)
+    {
+        ABiomeRegionVolume* Region = WeakRegion.Get();
+        if (Region && Region->IsPointInside(CellWorldPos))
+        {
+            OutCell.BiomeWeights.Add(FBiomeWeightEntry{ Region->Biome, 1.0f });
+            MatchingRegions.Add(Region);
+        }
+    }
+
+    EBiomeType Biome = EBiomeType::Tundra;
+    ABiomeRegionVolume* ClaimingRegion = nullptr;
+    if (OutCell.BiomeWeights.Num() > 0)
+    {
+        const float Share = 1.0f / OutCell.BiomeWeights.Num();
+        for (FBiomeWeightEntry& Entry : OutCell.BiomeWeights)
+        {
+            Entry.Weight = Share;
+        }
+
+        // Доминанта -- наибольший вес; при точном равенстве (v1: у равных
+        // долей ВСЕГДА равенство) -- меньший порядковый номер EBiomeType. Не
+        // "первый по порядку акторов" -- порядок TActorIterator зависит от
+        // порядка в Outliner/пересохранения уровня, скрытая невоспроизводимая
+        // зависимость, которой у старой блочной формулы не было.
+        int32 BestIndex = 0;
+        Biome = OutCell.BiomeWeights[0].Biome;
+        float BestWeight = OutCell.BiomeWeights[0].Weight;
+        for (int32 Index = 1; Index < OutCell.BiomeWeights.Num(); ++Index)
+        {
+            const FBiomeWeightEntry& Entry = OutCell.BiomeWeights[Index];
+            const bool bStrictlyBetter = Entry.Weight > BestWeight + KINDA_SMALL_NUMBER;
+            const bool bTieBrokenByOrdinal = FMath::IsNearlyEqual(Entry.Weight, BestWeight, KINDA_SMALL_NUMBER)
+                && static_cast<uint8>(Entry.Biome) < static_cast<uint8>(Biome);
+            if (bStrictlyBetter || bTieBrokenByOrdinal)
+            {
+                Biome = Entry.Biome;
+                BestWeight = Entry.Weight;
+                BestIndex = Index;
+            }
+        }
+        ClaimingRegion = MatchingRegions[BestIndex];
+    }
+    else
+    {
+        // Блоки 5 x 5 -- от глобальной координаты (ревью этапа 6): при
+        // расширении ландшафта сетка начинается с другой клетки, а блок клетки
+        // остаётся прежним. Деление с округлением вниз -- у клеток западнее
+        // начала сетки World Partition координаты отрицательные.
+        const int32 BlockSize = HerbalistFallbackBiomeBlockCells;
+        const int32 BlockX = HerbalistCore::FloorDivCoord(X, BlockSize);
+        const int32 BlockY = HerbalistCore::FloorDivCoord(Y, BlockSize);
+        const int32 BiomeCount = Context.AllBiomes.Num();
+        Biome = Context.AllBiomes[((BlockY * Context.BlocksX + BlockX) % BiomeCount + BiomeCount) % BiomeCount];
+    }
+
+    OutCell.Biome         = Biome;
+    OutCell.State         = FBiomeDefaults::GetDefaultState(Biome);
+    OutCell.TargetState   = OutCell.State;
+    OutCell.Environment   = FBiomeDefaults::GetDefaultEnvironment(Biome);
+    OutCell.Memory        = FMemoryState();
+    OutCell.X             = X;
+    OutCell.Y             = Y;
+    OutCell.HarvestStress = 0.0f;
+    OutCell.bIsWater      = false;
+    OutCell.WaterTypeID   = NAME_None;
+
+    if (Water == ECellBaseWater::FromBakedMask)
+    {
+        const int32 GridIndex = GetCellIndex(X, Y);
+        if (BakedWaterMask.IsValidIndex(GridIndex) && BakedWaterMask[GridIndex])
+        {
+            ApplyWaterToCell(OutCell, Context.WaterSubsystem);
+        }
+    }
+    return ClaimingRegion;
+}
+
+bool AGridWorldManager::BuildUnloadedCell(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context) const
+{
+    if (!IsCellInGrid(X, Y))
+    {
+        return false;
+    }
+    const FHerbalistCellPage* Page = FindCellPage(X, Y);
+    if (!Page || Page->bLoaded)
+    {
+        return false;
+    }
+    BuildCellBase(X, Y, OutCell, Context, ECellBaseWater::FromBakedMask);
+    if (const FSavedCellState* Delta = UnloadedCellDeltas.Find(GetCellIndex(X, Y)))
+    {
+        CopySavedCellFields(OutCell, *Delta);
+        OutCell.bResourcesSeeded = Delta->bResourcesSeeded;
+    }
+    return true;
+}
+
+void AGridWorldManager::CacheCellHeightsForPage(FHerbalistCellPage& Page)
+{
+    // Страница грузится вслед за землёй под ней, поэтому высоты читаются уже
+    // по загруженному ландшафту (этап 8в; раньше дальние клетки получали 0).
+    Page.Heights.Reset();
+    Page.Heights.SetNumZeroed(Page.Cells.Num());
+    // Без ландшафта нули -- правда; с ландшафтом высота известна, только когда
+    // компонент под клеткой загружен (ревью этапа 8в).
+    Page.bHeightsComplete = true;
+    if (!CachedLandscape)
+    {
+        return;
+    }
+    for (int32 LocalY = 0; LocalY < Page.Size.Y; ++LocalY)
+    {
+        for (int32 LocalX = 0; LocalX < Page.Size.X; ++LocalX)
+        {
+            FVector WorldPoint = GetCellWorldPositionFlat(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY);
+            WorldPoint.Z = 0.f;
+            const TOptional<float> OptHeight = CachedLandscape->GetHeightAtLocation(WorldPoint);
+            Page.Heights[LocalY * Page.Size.X + LocalX] = OptHeight.IsSet() ? OptHeight.GetValue() : 0.f;
+            Page.bHeightsComplete &= OptHeight.IsSet();
+        }
+    }
+}
+
+void AGridWorldManager::GetPageChunkRange(const FHerbalistCellPage& Page, FIntPoint& OutMinChunk, FIntPoint& OutMaxChunk) const
+{
+    OutMinChunk = GetChunkCoordForCell(Page.MinCell.X, Page.MinCell.Y);
+    OutMaxChunk = GetChunkCoordForCell(Page.MinCell.X + Page.Size.X - 1, Page.MinCell.Y + Page.Size.Y - 1);
+}
+
+void AGridWorldManager::LoadCellPage(FHerbalistCellPage& Page)
+{
+    // Порядок (DESIGN_World_Layout.md §6): основа -> снимок для отката -> высоты
+    // -> дельты -> отложенные отрастания. Догон за простой делает
+    // CatchUpActivatedChunks по времени чанка: активный чанк выгруженным не
+    // бывает, а неактивный не симулируется и загруженным.
+    const FHerbalistCellBaseContext Context = MakeCellBaseContext();
+    const int32 CellCount = Page.Size.X * Page.Size.Y;
+    Page.Cells.SetNum(CellCount);
+    Page.Baselines.Reset(CellCount);
+    for (int32 LocalY = 0; LocalY < Page.Size.Y; ++LocalY)
+    {
+        for (int32 LocalX = 0; LocalX < Page.Size.X; ++LocalX)
+        {
+            FGridCell& Cell = Page.Cells[LocalY * Page.Size.X + LocalX];
+            BuildCellBase(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY, Cell, Context, ECellBaseWater::FromBakedMask);
+            Page.Baselines.Add(CaptureCellState(Cell));
+        }
+    }
+    Page.bLoaded = true;
+    LoadedCellCount += CellCount;
+    CacheCellHeightsForPage(Page);
+
+    const bool bHasCellExtras = UnloadedCellDeltas.Num() > 0 || UnloadedCellRosters.Num() > 0 || PendingRegrowthsOnLoad.Num() > 0;
+    for (FGridCell& Cell : Page.Cells)
+    {
+        const int32 GridIndex = GetCellIndex(Cell.X, Cell.Y);
+        if (SeededCellMask.IsValidIndex(GridIndex) && SeededCellMask[GridIndex])
+        {
+            Cell.bResourcesSeeded = true;
+            SeededCellMask[GridIndex] = false;
+        }
+        if (!bHasCellExtras)
+        {
+            continue;
+        }
+
+        // Чанк ещё не материализован -- ростер встаёт спящим и просыпается
+        // вместе с чанком.
+        if (const FSavedCellState* Delta = UnloadedCellDeltas.Find(GridIndex))
+        {
+            ApplyCellStateAndRespawnResources(Cell, *Delta);
+            UnloadedCellDeltas.Remove(GridIndex);
+        }
+        else if (FHerbalistCellRoster* Roster = UnloadedCellRosters.Find(GridIndex))
+        {
+            const FHerbalistCellRoster Moved = MoveTemp(*Roster);
+            UnloadedCellRosters.Remove(GridIndex);
+            SpawnResourceRoster(Cell, Moved.IngredientIDs, Moved.PlacementSlots);
+        }
+        if (TArray<float>* Regrowths = PendingRegrowthsOnLoad.Find(GridIndex))
+        {
+            const TArray<float> RegrowthTimes = MoveTemp(*Regrowths);
+            PendingRegrowthsOnLoad.Remove(GridIndex);
+            for (float RegrowthTime : RegrowthTimes)
+            {
+                CompleteRegrowth(Cell, RegrowthTime);
+            }
+        }
+    }
+
+    FIntPoint MinChunk;
+    FIntPoint MaxChunk;
+    GetPageChunkRange(Page, MinChunk, MaxChunk);
+    for (int32 ChunkY = MinChunk.Y; ChunkY <= MaxChunk.Y; ++ChunkY)
+    {
+        for (int32 ChunkX = MinChunk.X; ChunkX <= MaxChunk.X; ++ChunkX)
+        {
+            StaleChunkSummaries.Add(FIntPoint(ChunkX, ChunkY));
+        }
+    }
+}
+
+void AGridWorldManager::UnloadCellPage(FHerbalistCellPage& Page)
+{
+    // Последние сводки чанков страницы -- до выброса клеток (DESIGN §9). Ключ
+    // кэша -- до записи: иначе первый же запрос сводок сбросил бы их (ревью
+    // этапа 8в).
+    EnsureChunkSummaryCacheKey();
+    FIntPoint MinChunk;
+    FIntPoint MaxChunk;
+    GetPageChunkRange(Page, MinChunk, MaxChunk);
+    for (int32 ChunkY = MinChunk.Y; ChunkY <= MaxChunk.Y; ++ChunkY)
+    {
+        for (int32 ChunkX = MinChunk.X; ChunkX <= MaxChunk.X; ++ChunkX)
+        {
+            const FIntPoint Chunk(ChunkX, ChunkY);
+            ChunkSummaries.FindOrAdd(Chunk) = BuildChunkSummary(Chunk);
+            StaleChunkSummaries.Remove(Chunk);
+        }
+    }
+
+    for (const FGridCell& Cell : Page.Cells)
+    {
+        // Сущности уже сняты на границе активной области, ресурсы усыплены
+        // материализацией; оставшееся -- на всякий случай, не висеть в мире.
+        if (AHerbalistEntityActor* EntityActor = Cell.ManifestedEntityActor.Get())
+        {
+            EntityActor->Destroy();
+        }
+
+        // Ростер -- только свой: чужие акторы (PCG-граф) стримит World
+        // Partition, при загрузке страницы сетка их не пересоздаёт.
+        FHerbalistCellRoster Roster;
+        for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
+        {
+            if (ResourceActor.IsValid() && ResourceActor->WasSpawnedByGrid())
+            {
+                Roster.IngredientIDs.Add(ResourceActor->GetIngredientID());
+                Roster.PlacementSlots.Add(ResourceActor->GetPlacementSlot());
+                ResourceActor->Destroy();
+            }
+        }
+        Roster.IngredientIDs.Append(Cell.DormantResourceIDs);
+        for (int32 Index = 0; Index < Cell.DormantResourceIDs.Num(); ++Index)
+        {
+            Roster.PlacementSlots.Add(Cell.DormantResourceSlots.IsValidIndex(Index) ? Cell.DormantResourceSlots[Index] : INDEX_NONE);
+        }
+
+        const int32 GridIndex = GetCellIndex(Cell.X, Cell.Y);
+        if (Cell.bResourcesSeeded)
+        {
+            SeededCellMask[GridIndex] = true;
+        }
+
+        // Полная дельта -- только у отклонившихся от основы: тронутая клетка и
+        // проявление сущности (пишется без пометки). Нетронутая засеянная
+        // клетка -- бит засева и, если растения есть, ростер: вид засеянного
+        // ресурса зависит от условий в момент заселения, и основа его не
+        // воспроизводит (ревью этапа 8в: полная дельта на каждую посещённую
+        // клетку -- десятки мегабайт на исследованном L_TestDev).
+        if (DirtyCellIndices.Contains(GridIndex) || !Cell.ManifestedEntityID.IsNone())
+        {
+            FSavedCellState Delta = CaptureCellState(Cell);
+            Delta.ResourceIngredientIDs = MoveTemp(Roster.IngredientIDs);
+            Delta.ResourceSlots = MoveTemp(Roster.PlacementSlots);
+            UnloadedCellDeltas.Add(GridIndex, MoveTemp(Delta));
+        }
+        else if (Roster.IngredientIDs.Num() > 0)
+        {
+            UnloadedCellRosters.Add(GridIndex, MoveTemp(Roster));
+        }
+    }
+
+    LoadedCellCount -= Page.Cells.Num();
+    Page.Cells.Empty();
+    Page.Heights.Empty();
+    Page.Baselines.Empty();
+    Page.bLoaded = false;
+}
+
+void AGridWorldManager::EnsureChunkPagesLoaded(const FIntPoint& Chunk)
+{
+    if (CellPageSize <= 0)
+    {
+        return;   // одна страница во всю сетку -- всегда загружена
+    }
+    ForEachChunkPage(Chunk, [this](FHerbalistCellPage& Page)
+    {
+        if (!Page.bLoaded)
+        {
+            LoadCellPage(Page);
+        }
+    });
+}
+
+void AGridWorldManager::ForEachChunkPage(const FIntPoint& Chunk, TFunctionRef<void(FHerbalistCellPage&)> Func)
+{
+    if (CellPages.Num() == 0 || GridSizeX <= 0 || GridSizeY <= 0)
+    {
+        return;
+    }
+    if (CellPageSize <= 0)
+    {
+        Func(CellPages[0]);
+        return;
+    }
+    const int32 ChunkSize = GetChunkSizeInCells();
+    const FIntPoint GridMin = GetGridMinCell();
+    const FIntPoint GridMax = GridMin + FIntPoint(GridSizeX - 1, GridSizeY - 1);
+    const FIntPoint CellMin(FMath::Max(Chunk.X * ChunkSize, GridMin.X), FMath::Max(Chunk.Y * ChunkSize, GridMin.Y));
+    const FIntPoint CellMax(FMath::Min(Chunk.X * ChunkSize + ChunkSize - 1, GridMax.X), FMath::Min(Chunk.Y * ChunkSize + ChunkSize - 1, GridMax.Y));
+    if (CellMin.X > CellMax.X || CellMin.Y > CellMax.Y)
+    {
+        return;
+    }
+    for (int32 PageY = HerbalistCore::FloorDivCoord(CellMin.Y, CellPageSize); PageY <= HerbalistCore::FloorDivCoord(CellMax.Y, CellPageSize); ++PageY)
+    {
+        for (int32 PageX = HerbalistCore::FloorDivCoord(CellMin.X, CellPageSize); PageX <= HerbalistCore::FloorDivCoord(CellMax.X, CellPageSize); ++PageX)
+        {
+            const int32 CellX = FMath::Max(PageX * CellPageSize, CellMin.X);
+            const int32 CellY = FMath::Max(PageY * CellPageSize, CellMin.Y);
+            if (FHerbalistCellPage* Page = FindCellPage(CellX, CellY))
+            {
+                Func(*Page);
+            }
+        }
+    }
+}
+
+bool AGridWorldManager::IsCellPagePinned(const FHerbalistCellPage& Page) const
+{
+    // Места, чья логика идёт своим чередом вдали от игрока (ревью этапа 8в):
+    // хозяева мест и легендарные якоря копят и тратят благосклонность, капища
+    // гасят утечку Морока по графу. Таких страниц единицы.
+    auto InPage = [&Page](const FIntPoint& Cell)
+    {
+        return Cell.X >= Page.MinCell.X && Cell.X < Page.MinCell.X + Page.Size.X
+            && Cell.Y >= Page.MinCell.Y && Cell.Y < Page.MinCell.Y + Page.Size.Y;
+    };
+    for (const FEntityLandmark& Landmark : EntityLandmarks)
+    {
+        if (InPage(Landmark.Cell))
+        {
+            return true;
+        }
+    }
+    for (const FShrine& Shrine : Shrines)
+    {
+        if (InPage(Shrine.Cell))
+        {
+            return true;
+        }
+    }
+    for (const TPair<FName, FIntPoint>& Anchor : LegendaryAnchors)
+    {
+        if (InPage(Anchor.Value))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AGridWorldManager::IsCellPageIdle(const FHerbalistCellPage& Page) const
+{
+    if (IsCellPagePinned(Page))
+    {
+        return false;
+    }
+    FIntPoint MinChunk;
+    FIntPoint MaxChunk;
+    GetPageChunkRange(Page, MinChunk, MaxChunk);
+    for (int32 ChunkY = MinChunk.Y; ChunkY <= MaxChunk.Y; ++ChunkY)
+    {
+        for (int32 ChunkX = MinChunk.X; ChunkX <= MaxChunk.X; ++ChunkX)
+        {
+            const FIntPoint Chunk(ChunkX, ChunkY);
+            if (MaterializedChunks.Contains(Chunk) || ActiveChunks.Contains(Chunk))
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void AGridWorldManager::UnloadIdleCellPagesIfPending()
+{
+    if (!bCellPageUnloadCheckPending)
+    {
+        return;
+    }
+    bCellPageUnloadCheckPending = false;
+
+    // Только когда страниц много, стриминг сетки включён и земля известна:
+    // без этого «земли нет» неотличимо от «не знаем» (редактор, карта без
+    // World Partition, автотесты без покрытия).
+    if (CellPageSize <= 0 || GetActiveRadiusInChunks() < 0 || !bGroundCoverageKnown || !bMaterializationTracked)
+    {
+        return;
+    }
+    for (FHerbalistCellPage& Page : CellPages)
+    {
+        if (Page.bLoaded && IsCellPageIdle(Page))
+        {
+            UnloadCellPage(Page);
+        }
+    }
+}
+
+bool AGridWorldManager::IsChunkInLoadedPage(const FIntPoint& Chunk) const
+{
+    if (CellPageSize <= 0)
+    {
+        return CellPages.Num() > 0 && CellPages[0].bLoaded;
+    }
+    const int32 ChunkSize = GetChunkSizeInCells();
+    const FIntPoint GridMin = GetGridMinCell();
+    const int32 CellX = FMath::Clamp(Chunk.X * ChunkSize, GridMin.X, GridMin.X + GridSizeX - 1);
+    const int32 CellY = FMath::Clamp(Chunk.Y * ChunkSize, GridMin.Y, GridMin.Y + GridSizeY - 1);
+    const FHerbalistCellPage* Page = FindCellPage(CellX, CellY);
+    return Page && Page->bLoaded;
+}
 
 FHarvestContext AGridWorldManager::BuildHarvestContextForCell(const FGridCell& Cell) const
 {
@@ -2633,10 +3056,21 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     // сама попытка отрастания в любом случае завершена).
     ++Cell.PendingRegrowthCount;
 
+    // Координата, а не ссылка на клетку (этап 8в): за минуты ожидания страница
+    // клетки может выгрузиться, и ссылка указывала бы в освобождённую память.
+    const FIntPoint Coord(Cell.X, Cell.Y);
     FTimerHandle TimerHandle;
-    GetWorldTimerManager().SetTimer(TimerHandle, [this, &Cell, RegrowthTime]()
+    GetWorldTimerManager().SetTimer(TimerHandle, [this, Coord, RegrowthTime]()
     {
-        CompleteRegrowth(Cell, RegrowthTime);
+        if (FGridCell* LiveCell = GetCell(Coord.X, Coord.Y))
+        {
+            CompleteRegrowth(*LiveCell, RegrowthTime);
+        }
+        else if (IsCellInGrid(Coord.X, Coord.Y))
+        {
+            // Страница выгружена -- отрастание завершится при её загрузке.
+            PendingRegrowthsOnLoad.FindOrAdd(GetCellIndex(Coord.X, Coord.Y)).Add(RegrowthTime);
+        }
     }, RegrowthTime, false);
 }
 

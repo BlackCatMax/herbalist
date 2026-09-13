@@ -459,6 +459,8 @@ public:
     int32 GetCellPageCountForTests() const { return CellPages.Num(); }
     bool GetCellPageBoundsForTests(int32 X, int32 Y, FIntPoint& OutMinCell, FIntPoint& OutSize) const;
     bool GetCellBaselineCellForTests(int32 GridIndex, FIntPoint& OutCell) const;
+    int32 GetUnloadedCellDeltaCountForTests() const { return UnloadedCellDeltas.Num(); }
+    void SetLegendaryAnchorsForTests(const TMap<FName, FIntPoint>& InAnchors) { LegendaryAnchors = InAnchors; }
     FVector GetCellWorldPosition(int32 X, int32 Y) const;
     FVector GetCellWorldPositionFlat(int32 X, int32 Y) const;
     float GetCellHeight(int32 X, int32 Y) const;
@@ -1819,6 +1821,30 @@ protected:
     int32 LoadedCellCount = 0;
     FRandomStream WorldRNG;
 
+    // Вода пятнами (общий WorldRNG по пулам всей сетки) -- не чистая функция
+    // страницы: раскладка запекается при инициализации в маску по линейному
+    // индексу сетки (этап 8в). Бит на клетку: L_TestDev 50 176 бит (6 КБ),
+    // предел сетки 4 млн клеток -- 500 КБ.
+    TBitArray<> BakedWaterMask;
+
+    // Отклонения клеток выгруженных страниц от основы, по линейному индексу
+    // сетки (этап 8в).
+    TMap<int32, FSavedCellState> UnloadedCellDeltas;
+
+    // Засеянные клетки выгруженных страниц (бит по линейному индексу) и ростеры
+    // нетронутых засеянных клеток -- без полной дельты на каждую посещённую
+    // клетку (ревью этапа 8в).
+    TBitArray<> SeededCellMask;
+    TMap<int32, FHerbalistCellRoster> UnloadedCellRosters;
+
+    // Отрастания, сработавшие в выгруженной странице: времена отрастания по
+    // линейному индексу -- завершаются при её загрузке.
+    TMap<int32, TArray<float>> PendingRegrowthsOnLoad;
+
+    // Материализованные или активные чанки изменились -- проверить, какие
+    // страницы простаивают.
+    bool bCellPageUnloadCheckPending = false;
+
     // Хэндл таймера GridCorruptionReportIntervalSeconds выше -- остановлен в
     // EndPlay, без этого таймер на уничтоженном акторе мог бы выстрелить в
     // persistent editor-мире между автотестами (та же причина, что уже
@@ -2126,6 +2152,42 @@ protected:
     const FHerbalistCellPage* FindCellPage(int32 X, int32 Y) const;
     const FSavedCellState* FindCellBaselineByGridIndex(int32 GridIndex) const;
 
+    // ---- Выгрузка и загрузка страниц (этап 8в, DESIGN_World_Layout.md §6) ----
+    FHerbalistCellBaseContext MakeCellBaseContext() const;
+
+    // Основа клетки -- чистая функция координаты: биом и веса по регионам,
+    // блочный фолбэк, умолчания, при ECellBaseWater::FromBakedMask -- вода из маски.
+    // Возвращает регион, заявивший клетку (nullptr -- блочный фолбэк).
+    ABiomeRegionVolume* BuildCellBase(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context, ECellBaseWater Water) const;
+    void ApplyWaterToCell(FGridCell& Cell, const UWaterTypeRegistrySubsystem* WaterSubsystem) const;
+
+    // Клетка выгруженной страницы: основа плюс её дельта, без акторов. false --
+    // клетка загружена или вне сетки.
+    bool BuildUnloadedCell(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context) const;
+
+    void CacheCellHeightsForPage(FHerbalistCellPage& Page);
+    void LoadCellPage(FHerbalistCellPage& Page);
+    void UnloadCellPage(FHerbalistCellPage& Page);
+    void EnsureChunkPagesLoaded(const FIntPoint& Chunk);
+
+    // Выгрузить страницы без материализованных и активных чанков -- только
+    // когда земля известна и материализация ведётся.
+    void UnloadIdleCellPagesIfPending();
+    bool IsCellPageIdle(const FHerbalistCellPage& Page) const;
+
+    // На странице -- хозяин места, легендарный якорь или капище: их логика идёт
+    // вдали от игрока, и страница не выгружается (ревью этапа 8в).
+    bool IsCellPagePinned(const FHerbalistCellPage& Page) const;
+
+    // Страницы, задевающие чанк (без разметки -- единственная страница).
+    void ForEachChunkPage(const FIntPoint& Chunk, TFunctionRef<void(FHerbalistCellPage&)> Func);
+
+    // Кэш сводок собран под размер чанка и прямоугольник сетки -- выставить ключ
+    // до записи в кэш (ревью этапа 8в).
+    void EnsureChunkSummaryCacheKey() const;
+    bool IsChunkInLoadedPage(const FIntPoint& Chunk) const;
+    void GetPageChunkRange(const FHerbalistCellPage& Page, FIntPoint& OutMinChunk, FIntPoint& OutMaxChunk) const;
+
     // Разметка при старте игры: пересчёт, применение, если поля разошлись с
     // ней, сверка с ландшафтом и ячейками стриминга, строка в лог.
     void InitializeWorldLayoutForPlay();
@@ -2163,6 +2225,10 @@ protected:
     // тронутых после сейва, к снимку страницы (аудит 2026-09-05). Определение —
     // GridWorldManagerSave.cpp.
     void ApplyCellStateAndRespawnResources(FGridCell& Cell, const FSavedCellState& Saved);
+
+    // Поля клетки из сейва или дельты без ростера ресурсов (этап 8в): общая
+    // часть загрузки сейва и сборки клетки выгруженной страницы.
+    static void CopySavedCellFields(FGridCell& Cell, const FSavedCellState& Saved);
 
     // Обратная операция: снимок клетки в FSavedCellState (X/Y/State/
     // TargetState/HarvestStress/Memory/ManifestedEntityID/bEternallyPure/

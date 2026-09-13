@@ -80,4 +80,9 @@ class FPCGHerbalistGridElement : public IPCGElement
 {
 protected:
     virtual bool ExecuteInternal(FPCGContext* Context) const override;
+
+    // Клетки менеджера живут в игровом потоке и выбрасываются при выгрузке
+    // страницы (разметка мира, этап 8в) -- читать их из рабочего потока PCG
+    // нельзя.
+    virtual bool CanExecuteOnlyOnMainThread(FPCGContext* Context) const override { return true; }
 };

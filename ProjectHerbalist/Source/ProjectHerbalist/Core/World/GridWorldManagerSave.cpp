@@ -60,15 +60,21 @@ TArray<FSavedCellState> AGridWorldManager::CaptureSaveCells() const
 
     for (int32 Index : DirtyCellIndices)
     {
-        const FGridCell* Cell = GetCellByGridIndex(Index);
-        if (!Cell) continue;
-        Result.Add(CaptureCellState(*Cell));
+        if (const FGridCell* Cell = GetCellByGridIndex(Index))
+        {
+            Result.Add(CaptureCellState(*Cell));
+        }
+        else if (const FSavedCellState* Delta = UnloadedCellDeltas.Find(Index))
+        {
+            // Клетка выгруженной страницы (этап 8в) -- её отклонение в дельте.
+            Result.Add(*Delta);
+        }
     }
 
     return Result;
 }
 
-void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const FSavedCellState& Saved)
+void AGridWorldManager::CopySavedCellFields(FGridCell& Cell, const FSavedCellState& Saved)
 {
     Cell.State = Saved.State;
     Cell.TargetState = Saved.TargetState;
@@ -77,6 +83,11 @@ void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const
     Cell.ManifestedEntityID = Saved.ManifestedEntityID;
     Cell.bEternallyPure = Saved.bEternallyPure;
     Cell.PlantedSpeciesID = Saved.PlantedSpeciesID;
+}
+
+void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const FSavedCellState& Saved)
+{
+    CopySavedCellFields(Cell, Saved);
 
     // Аудит 2026-09-05: без этого поля клетка, уже собранная/пересеянная
     // в предыдущей сессии, при первой активации своего чанка получала бы
@@ -123,11 +134,13 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     TSet<int32> SavedIndices;
     SavedIndices.Reserve(InCells.Num());
     int32 DroppedCount = 0;
+    // Чанки выгруженных страниц, чьи клетки сейв заменил или откатил: их
+    // последние сводки устарели.
+    TSet<FIntPoint> TouchedUnloadedChunks;
 
     for (const FSavedCellState& Saved : InCells)
     {
-        FGridCell* Cell = GetCell(Saved.X, Saved.Y);
-        if (!Cell)
+        if (!IsCellInGrid(Saved.X, Saved.Y))
         {
             // Одна строка на загрузку, а не на клетку (этап 8): после того как
             // убрали плитку ландшафта, таких клеток тысячи.
@@ -135,8 +148,24 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
             continue;
         }
 
-        SavedIndices.Add(GetCellIndex(Saved.X, Saved.Y));
-        ApplyCellStateAndRespawnResources(*Cell, Saved);
+        const int32 GridIndex = GetCellIndex(Saved.X, Saved.Y);
+        SavedIndices.Add(GridIndex);
+        if (FGridCell* Cell = GetCell(Saved.X, Saved.Y))
+        {
+            ApplyCellStateAndRespawnResources(*Cell, Saved);
+        }
+        else
+        {
+            // Страница выгружена (этап 8в): сохранённое ложится в её дельту и
+            // встанет на место при загрузке; ростер и засев -- из сейва.
+            UnloadedCellDeltas.Add(GridIndex, Saved);
+            UnloadedCellRosters.Remove(GridIndex);
+            if (SeededCellMask.IsValidIndex(GridIndex))
+            {
+                SeededCellMask[GridIndex] = false;
+            }
+            TouchedUnloadedChunks.Add(GetChunkCoordForCell(Saved.X, Saved.Y));
+        }
     }
 
     // Откат клеток, тронутых ПОСЛЕ момента сейва (аудит 2026-09-05, решение
@@ -157,8 +186,22 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     {
         if (SavedIndices.Contains(Index)) continue;
         FGridCell* Cell = GetCellByGridIndex(Index);
+        if (!Cell)
+        {
+            // Страница выгружена (этап 8в): откат к основе -- просто без
+            // дельты, ростера и засева, основа пересчитается при загрузке.
+            UnloadedCellDeltas.Remove(Index);
+            UnloadedCellRosters.Remove(Index);
+            if (SeededCellMask.IsValidIndex(Index))
+            {
+                SeededCellMask[Index] = false;
+            }
+            const FIntPoint GridMin = GetGridMinCell();
+            TouchedUnloadedChunks.Add(GetChunkCoordForCell(GridMin.X + Index % GridSizeX, GridMin.Y + Index / GridSizeX));
+            continue;
+        }
         const FSavedCellState* Baseline = FindCellBaselineByGridIndex(Index);
-        if (!Cell || !Baseline) continue;
+        if (!Baseline) continue;
 
         ApplyCellStateAndRespawnResources(*Cell, *Baseline);
     }
@@ -170,8 +213,29 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     // загрузки продолжит помечать клетки как обычно поверх этого набора.
     DirtyCellIndices = MoveTemp(SavedIndices);
 
-    // Клетки заменены сейвом и базой -- сводки чанков считаются заново (этап 7).
-    InvalidateAllChunkSummaries();
+    // Клетки заменены сейвом и базой -- сводки загруженных чанков считаются
+    // заново (этап 7). У выгруженных -- последние, кроме тех, чьи клетки сейв
+    // тронул: иначе загрузка сейва пересобирала бы весь выгруженный мир по
+    // основе (ревью этапа 8в).
+    EnsureChunkSummaryCacheKey();
+    for (const FHerbalistCellPage& Page : CellPages)
+    {
+        if (!Page.bLoaded)
+        {
+            continue;
+        }
+        FIntPoint MinChunk;
+        FIntPoint MaxChunk;
+        GetPageChunkRange(Page, MinChunk, MaxChunk);
+        for (int32 ChunkY = MinChunk.Y; ChunkY <= MaxChunk.Y; ++ChunkY)
+        {
+            for (int32 ChunkX = MinChunk.X; ChunkX <= MaxChunk.X; ++ChunkX)
+            {
+                StaleChunkSummaries.Add(FIntPoint(ChunkX, ChunkY));
+            }
+        }
+    }
+    StaleChunkSummaries.Append(TouchedUnloadedChunks);
 
     if (DroppedCount > 0)
     {
