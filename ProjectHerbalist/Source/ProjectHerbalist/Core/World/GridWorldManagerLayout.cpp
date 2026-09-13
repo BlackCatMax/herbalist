@@ -99,6 +99,9 @@ void AGridWorldManager::ApplyResolvedLayout()
     CellSize = static_cast<float>(ResolvedLayout.CellSizeCm);
     GridSizeX = ResolvedLayout.GridSize.X;
     GridSizeY = ResolvedLayout.GridSize.Y;
+
+    // Окно карты состояния стояло под прежнюю сетку (ревью этапа 7).
+    bWorldStateWindowPlaced = false;
 }
 
 bool AGridWorldManager::IsGridMatchingResolvedLayout() const

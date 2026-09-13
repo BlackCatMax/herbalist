@@ -39,4 +39,13 @@ namespace HerbalistCore
     {
         return IsValidCell(Cell) ? FString::Printf(TEXT("(%d,%d)"), Cell.X, Cell.Y) : FString(TEXT("—"));
     }
+
+    // Деление с округлением вниз -- номер чанка, тайла или страницы клетки
+    // (этапы 6-8): у отрицательных координат обычное деление тянет к нулю и
+    // склеивает номер -1 с номером 0.
+    inline constexpr int32 FloorDivCoord(int32 Value, int32 Divisor)
+    {
+        const int32 Quotient = Value / Divisor;
+        return (Value % Divisor != 0 && (Value < 0) != (Divisor < 0)) ? Quotient - 1 : Quotient;
+    }
 }

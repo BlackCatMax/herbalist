@@ -96,6 +96,14 @@ void AGridWorldManager::Tick(float DeltaTime)
     // всё время простоя одним шагом (точно, см. CatchUpActivatedChunks).
     CatchUpActivatedChunks();
 
+    // Окно карты состояния -- вне расписания таймера, как только зритель ушёл
+    // из его безопасной зоны (ревью этапа 7): за период таймера игрок успел бы
+    // подойти к краю окна.
+    if (WorldStateMapUpdateIntervalSeconds > 0.0f && IsWorldStateWindowStale())
+    {
+        UploadWorldStateMap(0.0f);
+    }
+
     // Аудит 2026-09-05 (тот же разрыв уже отмечен в архивном
     // "PROJECT HERBALIST - REFACTORING PIPELINE 2.md:408"): Graph->StepSimulation
     // раньше звался ОДИН РАЗ за Tick() сырым покадровым DeltaTime, ДО этого

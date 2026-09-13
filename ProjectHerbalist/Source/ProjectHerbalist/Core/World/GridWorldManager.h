@@ -343,18 +343,21 @@ public:
     // на глазах у игрока, изображая изменение, которого не было.
     void SnapWorldStateMapDisplayToWorld();
 
-    // Собирает буфер карты: по пикселю на клетку, индекс == GetCellIndex.
+    // Собирает буфер карты: по пикселю на клетку окна (GetWorldStateWindow),
+    // индекс -- от угла окна построчно. Без разметки окно -- вся сетка, и
+    // индекс совпадает с GetCellIndex.
     // Публичный ради тестов -- проверяемая часть механизма именно эта
     // (раскладка и значения), выгрузка на GPU headless не проверяется.
     TArray<FColor> BuildWorldStateMapPixels() const;
 
-    // Мировая позиция -> UV карты. Возвращает false, если точка вне сетки.
+    // Мировая позиция -> UV карты. Возвращает false, если точка вне окна.
     // Существует, чтобы соответствие "материал <-> симуляция" можно было
     // проверить тестом, а не сверять формулу глазами с материалом.
     bool GetWorldStateMapUV(const FVector& WorldPosition, FVector2D& OutUV) const;
 
-    // Начало и размер сетки в мире -- то, что материалу нужно знать, чтобы
-    // самому построить UV из абсолютной мировой позиции.
+    // Начало и размер окна в мире -- то, что материалу нужно знать, чтобы
+    // самому построить UV из абсолютной мировой позиции. С разметкой окно
+    // переезжает за зрителем: рамку нельзя запомнить один раз.
     UFUNCTION(BlueprintCallable, Category = "Visualization")
     void GetWorldStateMapFrame(FVector& OutOrigin, FVector2D& OutWorldSize) const;
 
@@ -363,6 +366,20 @@ public:
 
     // Та же тестовая видимость, что у IsGridCorruptionAutoReportScheduled.
     bool IsWorldStateMapUpdateScheduled() const;
+
+    // Окно карты состояния (разметка мира, этап 7, DESIGN_World_Layout.md
+    // §9): прямоугольник клеток, который попадает в текстуру. Без разметки
+    // или когда окно не меньше сетки -- вся сетка, как до этапа. С разметкой
+    // -- WorldStateWindowCells клеток вокруг зрителя (GetWorldStateViewerCell).
+    void GetWorldStateWindow(FIntPoint& OutMinCell, FIntPoint& OutSize) const;
+
+    // Поставить окно к зрителю: первый раз -- сразу, дальше -- когда зритель
+    // ушёл от центра окна дальше тайла. true -- окно сдвинулось.
+    bool UpdateWorldStateWindow();
+
+    // Ушёл ли зритель от центра поставленного окна дальше тайла -- тогда карту
+    // выгружают вне расписания (Tick), не дожидаясь таймера.
+    bool IsWorldStateWindowStale() const;
 
     // Базовый сид для детерминированного пайплайна (Simulation::ExecutePipeline).
     // Не используется для процедурной генерации мира (см. WorldRNG) — по сиду
@@ -1783,6 +1800,31 @@ protected:
     // (SnapWorldStateMapDisplayToWorld).
     // XYZW = Distortion / Corruption / HarvestStress / ShrineRestoration.
     TArray<FVector4f> DisplayedWorldState;
+
+    // Окно карты (этап 7): где оно стоит и для какого угла окна посчитано
+    // показываемое состояние. Пока окно не ставилось -- по центру сетки.
+    FIntPoint WorldStateWindowMin = FIntPoint::ZeroValue;
+    bool bWorldStateWindowPlaced = false;
+    FIntPoint DisplayedWorldStateMin = FIntPoint::ZeroValue;
+
+    // Угол окна для клетки зрителя: к ближайшему кратному тайла, окно не
+    // выходит за сетку.
+    FIntPoint ComputeWorldStateWindowMin(const FIntPoint& ViewerCell, const FIntPoint& Size) const;
+
+    // Сторона тайла перецентровки -- восьмая часть окна разметки.
+    int32 GetWorldStateWindowTile() const;
+
+    // Клетка зрителя: точка обзора локального игрока 0, без него -- центр
+    // первого чанка активности. false -- зрителя нет.
+    bool GetWorldStateViewerCell(FIntPoint& OutCell) const;
+
+    // Перенести показываемое состояние в окно с другим углом того же размера:
+    // перекрытие сохраняет сглаживание, вошедшие клетки приравниваются к миру.
+    void ShiftWorldStateMapDisplay(const FIntPoint& NewMin, const FIntPoint& Size);
+
+    // Выгрузка карты: окно, шаг сглаживания DisplayStepSeconds, пиксели,
+    // рамка. Таймер шагает на свой период, внеочередной вызов из Tick -- на 0.
+    void UploadWorldStateMap(float DisplayStepSeconds);
 
     // ---- Ландшафт и кеш высот ----
     UPROPERTY()
