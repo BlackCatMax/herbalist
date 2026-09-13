@@ -135,11 +135,68 @@ uint32 FWorldLayoutSolver::ComputeFingerprint(double CellSizeCm, const FVector2D
     // Через целые сотые сантиметра, а не биты double: одна и та же разметка,
     // посчитанная разной арифметикой, обязана дать один отпечаток -- иначе
     // сейв объявлялся бы несовместимым на пустом месте.
-    uint32 Hash = GetTypeHash(FMath::RoundToInt64(CellSizeCm * 100.0));
-    Hash = HashCombine(Hash, GetTypeHash(FMath::RoundToInt64(Anchor.X * 100.0)));
-    Hash = HashCombine(Hash, GetTypeHash(FMath::RoundToInt64(Anchor.Y * 100.0)));
-    Hash = HashCombine(Hash, GetTypeHash(PageSizeInCells));
+    // Только HashCombine (этап 8): отпечаток пишется в сейв.
+    uint32 Hash = StableHashInt64(ToHundredthsCm(CellSizeCm));
+    Hash = HashCombine(Hash, StableHashInt64(ToHundredthsCm(Anchor.X)));
+    Hash = HashCombine(Hash, StableHashInt64(ToHundredthsCm(Anchor.Y)));
+    Hash = HashCombine(Hash, static_cast<uint32>(PageSizeInCells));
     return Hash;
+}
+
+FHerbalistSavedWorldLayout FWorldLayoutSolver::MakeSavedLayout(const FHerbalistWorldLayout& Layout)
+{
+    FHerbalistSavedWorldLayout Saved;
+    if (!Layout.bValid)
+    {
+        return Saved;
+    }
+    Saved.bValid = true;
+    Saved.CellSizeCm = Layout.CellSizeCm;
+    Saved.Anchor = Layout.Anchor;
+    Saved.PageSizeInCells = Layout.PageSizeInCells;
+    Saved.Fingerprint = ComputeFingerprint(Layout.CellSizeCm, Layout.Anchor, Layout.PageSizeInCells);
+    return Saved;
+}
+
+bool FWorldLayoutSolver::IsSaveCompatible(const FHerbalistSavedWorldLayout& Saved, const FHerbalistWorldLayout& Current, FString& OutReason)
+{
+    OutReason.Reset();
+    if (!Saved.bValid && !Current.bValid)
+    {
+        return true;
+    }
+    if (Saved.bValid != Current.bValid)
+    {
+        const double CellCm = Saved.bValid ? Saved.CellSizeCm : Current.CellSizeCm;
+        const FVector2D Anchor = Saved.bValid ? Saved.Anchor : Current.Anchor;
+        const int32 Page = Saved.bValid ? Saved.PageSizeInCells : Current.PageSizeInCells;
+        const FString LayoutText = FString::Printf(TEXT("клетка %.2f см, начало отсчёта (%.2f, %.2f) см, страница %d клеток"), CellCm, Anchor.X, Anchor.Y, Page);
+        OutReason = Saved.bValid
+            ? FString::Printf(TEXT("сейв записан с разметкой (%s), у карты разметки нет"), *LayoutText)
+            : FString::Printf(TEXT("сейв записан без разметки (карта без ландшафта или сейв старее v5), у карты разметка: %s"), *LayoutText);
+        return false;
+    }
+
+    TArray<FString> Changes;
+    if (ToHundredthsCm(Saved.CellSizeCm) != ToHundredthsCm(Current.CellSizeCm))
+    {
+        Changes.Add(FString::Printf(TEXT("клетка %.2f см в сейве, %.2f см у карты"), Saved.CellSizeCm, Current.CellSizeCm));
+    }
+    if (ToHundredthsCm(Saved.Anchor.X) != ToHundredthsCm(Current.Anchor.X) || ToHundredthsCm(Saved.Anchor.Y) != ToHundredthsCm(Current.Anchor.Y))
+    {
+        Changes.Add(FString::Printf(TEXT("начало отсчёта (%.2f, %.2f) см в сейве, (%.2f, %.2f) см у карты"),
+            Saved.Anchor.X, Saved.Anchor.Y, Current.Anchor.X, Current.Anchor.Y));
+    }
+    if (Saved.PageSizeInCells != Current.PageSizeInCells)
+    {
+        Changes.Add(FString::Printf(TEXT("страница %d клеток в сейве, %d у карты"), Saved.PageSizeInCells, Current.PageSizeInCells));
+    }
+    if (Changes.Num() == 0)
+    {
+        return true;
+    }
+    OutReason = FString::Printf(TEXT("разметка другая: %s"), *FString::Join(Changes, TEXT("; ")));
+    return false;
 }
 
 bool FWorldLayoutSolver::IsSameSource(const FHerbalistWorldLayoutSource& A, const FHerbalistWorldLayoutSource& B)

@@ -6,6 +6,9 @@
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "HerbalistSaveSubsystem.generated.h"
 
+class AGridWorldManager;
+class UHerbalistSaveGame;
+
 // Координатор сохранений v1 (CHANGELOG.md 2026-08-24): собирает состояние из
 // AGridWorldManager + компонентов игрока в один UHerbalistSaveGame и обратно.
 // GameInstanceSubsystem, как реестры ингредиентов/воды — тот же паттерн:
@@ -31,6 +34,19 @@ public:
     // осмысленного соответствия нет -- обнуляется.
     static void MigrateBiomeGraphNodesV1ToV2(TMap<FName, FBiomeGraphNode>& Nodes);
     static const FString DefaultSlotName;
+
+    // Версия формата, которую пишет эта сборка (история -- у SaveGame).
+    static constexpr int32 CurrentSaveVersion = 5;
+
+    // Можно ли применить сейв к менеджеру (разметка мира, этап 8): версия не
+    // новее сборки, разметка совместима, без разметки -- тот же размер сетки.
+    // Статическая тем же доводом, что MigrateBiomeGraphNodesV1ToV2: LoadGame в
+    // автотесте не вызвать. OutReason -- причина отказа для лога.
+    static bool CheckSaveApplicable(const UHerbalistSaveGame& Save, const AGridWorldManager& Manager, FString& OutReason);
+
+    // Капища, ориентиры сущностей и точки интереса, чья клетка задана, но лежит
+    // за сеткой -- после уборки плиток ландшафта (ревью этапа 8а).
+    static int32 CountSitesOutsideGrid(const AGridWorldManager& Manager);
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Save")
     bool SaveGame(const FString& SlotName = TEXT(""));

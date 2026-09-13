@@ -1292,7 +1292,9 @@ public:
 
     // ---- Сохранения (Core/Save/HerbalistSaveTypes.h) ----
     TArray<FSavedCellState> CaptureSaveCells() const;
-    void ApplySaveCells(const TArray<FSavedCellState>& InCells);
+    // Возвращает число сохранённых клеток за сеткой: они отброшены (плитки
+    // ландшафта убрали, этап 8 разметки мира).
+    int32 ApplySaveCells(const TArray<FSavedCellState>& InCells);
 
     // Домашние хранилища (аудит 2026-09-05: "и их содержимое не сохраняются
     // вообще") — сами AStorageContainer нигде не отслеживаются постоянным

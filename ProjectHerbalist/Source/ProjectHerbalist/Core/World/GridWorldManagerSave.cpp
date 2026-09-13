@@ -117,17 +117,20 @@ void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const
     SpawnResourceRoster(Cell, Saved.ResourceIngredientIDs, Saved.ResourceSlots);
 }
 
-void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
+int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
 {
     TSet<int32> SavedIndices;
     SavedIndices.Reserve(InCells.Num());
+    int32 DroppedCount = 0;
 
     for (const FSavedCellState& Saved : InCells)
     {
         FGridCell* Cell = GetCell(Saved.X, Saved.Y);
         if (!Cell)
         {
-            UE_LOG(LogHerbalistSave, Warning, TEXT("ApplySaveCells: no cell at (%d,%d), skipped (grid size mismatch?)"), Saved.X, Saved.Y);
+            // Одна строка на загрузку, а не на клетку (этап 8): после того как
+            // убрали плитку ландшафта, таких клеток тысячи.
+            ++DroppedCount;
             continue;
         }
 
@@ -166,6 +169,12 @@ void AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
 
     // Клетки заменены сейвом и базой -- сводки чанков считаются заново (этап 7).
     InvalidateAllChunkSummaries();
+
+    if (DroppedCount > 0)
+    {
+        UE_LOG(LogHerbalistSave, Warning, TEXT("ApplySaveCells: %d saved cells lie outside the grid and were dropped (landscape tiles removed?)"), DroppedCount);
+    }
+    return DroppedCount;
 }
 
 TArray<FSavedHomeStorage> AGridWorldManager::CaptureHomeStorages() const

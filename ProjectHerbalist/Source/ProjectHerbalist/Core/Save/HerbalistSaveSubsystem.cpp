@@ -54,10 +54,13 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // клеток, у ресурсов появились слоты мест (FSavedCellState::ResourceSlots).
     // v4 (2026-09-13, разметка мира, этап 6): координаты клеток -- глобальные,
     // от начала сетки World Partition.
-    Save->SaveVersion = 4;
+    // v5 (2026-09-13, разметка мира, этап 8): разметка, в которой записаны
+    // координаты клеток; загрузка другой разметки отказывает.
+    Save->SaveVersion = CurrentSaveVersion;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
     Save->GridSizeY = WorldManager->GridSizeY;
+    Save->WorldLayout = FWorldLayoutSolver::MakeSavedLayout(WorldManager->ResolvedLayout);
     Save->CurrentTickID = WorldManager->GetCurrentTickID();
     Save->GameClockSeconds = WorldManager->GetGameClockSeconds();
     Save->Cells = WorldManager->CaptureSaveCells();
@@ -153,6 +156,75 @@ void UHerbalistSaveSubsystem::MigrateBiomeGraphNodesV1ToV2(TMap<FName, FBiomeGra
     }
 }
 
+bool UHerbalistSaveSubsystem::CheckSaveApplicable(const UHerbalistSaveGame& Save, const AGridWorldManager& Manager, FString& OutReason)
+{
+    OutReason.Reset();
+
+    // Версия формата (аудит 2026-09-05, см. подробный довод у
+    // UHerbalistSaveGame::SaveVersion). Файл НОВЕЕ, чем умеет читать текущий
+    // код (например, сохранённый более новой версией игры), отклоняется явно,
+    // а не десериализуется вслепую с риском тихо потерять или неверно
+    // истолковать поля, которых эта версия ещё не знает.
+    if (Save.SaveVersion > CurrentSaveVersion)
+    {
+        OutReason = FString::Printf(TEXT("SaveVersion %d is newer than this build supports (%d)"), Save.SaveVersion, CurrentSaveVersion);
+        return false;
+    }
+
+    // Разметка (этап 8, решение пользователя 9): координаты клеток сейва имеют
+    // смысл только в той разметке, в которой записаны.
+    FString LayoutMismatch;
+    if (!FWorldLayoutSolver::IsSaveCompatible(Save.WorldLayout, Manager.ResolvedLayout, LayoutMismatch))
+    {
+        // Сейв старее v5 разметки не знает вовсе -- причина в версии, а не в
+        // карте без ландшафта (ревью этапа 8а).
+        OutReason = (!Save.WorldLayout.bValid && Save.SaveVersion < 5)
+            ? FString::Printf(TEXT("сейв v%d записан до отпечатка разметки (v5); %s"), Save.SaveVersion, *LayoutMismatch)
+            : FString::Printf(TEXT("written for another world layout: %s"), *LayoutMismatch);
+        return false;
+    }
+
+    // Загрузка не путешествует по уровням -- восстанавливает состояние прямо в
+    // текущей живой сессии. Без разметки размер сетки должен совпасть:
+    // координаты клеток сохранения не означают ничего на сетке другого
+    // размера. С разметкой размер не сверяется: добавленные плитки ландшафта
+    // сейв не ломают (решение 14), клетки за убранными отбрасывает
+    // ApplySaveCells.
+    if (!Manager.ResolvedLayout.bValid && (Manager.GridSizeX != Save.GridSizeX || Manager.GridSizeY != Save.GridSizeY))
+    {
+        OutReason = FString::Printf(TEXT("grid size mismatch (current %dx%d, saved %dx%d)"),
+            Manager.GridSizeX, Manager.GridSizeY, Save.GridSizeX, Save.GridSizeY);
+        return false;
+    }
+    return true;
+}
+
+int32 UHerbalistSaveSubsystem::CountSitesOutsideGrid(const AGridWorldManager& Manager)
+{
+    int32 Count = 0;
+    auto CountCell = [&Manager, &Count](const FIntPoint& Cell)
+    {
+        if (HerbalistCore::IsValidCell(Cell) && !Manager.IsCellInGrid(Cell.X, Cell.Y))
+        {
+            ++Count;
+        }
+    };
+    for (const FShrine& Shrine : Manager.GetShrines())
+    {
+        CountCell(Shrine.Cell);
+    }
+    for (const FEntityLandmark& Landmark : Manager.GetEntityLandmarks())
+    {
+        CountCell(Landmark.Cell);
+    }
+    CountCell(Manager.GetTotemSite());
+    CountCell(Manager.GetSvetloyarSite());
+    CountCell(Manager.GetGoryuchKamenSite());
+    CountCell(Manager.GetSoloveySite());
+    CountCell(Manager.GetKalinovMostSite());
+    return Count;
+}
+
 bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
 {
     const FString Slot = SlotName.IsEmpty() ? DefaultSlotName : SlotName;
@@ -169,32 +241,6 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
         return false;
     }
 
-    // Версия формата (аудит 2026-09-05, см. подробный довод у
-    // UHerbalistSaveGame::SaveVersion) — эта сборка понимает только v1.
-    // Файл НОВЕЕ, чем умеет читать текущий код (например, сохранённый более
-    // новой версией игры), отклоняется явно, а не десериализуется вслепую с
-    // риском тихо потерять/неверно истолковать поля, которых эта версия ещё
-    // не знает.
-    if (Save->SaveVersion > 4)
-    {
-        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' has SaveVersion %d, newer than this build supports (4), aborted"),
-            *Slot, Save->SaveVersion);
-        return false;
-    }
-
-    // v3 (2026-09-12, разметка мира, этап 4): тип воды, число, виды и места
-    // ресурсов берутся из потоков клеток, и при том же сиде раскладка воды
-    // пятнами и всё, что сеется после неё (хозяева мест, якоря, курганы, места
-    // силы), другое, чем в сейве старее. Такой сейв грузится, но его клетки и
-    // места могут лечь не на тот мир. Отказ по отпечатку разметки -- этап 8.
-    // v4 (этап 6): координаты клеток в сейве глобальные; на карте с разметкой
-    // сейв старее ляжет со сдвигом на первую клетку сетки (найдено ревью).
-    if (Save->SaveVersion < 4)
-    {
-        UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: slot '%s' has SaveVersion %d, written before per-cell seeds (3) and global cell coordinates (4): water, sites, resources and cell positions may not match this world"),
-            *Slot, Save->SaveVersion);
-    }
-
     UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
     AGridWorldManager* WorldManager = FindWorldManager(World);
     if (!WorldManager)
@@ -203,15 +249,26 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
         return false;
     }
 
-    // Загрузка v1 не путешествует по уровням — восстанавливает состояние прямо
-    // в текущей живой сессии (см. чат-сообщение при старте задачи "Сохранения").
-    // Поэтому размер сетки должен совпасть: координаты клеток сохранения не
-    // означают ничего на сетке другого размера.
-    if (WorldManager->GridSizeX != Save->GridSizeX || WorldManager->GridSizeY != Save->GridSizeY)
+    // Версия, разметка, размер сетки -- до первой записи в мир: отказ не
+    // оставляет частично применённого состояния.
+    FString Rejection;
+    if (!CheckSaveApplicable(*Save, *WorldManager, Rejection))
     {
-        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: grid size mismatch (current %dx%d, saved %dx%d), aborted"),
-            WorldManager->GridSizeX, WorldManager->GridSizeY, Save->GridSizeX, Save->GridSizeY);
+        UE_LOG(LogHerbalistSave, Error, TEXT("LoadGame: slot '%s' rejected, nothing applied: %s"), *Slot, *Rejection);
         return false;
+    }
+
+    // v3 (2026-09-12, разметка мира, этап 4): тип воды, число, виды и места
+    // ресурсов берутся из потоков клеток, и при том же сиде раскладка воды
+    // пятнами и всё, что сеется после неё (хозяева мест, якоря, курганы, места
+    // силы), другое, чем в сейве старее. v4 (этап 6): координаты клеток
+    // глобальные. Сюда сейв старее v5 доходит только на карте без разметки
+    // (с разметкой он отклонён выше), где начало сетки -- (0, 0): грузится, но
+    // клетки и места могут лечь не на тот мир.
+    if (Save->SaveVersion < 4)
+    {
+        UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: slot '%s' has SaveVersion %d, written before per-cell seeds (3): water, sites and resources may not match this world"),
+            *Slot, Save->SaveVersion);
     }
 
     WorldManager->RngBaseSeed = Save->RngBaseSeed;
@@ -265,6 +322,16 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetSoloveyTriggered(Save->bSoloveyTriggered);
     WorldManager->SetSoloveyCalmed(Save->bSoloveyCalmed);
     WorldManager->SetKalinovMostSite(Save->KalinovMostSite);
+
+    // Места за сеткой (ревью этапа 8а): после уборки плиток ландшафта капище,
+    // ориентир или точка интереса могли остаться на исчезнувшей земле.
+    // Падать нечему -- потребители проверяют клетку, -- но место молча
+    // пропадает, и строка в логе -- единственный след.
+    const int32 SitesOutsideGrid = CountSitesOutsideGrid(*WorldManager);
+    if (SitesOutsideGrid > 0)
+    {
+        UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: %d shrines, entity landmarks or points of interest lie outside the grid and are unreachable (landscape tiles removed?)"), SitesOutsideGrid);
+    }
 
     // Биомный граф (AUDIT_AND_REFACTORING_PLAN.md §7.1, 2026-09-06) —
     // RestoreNodeFieldState сам не трогает узлы, отсутствующие в сейве

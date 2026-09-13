@@ -576,7 +576,17 @@ FHerbalistWorldLayoutSource AGridWorldManager::GatherWorldLayoutSource(UWorld* W
 
 bool AGridWorldManager::SyncWorldLayoutFromWorld(UWorld* World, TArray<FString>& OutWarnings, bool bMarkModified)
 {
-    const FHerbalistWorldLayoutSource NewSource = GatherWorldLayoutSource(World, OutWarnings);
+    FHerbalistWorldLayoutSource NewSource = GatherWorldLayoutSource(World, OutWarnings);
+
+    // Ландшафт не найден, а запечён (ревью этапа 8а): сверка при сохранении
+    // уровня (PreSave) или кнопкой в мире, где актор ландшафта не загружен,
+    // стёрла бы разметку -- и сейвы этой карты перестали бы грузиться. Убрать
+    // ландшафт с карты -- решение, которое делается не сверкой.
+    if (!NewSource.bHasLandscape && BakedLayoutSource.bHasLandscape)
+    {
+        OutWarnings.Add(TEXT("Ландшафт не найден в мире -- запечённая разметка сохранена без изменений"));
+        NewSource = BakedLayoutSource;
+    }
     const bool bSourceChanged = !FWorldLayoutSolver::IsSameSource(NewSource, BakedLayoutSource);
 
     // Итог пересчитывается всегда: он не сохраняется, а настройки радиуса

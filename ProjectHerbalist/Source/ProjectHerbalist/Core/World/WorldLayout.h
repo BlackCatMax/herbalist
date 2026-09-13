@@ -176,6 +176,33 @@ struct PROJECTHERBALIST_API FHerbalistWorldLayout
     double GetChunkSizeCm() const { return CellSizeCm * ChunkSizeInCells; }
 };
 
+// Разметка, записанная в сейв (этап 8): то, что входит в отпечаток, -- чтобы
+// отказ загрузки назвал, что именно поменялось (§8 DESIGN_World_Layout.md).
+USTRUCT()
+struct PROJECTHERBALIST_API FHerbalistSavedWorldLayout
+{
+    GENERATED_BODY()
+
+    // false -- сейв записан на карте без разметки или старее v5.
+    UPROPERTY()
+    bool bValid = false;
+
+    UPROPERTY()
+    double CellSizeCm = 0.0;
+
+    UPROPERTY()
+    FVector2D Anchor = FVector2D::ZeroVector;
+
+    UPROPERTY()
+    int32 PageSizeInCells = 0;
+
+    // Для лога и отладки. Совместимость сверяется по величинам, а не по
+    // записанному числу: сменись формула отпечатка в новой сборке, старые
+    // сейвы той же разметки остались бы совместимы.
+    UPROPERTY()
+    uint32 Fingerprint = 0;
+};
+
 // Чистый решатель разметки. Все функции статические и не трогают мир.
 struct PROJECTHERBALIST_API FWorldLayoutSolver
 {
@@ -229,6 +256,31 @@ struct PROJECTHERBALIST_API FWorldLayoutSolver
     static int32 MakeCellSeed(int32 WorldSeed, const FIntPoint& GlobalCell, ECellRandomPurpose Purpose, int32 Salt);
 
     static uint32 ComputeFingerprint(double CellSizeCm, const FVector2D& Anchor, int32 PageSizeInCells);
+
+    // Хэш int64, одинаковый в любой сборке. Неизменность движок обещает только
+    // у HashCombine (TypeHash.h); GetTypeHash для int64 -- формула без такого
+    // обещания, а хэши структур и контейнеров идут через HashCombineFast,
+    // прямо помеченный как меняющийся.
+    static constexpr uint32 StableHashInt64(int64 Value)
+    {
+        const uint64 Bits = static_cast<uint64>(Value);
+        return HashCombine(static_cast<uint32>(Bits), static_cast<uint32>(Bits >> 32));
+    }
+
+    // Сантиметры в целых сотых -- единица сравнения разметки, в отпечатке и при
+    // сверке сейва: одна и та же разметка, посчитанная разной арифметикой,
+    // даёт одно число.
+    static int64 ToHundredthsCm(double Cm) { return FMath::RoundToInt64(Cm * 100.0); }
+
+    // Разметка для записи в сейв.
+    static FHerbalistSavedWorldLayout MakeSavedLayout(const FHerbalistWorldLayout& Layout);
+
+    // Совместим ли сейв с разметкой карты (решение пользователя 9). Клетка,
+    // начало отсчёта и страница сверяются с точностью до сотой сантиметра, как
+    // в отпечатке; границы ландшафта не сверяются (решение 14). Сейв и карта
+    // оба без разметки -- совместимы, размер сетки сверяет загрузка. OutReason
+    // -- что не совпало.
+    static bool IsSaveCompatible(const FHerbalistSavedWorldLayout& Saved, const FHerbalistWorldLayout& Current, FString& OutReason);
 
     // Совпадают ли исходные величины с точностью до допуска. Границы
     // ландшафта из редактора зависят от того, что загружено, -- точное

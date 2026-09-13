@@ -23,6 +23,7 @@
 #include "Core/Shrine/ShrineTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
+#include "Core/World/WorldLayout.h"
 #include "HerbalistSaveTypes.generated.h"
 
 USTRUCT()
@@ -187,6 +188,11 @@ public:
 
     UPROPERTY()
     int32 GridSizeY = 20;
+
+    // Разметка мира, в которой записаны координаты клеток (этап 8, v5). Сейв
+    // старее -- без разметки (bValid false).
+    UPROPERTY()
+    FHerbalistSavedWorldLayout WorldLayout;
 
     UPROPERTY()
     int32 CurrentTickID = 0;
