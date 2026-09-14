@@ -20,7 +20,9 @@ py tools/docs_audit/audit_docs.py
 ```
 
 Отчёт — `build/docs_audit/report.md` (в git не попадает). Код выхода 1 —
-есть ошибки. Прогон отдельных проверок: `--only C06,C09`; список —
+есть ошибки. В Claude Code то же быстрее — скилл `/docs-audit` (аргументы
+`quick`, `full`, `fix`, `strict` или список проверок, например `C06,C09`;
+`.claude/skills/docs-audit/SKILL.md`, там же текущий эталон находок). Прогон отдельных проверок: `--only C06,C09`; список —
 `--list`. Тесты самого скрипта:
 
 ```bash
