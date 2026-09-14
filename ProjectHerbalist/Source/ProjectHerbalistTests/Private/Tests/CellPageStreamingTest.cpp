@@ -531,6 +531,45 @@ bool FHerbalistCellPageStreaming_SiteActorStandsOnGroundWhenPageLoads::RunTest(c
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCellPageStreaming_RegrowthsOfUnloadedPageRestartOnSaveLoad,
+    "Herbalist.WorldLayout.PageStreaming.RegrowthsOfUnloadedPageRestartOnSaveLoad",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCellPageStreaming_RegrowthsOfUnloadedPageRestartOnSaveLoad::RunTest(const FString& Parameters)
+{
+    // Загрузка сейва перезапускает отрастания и у клетки выгруженной страницы:
+    // время -- по её основе с дельтой сейва (ревью 2026-09-14).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World))
+    {
+        return false;
+    }
+    FScopedStreamingTestRadius ScopedRadius;
+    AGridWorldManager* Manager = SpawnStreamingTestManager(World, 6300.0);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager))
+    {
+        return false;
+    }
+
+    // Клетка на странице (0, 0); зритель на странице (-1, -1).
+    const FIntPoint RegrowingCell(5, 5);
+    StreamTo(Manager, GroundUnderWestPage, FIntPoint(-2, -2));
+    TestNull(TEXT("Sanity: страница клетки выгружена"), Manager->GetCellConst(RegrowingCell.X, RegrowingCell.Y));
+
+    FSavedCellState Saved;
+    Saved.X = RegrowingCell.X;
+    Saved.Y = RegrowingCell.Y;
+    Saved.PendingRegrowthCount = 2;
+    const int32 TimersBefore = Manager->GetRegrowthTimersScheduledForTests();
+    Manager->ApplySaveCells({ Saved });
+    TestEqual(TEXT("У клетки выгруженной страницы поставлены оба таймера"),
+        Manager->GetRegrowthTimersScheduledForTests() - TimersBefore, 2);
+
+    StopStreaming(Manager);
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCellPageStreaming_RosterComesBackAsleep,
     "Herbalist.WorldLayout.PageStreaming.RosterComesBackAsleep",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

@@ -121,6 +121,68 @@ bool FHerbalistResourceRegrowth_EachHarvestGetsItsOwnIndependentSlot::RunTest(co
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistResourceRegrowth_PendingRegrowthsSurviveSaveLoad,
+    "Herbalist.ResourceRegrowth.PendingRegrowthsSurviveSaveLoad",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistResourceRegrowth_PendingRegrowthsSurviveSaveLoad::RunTest(const FString& Parameters)
+{
+    // Отрастания в процессе в сейве (2026-09-14, вместе с повторной попыткой):
+    // раньше сохранялись стоящие и спящие растения, а таймеры -- нет, и всё, что
+    // отрастало, после загрузки терялось навсегда.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    AHerbalistResourceActor* R0 = SpawnResourceAt(World, Manager, 7, 7);
+    AHerbalistResourceActor* R1 = SpawnResourceAt(World, Manager, 7, 7);
+    FGridCell* Cell = Manager->GetCell(7, 7);
+    if (!TestNotNull(TEXT("R0"), R0) || !TestNotNull(TEXT("R1"), R1) || !TestNotNull(TEXT("Cell exists"), Cell))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Manager->OnResourceCollected(R0);
+    Manager->OnResourceCollected(R1);
+    if (!TestEqual(TEXT("Sanity: два отрастания в процессе"), Cell->PendingRegrowthCount, 2))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    const TArray<FSavedCellState> Saved = Manager->CaptureSaveCells();
+    const FSavedCellState* SavedCell = Saved.FindByPredicate([](const FSavedCellState& Entry) { return Entry.X == 7 && Entry.Y == 7; });
+    if (TestNotNull(TEXT("Клетка в сейве"), SavedCell))
+    {
+        TestEqual(TEXT("В сейве два отрастания"), SavedCell->PendingRegrowthCount, 2);
+    }
+
+    // Состояние до применения сейва -- отрастаний нет.
+    Cell->PendingRegrowthCount = 0;
+    const int32 TimersBefore = Manager->GetRegrowthTimersScheduledForTests();
+    const int32 GenerationBefore = Manager->GetRegrowthTimerGenerationForTests();
+    Manager->ApplySaveCells(Saved);
+    const FGridCell* Loaded = Manager->GetCellConst(7, 7);
+    if (TestNotNull(TEXT("Клетка после загрузки"), Loaded))
+    {
+        TestEqual(TEXT("После загрузки два отрастания в счётчике"), Loaded->PendingRegrowthCount, 2);
+        TestEqual(TEXT("...и два таймера перезапущены по счётчику сейва"), Manager->GetRegrowthTimersScheduledForTests() - TimersBefore, 2);
+        TestEqual(TEXT("Загрузка сдвинула поколение таймеров"), Manager->GetRegrowthTimerGenerationForTests(), GenerationBefore + 1);
+
+        // Таймер, поставленный до загрузки (сборы выше), срабатывает вхолостую.
+        const int32 ActorsBefore = Loaded->ResourceActors.Num();
+        const int32 DormantBefore = Loaded->DormantResourceIDs.Num();
+        Manager->OnRegrowthTimer(FIntPoint(7, 7), 1.0f, GenerationBefore);
+        TestEqual(TEXT("Таймер прошлого поколения не трогает счётчик"), Loaded->PendingRegrowthCount, 2);
+        TestEqual(TEXT("...и ничего не выращивает"), Loaded->ResourceActors.Num() + Loaded->DormantResourceIDs.Num(), ActorsBefore + DormantBefore);
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistResourceRegrowth_DefaultTimeIsInRequestedMinutesRange,
     "Herbalist.ResourceRegrowth.DefaultTimeIsInRequestedMinutesRange",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

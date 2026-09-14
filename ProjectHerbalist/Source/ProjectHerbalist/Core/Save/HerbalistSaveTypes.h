@@ -87,6 +87,13 @@ struct PROJECTHERBALIST_API FSavedCellState
     // (который ApplySaveCells к этому моменту уже честно применил).
     UPROPERTY()
     bool bResourcesSeeded = false;
+
+    // Отрастания в процессе (2026-09-14, вместе с повторной попыткой
+    // отрастания): без поля всё, что отрастало, после загрузки терялось
+    // навсегда. Загрузка ставит столько таймеров, сколько здесь, с полным
+    // временем отрастания. В сейве старее поля нет -- 0.
+    UPROPERTY()
+    int32 PendingRegrowthCount = 0;
 };
 
 // Домашние хранилища (DESIGN_Community_And_Homestead.md §2.2, 2026-09-04) —

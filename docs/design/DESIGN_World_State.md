@@ -198,11 +198,11 @@ graph LR
 | 1 | Среда → свойства собранного | ✅ `GenerateHarvestResult`, Lerp с `Resilience`. Работает и проверено численно. |
 | 2 | Сбор → истощение среды | ✅ `HarvestStress` + деградация. Починено в этой сессии (frame-rate). |
 | 3 | **Среда → что вырастает** | ✅ ВЫПОЛНЕНО 2026-08-23 — `GetRandomResourceForBiome` теперь берёт `Cell.State` третьим параметром и гасит `RarityWeight` гауссианой по `Distance(CellState, Row.BaseState)` (§15). Регрессия: `Herbalist.Registry.SuitabilityBiasesTowardCloserBaseState`. |
-| 4 | Разрастание → среда | 🟡→✅ Косвенно закрыто через звено 3: состав выросшего теперь зависит от `Cell.State`, значит следующий сбор (звено 1) уже видит след предыдущего состояния. 2026-08-29: `GetRandomResourceForBiome` теперь читает `Cell.HarvestStress` тем же множителем (`1 − HarvestStress`) — истощённая сборами клетка родит меньше и хуже, обратная связь появилась без отдельной механики, как и предполагал §15 ниже. **Поправка 2026-09-12:** по коду этот множитель ничего не делает. Он одинаков для всех кандидатов и сокращается при выборе по доле от `TotalWeight` (см. `ROADMAP.md`, раздел «Дизайн-решения, ждущие вашего выбора», пункт «Истощение уменьшает число вернувшихся растений»). С 2026-09-12 истощение действует через время отрастания: `GetRegrowthDelaySeconds` добавляет `HarvestStress × HarvestStressIncrement × полное зарастание`. Прямой обратной связи (само разрастание меняет `Cell.State`) всё ещё нет — решено, что это не нужно отдельно. |
+| 4 | Разрастание → среда | 🟡→✅ Косвенно закрыто через звено 3: состав выросшего теперь зависит от `Cell.State`, значит следующий сбор (звено 1) уже видит след предыдущего состояния. 2026-08-29: `GetRandomResourceForBiome` теперь читает `Cell.HarvestStress` тем же множителем (`1 − HarvestStress`) — истощённая сборами клетка родит меньше и хуже, обратная связь появилась без отдельной механики, как и предполагал §15 ниже. **Поправка 2026-09-12:** по коду этот множитель ничего не делает. Он одинаков для всех кандидатов и сокращается при выборе по доле от `TotalWeight` (см. `ROADMAP.md`, раздел «Дизайн-решения, ждущие вашего выбора», пункт «Истощение уменьшает число вернувшихся растений»). С 2026-09-12 истощение действует через время отрастания: `GetRegrowthDelaySeconds` добавляет `HarvestStress × HarvestStressIncrement × полное зарастание`. **2026-09-14:** множитель из выбора травы снят; истощение уменьшает число растений — отрастающее возвращается с вероятностью `1 − HarvestStress`, неудача ставит новую попытку (`CompleteRegrowth`, решение пользователя «пробовать снова»). Прямой обратной связи (само разрастание меняет `Cell.State`) всё ещё нет — решено, что это не нужно отдельно. |
 | 5 | Среда → проявление сущностей | ✅ Гнильники по порогу Corruption, Берегиня по HistoryPurity. |
 | 6 | Сущности → среда | ✅ через `TargetStateNudges`. |
 | 7 | Миграция существ | ❌ Сущности проявляются на месте по порогу и гаснут. Не перемещаются. |
-| 8 | Сезон/погода → ингредиенты | ✅ ВЫПОЛНЕНО 2026-08-29 — `FIngredientTableRow` получил `AllowedSeasons`/`bAutumnOnly`/`HarvestTimeWindow`/`bRequiresMoonPhase`+`RequiredMoonPhase`/`bRequiresDryWeather` (`IngredientTableRow.h`); `GetRandomResourceForBiome` умножает `Suitability` на все четыре мягких гейта (`IngredientWindowMismatchMultiplier`, никогда 0) плюс `(1 − Cell.HarvestStress)` — звено 4 закрыто той же правкой, не отдельно. Реальные значения на 70 из 76 карточек компендиума проставлены через `IngredientHarvestWindowPatchCommandlet` по отчёту агента, прочитавшего весь `04_Compendium/Растительность/`. Погода расширена третьим независимым каналом шума (`GetRainIntensity`/`IsRainy`, §15.7) — ни Ветер, ни сезонная Метель не покрывали "сухой день", самое частое условие в карточках. Регрессия: `Herbalist.Registry.{SeasonWindowBiasesTowardMatchingSeason, AutumnOnlyDoesNotBlockItsOtherAllowedSeason, HarvestTimeWindowGatesDawnOnlyIngredient, MoonPhaseGatesRequiredPhase, DryWeatherGatesRequiredIngredient, ExhaustedCellStillYieldsSomethingNotNothing}`. "Хозяин" (Леший/Водяной/...), тоже почти повсеместный в карточках, сознательно НЕ реализован в этом проходе — расходится с решением 2026-08-29, что Respect хозяина места меняется только через подношение (Apply), не автоматически от сбора; см. `GridWorldManagerTick.cpp` "Подношение хозяину места" и `ROADMAP.md`. |
+| 8 | Сезон/погода → ингредиенты | ✅ ВЫПОЛНЕНО 2026-08-29 — `FIngredientTableRow` получил `AllowedSeasons`/`bAutumnOnly`/`HarvestTimeWindow`/`bRequiresMoonPhase`+`RequiredMoonPhase`/`bRequiresDryWeather` (`IngredientTableRow.h`); `GetRandomResourceForBiome` умножает `Suitability` на все четыре мягких гейта (`IngredientWindowMismatchMultiplier`, никогда 0) плюс `(1 − Cell.HarvestStress)` — звено 4 закрыто той же правкой, не отдельно (множитель снят 2026-09-14, см. звено 4). Реальные значения на 70 из 76 карточек компендиума проставлены через `IngredientHarvestWindowPatchCommandlet` по отчёту агента, прочитавшего весь `04_Compendium/Растительность/`. Погода расширена третьим независимым каналом шума (`GetRainIntensity`/`IsRainy`, §15.7) — ни Ветер, ни сезонная Метель не покрывали "сухой день", самое частое условие в карточках. Регрессия: `Herbalist.Registry.{SeasonWindowBiasesTowardMatchingSeason, AutumnOnlyDoesNotBlockItsOtherAllowedSeason, HarvestTimeWindowGatesDawnOnlyIngredient, MoonPhaseGatesRequiredPhase, DryWeatherGatesRequiredIngredient, HarvestStressDoesNotChangeWhichHerbIsPicked}`. "Хозяин" (Леший/Водяной/...), тоже почти повсеместный в карточках, сознательно НЕ реализован в этом проходе — расходится с решением 2026-08-29, что Respect хозяина места меняется только через подношение (Apply), не автоматически от сбора; см. `GridWorldManagerTick.cpp` "Подношение хозяину места" и `ROADMAP.md`. |
 | 9 | Время суток → сущности | 🟡 Только `IsNight()` для Морочников, и та не видна игроку. |
 | 10 | Прогресс игрока → Заряна | ❌ Ничего. |
 
@@ -233,10 +233,14 @@ FName IngredientID = IngredientSubsystem->GetRandomResourceForBiome(Cell.Biome, 
                                 × (1 − HarvestStress)
 ```
 
+**2026-09-14:** множитель `(1 − HarvestStress)` из выбора травы снят — одинаковый
+у всех кандидатов, он сокращался. Истощение уменьшает число растений: отрастающее
+возвращается с вероятностью `1 − HarvestStress` (звено 4).
+
 Тогда всё встаёт на места само:
 - в испорченной клетке чистые травы перестают всходить, а гнильные — наоборот;
-- истощённая сборами клетка родит меньше и хуже — обратная связь по звену 4
-  появляется без отдельной механики;
+- истощённая сборами клетка родит меньше — обратная связь по звену 4 (с
+  2026-09-14 через шанс отрастающего вернуться, не через выбор травы);
 - сезонный множитель (звено 8) вставляется в ту же формулу одним сомножителем;
 - `Resilience` получает второй смысл: своевольные травы менее чувствительны
   к пригодности места.
@@ -377,6 +381,8 @@ Entity = Projection(BiomeState)».
 2. СКОЛЬКО и КАКОГО качества = f(близость Cell.State к Row.BaseState)
                              × СезонноеОкно × ПогодноеОкно × (1 − HarvestStress)
 ```
+
+(Сомножитель `(1 − HarvestStress)` снят 2026-09-14, см. звено 4.)
 
 **Проверено на реальных данных — второй ступени есть на чём работать.**
 Внутри одного только Болота (эталон биома: `Purity 0.35`, `Corruption 0.70`):

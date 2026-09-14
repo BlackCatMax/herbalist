@@ -3181,7 +3181,9 @@ float AGridWorldManager::GetRegrowthDelaySeconds(const FGridCell& Cell) const
     // клетка реально заявлена регионом; без регионов на уровне -- глобальный
     // ResourceRegrowthTime.
     const ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(Cell);
-    const float BaseSeconds = ClaimingRegion ? ClaimingRegion->ResourceRegrowthTimeSeconds : ResourceRegrowthTime;
+    // Не ниже 0.1 с -- ClampMin региона и ResourceRegrowthTime действует только
+    // в редакторе, а таймер с нулём не ставится, и место ждало бы вечно.
+    const float BaseSeconds = FMath::Max(ClaimingRegion ? ClaimingRegion->ResourceRegrowthTimeSeconds : ResourceRegrowthTime, 0.1f);
 
     // Истощённая клетка отращивает дольше (2026-09-12, прямой запрос: "на
     // клетках с высоким стрессом растения должны восстанавливаться
@@ -3216,7 +3218,7 @@ float AGridWorldManager::GetRegrowthDelaySeconds(const FGridCell& Cell) const
     // отрастить за базовое время.
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float StressStep = Settings ? Settings->HarvestStressIncrement : 0.1f;
-    const float Stress = FMath::Clamp(Cell.HarvestStress, 0.0f, 1.0f);
+    const float Stress = GetCurrentHarvestStress(Cell);
 
     return BaseSeconds + Stress * StressStep * GetStressRecoverySecondsForCell(Cell);
 }
@@ -3237,27 +3239,44 @@ void AGridWorldManager::StartRegeneration(FGridCell& Cell)
     const float RegrowthTime = GetRegrowthDelaySeconds(Cell);
 
     // Наблюдаемый счётчик (2026-09-04) -- см. комментарий у поля в
-    // HerbalistCoreTypes.h. Растёт здесь, падает в лямбде ниже независимо
-    // от исхода попытки (собрано ли что-то реально -- отдельный вопрос,
-    // сама попытка отрастания в любом случае завершена).
+    // HerbalistCoreTypes.h. Растёт здесь, падает в CompleteRegrowth; неудачная
+    // попытка ставит новую (2026-09-14), и место остаётся в счёте.
     ++Cell.PendingRegrowthCount;
+    ScheduleRegrowthTimer(FIntPoint(Cell.X, Cell.Y), RegrowthTime);
+}
 
+void AGridWorldManager::ScheduleRegrowthTimer(const FIntPoint& Coord, float RegrowthTime)
+{
     // Координата, а не ссылка на клетку (этап 8в): за минуты ожидания страница
     // клетки может выгрузиться, и ссылка указывала бы в освобождённую память.
-    const FIntPoint Coord(Cell.X, Cell.Y);
+    // Поколение (2026-09-14): загрузка сейва перезапускает отрастания из сейва,
+    // а таймер, поставленный до неё, отрастил бы растение поверх загруженного.
+    // Слабая лямбда (ревью 2026-09-14): таймер, переживший менеджер (Destroy в
+    // автотестах, смена уровня), не вызывается у мёртвого объекта.
+    const int32 Generation = RegrowthTimerGeneration;
+    ++RegrowthTimersScheduled;
     FTimerHandle TimerHandle;
-    GetWorldTimerManager().SetTimer(TimerHandle, [this, Coord, RegrowthTime]()
+    GetWorldTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, Coord, RegrowthTime, Generation]()
     {
-        if (FGridCell* LiveCell = GetCell(Coord.X, Coord.Y))
-        {
-            CompleteRegrowth(*LiveCell, RegrowthTime);
-        }
-        else if (IsCellInGrid(Coord.X, Coord.Y))
-        {
-            // Страница выгружена -- отрастание завершится при её загрузке.
-            PendingRegrowthsOnLoad.FindOrAdd(GetCellIndex(Coord.X, Coord.Y)).Add(RegrowthTime);
-        }
-    }, RegrowthTime, false);
+        OnRegrowthTimer(Coord, RegrowthTime, Generation);
+    }), RegrowthTime, false);
+}
+
+void AGridWorldManager::OnRegrowthTimer(const FIntPoint& Coord, float RegrowthTime, int32 Generation)
+{
+    if (Generation != RegrowthTimerGeneration)
+    {
+        return;
+    }
+    if (FGridCell* LiveCell = GetCell(Coord.X, Coord.Y))
+    {
+        CompleteRegrowth(*LiveCell, RegrowthTime);
+    }
+    else if (IsCellInGrid(Coord.X, Coord.Y))
+    {
+        // Страница выгружена -- отрастание завершится при её загрузке.
+        PendingRegrowthsOnLoad.FindOrAdd(GetCellIndex(Coord.X, Coord.Y)).Add(RegrowthTime);
+    }
 }
 
 void AGridWorldManager::CompleteRegrowth(FGridCell& Cell, float RegrowthTime)
@@ -3287,7 +3306,23 @@ void AGridWorldManager::CompleteRegrowth(FGridCell& Cell, float RegrowthTime)
     const FHarvestContext Context = BuildHarvestContextForCell(Cell);
     const EGardenNiche* PlotNiche = Cell.bIsWater ? nullptr : GardenPlots.Find(FIntPoint(Cell.X, Cell.Y));
 
-    if (SpawnOneResourceInCell(Cell, Context, PlotNiche, Region, IngredientSubsystem))
+    // Повторная попытка (решение пользователя 2026-09-14: «если растение не
+    // вернулось -- пробовать снова»). Растение возвращается с вероятностью
+    // 1 - HarvestStress, стресс -- на момент срабатывания таймера (решено
+    // 2026-09-12: штраф истощения -- меньше растений, а не другой набор трав).
+    // Неудача -- броска или места -- не теряет место: через время отрастания при
+    // новом стрессе бросок повторяется. На истощённой клетке растений в каждый
+    // момент меньше, по мере заживления земли возвращаются все. Стресс -- на
+    // сейчас: в спящем чанке он в клетке заморожен до догона (ревью 2026-09-14).
+    // Без стресса бросок не нужен -- последовательность WorldRNG мира не
+    // сдвигается зря.
+    const float ReturnChance = 1.0f - GetCurrentHarvestStress(Cell);
+    const bool bReturns = ReturnChance >= 1.0f || WorldRNG.FRand() < ReturnChance;
+    if (!bReturns || !SpawnOneResourceInCell(Cell, Context, PlotNiche, Region, IngredientSubsystem))
+    {
+        StartRegeneration(Cell);
+        return;
+    }
     {
         // В отличие от исходного броска в InitializeCells (тот безопасно
         // переигрывается заново из RngBaseSeed), это отросшее — не то же
@@ -3538,6 +3573,37 @@ float AGridWorldManager::GetStressRecoverySecondsForCell(const FGridCell& Cell) 
     }
 
     return FMath::Max(Seconds, KINDA_SMALL_NUMBER);
+}
+
+float AGridWorldManager::GetCurrentHarvestStress(const FGridCell& Cell) const
+{
+    // Навечно чистая клетка (Перо Жар-птицы) из релаксации исключена, её стресс
+    // не спадает никогда -- а сбор его поднимает. Иначе после десятка сборов
+    // шанс вернуться стал бы 0 навсегда (ревью 2026-09-14).
+    if (Cell.bEternallyPure)
+    {
+        return 0.0f;
+    }
+    const float Stress = FMath::Clamp(Cell.HarvestStress, 0.0f, 1.0f);
+    // Стриминг выключен или источников нет -- считается весь мир, стресс в
+    // клетке свежий.
+    if (Stress <= 0.0f || GetActiveRadiusInChunks() < 0 || ActiveChunkCenters.Num() == 0)
+    {
+        return Stress;
+    }
+    // Чанк считался и в прошлом проходе -- спад уже в клетке. Только что
+    // активированный ещё не догнан: страница грузится до догона
+    // (CatchUpActivatedChunks), и отложенные отрастания срабатывают в ней.
+    const FIntPoint Chunk = GetChunkCoordForCell(Cell.X, Cell.Y);
+    if (IsCellActive(Cell) && PreviousActiveChunks.Contains(Chunk))
+    {
+        return Stress;
+    }
+    // Тот же линейный спад, что в RegenerateCellParameters: полное зарастание --
+    // GetStressRecoverySecondsForCell (биом, сезон, Лесное капище).
+    const float* LastSimulated = ChunkLastSimulatedGameTime.Find(Chunk);
+    const float Elapsed = FMath::Max(GameClockSeconds - (LastSimulated ? *LastSimulated : GridInitGameClock), 0.0f);
+    return FMath::Max(Stress - Elapsed / GetStressRecoverySecondsForCell(Cell), 0.0f);
 }
 
 void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoint* OnlyChunk)

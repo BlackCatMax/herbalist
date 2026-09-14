@@ -272,10 +272,11 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
     // почти точная копия чьего-то эталона / его противоположность) выражены
     // резко, при этом вес никогда не проваливается ровно в 0.
     const float Falloff = Settings ? Settings->IngredientSuitabilityFalloff : 2.0f;
-    // (1 − HarvestStress), §15 звено 4: истощённая сборами клетка родит меньше
-    // — тот же HarvestStress, что уже двигает Гнильников/Злыдней/Подпольников
-    // (AmbientEntityTypes.h), здесь читается напрямую, не через сущность.
-    const float StressFactor = FMath::Clamp(1.0f - Cell.HarvestStress, 0.0f, 1.0f);
+    // Множителя (1 − HarvestStress) здесь больше нет (2026-09-14): одинаковый у
+    // всех кандидатов, он сокращался при выборе по доле от TotalWeight и на
+    // состав не влиял, а при стрессе 1.0 уводил выбор в фолбэк на первого
+    // кандидата. Истощение действует на число растений -- шансом вернуться в
+    // AGridWorldManager::CompleteRegrowth -- и на время отрастания.
     const float WindowMismatch = Settings ? Settings->IngredientWindowMismatchMultiplier : 0.15f;
 
     TArray<float> EffectiveWeights;
@@ -357,7 +358,7 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
         }
         if (AltitudeFactor > 0.0f) bAnyCandidateAltitudeEligible = true;
 
-        const float Weight = BaseWeights[i] * Suitability * StressFactor
+        const float Weight = BaseWeights[i] * Suitability
             * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow * AltitudeFactor;
         EffectiveWeights.Add(Weight);
         TotalWeight += Weight;

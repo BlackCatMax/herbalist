@@ -131,6 +131,21 @@ public:
     // SpawnResourcesInCell и StartRegeneration, вынесено сюда (2026-09-04).
     struct FHarvestContext BuildHarvestContextForCell(const FGridCell& Cell) const;
     void StartRegeneration(FGridCell& Cell);
+    // Таймер одного отрастания по координате клетки -- из StartRegeneration и
+    // из загрузки сейва, которая перезапускает отрастания в процессе
+    // (2026-09-14). Таймер прошлого поколения (до загрузки) срабатывает вхолостую.
+    void ScheduleRegrowthTimer(const FIntPoint& Coord, float RegrowthTime);
+    // Тело таймера отрастания: таймер другого поколения -- вхолостую, клетка
+    // выгруженной страницы -- в отложенные до её загрузки. Вынесено ради
+    // проверки поколения автотестом.
+    void OnRegrowthTimer(const FIntPoint& Coord, float RegrowthTime, int32 Generation);
+    int32 GetRegrowthTimerGenerationForTests() const { return RegrowthTimerGeneration; }
+    int32 GetRegrowthTimersScheduledForTests() const { return RegrowthTimersScheduled; }
+    // Стресс клетки на сейчас. В спящем чанке стресс не спадает до догона при
+    // активации (CatchUpActivatedChunks); спад линейный, поэтому прогноз по
+    // пропущенному времени точен. Без него истощённое место не возвращалось,
+    // пока игрок далеко (ревью 2026-09-14).
+    float GetCurrentHarvestStress(const FGridCell& Cell) const;
     // Через сколько секунд отрастёт ресурс, собранный с этой клетки сейчас:
     // базовое время региона плюс надбавка за истощение (2026-09-12). Вынесено
     // из StartRegeneration ради прямой проверки -- сам таймер на автотесте не
@@ -426,7 +441,9 @@ public:
     // мгновенным. Игровое число не для меня выдумывать -- если 7 минут не
     // то, правится один параметр здесь (и одноимённый
     // ABiomeRegionVolume::ResourceRegrowthTimeSeconds для региона).
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
+    // Не ниже 0.1 с -- как у региона: таймер с нулевым временем не ставится,
+    // и место ждало бы вечно.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest", meta = (ClampMin = "0.1"))
     float ResourceRegrowthTime = 420.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest")
@@ -2314,6 +2331,12 @@ private:
 
     // Накопитель шага восстановления клеток (см. CellRegenerationStepSeconds).
     float CellRegenerationAccumulator = 0.0f;
+
+    // Поколение таймеров отрастания: загрузка сейва его сдвигает, и таймеры,
+    // поставленные до неё, срабатывают вхолостую (2026-09-14).
+    int32 RegrowthTimerGeneration = 0;
+    // Сколько таймеров отрастания поставлено за жизнь менеджера -- для автотестов.
+    int32 RegrowthTimersScheduled = 0;
 
     // Чанки-центры активного множества (2026-09-03, стриминг сетки) —
     // координаты чанков, в которых сейчас находятся источники стриминга

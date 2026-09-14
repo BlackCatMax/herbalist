@@ -246,18 +246,18 @@ bool FHerbalistRegistry_DryWeatherGatesRequiredIngredient::RunTest(const FString
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_ExhaustedCellStillYieldsSomethingNotNothing,
-    "Herbalist.Registry.ExhaustedCellStillYieldsSomethingNotNothing",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_HarvestStressDoesNotChangeWhichHerbIsPicked,
+    "Herbalist.Registry.HarvestStressDoesNotChangeWhichHerbIsPicked",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistRegistry_ExhaustedCellStillYieldsSomethingNotNothing::RunTest(const FString& Parameters)
+bool FHerbalistRegistry_HarvestStressDoesNotChangeWhichHerbIsPicked::RunTest(const FString& Parameters)
 {
-    // (1 - HarvestStress), DESIGN_World_State.md §15 звено 4: клетка на пике
-    // истощения (HarvestStress=1) гасит TotalWeight до нуля -- проверяем
-    // безопасный откат (первый кандидат), не NAME_None, тот же принцип, что
-    // уже покрыт для TotalWeight<=KINDA_SMALL_NUMBER выше по другой причине.
-    // Два ряда, не один -- с одним GetRandomResourceForBiome вообще не считает
-    // веса (ранний выход "Candidates->Num() == 1"), это не проверило бы StressFactor.
+    // Штраф истощения -- меньше растений, а не другой набор трав (решение
+    // 2026-09-12; сделано 2026-09-14 вместе с повторной попыткой отрастания).
+    // Раньше PickWeightedResource домножал вес каждого кандидата на
+    // (1 - HarvestStress): на состав это не влияло, а при стрессе 1.0 выбор
+    // падал в фолбэк на первого кандидата. Одно зерно -- одна трава при любом
+    // стрессе. Два ряда, не один -- с одним рядом веса не считаются вовсе.
     UDataTable* Table = MakeWindowTestTable();
 
     FIngredientTableRow RowA;
@@ -270,14 +270,28 @@ bool FHerbalistRegistry_ExhaustedCellStillYieldsSomethingNotNothing::RunTest(con
 
     UIngredientRegistrySubsystem* Registry = MakeWindowTestRegistry(Table);
 
-    FGridCell Cell;
-    Cell.Biome = EBiomeType::Bog;
-    Cell.HarvestStress = 1.0f;
+    FGridCell Rested;
+    Rested.Biome = EBiomeType::Bog;
+    Rested.HarvestStress = 0.0f;
+    FGridCell Exhausted = Rested;
+    Exhausted.HarvestStress = 1.0f;
 
     FHarvestContext Context;
-    FRandomStream Rng(1);
-    const FName Picked = Registry->GetRandomResourceForBiome(Cell, Context, Rng);
-    TestEqual(TEXT("Fully exhausted cell still returns the first candidate, not NAME_None"), Picked, FName(TEXT("HerbA")));
+    int32 Mismatches = 0;
+    bool bSawA = false;
+    bool bSawB = false;
+    for (int32 Seed = 1; Seed <= 64; ++Seed)
+    {
+        FRandomStream RestedRng(Seed);
+        FRandomStream ExhaustedRng(Seed);
+        const FName RestedPick = Registry->GetRandomResourceForBiome(Rested, Context, RestedRng);
+        const FName ExhaustedPick = Registry->GetRandomResourceForBiome(Exhausted, Context, ExhaustedRng);
+        Mismatches += RestedPick != ExhaustedPick ? 1 : 0;
+        bSawA |= RestedPick == FName(TEXT("HerbA"));
+        bSawB |= RestedPick == FName(TEXT("HerbB"));
+    }
+    TestEqual(TEXT("Стресс 0 и 1 при одном зерне -- одна трава"), Mismatches, 0);
+    TestTrue(TEXT("Sanity: выбор не вырожден -- выпадают обе травы"), bSawA && bSawB);
 
     Registry->Reset();
     return true;

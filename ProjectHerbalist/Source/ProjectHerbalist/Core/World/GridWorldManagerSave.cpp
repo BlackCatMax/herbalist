@@ -28,6 +28,7 @@ FSavedCellState AGridWorldManager::CaptureCellState(const FGridCell& Cell)
     Saved.bEternallyPure = Cell.bEternallyPure;
     Saved.PlantedSpeciesID = Cell.PlantedSpeciesID;
     Saved.bResourcesSeeded = Cell.bResourcesSeeded;
+    Saved.PendingRegrowthCount = Cell.PendingRegrowthCount;
 
     for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
     {
@@ -83,6 +84,7 @@ void AGridWorldManager::CopySavedCellFields(FGridCell& Cell, const FSavedCellSta
     Cell.ManifestedEntityID = Saved.ManifestedEntityID;
     Cell.bEternallyPure = Saved.bEternallyPure;
     Cell.PlantedSpeciesID = Saved.PlantedSpeciesID;
+    Cell.PendingRegrowthCount = Saved.PendingRegrowthCount;
 }
 
 void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const FSavedCellState& Saved)
@@ -131,6 +133,21 @@ void AGridWorldManager::ApplyCellStateAndRespawnResources(FGridCell& Cell, const
 
 int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
 {
+    // Отрастания в процессе (2026-09-14): таймеры прошлого состояния гаснут,
+    // отрастания из сейва перезапускаются ниже по его счётчику. Отложенные до
+    // загрузки страницы -- тоже прошлого состояния.
+    ++RegrowthTimerGeneration;
+    PendingRegrowthsOnLoad.Reset();
+    TArray<const FSavedCellState*> SavedWithRegrowths;
+
+    // Клетки сейва -- на момент сейва, часы загрузка уже выставила: простой
+    // спящих чанков считается от неё (ревью 2026-09-14). Раньше -- от старта
+    // сессии, и прогноз стресса вместе с догоном при активации стирали стресс и
+    // отклонения дальних клеток за всё время до сейва. Время простоя самих
+    // чанков в сейв не пишется -- до сейва оно теряется, стресс остаётся выше.
+    GridInitGameClock = GameClockSeconds;
+    ChunkLastSimulatedGameTime.Reset();
+
     TSet<int32> SavedIndices;
     SavedIndices.Reserve(InCells.Num());
     int32 DroppedCount = 0;
@@ -152,6 +169,10 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
 
         const int32 GridIndex = GetCellIndex(Saved.X, Saved.Y);
         SavedIndices.Add(GridIndex);
+        if (Saved.PendingRegrowthCount > 0)
+        {
+            SavedWithRegrowths.Add(&Saved);
+        }
         if (FGridCell* Cell = GetCell(Saved.X, Saved.Y))
         {
             ApplyCellStateAndRespawnResources(*Cell, Saved);
@@ -214,6 +235,32 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     // сессии, загрузившей этот же сейв с нуля. Дальнейшая игра после
     // загрузки продолжит помечать клетки как обычно поверх этого набора.
     DirtyCellIndices = MoveTemp(SavedIndices);
+
+    // Время отрастания -- по клетке после загрузки (регион, стресс), у клетки
+    // выгруженной страницы -- по её основе с дельтой сейва. Счётчик уже лежит в
+    // клетке или в дельте; в сейве старее поля он 0.
+    if (SavedWithRegrowths.Num() > 0)
+    {
+        const FHerbalistCellBaseContext RegrowthContext = MakeCellBaseContext();
+        for (const FSavedCellState* Saved : SavedWithRegrowths)
+        {
+            FGridCell UnloadedCell;
+            const FGridCell* Cell = GetCellConst(Saved->X, Saved->Y);
+            if (!Cell && BuildUnloadedCell(Saved->X, Saved->Y, UnloadedCell, RegrowthContext))
+            {
+                Cell = &UnloadedCell;
+            }
+            if (!Cell)
+            {
+                continue;
+            }
+            const float RegrowthTime = GetRegrowthDelaySeconds(*Cell);
+            for (int32 Attempt = 0; Attempt < Saved->PendingRegrowthCount; ++Attempt)
+            {
+                ScheduleRegrowthTimer(FIntPoint(Saved->X, Saved->Y), RegrowthTime);
+            }
+        }
+    }
 
     // Клетки заменены сейвом и базой -- сводки загруженных чанков считаются
     // заново (этап 7). У выгруженных -- последние, кроме тех, чьи клетки сейв

@@ -876,6 +876,154 @@ bool FHerbalistGridStreaming_RegrowthInSleepingChunkIsRemembered::RunTest(const 
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_FailedRegrowthTriesAgain,
+    "Herbalist.GridStreaming.FailedRegrowthTriesAgain",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_FailedRegrowthTriesAgain::RunTest(const FString& Parameters)
+{
+    // Повторная попытка отрастания (решение пользователя 2026-09-14: «если
+    // растение не вернулось -- пробовать снова»). Растение возвращается с
+    // вероятностью 1 - HarvestStress: на полностью истощённой клетке бросок не
+    // проходит никогда, и место ставит новую попытку, а не теряется. Тот же
+    // спящий чанк, что в тесте выше, -- выросшее видно в DormantResourceIDs.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(4, 4), FIntPoint(4, 4)) });
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });
+        Manager->CatchUpActivatedChunks();
+
+        FGridCell* Cell = Manager->GetCell(1, 1);
+        if (TestNotNull(TEXT("Cell exists"), Cell))
+        {
+            const FName Herb(TEXT("PlantedFarHerb"));
+            Cell->bIsWater = false;
+            Cell->PlantedSpeciesID = Herb;
+            Cell->HarvestStress = 1.0f;
+            Cell->PendingRegrowthCount = 1;
+
+            const int32 TimersBefore = Manager->GetRegrowthTimersScheduledForTests();
+            Manager->CompleteRegrowth(*Cell, 1.0f);
+            TestEqual(TEXT("Полностью истощённая клетка: попытка не прошла, место ждёт новой"), Cell->PendingRegrowthCount, 1);
+            TestEqual(TEXT("...и новая попытка поставлена таймером"), Manager->GetRegrowthTimersScheduledForTests(), TimersBefore + 1);
+            TestFalse(TEXT("...и ничего не выросло"), Cell->DormantResourceIDs.Contains(Herb));
+
+            // Земля отпустила стресс -- следующая попытка того же места проходит.
+            Cell->HarvestStress = 0.0f;
+            Manager->CompleteRegrowth(*Cell, 1.0f);
+            TestEqual(TEXT("Попытка прошла -- ждущих мест нет"), Cell->PendingRegrowthCount, 0);
+            TestTrue(TEXT("Растение вернулось (спящим -- чанк не активен)"), Cell->DormantResourceIDs.Contains(Herb));
+
+            // Спящий чанк (ревью 2026-09-14): в клетке стресс заморожен до
+            // догона, а земля за это время заросла -- попытка идёт по стрессу на
+            // сейчас.
+            Cell->HarvestStress = 1.0f;
+            Cell->PendingRegrowthCount = 1;
+            const int32 DormantBefore = Cell->DormantResourceIDs.Num();
+            Manager->SetGameClockSeconds(Manager->GetGameClockSeconds() + Manager->GetStressRecoverySecondsForCell(*Cell) + 1.0f);
+            TestEqual(TEXT("Sanity: в клетке спящего чанка стресс заморожен"), Cell->HarvestStress, 1.0f);
+            TestEqual(TEXT("Стресс на сейчас -- земля заросла"), Manager->GetCurrentHarvestStress(*Cell), 0.0f);
+            Manager->CompleteRegrowth(*Cell, 1.0f);
+            TestEqual(TEXT("Спящее истощённое место вернулось по стрессу на сейчас"), Cell->DormantResourceIDs.Num(), DormantBefore + 1);
+            TestEqual(TEXT("...и не ждёт новой попытки"), Cell->PendingRegrowthCount, 0);
+        }
+
+        Manager->ClearGroundCoverageForTests();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_SaveLoadRestartsIdleClock,
+    "Herbalist.GridStreaming.SaveLoadRestartsIdleClock",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_SaveLoadRestartsIdleClock::RunTest(const FString& Parameters)
+{
+    // Загрузка ставит часы сейва, а простой спящих чанков считался от старта
+    // сессии: прогноз стресса стирал сохранённый стресс дальних клеток (ревью
+    // 2026-09-14). Клетки сейва -- на момент сейва, простой -- от загрузки.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(4, 4), FIntPoint(4, 4)) });
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });
+        Manager->CatchUpActivatedChunks();
+
+        FGridCell* Cell = Manager->GetCell(1, 1);
+        if (TestNotNull(TEXT("Cell exists"), Cell))
+        {
+            Cell->HarvestStress = 1.0f;
+            Manager->SetGameClockSeconds(Manager->GetGameClockSeconds() + 2.0f * Manager->GetStressRecoverySecondsForCell(*Cell));
+            TestEqual(TEXT("Sanity: простой с начала сессии -- земля спящего чанка заросла"), Manager->GetCurrentHarvestStress(*Cell), 0.0f);
+
+            Manager->ApplySaveCells(TArray<FSavedCellState>());
+            TestEqual(TEXT("После загрузки простой считается от неё -- стресс клетки на месте"), Manager->GetCurrentHarvestStress(*Cell), 1.0f);
+        }
+
+        Manager->ClearGroundCoverageForTests();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_EternallyPureCellRegrowsDespiteStress,
+    "Herbalist.GridStreaming.EternallyPureCellRegrowsDespiteStress",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_EternallyPureCellRegrowsDespiteStress::RunTest(const FString& Parameters)
+{
+    // Навечно чистая клетка (Перо Жар-птицы) из релаксации исключена, её стресс
+    // не спадает никогда. Шанс вернуться по нему стал бы 0 навсегда (ревью
+    // 2026-09-14). Тот же спящий чанк, что в FailedRegrowthTriesAgain, --
+    // выросшее видно в DormantResourceIDs; часы не сдвигаются, прогноз стресса
+    // равен стрессу клетки.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+        Manager->SetGroundCoverageForTests({ ChunkRangeCoverage(Manager, 4, FIntPoint(4, 4), FIntPoint(4, 4)) });
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });
+        Manager->CatchUpActivatedChunks();
+
+        FGridCell* Cell = Manager->GetCell(1, 1);
+        if (TestNotNull(TEXT("Cell exists"), Cell))
+        {
+            const FName Herb(TEXT("PlantedPureHerb"));
+            Cell->bIsWater = false;
+            Cell->PlantedSpeciesID = Herb;
+            Cell->HarvestStress = 1.0f;
+            Cell->PendingRegrowthCount = 1;
+            TestEqual(TEXT("Sanity: обычная клетка -- стресс на сейчас 1.0"), Manager->GetCurrentHarvestStress(*Cell), 1.0f);
+
+            Cell->bEternallyPure = true;
+            TestEqual(TEXT("Навечно чистая клетка -- стресс на сейчас 0"), Manager->GetCurrentHarvestStress(*Cell), 0.0f);
+            Manager->CompleteRegrowth(*Cell, 1.0f);
+            TestEqual(TEXT("Растение вернулось -- место не ждёт новой попытки"), Cell->PendingRegrowthCount, 0);
+            TestTrue(TEXT("...и лежит спящим в клетке"), Cell->DormantResourceIDs.Contains(Herb));
+        }
+
+        Manager->ClearGroundCoverageForTests();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_CentreOutsideTheGridStillReachesItsEdge,
     "Herbalist.GridStreaming.CentreOutsideTheGridStillReachesItsEdge",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
