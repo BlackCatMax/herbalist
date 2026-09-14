@@ -71,8 +71,8 @@ based_on: ProjectHerbalist source, 2026-09-06
 `Cmd.Apply.Intent.Coherence`, `ProcessApplyCommand` безусловно
 перезаписывает своим значением — реального потребителя этого поля со
 стороны вызывающего кода нет (`ProjectHerbalist.PipelineV2.ApplyIgnoresCallerCoherence`
-проверяет это явно). `UAlchemyTransferWidget` вызывает `ComputeIntentCoherence`
-напрямую для превью до фактической варки.
+проверяет это явно). Функция `static` внутри `PipelineV2.cpp`, превью в окне
+котла нет.
 
 ## Нормализация направления
 

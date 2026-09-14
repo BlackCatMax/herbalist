@@ -1,6 +1,7 @@
 // AlchemyTransferWidget.cpp
 #include "UI/AlchemyTransferWidget.h"
 #include "UI/InventoryWidget.h"
+#include "UI/HerbalistWidgetSizing.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Player/HerbalistPlayerController.h"
@@ -39,6 +40,7 @@ UAlchemySlotWidget* UAlchemyTransferWidget::FindSuitableSlot(const FInventoryIte
 void UAlchemyTransferWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+    HerbalistUI::LetSizeBoxesGrowWithContent(WidgetTree);
     if (MixButton)
     {
         MixButton->OnClicked.AddDynamic(this, &UAlchemyTransferWidget::OnMixClicked);
@@ -49,10 +51,18 @@ void UAlchemyTransferWidget::NativeConstruct()
     IngredientSlot3->InitializeSlot(EAlchemySlotType::Ingredient, 9);
     ResultSlot->InitializeSlot(EAlchemySlotType::Result, 1);
 
-    // Подписываемся на изменение инвентаря игрока, если он уже привязан
-    if (PlayerInventoryComponent)
+    // Результат варки -- уведомлением менеджера с настоящим предметом.
+    // Проверка хэндла: NativeConstruct повторяется при повторном показе окна.
+    if (!BrewCompletedHandle.IsValid())
     {
-        PlayerInventoryComponent->OnInventoryChanged.AddDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
+        if (AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
+        {
+            if (AGridWorldManager* WorldManager = HPC->FindWorldManager())
+            {
+                BoundWorldManager = WorldManager;
+                BrewCompletedHandle = WorldManager->OnBrewCompleted.AddUObject(this, &UAlchemyTransferWidget::HandleBrewCompleted);
+            }
+        }
     }
 
     SetKeyboardFocus();
@@ -89,10 +99,12 @@ void UAlchemyTransferWidget::NativeDestruct()
     {
         MixButton->OnClicked.RemoveDynamic(this, &UAlchemyTransferWidget::OnMixClicked);
     }
-    if (PlayerInventoryComponent)
+    if (AGridWorldManager* WorldManager = BoundWorldManager.Get())
     {
-        PlayerInventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UAlchemyTransferWidget::OnInventoryChanged);
+        WorldManager->OnBrewCompleted.Remove(BrewCompletedHandle);
     }
+    BoundWorldManager.Reset();
+    BrewCompletedHandle.Reset();
     Super::NativeDestruct();
 }
 
@@ -100,16 +112,22 @@ void UAlchemyTransferWidget::OnMixClicked()
 {
     if (bIsMixing) return;
 
-    if (ResultSlot->GetItem() && ResultSlot->GetCount() > 0)
-    {
-        SetStatusMessage(TEXT("Сначала заберите готовое зелье из слота результата."));
-        return;
-    }
-
+    // Занятая витрина варку не блокирует: зелье прошлой варки уже в сумке,
+    // забирать из слота результата нечего.
     TArray<FInventoryItem> Ingredients;
     if (!CollectIngredients(Ingredients) || Ingredients.Num() == 0)
     {
         SetStatusMessage(TEXT("Нет ингредиентов."));
+        return;
+    }
+
+    // Полная сумка (ревью 2026-09-14): AddItem откажет, а травы уже в котле --
+    // зелье пропало бы. Состояние результата заранее неизвестно, влезет ли он
+    // в похожую стопку -- не угадать, поэтому нужен свободный слот. Травы
+    // остаются в слотах.
+    if (PlayerInventoryComponent && PlayerInventoryComponent->GetItems().Num() >= PlayerInventoryComponent->MaxSlots)
+    {
+        SetStatusMessage(TEXT("Сумка полна: освободите место под зелье."));
         return;
     }
 
@@ -124,14 +142,6 @@ void UAlchemyTransferWidget::OnMixClicked()
         return;
     }
 
-    UWorld* World = GetWorld();
-    if (!World)
-    {
-        SetStatusMessage(TEXT("Ошибка мира."));
-        bIsMixing = false;
-        return;
-    }
-
     // Виджет не ходит в мир напрямую — берёт уже закэшированный у контроллера
     // (HerbalistPlayerController::FindWorldManager), а не через TActorIterator.
     AGridWorldManager* WorldManager = HPC->FindWorldManager();
@@ -142,28 +152,17 @@ void UAlchemyTransferWidget::OnMixClicked()
         return;
     }
 
-    // Запоминаем время крафта для последующего поиска созданного зелья
-    LastCraftTime = World->GetTimeSeconds();
+    // Команду собирает менеджер: модификаторы варки те же, что у применения
+    // на клетку, а ингредиенты помечены изъятыми -- они ушли из сумки ещё
+    // при переносе в слоты.
+    const FIntPoint TableCell = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : HerbalistCore::InvalidCell();
+    WorldManager->QueueCauldronBrew(TableCell, Ingredients);
+    ++PendingBrewCount;
 
-    FCommandEntry Cmd;
-    Cmd.Primitive = ECommandPrimitive::Apply;
-    // Клетка котла, не InvalidCell — капище (15_Cycles_And_Shrines §15.5) должно
-    // видеть, где именно происходит подношение; котлы всегда стоят в строго
-    // определённых, привязанных к клетке местах (жилище игрока, будущие
-    // мастерские), это не случайная точка на карте.
-    Cmd.Apply.TargetCell = HPC->CurrentAlchemyTable ? HPC->CurrentAlchemyTable->GetGridCoords() : HerbalistCore::InvalidCell();
-    Cmd.Apply.Ingredients = Ingredients;
-    // Coherence считается Pipeline'ом из Ingredients (ComputeIntentCoherence).
-    Cmd.Apply.bIsCrafting = true;
-    // Камень-оберег (21_Journey_And_Artifacts.md §21.3) — реальный путь
-    // варки идёт отсюда, не через ApplyAlchemyResult (тот — только
-    // применение уже готового зелья/предмета на клетку).
-    Cmd.Apply.bBifurcationCharmActive = WorldManager->HasUnspentBifurcationCharm();
-
-    WorldManager->QueueCommand(Cmd);
-
+    // Ингредиенты израсходованы -- в сумку не возвращаются.
     ClearIngredientSlots();
-    SetStatusMessage(TEXT("Зелье создаётся... Оно появится в слоте результата."));
+    ResultSlot->Clear();
+    SetStatusMessage(TEXT("Варится..."));
 
     bIsMixing = false;
 }
@@ -217,54 +216,34 @@ FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
 }
 
 // -----------------------------------------------------------------------------
-// Отслеживание созданного зелья
+// Витрина результата
 // -----------------------------------------------------------------------------
 
-void UAlchemyTransferWidget::OnInventoryChanged()
+void UAlchemyTransferWidget::HandleBrewCompleted(const FInventoryItem& Produced)
 {
-    CheckForNewPotion();
-}
+    if (PendingBrewCount <= 0) return;
+    --PendingBrewCount;
 
-void UAlchemyTransferWidget::CheckForNewPotion()
-{
-    if (!PlayerInventoryComponent || LastCraftTime <= 0.0f)
-        return;
-
-    UWorld* World = GetWorld();
-    if (!World) return;
+    ResultSlot->Clear();
+    ResultSlot->AddItem(Produced, 1);
 
     // Крафт может дать не только "Potion" — при вырожденных исходах (05_Systems.md)
-    // Pipeline создаёт "Ash"/"BoiledWater" вместо зелья, см. ProcessApplyCommand.
-    const TArray<FInventoryItem>& Items = PlayerInventoryComponent->GetItems();
-    for (const FInventoryItem& Item : Items)
+    // Pipeline создаёт "Ash" (нет воды) или "BoiledWater" (одна вода), см.
+    // ProcessApplyCommand.
+    if (Produced.IngredientID == FName(TEXT("Ash")))
     {
-        const bool bIsCraftResult = Item.IngredientID == FName(TEXT("Potion"))
-            || Item.IngredientID == FName(TEXT("Ash"))
-            || Item.IngredientID == FName(TEXT("BoiledWater"));
-        if (bIsCraftResult && Item.Count > 0)
-        {
-            // Если время создания предмета больше времени крафта (с погрешностью 0.1 сек)
-            if (Item.CreationTime >= LastCraftTime - 0.1f)
-            {
-                ResultSlot->Clear();
-                ResultSlot->AddItem(Item, 1);
-                LastCraftTime = 0.0f;
-                // Раньше здесь читались Item.State.* напрямую — самый прямой
-                // слив S_real игроку изо всех виджетов (07_UX, CHANGELOG.md
-                // 2026-08-24): сразу после варки, дословно числами. Берём то же искажённое
-                // значение, что теперь уже посчитал сам ResultSlot.
-                const FRealState& Perceived = ResultSlot->GetPerceivedState();
-                SetStatusMessage(FString::Printf(TEXT("Создано зелье (сила: %.2f, искажение: %.2f)"),
-                    Perceived.Magnitude, Perceived.Meta.Distortion));
-                return;
-            }
-        }
+        SetStatusMessage(TEXT("Без воды травы сгорели: вышла зола. Она в сумке."));
+        return;
+    }
+    if (Produced.IngredientID == FName(TEXT("BoiledWater")))
+    {
+        SetStatusMessage(TEXT("Без трав вышла кипячёная вода. Она в сумке."));
+        return;
     }
 
-    float CurrentTime = World->GetTimeSeconds();
-    if (CurrentTime - LastCraftTime > 2.0f)
-    {
-        // Прошло больше 2 секунд, зелье не найдено – сбрасываем ожидание
-        LastCraftTime = 0.0f;
-    }
+    // Не Produced.State: S_real игроку не показывается (07_UX, CHANGELOG.md
+    // 2026-08-24) -- то же искажённое значение, что уже посчитал ResultSlot.
+    const FRealState& Perceived = ResultSlot->GetPerceivedState();
+    SetStatusMessage(FString::Printf(TEXT("Зелье готово и уже в сумке (сила: %.2f, искажение: %.2f)."),
+        Perceived.Magnitude, Perceived.Meta.Distortion));
 }

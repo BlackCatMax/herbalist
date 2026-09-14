@@ -200,6 +200,46 @@ void AGridWorldManager::Tick(float DeltaTime)
 #endif
 }
 
+void AGridWorldManager::ForEachProducedItem(const TArray<FCommandEntry>& Commands, const FStateDelta& Delta,
+    TFunctionRef<void(const FCommandEntry& Cmd, const FInventoryOperation& AddOp)> Visit)
+{
+    // ID результатов варки -- те, что выдаёт ProcessApplyCommand (PipelineV2.cpp).
+    auto IsBrewProduct = [](const FName ID)
+    {
+        return ID == FName(TEXT("Potion")) || ID == FName(TEXT("Ash")) || ID == FName(TEXT("BoiledWater"));
+    };
+
+    int32 HarvestOpIndex = 0;
+    int32 BrewOpIndex = 0;
+    for (const FCommandEntry& Cmd : Commands)
+    {
+        const bool bIsHarvest = Cmd.Primitive == ECommandPrimitive::Harvest;
+        const bool bIsCraft = Cmd.Primitive == ECommandPrimitive::Apply && Cmd.Apply.bIsCrafting;
+        if (!bIsHarvest && !bIsCraft) continue;
+
+        // Раньше индекс был общий: сбор, не давший предмета, забирал себе
+        // зелье следующей в пакете варки -- Травник записывал его как сбор, а
+        // варка оставалась без результата. Внутри одного типа сдвиг остаётся:
+        // сбор без добычи получит предмет следующего сбора -- точная привязка
+        // требует ID команды через весь Pipeline.
+        int32& OpIndex = bIsCraft ? BrewOpIndex : HarvestOpIndex;
+        while (OpIndex < Delta.InventoryOps.Num())
+        {
+            const FInventoryOperation& Op = Delta.InventoryOps[OpIndex];
+            if (Op.OpType == EInventoryOpType::Add && Op.ContainerID == 0
+                && IsBrewProduct(Op.Ingredient.IngredientID) == bIsCraft)
+            {
+                break;
+            }
+            ++OpIndex;
+        }
+        if (OpIndex >= Delta.InventoryOps.Num()) continue;
+
+        Visit(Cmd, Delta.InventoryOps[OpIndex]);
+        ++OpIndex;
+    }
+}
+
 void AGridWorldManager::RunSimulationStep()
 {
     // Снапшот мира и биом-графа для трассировки (если включено)
@@ -238,93 +278,86 @@ void AGridWorldManager::RunSimulationStep()
     // Травник (07_UX §7.2.4, CHANGELOG.md 2026-08-23/24) — вне детерминированного
     // пайплайна, как и Footprint выше: презентационная фиксация, не часть
     // Command/Delta цикла. Сопоставляем команды Harvest/Apply(крафт) из
-    // CommandsCopy с добавленными предметами из Delta.InventoryOps по порядку —
-    // Pipeline формирует их последовательно 1:1 для одиночного сбора/варки,
-    // этого достаточно для v1. Полная привязка результата к исходной команде
+    // CommandsCopy с добавленными предметами из Delta.InventoryOps по порядку
+    // (ForEachProducedItem) — Pipeline формирует их последовательно 1:1 для
+    // одиночного сбора/варки. Полная привязка результата к исходной команде
     // потребовала бы прокидывать ID команды через весь Pipeline — излишне
     // для журнала, который и так презентационный слой.
     if (Delta.InventoryOps.Num() > 0)
     {
-        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()))
+        AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController());
+        UHerbalistJournalComponent* Journal = PC ? PC->JournalComponent : nullptr;
+        ForEachProducedItem(CommandsCopy, Delta, [this, Journal](const FCommandEntry& Cmd, const FInventoryOperation& AddOp)
         {
-            if (PC->JournalComponent)
+            const bool bIsHarvest = Cmd.Primitive == ECommandPrimitive::Harvest;
+            const bool bIsCraft = !bIsHarvest;
+
+            // Ash/BoiledWater из провальной варки тоже сюда попадают,
+            // это осознанно: неудача — тоже опыт, который стоит записать.
+            const FInventoryItem& Produced = AddOp.Ingredient;
+            const float ProducedCoherence = AddOp.Coherence;
+
+            // Витрина котла (2026-09-14) -- настоящий предмет, не поиск
+            // в сумке. До журнала: окну котла журнал не нужен.
+            if (bIsCraft)
             {
-                int32 OpIndex = 0;
-                for (const FCommandEntry& Cmd : CommandsCopy)
-                {
-                    const bool bIsHarvest = Cmd.Primitive == ECommandPrimitive::Harvest;
-                    const bool bIsCraft = Cmd.Primitive == ECommandPrimitive::Apply && Cmd.Apply.bIsCrafting;
-                    if (!bIsHarvest && !bIsCraft) continue;
-
-                    // Ищем следующий Add-оп в инвентарь игрока (ContainerID 0) —
-                    // Ash/BoiledWater из провальной варки тоже сюда попадают,
-                    // это осознанно: неудача — тоже опыт, который стоит записать.
-                    while (OpIndex < Delta.InventoryOps.Num()
-                        && !(Delta.InventoryOps[OpIndex].OpType == EInventoryOpType::Add
-                            && Delta.InventoryOps[OpIndex].ContainerID == 0))
-                    {
-                        ++OpIndex;
-                    }
-                    if (OpIndex >= Delta.InventoryOps.Num()) break;
-
-                    const FInventoryItem& Produced = Delta.InventoryOps[OpIndex].Ingredient;
-                    const float ProducedCoherence = Delta.InventoryOps[OpIndex].Coherence;
-                    ++OpIndex;
-
-                    // Заряна, фрагмент CoherentBrew (обсуждение в сессии 2026-08-24) —
-                    // тот же момент, где уже читается результат варки для Травника,
-                    // не отдельный проход по CommandsCopy.
-                    if (bIsCraft && Produced.IngredientID == FName(TEXT("Potion")))
-                    {
-                        const FIntPoint BrewCell = Cmd.Apply.TargetCell;
-                        TryTriggerCoherentBrewFragment(BrewCell, ProducedCoherence,
-                            Produced.State.Meta.Distortion, Produced.State.Meta.Purity);
-                    }
-
-                    const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
-
-                    FJournalEntry Entry;
-                    Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
-                    Entry.IngredientID = Produced.IngredientID;
-                    Entry.Count = Produced.Count;
-                    // Искажённое состояние, замороженное сейчас — см. предупреждение
-                    // в JournalTypes.h. Найдено аудитом 2026-09-05 (сохранения/
-                    // капища/община): здесь всё ещё стоял WorldRNG, тот же класс
-                    // бага, что уже дважды чинился раньше в проекте (спавн
-                    // ресурсов, порча инвентаря) — комментарий утверждал, что
-                    // паттерн уже устранён, но именно это место осталось
-                    // непроверенным. Свой локальный сид (тот же приём, что уже
-                    // MirrorPerceptionRng/PerceptionRng/GridWorldManagerArtifacts.cpp) —
-                    // запись в журнал разовая, не перезапрашивается повторно,
-                    // поэтому не обязана быть воспроизводимой снаружи, но
-                    // обязана не трогать общий поток WorldRNG. Замешаны
-                    // ингредиент+клетка+игровое время — не голая константа,
-                    // иначе все записи журнала шумели бы одинаково.
-                    {
-                        FRandomStream JournalPerceptionRng(20260905 + GetTypeHash(Produced.IngredientID)
-                            + GetTypeHash(TargetCell) + FMath::RoundToInt(GameClockSeconds * 100.0f));
-                        Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, JournalPerceptionRng, GlobalPerceptionClarity);
-                    }
-                    Entry.BrewOutcome = Produced.BrewOutcome;
-                    Entry.Cell = TargetCell;
-                    if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))
-                    {
-                        Entry.Biome = Cell->Biome;
-                    }
-                    Entry.bWasNight = IsNight();
-                    // GameClockSeconds, не GetWorld()->GetTimeSeconds() (найдено
-                    // тем же аудитом 2026-09-05): часы уровня обнуляются при
-                    // перезапуске сессии, GameClockSeconds honestly переживает
-                    // сохранение/загрузку (см. тот же выбор уже сделанный для
-                    // фрагментов памяти, GridWorldManagerZaryana.cpp) — иначе
-                    // записи Harvest/Brew сортировались бы не по игровому
-                    // времени, а по тому, сколько работает текущий процесс.
-                    Entry.GameTimeSeconds = GameClockSeconds;
-
-                    PC->JournalComponent->AddEntry(Entry);
-                }
+                OnBrewCompleted.Broadcast(Produced);
             }
-        }
+
+            // Заряна, фрагмент CoherentBrew (обсуждение в сессии 2026-08-24) —
+            // тот же момент, где уже читается результат варки для Травника,
+            // не отдельный проход по CommandsCopy.
+            if (bIsCraft && Produced.IngredientID == FName(TEXT("Potion")))
+            {
+                const FIntPoint BrewCell = Cmd.Apply.TargetCell;
+                TryTriggerCoherentBrewFragment(BrewCell, ProducedCoherence,
+                    Produced.State.Meta.Distortion, Produced.State.Meta.Purity);
+            }
+
+            if (!Journal) return;
+
+            const FIntPoint TargetCell = bIsHarvest ? Cmd.Harvest.TargetCell : Cmd.Apply.TargetCell;
+
+            FJournalEntry Entry;
+            Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
+            Entry.IngredientID = Produced.IngredientID;
+            Entry.Count = Produced.Count;
+            // Искажённое состояние, замороженное сейчас — см. предупреждение
+            // в JournalTypes.h. Найдено аудитом 2026-09-05 (сохранения/
+            // капища/община): здесь всё ещё стоял WorldRNG, тот же класс
+            // бага, что уже дважды чинился раньше в проекте (спавн
+            // ресурсов, порча инвентаря) — комментарий утверждал, что
+            // паттерн уже устранён, но именно это место осталось
+            // непроверенным. Свой локальный сид (тот же приём, что уже
+            // MirrorPerceptionRng/PerceptionRng/GridWorldManagerArtifacts.cpp) —
+            // запись в журнал разовая, не перезапрашивается повторно,
+            // поэтому не обязана быть воспроизводимой снаружи, но
+            // обязана не трогать общий поток WorldRNG. Замешаны
+            // ингредиент+клетка+игровое время — не голая константа,
+            // иначе все записи журнала шумели бы одинаково.
+            {
+                FRandomStream JournalPerceptionRng(20260905 + GetTypeHash(Produced.IngredientID)
+                    + GetTypeHash(TargetCell) + FMath::RoundToInt(GameClockSeconds * 100.0f));
+                Entry.PerceivedState = Simulation::FPerceptionService::PerceiveRealState(Produced.State, JournalPerceptionRng, GlobalPerceptionClarity);
+            }
+            Entry.BrewOutcome = Produced.BrewOutcome;
+            Entry.Cell = TargetCell;
+            if (const FGridCell* Cell = GetCellConst(TargetCell.X, TargetCell.Y))
+            {
+                Entry.Biome = Cell->Biome;
+            }
+            Entry.bWasNight = IsNight();
+            // GameClockSeconds, не GetWorld()->GetTimeSeconds() (найдено
+            // тем же аудитом 2026-09-05): часы уровня обнуляются при
+            // перезапуске сессии, GameClockSeconds honestly переживает
+            // сохранение/загрузку (см. тот же выбор уже сделанный для
+            // фрагментов памяти, GridWorldManagerZaryana.cpp) — иначе
+            // записи Harvest/Brew сортировались бы не по игровому
+            // времени, а по тому, сколько работает текущий процесс.
+            Entry.GameTimeSeconds = GameClockSeconds;
+
+            Journal->AddEntry(Entry);
+        });
     }
 
     // Подношение капищу (15_Cycles_And_Shrines §15.5) — правка по итогам
@@ -438,25 +471,18 @@ void AGridWorldManager::RunSimulationStep()
     // IsArtifactWarmed).
     if (Delta.InventoryOps.Num() > 0 && AcquiredArtifacts.Num() > 0)
     {
-        int32 WarmthOpIndex = 0;
-        for (const FCommandEntry& Cmd : CommandsCopy)
+        // Сопоставление -- ForEachProducedItem, не свой общий индекс (ревью
+        // 2026-09-14): сбор перед варкой в том же пакете отдавал варке свою
+        // добычу, и настоящее зелье не проверялось.
+        ForEachProducedItem(CommandsCopy, Delta, [this](const FCommandEntry& Cmd, const FInventoryOperation& AddOp)
         {
-            if (Cmd.Primitive != ECommandPrimitive::Apply || !Cmd.Apply.bIsCrafting) continue;
+            if (Cmd.Primitive != ECommandPrimitive::Apply) return;
 
-            while (WarmthOpIndex < Delta.InventoryOps.Num()
-                && !(Delta.InventoryOps[WarmthOpIndex].OpType == EInventoryOpType::Add
-                    && Delta.InventoryOps[WarmthOpIndex].ContainerID == 0))
-            {
-                ++WarmthOpIndex;
-            }
-            if (WarmthOpIndex >= Delta.InventoryOps.Num()) break;
-
-            const FInventoryItem& Produced = Delta.InventoryOps[WarmthOpIndex].Ingredient;
-            ++WarmthOpIndex;
-            if (Produced.IngredientID != FName(TEXT("Potion"))) continue;
+            const FInventoryItem& Produced = AddOp.Ingredient;
+            if (Produced.IngredientID != FName(TEXT("Potion"))) return;
 
             const FGridCell* BrewCell = GetCellConst(Cmd.Apply.TargetCell.X, Cmd.Apply.TargetCell.Y);
-            if (!BrewCell) continue;
+            if (!BrewCell) return;
 
             for (FAcquiredArtifact& Artifact : AcquiredArtifacts)
             {
@@ -485,7 +511,7 @@ void AGridWorldManager::RunSimulationStep()
                 UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] %s Warmth += %.2f (now %.2f)"),
                     *Artifact.ArtifactID.ToString(), Gain, Artifact.Warmth);
             }
-        }
+        });
     }
 
     // Запись кадра трассировки

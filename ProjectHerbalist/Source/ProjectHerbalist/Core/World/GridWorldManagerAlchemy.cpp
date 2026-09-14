@@ -18,17 +18,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     Cmd.Apply.TargetCell     = FIntPoint(X, Y);
     Cmd.Apply.Ingredients    = Ingredients;
     Cmd.Apply.Intent         = Intent;
-    // Камень-оберег (21_Journey_And_Artifacts.md §21.3) — резолвится здесь,
-    // вне Pipeline, тем же принципом, что и остальные внепайплайновые
-    // входы команды (bIsRitual и т.п.).
-    Cmd.Apply.bBifurcationCharmActive = HasUnspentBifurcationCharm();
-    // Полнолуние поднимает Морок при варке (15_Cycles_And_Shrines.md §15.3,
-    // Tier 1 п.1.2) -- тот же принцип, что и заряд оберега выше: резолвится
-    // здесь, вне Pipeline.
-    Cmd.Apply.MoonPhase = GetMoonPhase();
-    // Оберег BrewBoost (Громовая стрела, §2.4, 2026-09-04) -- тот же приём,
-    // что и bBifurcationCharmActive выше: резолвится здесь, не в Pipeline.
-    Cmd.Apply.bWardBrewBoostActive = IsWardBrewBoostActive();
+    ResolveBrewModifiers(Cmd.Apply);
     // Горюч-камень (§4.5, DESIGN_POI_Art_And_LevelDesign.md §3, 2026-09-06)
     // -- тот же принцип "резолвится здесь, не в Pipeline", что и остальные
     // модификаторы выше. Явная проверка на InvalidCell -- точка не размещена
@@ -59,6 +49,28 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
             }
         }
     }
+    QueueCommand(Cmd);
+
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());
+}
+
+// ============================================================================
+// МОДИФИКАТОРЫ ВАРКИ (ОБЩИЕ ДЛЯ КОТЛА И ПРИМЕНЕНИЯ НА КЛЕТКУ)
+// ============================================================================
+
+void AGridWorldManager::ResolveBrewModifiers(FApplyCommand& Apply) const
+{
+    // Камень-оберег (21_Journey_And_Artifacts.md §21.3) — резолвится здесь,
+    // вне Pipeline, тем же принципом, что и остальные внепайплайновые
+    // входы команды (bIsRitual и т.п.).
+    Apply.bBifurcationCharmActive = HasUnspentBifurcationCharm();
+    // Полнолуние поднимает Морок при варке (15_Cycles_And_Shrines.md §15.3,
+    // Tier 1 п.1.2) -- тот же принцип, что и заряд оберега выше: резолвится
+    // здесь, вне Pipeline.
+    Apply.MoonPhase = GetMoonPhase();
+    // Оберег BrewBoost (Громовая стрела, §2.4, 2026-09-04) -- тот же приём,
+    // что и bBifurcationCharmActive выше: резолвится здесь, не в Pipeline.
+    Apply.bWardBrewBoostActive = IsWardBrewBoostActive();
     // Межбиомная варка (§2.4, прямой запрос пользователя, 2026-09-04) -- тот
     // же принцип "резолвится здесь, не в Pipeline", что и остальные модификаторы
     // выше: считаем число РАЗНЫХ FInventoryItem::SourceBiome среди не-водных
@@ -67,14 +79,14 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     // (ProcessApplyCommand) только читает.
     {
         TSet<EBiomeType> DistinctBiomes;
-        for (const FInventoryItem& Ing : Ingredients)
+        for (const FInventoryItem& Ing : Apply.Ingredients)
         {
             if (!Ing.bIsWater)
             {
                 DistinctBiomes.Add(Ing.SourceBiome);
             }
         }
-        Cmd.Apply.DistinctIngredientBiomeCount = FMath::Max(1, DistinctBiomes.Num());
+        Apply.DistinctIngredientBiomeCount = FMath::Max(1, DistinctBiomes.Num());
     }
     // Тиражный оберег BrewBoost (награда ритуала перехода ярусов биомов,
     // 2026-09-04) -- тот же принцип "резолвится здесь, не в Pipeline", что
@@ -90,7 +102,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
         if (bTieredBrewBoostActive)
         {
             bool bAnyIngredientAtHome = false;
-            for (const FInventoryItem& Ing : Ingredients)
+            for (const FInventoryItem& Ing : Apply.Ingredients)
             {
                 if (!Ing.bIsWater && TieredBrewBoostHomeBiomes.Contains(Ing.SourceBiome))
                 {
@@ -102,11 +114,41 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
             const float OutOfBiomeStrength = Settings ? Settings->TieredWardOutOfBiomeStrength : 0.5f;
             Strength = bAnyIngredientAtHome ? 1.0f : OutOfBiomeStrength;
         }
-        Cmd.Apply.TieredBrewBoostStrength = Strength;
+        Apply.TieredBrewBoostStrength = Strength;
     }
-    QueueCommand(Cmd);
+}
 
-    UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued Apply command for cell (%d,%d) with %d ingredients"), X, Y, Ingredients.Num());
+// ============================================================================
+// ВАРКА У КОТЛА
+// ============================================================================
+
+FCommandEntry AGridWorldManager::BuildCauldronBrewCommand(const FIntPoint& TableCell, const TArray<FInventoryItem>& Ingredients) const
+{
+    FCommandEntry Cmd;
+    Cmd.Primitive = ECommandPrimitive::Apply;
+    // Клетка котла, не InvalidCell — капище (15_Cycles_And_Shrines §15.5) должно
+    // видеть, где именно происходит подношение; котлы всегда стоят в строго
+    // определённых, привязанных к клетке местах (жилище игрока, будущие
+    // мастерские), это не случайная точка на карте.
+    Cmd.Apply.TargetCell = TableCell;
+    Cmd.Apply.Ingredients = Ingredients;
+    // Coherence считается Pipeline'ом из Ingredients (ComputeIntentCoherence).
+    Cmd.Apply.bIsCrafting = true;
+    Cmd.Apply.bIngredientsAlreadyWithdrawn = true;
+    // Горюч-камень и Соловей (ApplyAlchemyResult) здесь не резолвятся: варка
+    // не трогает клетку, результат идёт в сумку.
+    ResolveBrewModifiers(Cmd.Apply);
+    return Cmd;
+}
+
+void AGridWorldManager::QueueCauldronBrew(const FIntPoint& TableCell, const TArray<FInventoryItem>& Ingredients)
+{
+    if (Ingredients.Num() == 0) return;
+
+    QueueCommand(BuildCauldronBrewCommand(TableCell, Ingredients));
+
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("Queued cauldron brew at cell (%d,%d) with %d ingredients"),
+        TableCell.X, TableCell.Y, Ingredients.Num());
 }
 
 // ============================================================================

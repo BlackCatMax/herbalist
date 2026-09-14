@@ -11,6 +11,7 @@ class UInventoryWidget;
 class UButton;
 class UTextBlock;
 class UHerbalistInventoryComponent;
+class AGridWorldManager;
 
 UCLASS()
 class PROJECTHERBALIST_API UAlchemyTransferWidget : public UUserWidget
@@ -67,11 +68,16 @@ protected:
 
     bool bIsMixing = false;
 
-    // --- Новые поля для отслеживания созданного зелья ---
-    float LastCraftTime = 0.0f;   // время последнего крафта (в секундах мирового времени)
+    // Витрина котла (2026-09-14): слот результата показывает предмет из
+    // AGridWorldManager::OnBrewCompleted, сам предмет уже в сумке. Раньше
+    // окно искало зелье в сумке по времени создания и промахивалось, когда
+    // оно сливалось с похожей стопкой.
+    void HandleBrewCompleted(const FInventoryItem& Produced);
 
-    UFUNCTION()
-    void OnInventoryChanged();    // обработчик изменения инвентаря
+    // Варки из этого окна, ещё не вернувшие результат: чужой крафт в том же
+    // тике витрину не трогает.
+    int32 PendingBrewCount = 0;
 
-    void CheckForNewPotion();     // проверяет, появилось ли новое зелье, и отображает в слоте результата
+    TWeakObjectPtr<AGridWorldManager> BoundWorldManager;
+    FDelegateHandle BrewCompletedHandle;
 };

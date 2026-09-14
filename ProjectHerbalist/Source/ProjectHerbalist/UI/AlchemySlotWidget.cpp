@@ -1,5 +1,6 @@
 // AlchemySlotWidget.cpp
 #include "UI/AlchemySlotWidget.h"
+#include "UI/HerbalistWidgetSizing.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -138,7 +139,7 @@ FReply UAlchemySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeo
             // Дублирование зелья (аудит 2026-09-05): ResultSlot никогда не
             // ИЗЫМАЕТ предмет из инвентаря игрока — крафт кладёт готовое
             // зелье в реальный инвентарь напрямую через FStateDelta::InventoryOps
-            // (см. GridWorldManagerTick.cpp/AlchemyTransferWidget::CheckForNewPotion),
+            // (см. GridWorldManagerTick.cpp/AlchemyTransferWidget::HandleBrewCompleted),
             // а этот слот лишь ЗЕРКАЛИТ уже лежащий там предмет для витрины.
             // Двойной клик раньше вызывал InventoryComponent->AddItem ещё раз —
             // добавлял ВТОРУЮ копию уже существующего зелья, потом просто
@@ -208,6 +209,7 @@ void UAlchemySlotWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDropE
 void UAlchemySlotWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+    HerbalistUI::LetSizeBoxesGrowWithContent(WidgetTree);
     Clear();
 }
 

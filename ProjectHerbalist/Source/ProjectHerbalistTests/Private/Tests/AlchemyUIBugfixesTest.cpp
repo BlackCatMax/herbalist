@@ -122,7 +122,7 @@ bool FHerbalistAlchemySlot_ResultSlotDoubleClickDoesNotDuplicate::RunTest(const 
     if (!TestNotNull(TEXT("PlayerController spawned"), PC)) { Manager->Destroy(); return false; }
 
     // ResultSlot ничего не изымает из инвентаря при пополнении -- Pipeline
-    // (CheckForNewPotion в реальном UI) уже положил зелье в НАСТОЯЩИЙ
+    // (витрину в реальном UI наполняет AGridWorldManager::OnBrewCompleted) уже положил зелье в НАСТОЯЩИЙ
     // инвентарь напрямую; здесь имитируем ровно это состояние: предмет уже
     // есть в PC->InventoryComponent, ResultSlot лишь зеркалит его на витрину.
     // Считаем именно "Potion"-стопки, не Items.Num() целиком -- BeginPlay

@@ -4,6 +4,13 @@
 #include "Core/Types/HerbalistNameUtils.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Player/HerbalistPlayerController.h"
+#include "UI/HerbalistWidgetSizing.h"
+
+void UItemTooltipWidget::NativeConstruct()
+{
+    Super::NativeConstruct();
+    HerbalistUI::LetSizeBoxesGrowWithContent(WidgetTree);
+}
 
 void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
 {

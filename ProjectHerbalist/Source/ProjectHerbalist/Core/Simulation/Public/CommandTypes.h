@@ -55,6 +55,14 @@ struct FApplyCommand
     FIntent Intent;
     bool bIsCrafting = false;   // true = крафт в инвентарь, false = применение на клетку
 
+    // Котёл (UAlchemyTransferWidget, 2026-09-14) изымает ингредиенты из сумки
+    // ещё при переносе в слоты. Без флага Pipeline списывал их второй раз --
+    // по единице из оставшихся в сумке стопок того же ID (лог PIE: 11 -> 10
+    // предметов после варки). Применение на клетку берёт предметы прямо из
+    // сумки -- флаг false, списание нужно. Ритуал (TryAdvanceRitual) из
+    // дельты читает только результат.
+    bool bIngredientsAlreadyWithdrawn = false;
+
     // Итог правильно исполненного ритуала (AGridWorldManager::TryAdvanceRitual,
     // Core/Alchemy/RitualTypes.h, 2026-08-30) -- градации опасности по числу
     // ингредиентов (ComputeApplyResult) для него не действуют: игрок сварил
@@ -64,8 +72,8 @@ struct FApplyCommand
 
     // Камень-оберег (21_Journey_And_Artifacts.md §21.3, 2026-09-01) --
     // резолвится вне Pipeline, тем же принципом, что bIsRitual выше:
-    // вызывающая сторона (AGridWorldManager::ApplyAlchemyResult/
-    // HasUnspentBifurcationCharm, AlchemyTransferWidget.cpp) проверяет
+    // вызывающая сторона (AGridWorldManager::ResolveBrewModifiers/
+    // HasUnspentBifurcationCharm -- для котла и ApplyAlchemyResult) проверяет
     // AcquiredArtifacts перед постановкой команды в очередь, Pipeline не
     // лезет в мировое состояние сам. НЕ прошито для завершения ритуала
     // (GridWorldManagerRitual.cpp) -- тот путь идёт мимо обычной очереди
@@ -79,7 +87,7 @@ struct FApplyCommand
     // текста строки Полнолуния, до сих пор реализованная только для сбора
     // (FHarvestCommand::MoonPhase, GenerateHarvestResult). Тот же принцип
     // "резолвится вне Pipeline" (см. bBifurcationCharmActive/bIsRitual выше):
-    // вызывающая сторона (AGridWorldManager::ApplyAlchemyResult) читает
+    // вызывающая сторона (AGridWorldManager::ResolveBrewModifiers) читает
     // GetMoonPhase(). НЕ прошито для завершения ритуала
     // (GridWorldManagerRitual.cpp) -- тот путь идёт мимо обычной очереди
     // команд, тот же известный, отдельно задокументированный разрыв, что и у
@@ -89,7 +97,7 @@ struct FApplyCommand
     // Оберег BrewBoost (Громовая стрела, DESIGN_Community_And_Homestead.md
     // §2.4, 2026-09-04) -- тот же принцип "резолвится вне Pipeline", что
     // bBifurcationCharmActive/MoonPhase выше: вызывающая сторона
-    // (AGridWorldManager::ApplyAlchemyResult) читает IsWardBrewBoostActive().
+    // (AGridWorldManager::ResolveBrewModifiers) читает IsWardBrewBoostActive().
     // Применяется как маленькая плоская надбавка к Coherence, тем же путём,
     // что и бонус капища (ShrineCoherenceBonus, ProcessApplyCommand) -- НЕ
     // трогает Bifurcation, это отдельная, слабая-но-непрерывная механика, не
@@ -99,7 +107,7 @@ struct FApplyCommand
     // Межбиомная варка (DESIGN_Community_And_Homestead.md §2.4, прямой запрос
     // пользователя, 2026-09-04) -- тот же принцип "резолвится вне Pipeline",
     // что bWardBrewBoostActive выше: вызывающая сторона
-    // (AGridWorldManager::ApplyAlchemyResult) считает число РАЗНЫХ
+    // (AGridWorldManager::ResolveBrewModifiers) считает число РАЗНЫХ
     // FInventoryItem::SourceBiome среди не-водных ингредиентов ДО постановки
     // команды в очередь и кладёт готовое число сюда -- ProcessApplyCommand
     // (PipelineV2.cpp) только читает его, не пересобирает TSet из
@@ -113,7 +121,7 @@ struct FApplyCommand
     // 2026-09-04) -- тот же принцип "резолвится вне Pipeline", что и
     // bWardBrewBoostActive выше, но котёл стоит на одном месте (дом),
     // поэтому "биом игрока" бессмысленен как критерий -- вместо этого
-    // AGridWorldManager::ApplyAlchemyResult (GridWorldManagerAlchemy.cpp)
+    // AGridWorldManager::ResolveBrewModifiers (GridWorldManagerAlchemy.cpp)
     // смотрит FInventoryItem::SourceBiome каждого не-водного ингредиента
     // этой варки: 1.0 (полная сила), если ХОТЯ БЫ ОДИН собран в домашнем
     // биоме тиражного BrewBoost-кристалла; TieredWardOutOfBiomeStrength

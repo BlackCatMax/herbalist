@@ -42,6 +42,7 @@ class AStorageContainer;
 class UMaterialParameterCollection;
 struct FWorldSnapshot;
 struct FStateDelta;
+struct FInventoryOperation;
 
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
@@ -773,6 +774,34 @@ public:
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent);
+
+    // Варка у котла (UAlchemyTransferWidget, 2026-09-14). Ингредиенты уже
+    // изъяты из сумки переносом в слоты, результат ляжет в сумку. Раньше
+    // виджет собирал команду сам и выставлял только заряд оберега -- фаза
+    // луны, BrewBoost, межбиомность и тиражный оберег на варку у стола не
+    // действовали.
+    FCommandEntry BuildCauldronBrewCommand(const FIntPoint& TableCell, const TArray<FInventoryItem>& Ingredients) const;
+    void QueueCauldronBrew(const FIntPoint& TableCell, const TArray<FInventoryItem>& Ingredients);
+
+    // Модификаторы варки, которые резолвятся вне Pipeline: заряд
+    // Камня-оберега, фаза луны, оберег BrewBoost, межбиомность, тиражный
+    // оберег. Читает Apply.Ingredients. Общий для котла и ApplyAlchemyResult.
+    void ResolveBrewModifiers(FApplyCommand& Apply) const;
+
+    // Предмет, сваренный по команде варки (зелье, зола или кипячёная вода),
+    // уже в сумке. Рассылается из RunSimulationStep; окно котла показывает
+    // его на витрине вместо поиска в сумке по времени создания -- поиск
+    // промахивался, когда новое зелье сливалось с похожей стопкой (MergeStack
+    // усредняет CreationTime).
+    DECLARE_MULTICAST_DELEGATE_OneParam(FOnBrewCompleted, const FInventoryItem& /*Produced*/);
+    FOnBrewCompleted OnBrewCompleted;
+
+    // Сопоставляет команды сбора и варки из пакета с предметами, которые
+    // Pipeline добавил в сумку (ContainerID 0): варке -- следующий результат
+    // варки (Potion/Ash/BoiledWater), сбору -- следующий прочий предмет.
+    // Раздельно, чтобы сбор без добычи не забирал себе зелье соседней варки.
+    static void ForEachProducedItem(const TArray<FCommandEntry>& Commands, const FStateDelta& Delta,
+        TFunctionRef<void(const FCommandEntry& Cmd, const FInventoryOperation& AddOp)> Visit);
 
     // ---- Ритуальная (пошаговая) варка — Core/Alchemy/RitualTypes.h.
     // Внепайплайновая, как и Травник/подношение капищу: продвижение шага и

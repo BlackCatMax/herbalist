@@ -685,7 +685,8 @@ ExecutePipeline`, обычным `for`). Q/T/D/S остаются на мест�
 | `CollectWater` | строит `FCommandEntry(Harvest)` → `QueueCommand` |
 | `ApplyPotionToCell` | → `ApplyAlchemyResult` → строит `FCommandEntry(Apply)` → `QueueCommand` |
 | `HarvestTest` | **мёртвый код** — `UE_LOG(..."deprecated")`, ничего не делает |
-| `AlchemyTransferWidget`, действия игрока в `PlayerController` | `QueueCommand` напрямую |
+| `AlchemyTransferWidget` | → `QueueCauldronBrew` (с 2026-09-14) → строит `FCommandEntry(Apply)` → `QueueCommand` |
+| действия игрока в `PlayerController` | `QueueCommand` напрямую |
 
 Single Writer соблюдён **до самой границы UI**, без исключений. Комментарий в
 `GridWorldManager.h` («тонкие обёртки, собирающие FCommandEntry... реальный

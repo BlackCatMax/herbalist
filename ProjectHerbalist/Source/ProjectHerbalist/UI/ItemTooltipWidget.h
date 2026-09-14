@@ -20,6 +20,8 @@ public:
     void SetItem(const FInventoryItem& Item);
 
 protected:
+    virtual void NativeConstruct() override;
+
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> NameText;
 

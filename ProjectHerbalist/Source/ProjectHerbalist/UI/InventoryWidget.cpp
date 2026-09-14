@@ -3,6 +3,7 @@
 #include "HerbalistLogChannels.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "UI/InventorySlotWidget.h"
+#include "UI/HerbalistWidgetSizing.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Components/VerticalBox.h"
 
@@ -23,6 +24,7 @@ void UInventoryWidget::BindInventory(UHerbalistInventoryComponent* InInventory)
 void UInventoryWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+    HerbalistUI::LetSizeBoxesGrowWithContent(WidgetTree);
 }
 
 void UInventoryWidget::NativeDestruct()

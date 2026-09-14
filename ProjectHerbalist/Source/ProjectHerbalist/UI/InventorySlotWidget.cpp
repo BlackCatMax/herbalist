@@ -16,6 +16,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
 #include "Core/World/GridWorldManager.h"
+#include "UI/HerbalistWidgetSizing.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
@@ -279,6 +280,12 @@ void UInventorySlotWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
     {
         ActiveTooltip->RemoveFromParent();
     }
+}
+
+void UInventorySlotWidget::NativeConstruct()
+{
+    Super::NativeConstruct();
+    HerbalistUI::LetSizeBoxesGrowWithContent(WidgetTree);
 }
 
 void UInventorySlotWidget::NativeDestruct()

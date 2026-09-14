@@ -994,7 +994,7 @@ namespace Simulation
         // 2026-09-04) -- та же базовая надбавка WardBrewBoostCoherenceBonus,
         // что и у Камня-оберега выше, но домноженная на TieredBrewBoostStrength
         // (0.0/TieredWardOutOfBiomeStrength/1.0, уже посчитано вызывающей
-        // стороной -- AGridWorldManager::ApplyAlchemyResult, см. CommandTypes.h).
+        // стороной -- AGridWorldManager::ResolveBrewModifiers, см. CommandTypes.h).
         // Складывается с bWardBrewBoostActive-веткой выше, не заменяет её --
         // независимые источники надбавки, ровно как IsWardConcealmentActive/
         // IsTieredConcealmentActive независимы друг от друга при проявлении.
@@ -1008,7 +1008,7 @@ namespace Simulation
         // -- та же плоская надбавка к Coherence, что и у оберега BrewBoost
         // выше, но её сила зависит от того, СКОЛЬКО разных биомов собрано в
         // котле (Cmd.DistinctIngredientBiomeCount, готовое число от
-        // ApplyAlchemyResult -- см. CommandTypes.h). Две ступени, не плавная
+        // ResolveBrewModifiers -- см. CommandTypes.h). Две ступени, не плавная
         // формула: 2 разных биома -- обычный бонус, все 3 (физический предел
         // котла, AlchemyTransferWidget.cpp) -- удвоенный, тем же простым
         // приёмом "полный набор сильнее частичного", что уже bBothHigh/
@@ -1024,16 +1024,20 @@ namespace Simulation
         FVector4 AxisDeltaForFootprint;
         FRealState PotionState = ComputeApplyResult(Cmd.Ingredients, EffectiveIntent, BiomeCtx, BiomeSnap.CollapseThreshold, Rng, Outcome, AxisDeltaForFootprint, Cmd.bIsRitual, Cmd.bBifurcationCharmActive, Cmd.MoonPhase);
 
-        // 2. Удаляем использованные ингредиенты из инвентаря
-        for (const FInventoryItem& Ing : Cmd.Ingredients)
+        // 2. Удаляем использованные ингредиенты из инвентаря -- если их не
+        // изъял котёл раньше (FApplyCommand::bIngredientsAlreadyWithdrawn)
+        if (!Cmd.bIngredientsAlreadyWithdrawn)
         {
-            FInventoryOperation RemoveOp;
-            RemoveOp.ContainerID = 0;
-            RemoveOp.Ingredient = Ing;
-            RemoveOp.Ingredient.Count = 1;
-            RemoveOp.OpType = EInventoryOpType::Remove;
-            RemoveOp.Amount = 1;
-            OutDelta.InventoryOps.Add(RemoveOp);
+            for (const FInventoryItem& Ing : Cmd.Ingredients)
+            {
+                FInventoryOperation RemoveOp;
+                RemoveOp.ContainerID = 0;
+                RemoveOp.Ingredient = Ing;
+                RemoveOp.Ingredient.Count = 1;
+                RemoveOp.OpType = EInventoryOpType::Remove;
+                RemoveOp.Amount = 1;
+                OutDelta.InventoryOps.Add(RemoveOp);
+            }
         }
 
         // Footprint (14_Biome_Graph.md) — только при варке/применении непосредственно
@@ -1096,8 +1100,8 @@ namespace Simulation
         // Горюч-камень (§4.5, компендиум "Места_силы/Горюч-камень.md",
         // 2026-09-06) -- "ни зельем очищения, ни зельем порчи его не
         // сдвинуть... камень отвечает на оба одинаково, глухим стуком и
-        // ничем больше". Ингредиенты уже списаны выше (строка 1019), а
-        // Footprint (строка 1033) уже посчитан в биом-граф до этой проверки
+        // ничем больше". Ингредиенты уже списаны выше (шаг 2), а
+        // Footprint (сразу после шага 2) уже посчитан в биом-граф до этой проверки
         // и НЕ отменяется -- широкая система влияния места видит попытку,
         // сам камень-цель нет, это две разные вещи. Клетка просто не
         // добавляется в OutDelta.WorldChanges вовсе -- ни State, ни
