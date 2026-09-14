@@ -290,4 +290,68 @@ bool FHerbalistKurgan_LoadedSitesReplaceSeededPickupActors::RunTest(const FStrin
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistKurgan_FullBagLeavesKurganUntouched,
+    "Herbalist.Kurgan.FullBagLeavesKurganUntouched",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistKurgan_FullBagLeavesKurganUntouched::RunTest(const FString& Parameters)
+{
+    // Полная сумка (2026-09-14): курган разграблялся до AddItem, и награда
+    // пропадала вместе с ним. Тот же поиск свежего актора, что у
+    // InteractingWithPickupActorGrantsItemAndClearsSite выше.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    TSet<AKurganActor*> ExistingBefore;
+    for (TActorIterator<AKurganActor> It(World); It; ++It) ExistingBefore.Add(*It);
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC) || !TestNotNull(TEXT("Inventory present"), PC->InventoryComponent))
+    {
+        Manager->Destroy();
+        if (PC) PC->Destroy();
+        return false;
+    }
+
+    const TMap<FIntPoint, FName>& Sites = Manager->GetKurganSites();
+    if (!TestTrue(TEXT("At least one kurgan seeded"), Sites.Num() > 0)) { Manager->Destroy(); PC->Destroy(); return false; }
+    const FIntPoint SiteCell = Sites.CreateConstIterator()->Key;
+    const FName RewardID = Sites.CreateConstIterator()->Value;
+
+    AKurganActor* Pickup = nullptr;
+    for (TActorIterator<AKurganActor> It(World); It; ++It)
+    {
+        if (ExistingBefore.Contains(*It)) continue;
+        if (It->GetGridCell() == SiteCell) { Pickup = *It; break; }
+    }
+    if (!TestNotNull(TEXT("A freshly spawned pickup actor exists at the seeded site"), Pickup)) { Manager->Destroy(); PC->Destroy(); return false; }
+
+    UHerbalistInventoryComponent* Bag = PC->InventoryComponent;
+    for (int32 Filler = 0; Bag->GetNumSlots() < Bag->MaxSlots; ++Filler)
+    {
+        FInventoryItem Item;
+        Item.IngredientID = FName(*FString::Printf(TEXT("KurganFullBagFiller%d"), Filler));
+        Item.Count = 1;
+        if (!Bag->AddItem(Item, 1)) break;
+    }
+    if (!TestEqual(TEXT("Sanity: сумка полна"), Bag->GetNumSlots(), Bag->MaxSlots)) { Manager->Destroy(); PC->Destroy(); return false; }
+
+    Pickup->OnInteract_Implementation(PC);
+    TestTrue(TEXT("Полная сумка -- курган не разграблен"), Manager->GetKurganSites().Contains(SiteCell));
+    TestFalse(TEXT("Полная сумка -- актор кургана на месте"), Pickup->IsActorBeingDestroyed());
+    TestEqual(TEXT("Полная сумка -- награды в сумке нет"), CountItemsWithID(Bag, RewardID), 0);
+
+    // Освободили строку -- тот же курган отдаёт награду.
+    Bag->RemoveItem(Bag->GetNumSlots() - 1, 1);
+    Pickup->OnInteract_Implementation(PC);
+    TestFalse(TEXT("Место есть -- курган снят"), Manager->GetKurganSites().Contains(SiteCell));
+    TestEqual(TEXT("Место есть -- награда в сумке"), CountItemsWithID(Bag, RewardID), 1);
+
+    Manager->Destroy();
+    PC->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
