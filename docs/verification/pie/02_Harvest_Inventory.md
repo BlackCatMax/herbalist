@@ -27,7 +27,7 @@
 |---|---|---|
 | Открыть инвентарь | `IA_Inventory` или `ShowInventory` | окно; `RefreshInventoryDisplay: N items in inventory` |
 | Сведения о клетке | `IA_Info` под прицелом | `Cell info: Cell (x,y): Mag=…, Dist=…, Stress=…, DistToS0=…, Resource=…`. `Stress` растёт после сборов на этой клетке |
-| Перенос в пайплайне | `TestNewTransfer <IngredientID> <Amount>` | отладка; результат — в инвентаре |
+| Перенос в пайплайне | `TestNewTransfer <IngredientID> <Amount>` | отладка переноса 0 → 1. Пайплайн знает только сумку: `PipelineV2: Transfer 0 -> 1 refused: …`, предмет остаётся в сумке (до 2026-09-14 пропадал) |
 
 Тревога: `Инвентарь: InventoryWidgetClass не задан в Blueprint'е контроллера`;
 `Инвентарь: уже открыт другой виджет -- закрой его сначала` — открыто окно
@@ -39,7 +39,7 @@
 | Команда | Что делает | Что ждать |
 |---|---|---|
 | `SetGatheringTool hands` / `iron` / `copper` / `bone` | инструмент сбора; кроме `hands` нужен предмет (Железный серп — старт, Медный — торговля, Костяной нож — курган) | `SetGatheringTool: iron`; без предмета — `SetGatheringTool: no '<ID>' in inventory` |
-| `SetHarvestIntent brew` / `seed` | `seed` — следующий сбор даёт посадочный материал для `PlantSeed` (раздел 6) | `SetHarvestIntent: seed` |
+| `SetHarvestIntent brew` / `seed` | `seed` — сборы дают посадочный материал для `PlantSeed` (раздел 6), пока не `SetHarvestIntent brew` | `SetHarvestIntent: seed` |
 | `EquipContainer Корзина` / `Мешок` / `Туёс` | переносной контейнер, не расходуется | `EquipContainer: equipped 'Корзина' (ContainerType=N)`; `EquipContainer: no '<ID>' in inventory` |
 
 Проверка железа: `SetGatheringTool iron`, собрать Плакун-траву или Чистотел

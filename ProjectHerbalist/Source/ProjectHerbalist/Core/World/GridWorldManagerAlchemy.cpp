@@ -9,7 +9,8 @@
 // ПРИМЕНЕНИЕ АЛХИМИИ (ЧЕРЕЗ КОМАНДЫ НОВОГО ПАЙПЛАЙНА)
 // ============================================================================
 
-void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent)
+void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent,
+    bool bIngredientsAlreadyWithdrawn)
 {
     if (Ingredients.Num() == 0) return;
 
@@ -18,6 +19,7 @@ void AGridWorldManager::ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInven
     Cmd.Apply.TargetCell     = FIntPoint(X, Y);
     Cmd.Apply.Ingredients    = Ingredients;
     Cmd.Apply.Intent         = Intent;
+    Cmd.Apply.bIngredientsAlreadyWithdrawn = bIngredientsAlreadyWithdrawn;
     ResolveBrewModifiers(Cmd.Apply);
     // Горюч-камень (§4.5, DESIGN_POI_Art_And_LevelDesign.md §3, 2026-09-06)
     // -- тот же принцип "резолвится здесь, не в Pipeline", что и остальные
@@ -211,5 +213,8 @@ void AGridWorldManager::ApplyPotionToCell(int32 X, int32 Y, const FRealState& Po
     TArray<FInventoryItem> Ingredients = { PotionItem };
     FIntent Intent;
 
-    ApplyAlchemyResult(X, Y, Ingredients, Intent);
+    // Зелье уже снято из сумки (AHerbalistPlayerController::UsePotion): без
+    // флага Pipeline следующим тиком снимал ещё одно "Potion" -- при двух
+    // зельях в сумке за одно применение уходили оба (2026-09-14).
+    ApplyAlchemyResult(X, Y, Ingredients, Intent, /*bIngredientsAlreadyWithdrawn*/ true);
 }

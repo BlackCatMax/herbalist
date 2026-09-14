@@ -58,9 +58,10 @@ struct FApplyCommand
     // Котёл (UAlchemyTransferWidget, 2026-09-14) изымает ингредиенты из сумки
     // ещё при переносе в слоты. Без флага Pipeline списывал их второй раз --
     // по единице из оставшихся в сумке стопок того же ID (лог PIE: 11 -> 10
-    // предметов после варки). Применение на клетку берёт предметы прямо из
-    // сумки -- флаг false, списание нужно. Ритуал (TryAdvanceRitual) из
-    // дельты читает только результат.
+    // предметов после варки). Применение на клетку из сумки (ApplyTest,
+    // TestNewApply) -- флаг false, списание нужно; зелье через UsePotion
+    // снимается заранее -- true (ApplyPotionToCell). Ритуал (TryAdvanceRitual)
+    // из дельты читает только результат.
     bool bIngredientsAlreadyWithdrawn = false;
 
     // Итог правильно исполненного ритуала (AGridWorldManager::TryAdvanceRitual,

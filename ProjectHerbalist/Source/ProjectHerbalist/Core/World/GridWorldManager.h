@@ -142,6 +142,9 @@ public:
     void OnRegrowthTimer(const FIntPoint& Coord, float RegrowthTime, int32 Generation);
     int32 GetRegrowthTimerGenerationForTests() const { return RegrowthTimerGeneration; }
     int32 GetRegrowthTimersScheduledForTests() const { return RegrowthTimersScheduled; }
+    // Очередь команд до шага симуляции: автотест не может прогнать тик
+    // (GetSimulationWorld не видит editor-мир) и сверяет собранную команду.
+    const TArray<FCommandEntry>& GetPendingCommandsForTests() const { return PendingCommands; }
     // Стресс клетки на сейчас. В спящем чанке стресс не спадает до догона при
     // активации (CatchUpActivatedChunks); спад линейный, поэтому прогноз по
     // пропущенному времени точен. Без него истощённое место не возвращалось,
@@ -772,7 +775,10 @@ public:
 
     // ---- Алхимия: тонкие обёртки, собирающие FCommandEntry(Apply) и
     // отправляющие его в QueueCommand — реальный расчёт идёт в PipelineV2 ----
-    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent);
+    // bIngredientsAlreadyWithdrawn -- вызывающая сторона уже сняла предметы из
+    // сумки сама (UsePotion), Pipeline их не списывает (FApplyCommand).
+    void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FInventoryItem>& Ingredients, const FIntent& Intent,
+        bool bIngredientsAlreadyWithdrawn = false);
     void ApplyAlchemyResult(int32 X, int32 Y, const TArray<FRealState>& Ingredients, const FIntent& Intent);
 
     // Варка у котла (UAlchemyTransferWidget, 2026-09-14). Ингредиенты уже

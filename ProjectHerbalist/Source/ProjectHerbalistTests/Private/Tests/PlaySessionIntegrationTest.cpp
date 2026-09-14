@@ -211,8 +211,12 @@ bool FHerbalistPlaySession_GatherBrewApplyEndToEnd::RunTest(const FString& Param
     }
 
     // --- Шаг 4: применить сваренное зелье на клетку-мишень ---
-    // Регрессия сессии 2026-08-30: применение зелья на клетку (UsePotion ->
-    // ApplyPotionToCell) заворачивает готовый предмет в тот же список
+    // Команда собирается без флага bIngredientsAlreadyWithdrawn -- путь
+    // ApplyTest/TestNewApply, где зелье снимает сам Pipeline. UsePotion
+    // (-> ApplyPotionToCell) снимает зелье до команды и ставит флаг; тот путь
+    // здесь не прогнать -- нужен луч из камеры (2026-09-14).
+    // Регрессия сессии 2026-08-30: применение зелья на клетку
+    // заворачивает готовый предмет в тот же список
     // Ingredients, что и сырые материалы при варке -- без явной проверки в
     // ComputeApplyResult единственный небольшой предмет без воды в списке
     // безусловно становился золой ЗАНОВО (правило "обязательность воды"),
@@ -236,7 +240,7 @@ bool FHerbalistPlaySession_GatherBrewApplyEndToEnd::RunTest(const FString& Param
     TestFalse(TEXT("Sanity: ash constants (Distortion=0.9) are not what landed on the cell"),
         FMath::IsNearlyEqual(TargetCell->State.Meta.Distortion, 0.9f, 0.01f));
 
-    TestEqual(TEXT("Potion consumed applying it to the cell"), Inventory->GetItems().Num(), 0);
+    TestEqual(TEXT("Potion consumed by the pipeline when applied without the withdrawn flag"), Inventory->GetItems().Num(), 0);
     TestTrue(TEXT("Target cell HarvestStress increased by applying a potion"),
         TargetCell->HarvestStress > TargetStressBefore + KINDA_SMALL_NUMBER - 0.0005f);
     TestTrue(TEXT("Target cell stays coherent after real application"), CellAxesSane(*TargetCell));

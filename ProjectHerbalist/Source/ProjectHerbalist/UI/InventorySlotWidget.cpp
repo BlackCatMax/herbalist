@@ -263,11 +263,15 @@ void UInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, con
     DragOp->SourceInventory = InventoryComponent;
     DragOp->SourceIndex = RealIndex;
 
-    bool bShiftDown = InMouseEvent.IsShiftDown();
-    if (bShiftDown)
+    // Сплит -- только стопки больше одной штуки, по настоящему числу: у одной
+    // штуки SplitStack отказывает, и Shift+перетаскивание раньше не делало
+    // ничего вовсе (2026-09-14). Одна штука тащится обычным переносом.
+    const FInventoryItem* RealSlot = InventoryComponent->GetSlot(RealIndex);
+    const bool bSplit = InMouseEvent.IsShiftDown() && RealSlot && RealSlot->Count > 1;
+    if (bSplit)
     {
         FInventoryItem SplitItem;
-        int32 Half = FMath::Max(1, CachedItem.Count / 2);
+        int32 Half = FMath::Max(1, RealSlot->Count / 2);
         if (InventoryComponent->SplitStack(RealIndex, Half, SplitItem))
         {
             DragOp->bIsSplit = true;

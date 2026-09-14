@@ -351,8 +351,8 @@
   настроено — проверяется в PIE. Построение настоящих макетов WBP и их размеры
   автотест уже проверяет (`Herbalist.UI.WidgetSizing.GameWindowsGrowWithText`,
   2026-09-14); логика окна котла без ассета — нет (`BindWidget`).
-- `ProcessTransferCommand`, `ShrineRestored`/`LowLocalDistortion` (триггеры
-  Заряны) — по-прежнему без прямого теста.
+- `ShrineRestored`/`LowLocalDistortion` (триггеры Заряны) — по-прежнему без
+  прямого теста.
 - Резолв инвентаря по строковому ID через `IngredientRegistrySubsystem`
   (`ActivateWard`/`TradeWithCommunity`/`PlantSeed`/`EquipContainer`/
   `SetGatheringTool`-регистр и т.д.) не покрыт автотестом на этом уровне —

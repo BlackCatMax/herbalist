@@ -914,6 +914,18 @@ namespace Simulation
                                       const FInventorySnapshot& InvSnap,
                                       FStateDelta& OutDelta)
     {
+        // Пайплайн знает только сумку игрока: в снимке один контейнер 0
+        // (FSnapshotService::CaptureInventory), дельту применяет только она
+        // (UHerbalistInventoryComponent::ApplyStateDelta). Перенос в другой
+        // контейнер снимал предмет из сумки и никуда его не клал -- отладочная
+        // TestNewTransfer (0 -> 1) молча уничтожала предметы (2026-09-14).
+        if (Cmd.SourceContainerID != 0 || Cmd.TargetContainerID != 0)
+        {
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("PipelineV2: Transfer %d -> %d refused: the pipeline only knows container 0 (player inventory)"),
+                Cmd.SourceContainerID, Cmd.TargetContainerID);
+            return;
+        }
+
         const FInventoryItem* SourceItem = FindItemInSnapshot(InvSnap, Cmd.SourceContainerID, Cmd.IngredientID);
         if (!SourceItem)
         {
@@ -922,19 +934,25 @@ namespace Simulation
             return;
         }
 
+        // Не больше, чем в стопке (ревью 2026-09-14): снятие применяется в
+        // пределах стопки (ApplyStateDelta), а добавление клало полный Amount
+        // -- перенос больше, чем есть, размножал предметы.
+        const int32 Amount = FMath::Min(Cmd.Amount, SourceItem->Count);
+        if (Amount <= 0) return;
+
         FInventoryOperation RemoveOp;
         RemoveOp.ContainerID = Cmd.SourceContainerID;
         RemoveOp.Ingredient = *SourceItem;
         RemoveOp.OpType = EInventoryOpType::Remove;
-        RemoveOp.Amount = Cmd.Amount;
+        RemoveOp.Amount = Amount;
         OutDelta.InventoryOps.Add(RemoveOp);
 
         FInventoryOperation AddOp;
         AddOp.ContainerID = Cmd.TargetContainerID;
         AddOp.Ingredient = *SourceItem;
-        AddOp.Ingredient.Count = Cmd.Amount;
+        AddOp.Ingredient.Count = Amount;
         AddOp.OpType = EInventoryOpType::Add;
-        AddOp.Amount = Cmd.Amount;
+        AddOp.Amount = Amount;
         OutDelta.InventoryOps.Add(AddOp);
     }
 
