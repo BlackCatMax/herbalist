@@ -127,6 +127,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool SplitStack(int32 Index, int32 Amount, FInventoryItem& OutItem);
 
+    // Вернуть отменённый сплит (2026-09-14): в исходную строку, если там всё
+    // ещё тот же предмет, иначе обычным AddItem. Через AddItem возврат не
+    // складывался даже с исходной стопкой, пока идёт процесс станции (у каждой
+    // части свой таймер), и пропадал при занятых строках.
+    bool ReturnSplitToSlot(int32 Index, const FInventoryItem& SplitItem);
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     TArray<FInventoryItem> GetItems() const { return Items; }
 

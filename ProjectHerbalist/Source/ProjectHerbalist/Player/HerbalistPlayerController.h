@@ -543,6 +543,12 @@ private:
     bool RemoveArtifactFromInventory(FName ArtifactOrFeatherID);
 
 public:
+    // Ляжет ли в сумку предмет артефакта или пера (2026-09-14): владение
+    // пишется в мировую бухгалтерию, а видимый предмет при полной сумке
+    // пропадал. SlotsFreedFirst -- строки, которые освободит то, что снимается
+    // до добавления (подношение, приманка из одной штуки).
+    bool HasRoomForArtifactItem(FName ArtifactOrFeatherID, int32 SlotsFreedFirst = 0) const;
+
     // Инъекция для тестов (2026-09-02, тот же паттерн, что уже
     // AGridWorldManager::SetAcquiredArtifacts/SetClarityAnchor и т.д.) —
     // FindWorldManager() ищет первый AGridWorldManager в мире через

@@ -315,7 +315,7 @@ void UInventorySlotWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDro
     UInventoryDragDropOperation* DragOp = Cast<UInventoryDragDropOperation>(InOperation);
     if (DragOp && DragOp->bIsSplit && DragOp->SourceInventory)
     {
-        DragOp->SourceInventory->AddItem(DragOp->SplitItem, DragOp->SplitItem.Count);
+        DragOp->SourceInventory->ReturnSplitToSlot(DragOp->SourceIndex, DragOp->SplitItem);
     }
 }
 

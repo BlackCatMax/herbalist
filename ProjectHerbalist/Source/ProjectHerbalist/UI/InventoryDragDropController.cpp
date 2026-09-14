@@ -20,6 +20,10 @@ bool UInventoryDragDropController::TryAddSplitItem(const FInventoryItem& SplitIt
     UInventoryDragDropOperation* DragOp)
 {
     if (!TargetInventory) return false;
+    // Целиком или никак (ревью 2026-09-14): AddItem возвращает true и при
+    // частичном добавлении, после чего bIsSplit гасился и отменённое
+    // перетаскивание остаток уже не возвращало -- часть сплита пропадала.
+    if (TargetInventory->GetAvailableCapacityFor(SplitItem) < SplitItem.Count) return false;
     if (TargetInventory->AddItem(SplitItem, SplitItem.Count))
     {
         if (DragOp)

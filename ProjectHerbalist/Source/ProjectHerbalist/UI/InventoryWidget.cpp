@@ -4,6 +4,7 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "UI/InventorySlotWidget.h"
 #include "UI/HerbalistWidgetSizing.h"
+#include "UI/InventoryDragDropController.h"
 #include "Core/Inventory/InventoryDragDropOperation.h"
 #include "Components/VerticalBox.h"
 
@@ -79,12 +80,9 @@ bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDrop
 
     if (DragOp->bIsSplit)
     {
-        if (InventoryComponent->AddItem(DragOp->SplitItem, DragOp->SplitItem.Count))
-        {
-            DragOp->bIsSplit = false;
-            return true;
-        }
-        return false;
+        // Тот же путь, что у дропа на слот: сплит ложится целиком или не
+        // ложится, остаток возвращает отмена перетаскивания.
+        return UInventoryDragDropController::TryAddSplitItem(DragOp->SplitItem, DragOp->SourceInventory, InventoryComponent, DragOp);
     }
 
     if (DragOp->SourceInventory && DragOp->SourceInventory != InventoryComponent)

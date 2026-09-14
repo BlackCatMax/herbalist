@@ -123,9 +123,10 @@ void UAlchemyTransferWidget::OnMixClicked()
 
     // Полная сумка (ревью 2026-09-14): AddItem откажет, а травы уже в котле --
     // зелье пропало бы. Состояние результата заранее неизвестно, влезет ли он
-    // в похожую стопку -- не угадать, поэтому нужен свободный слот. Травы
-    // остаются в слотах.
-    if (PlayerInventoryComponent && PlayerInventoryComponent->GetItems().Num() >= PlayerInventoryComponent->MaxSlots)
+    // в похожую стопку -- не угадать, поэтому нужен свободный слот, и не один
+    // на все варки: зелье приходит следующим тиком, и две варки до него при
+    // одной свободной строке теряли второе. Травы остаются в слотах.
+    if (PlayerInventoryComponent && PlayerInventoryComponent->GetItems().Num() + PendingBrewCount >= PlayerInventoryComponent->MaxSlots)
     {
         SetStatusMessage(TEXT("Сумка полна: освободите место под зелье."));
         return;

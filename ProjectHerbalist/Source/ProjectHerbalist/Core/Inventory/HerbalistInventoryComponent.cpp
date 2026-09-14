@@ -600,6 +600,31 @@ bool UHerbalistInventoryComponent::SplitStack(int32 Index, int32 Amount, FInvent
     return true;
 }
 
+bool UHerbalistInventoryComponent::ReturnSplitToSlot(int32 Index, const FInventoryItem& SplitItem)
+{
+    if (SplitItem.Count <= 0) return false;
+
+    if (Items.IsValidIndex(Index))
+    {
+        FInventoryItem& Slot = Items[Index];
+        // Тот же предмет -- вид, назначение и итоги процессов; таймеры не
+        // сравниваются: строка досчитывала, пока шло перетаскивание, и
+        // MergeStack оставляет её собственный.
+        const bool bSameItem = Slot.IngredientID == SplitItem.IngredientID
+            && Slot.bIsPlantingStock == SplitItem.bIsPlantingStock
+            && Slot.bIsDried == SplitItem.bIsDried
+            && Slot.bHasSettled == SplitItem.bHasSettled
+            && Slot.bHasEvaporated == SplitItem.bHasEvaporated;
+        if (bSameItem && Slot.Count + SplitItem.Count <= MAX_STACK_SIZE)
+        {
+            MergeStack(Slot, SplitItem, SplitItem.Count);
+            OnInventoryChanged.Broadcast();
+            return true;
+        }
+    }
+    return AddItem(SplitItem, SplitItem.Count);
+}
+
 const FInventoryItem* UHerbalistInventoryComponent::GetSlot(int32 Index) const
 {
     return Items.IsValidIndex(Index) ? &Items[Index] : nullptr;
@@ -647,7 +672,14 @@ bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, co
     // слияние либо потеряло бы прогресс одного из двух, либо держало бы в
     // одном слоте два разных таймера одновременно -- оба варианта хуже,
     // чем просто не дать таким предметам разделить слот, пока сушка идёт.
-    if (A.DryingTimeRemainingSeconds >= 0.0f || B.DryingTimeRemainingSeconds >= 0.0f) return false;
+    // "В процессе" -- таймер взведён и итог ещё не наступил. По окончании
+    // таймер ставится в 0, а не в -1 (TickDryingItem): прежняя проверка
+    // ">= 0" не давала сложиться даже двум досушенным предметам (ревью
+    // 2026-09-14) -- каждая досушенная единица занимала свою строку, а
+    // возврат отменённого сплита такой стопки в полный инвентарь пропадал.
+    const bool bADrying = !A.bIsDried && A.DryingTimeRemainingSeconds >= 0.0f;
+    const bool bBDrying = !B.bIsDried && B.DryingTimeRemainingSeconds >= 0.0f;
+    if (bADrying || bBDrying) return false;
 
     // Отстой/Выпаривание (2026-09-05) -- тот же довод и тот же приём, что
     // bIsDried/DryingTimeRemainingSeconds выше: терминальный флаг различает
@@ -657,10 +689,10 @@ bool UHerbalistInventoryComponent::AreItemsStackable(const FInventoryItem& A, co
     // (у каждого свой независимый *TimeRemainingSeconds, MergeStack его не
     // усредняет).
     if (A.bHasSettled != B.bHasSettled) return false;
-    if (A.SettlingTimeRemainingSeconds >= 0.0f || B.SettlingTimeRemainingSeconds >= 0.0f) return false;
+    if ((!A.bHasSettled && A.SettlingTimeRemainingSeconds >= 0.0f) || (!B.bHasSettled && B.SettlingTimeRemainingSeconds >= 0.0f)) return false;
 
     if (A.bHasEvaporated != B.bHasEvaporated) return false;
-    if (A.EvaporationTimeRemainingSeconds >= 0.0f || B.EvaporationTimeRemainingSeconds >= 0.0f) return false;
+    if ((!A.bHasEvaporated && A.EvaporationTimeRemainingSeconds >= 0.0f) || (!B.bHasEvaporated && B.EvaporationTimeRemainingSeconds >= 0.0f)) return false;
 
     return HerbalistCore::Math::AreStatesSimilar(A.State, B.State);
 }

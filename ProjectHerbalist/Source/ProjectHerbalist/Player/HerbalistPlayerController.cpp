@@ -188,19 +188,44 @@ AGridWorldManager* AHerbalistPlayerController::FindWorldManager() const
     return nullptr;
 }
 
+namespace
+{
+    FInventoryItem MakeArtifactInventoryItem(FName ArtifactOrFeatherID)
+    {
+        FInventoryItem Item;
+        Item.IngredientID = ArtifactOrFeatherID;
+        Item.Count = 1;
+        // Артефакты/перья не портятся, в отличие от собранных трав -- та же
+        // защита, что уже DecayRate=0 на стороне DT_IngredientClass (оба слоя,
+        // не один: DecayRate защищает саму формулу порчи, этот флаг защищает
+        // даже путь, который DecayRate не читает).
+        Item.bSubjectToDecay = false;
+        return Item;
+    }
+
+    // Уже добытое место не проверяет: откажет сама добыча и назовёт причину,
+    // а не "сумка полна".
+    bool IsArtifactAlreadyHeld(const AGridWorldManager* Manager, FName ArtifactID)
+    {
+        for (const FAcquiredArtifact& Artifact : Manager->GetAcquiredArtifacts())
+        {
+            if (Artifact.ArtifactID == ArtifactID) return true;
+        }
+        return false;
+    }
+}
+
 void AHerbalistPlayerController::AddArtifactToInventory(FName ArtifactOrFeatherID)
 {
     if (!InventoryComponent) return;
 
-    FInventoryItem Item;
-    Item.IngredientID = ArtifactOrFeatherID;
-    Item.Count = 1;
-    // Артефакты/перья не портятся, в отличие от собранных трав -- та же
-    // защита, что уже DecayRate=0 на стороне DT_IngredientClass (оба слоя,
-    // не один: DecayRate защищает саму формулу порчи, этот флаг защищает
-    // даже путь, который DecayRate не читает).
-    Item.bSubjectToDecay = false;
-    InventoryComponent->AddItem(Item);
+    InventoryComponent->AddItem(MakeArtifactInventoryItem(ArtifactOrFeatherID));
+}
+
+bool AHerbalistPlayerController::HasRoomForArtifactItem(FName ArtifactOrFeatherID, int32 SlotsFreedFirst) const
+{
+    if (!InventoryComponent) return false;
+    return SlotsFreedFirst > 0 || InventoryComponent->GetAvailableCapacityFor(MakeArtifactInventoryItem(ArtifactOrFeatherID)) >= 1;
 }
 
 bool AHerbalistPlayerController::RemoveArtifactFromInventory(FName ArtifactOrFeatherID)
@@ -348,6 +373,22 @@ void AHerbalistPlayerController::Harvest()
         return;
     }
 
+    // Та же проверка места, что у растения (TryHarvestResource): ID и
+    // состояние воды -- те, что возьмёт ProcessHarvestCommand.
+    if (InventoryComponent)
+    {
+        FInventoryItem Expected;
+        Expected.IngredientID = Cell->WaterTypeID.IsNone() ? FName(TEXT("Water")) : Cell->WaterTypeID;
+        Expected.Count = 1;
+        Expected.State = Cell->State;
+        Expected.bIsWater = true;
+        if (InventoryComponent->GetAvailableCapacityFor(Expected) < 1)
+        {
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: сумка полна -- воду '%s' некуда налить"), *Expected.IngredientID.ToString());
+            return;
+        }
+    }
+
     WorldManager->CollectWater(X, Y);
     UE_LOG(LogHerbalistPlayer, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
 }
@@ -373,6 +414,20 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
     if (Resource->IsBeingHarvested())
     {
         UE_LOG(LogHerbalistPlayer, Verbose, TEXT("%s is already being harvested"), *Resource->GetName());
+        return false;
+    }
+
+    // Место в сумке -- ДО сбора (2026-09-14): Harvest() сразу снимает
+    // растение, а предмет, которому нет места, AddItem молча отбрасывал.
+    // Нужна свободная строка, а не место в похожей стопке: состояние
+    // собранного пайплайн считает следующим тиком (смешение с клеткой, луна,
+    // инструмент, джиттер), и сложится ли оно со стопкой, заранее не узнать --
+    // проверка по базовому состоянию и пропускала потери, и отказывала зря
+    // (ревью 2026-09-14).
+    if (InventoryComponent && InventoryComponent->GetNumSlots() >= InventoryComponent->MaxSlots)
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: сумка полна -- для '%s' нужна свободная строка, растение не тронуто"),
+            *Resource->GetIngredientID().ToString());
         return false;
     }
 
@@ -1566,6 +1621,22 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
     }
 
     const FName ArtID(*ArtifactID);
+
+    // Место под предмет артефакта -- ДО добычи (2026-09-14): TryAcquireArtifact
+    // сразу пишет владение, а видимый предмет при полной сумке пропадал.
+    // Подношение снимается раньше предмета, так что строки стопок из одной
+    // штуки освобождаются в счёт.
+    int32 SlotsFreedByOffering = 0;
+    for (int32 Index : Indices)
+    {
+        if (CurrentItems[Index].Count <= 1) ++SlotsFreedByOffering;
+    }
+    if (!IsArtifactAlreadyHeld(Manager, ArtID) && !HasRoomForArtifactItem(ArtID, SlotsFreedByOffering))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: сумка полна -- %s некуда положить, подношение не тронуто"), *ArtifactID);
+        return;
+    }
+
     bool bViaDeception = false;
     const bool bAcquired = Manager->TryAcquireArtifact(ArtID, Items, bViaDeception);
     if (!bAcquired)
@@ -1613,10 +1684,6 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s помечен bWarmsCompanionItem в DT_Artifacts, но не опознан здесь -- нужна новая ветка для его флага-присутствия"), *ArtifactID);
     }
 
-    // Настоящее инвентарное представление (2026-09-02) — см. комментарий
-    // у AddArtifactToInventory в шапке .h.
-    AddArtifactToInventory(ArtID);
-
     // Индексы по убыванию — RemoveItem(Index) не должен сдвинуть ещё не
     // обработанные позиции (тот же приём, что OfferToCommunity).
     Indices.Sort([](int32 A, int32 B) { return A > B; });
@@ -1624,6 +1691,11 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
     {
         InventoryComponent->RemoveItem(Index, 1);
     }
+
+    // Настоящее инвентарное представление (2026-09-02) — см. комментарий
+    // у AddArtifactToInventory в шапке .h. После списания подношения: его
+    // освобождённые строки учтены проверкой места выше.
+    AddArtifactToInventory(ArtID);
 
     UE_LOG(LogHerbalistPlayer, Log, TEXT("OfferForArtifact: %s acquired %s"), *ArtifactID,
         bViaDeception ? TEXT("via deception") : TEXT("honestly"));
@@ -1649,6 +1721,16 @@ void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionI
     if (FoundIndex == INDEX_NONE)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("LureSwampTsar: no %s in inventory"), *PotionIngredientID);
+        return;
+    }
+
+    // Место под Фонарь -- ДО попытки (2026-09-14): удача пишет владение сразу,
+    // а видимый предмет при полной сумке пропадал. Приманка из одной штуки
+    // освобождает свою строку раньше.
+    const FName LanternID(TEXT("Фонарь"));
+    if (!IsArtifactAlreadyHeld(WorldManager, LanternID) && !HasRoomForArtifactItem(LanternID, CurrentItems[FoundIndex].Count <= 1 ? 1 : 0))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("LureSwampTsar: сумка полна -- Фонарь некуда положить, приманка не тронута"));
         return;
     }
 
@@ -1758,6 +1840,13 @@ void AHerbalistPlayerController::AcquireFeather(FString FeatherID)
     if (!WorldManager) return;
 
     const FName ID(*FeatherID);
+    // Место под перо -- ДО добычи (2026-09-14), тот же довод, что у
+    // OfferForArtifact: владение пишется сразу, предмет пропадал.
+    if (!WorldManager->GetAcquiredFeathers().Contains(ID) && !HasRoomForArtifactItem(ID))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("AcquireFeather: сумка полна -- %s некуда положить"), *FeatherID);
+        return;
+    }
     if (!WorldManager->TryAcquireProphetFeather(ID))
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("AcquireFeather: %s not acquired (trigger not met, already held, or unknown feather)"), *FeatherID);

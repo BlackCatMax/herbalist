@@ -52,7 +52,7 @@ Active fragment in world: <ID>|none
 
 | Команда | Что ждать |
 |---|---|
-| `OfferForArtifact <артефакт> "id1,id2"` (сущность проявлена рядом) | `OfferForArtifact: <артефакт> acquired …` и `[Artifact] <артефакт> acquired (…), RealPurity=…, PerceivedPurity=…`; отказ — `OfferForArtifact: <артефакт> not acquired (entity not manifested, already held, or offering too weak)` |
+| `OfferForArtifact <артефакт> "id1,id2"` (сущность проявлена рядом) | `OfferForArtifact: <артефакт> acquired …` и `[Artifact] <артефакт> acquired (…), RealPurity=…, PerceivedPurity=…`; отказ — `OfferForArtifact: <артефакт> not acquired (entity not manifested, already held, or offering too weak)`; полная сумка — `OfferForArtifact: сумка полна -- <артефакт> некуда положить, подношение не тронуто` (подношение из одной штуки освобождает свою строку и в счёт идёт) |
 | (прогрев в родном регионе) | `[Artifact] <артефакт> Warmth += … (now …)` |
 | `UseHorn X Y` (водная клетка) | диагностика родника попапом; `UseHorn: no Рог, or (x,y) is not water` |
 | `UseComb X Y` | `[Artifact] Гребень spent at (x,y), entity cleared: <сущность>` |
@@ -60,7 +60,7 @@ Active fragment in world: <ID>|none
 | `UseInvisibilityCap` | `[Artifact] Шапка-невидимка active at (x,y) until T` |
 | `UseLanternDisclosure X Y` (прогретый Фонарь) | честное состояние клетки попапом; `UseLanternDisclosure: no Фонарь, not warmed yet, or (x,y) is outside the grid` |
 | (Камень-оберег в ритуальной варке) | `[Artifact] Камень-оберег charge spent` |
-| `LureSwampTsar X Y <зелье>` (рядом проявлен Болотный царь) | `LureSwampTsar: attempt at (x,y), Фонарь stolen` или `failed`; причина — `[Artifact] Lure potion at (x,y) unconvincing, PerceivedPurity=…` / `… convincing (PerceivedPurity=…) but the roll failed` |
+| `LureSwampTsar X Y <зелье>` (рядом проявлен Болотный царь) | `LureSwampTsar: attempt at (x,y), Фонарь stolen` или `failed`; причина — `[Artifact] Lure potion at (x,y) unconvincing, PerceivedPurity=…` / `… convincing (PerceivedPurity=…) but the roll failed`; полная сумка — `LureSwampTsar: сумка полна -- Фонарь некуда положить, приманка не тронута` |
 
 Имена артефактов: `Рог`, `Гребень`, `Молодильное яблоко`, `Шапка-невидимка`,
 `Камень-оберег`, `Фонарь`, `Зеркальце`, `Клубочек`.
@@ -69,7 +69,7 @@ Active fragment in world: <ID>|none
 
 | Команда | Что ждать |
 |---|---|
-| `AcquireFeather "Перо Гамаюна"` (`Перо Алконоста`, `Перо Сирина`, `Перо Жар-птицы`) | `[Feather] <перо> acquired`; `AcquireFeather: <перо> not acquired (trigger not met, already held, or unknown feather)` |
+| `AcquireFeather "Перо Гамаюна"` (`Перо Алконоста`, `Перо Сирина`, `Перо Жар-птицы`) | `[Feather] <перо> acquired`; `AcquireFeather: <перо> not acquired (trigger not met, already held, or unknown feather)`; полная сумка — `AcquireFeather: сумка полна -- <перо> некуда положить` |
 | `EatGamayunFeather` | `[Feather] Перо Гамаюна eaten -- Зеркальце's prophetic reading is now guaranteed` |
 | `UseAlkonostFeather X Y` | `[Feather] Перо Алконоста spent -- biome N suppressed until T` |
 | `UseSirinFeather X Y` (при Malign-спайке в биоме) | `[Feather] Перо Сирина spent at (x,y) during an active Malign spike` |
