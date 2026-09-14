@@ -73,6 +73,17 @@ namespace
         }
     };
 
+    // Точки интереса, засеянные при старте, закрепляют свои страницы (ревью
+    // 2026-09-13) -- тесты выгрузки их убирают, как ориентиры и капища.
+    void ClearPointsOfInterestForSaveLayoutTest(AGridWorldManager* Manager)
+    {
+        Manager->SetTotemSite(HerbalistCore::InvalidCell());
+        Manager->SetSvetloyarSite(HerbalistCore::InvalidCell());
+        Manager->SetGoryuchKamenSite(HerbalistCore::InvalidCell());
+        Manager->SetSoloveySite(HerbalistCore::InvalidCell());
+        Manager->SetKalinovMostSite(HerbalistCore::InvalidCell());
+    }
+
     AGridWorldManager* SpawnSaveLayoutManager(UWorld* World, double HalfExtentCm)
     {
         for (TActorIterator<AGridWorldManager> It(World); It; ++It)
@@ -482,6 +493,269 @@ bool FHerbalistSaveLayout_SitesOutsideGridAreCounted::RunTest(const FString& Par
         UHerbalistSaveSubsystem::CountSitesOutsideGrid(*Manager), 3);
 
     Manager->Destroy();
+    return true;
+}
+
+// Места за убранными плитками ландшафта живут (решение пользователя
+// 2026-09-13, вариант «Страницы мест остаются»): загрузка расширяет сетку до
+// целых страниц с местами, страницы мест собираются из основы и закрепляются.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSaveLayout_SitesBeyondRemovedTilesKeepTheirPages,
+    "Herbalist.WorldLayout.Save.SitesBeyondRemovedTilesKeepTheirPages",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSaveLayout_SitesBeyondRemovedTilesKeepTheirPages::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World))
+    {
+        return false;
+    }
+    // Все клетки -- блочный фолбэк: проверяется, что его основа не зависит от
+    // размера сетки после расширения.
+    for (TActorIterator<ABiomeRegionVolume> It(World); It; ++It)
+    {
+        It->Destroy();
+    }
+    FScopedSaveLayoutRadius ScopedRadius;
+    AGridWorldManager* Manager = SpawnSaveLayoutManager(World, 6300.0);
+    if (!TestNotNull(TEXT("Сетка 28 x 28 от (-14, -14)"), Manager))
+    {
+        return false;
+    }
+    // Места, засеянные при старте, закрепляют свои страницы -- их заменяют места сейва.
+    Manager->SetEntityLandmarks({});
+    Manager->SetShrines({});
+    Manager->SetLegendaryAnchorsForTests({});
+    ClearPointsOfInterestForSaveLayoutTest(Manager);
+
+    // Клетка, тронутая до расширения: её линейный индекс пересчитывается.
+    const FGridCell* ToTouch = Manager->GetCellConst(5, 5);
+    if (!TestNotNull(TEXT("Клетка (5, 5)"), ToTouch))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    const float UntouchedDistortion = ToTouch->State.Meta.Distortion;
+    FStateDelta Delta;
+    FGridCell Touched = *ToTouch;
+    Touched.State.Meta.Distortion = 0.61f;
+    Delta.WorldChanges.Add(FIntPoint(5, 5), Touched);
+    Manager->ApplyStateDelta(Delta);
+
+    int32 SummaryChunksBefore = 0;
+    Manager->ForEachChunkSummary([&SummaryChunksBefore](const FHerbalistChunkSummary&) { ++SummaryChunksBefore; });
+    TestEqual(TEXT("Сводок у сетки ландшафта -- 4 x 4 чанка"), SummaryChunksBefore, 16);
+
+    // Сейв, записанный до уборки плиток: капище (-22, 3) с соседями на той же
+    // странице, капище (0, 5) у края страницы внутри сетки, Тотем (0, 30),
+    // Светлояр (-20, 25); клетка капища и клетка страницы-заполнителя (-10, 30).
+    UHerbalistSaveGame* Save = NewObject<UHerbalistSaveGame>();
+    FShrine BeyondShrine;
+    BeyondShrine.Cell = FIntPoint(-22, 3);
+    BeyondShrine.Restoration = 0.4f;
+    Save->Shrines.Add(BeyondShrine);
+    FShrine EdgeShrine;
+    EdgeShrine.Cell = FIntPoint(0, 5);
+    Save->Shrines.Add(EdgeShrine);
+    Save->TotemSite = FIntPoint(0, 30);
+    Save->SvetloyarSite = FIntPoint(-20, 25);
+    FSavedCellState ShrineCellSaved;
+    ShrineCellSaved.X = -22;
+    ShrineCellSaved.Y = 3;
+    ShrineCellSaved.State.Meta.Distortion = 0.66f;
+    Save->Cells.Add(ShrineCellSaved);
+    FSavedCellState FillerCellSaved;
+    FillerCellSaved.X = -10;
+    FillerCellSaved.Y = 30;
+    Save->Cells.Add(FillerCellSaved);
+
+    // Страницы мест: (-2, 0), (0, 2), (-2, 1) -- таблица X -2..0, Y -1..2.
+    // Сосед (-1, 5) капища (0, 5) лежит в сетке, но и сосед у края сетки
+    // ландшафта расширять её не должен -- капище внутри сетки соседей не даёт.
+    FShrine WorldEdgeShrine;
+    WorldEdgeShrine.Cell = FIntPoint(13, 0);
+    const TArray<FIntPoint> EdgeOnly = UHerbalistSaveSubsystem::CollectSaveSiteCells(*NewObject<UHerbalistSaveGame>(), *Manager);
+    UHerbalistSaveGame* EdgeSave = NewObject<UHerbalistSaveGame>();
+    EdgeSave->Shrines.Add(WorldEdgeShrine);
+    TestFalse(TEXT("Сосед (14, 0) капища на краю ландшафта не входит в места"),
+        UHerbalistSaveSubsystem::CollectSaveSiteCells(*EdgeSave, *Manager).Contains(FIntPoint(14, 0)));
+    TestEqual(TEXT("Пустой сейв -- только незаданные точки интереса"), EdgeOnly.Num(), 5);
+
+    TestEqual(TEXT("Три страницы мест"), Manager->EnsureGridCoversSites(UHerbalistSaveSubsystem::CollectSaveSiteCells(*Save, *Manager)), 3);
+    TestEqual(TEXT("Сетка от (-28, -14)"), Manager->GetGridMinCell(), FIntPoint(-28, -14));
+    TestEqual(TEXT("42 клетки по X"), Manager->GridSizeX, 42);
+    TestEqual(TEXT("56 клеток по Y"), Manager->GridSizeY, 56);
+    TestTrue(TEXT("Страница (-1, 2) -- заполнитель"), Manager->IsCellInExtensionFiller(-10, 30));
+    TestFalse(TEXT("Страница места -- не заполнитель"), Manager->IsCellInExtensionFiller(-20, 25));
+    TestFalse(TEXT("Сетка ландшафта -- не заполнитель"), Manager->IsCellInExtensionFiller(5, 5));
+
+    // Заполнитель не размывает биомный граф: сводок -- ландшафт и три страницы
+    // мест по 2 x 2 чанка.
+    int32 SummaryChunksAfter = 0;
+    Manager->ForEachChunkSummary([&SummaryChunksAfter](const FHerbalistChunkSummary&) { ++SummaryChunksAfter; });
+    TestEqual(TEXT("Сводок -- 16 чанков ландшафта и 12 чанков страниц мест"), SummaryChunksAfter, 28);
+
+    const TArray<FSavedCellState> CapturedAfterExtension = Manager->CaptureSaveCells();
+    const FSavedCellState* TouchedSaved = CapturedAfterExtension.FindByPredicate([](const FSavedCellState& Saved) { return Saved.X == 5 && Saved.Y == 5; });
+    if (TestNotNull(TEXT("Тронутая до расширения клетка по-прежнему в сейве"), TouchedSaved))
+    {
+        TestEqual(TEXT("...со своим состоянием"), TouchedSaved->State.Meta.Distortion, 0.61f, 1e-6f);
+    }
+
+    Manager->SetShrines(Save->Shrines);
+    Manager->SetTotemSite(Save->TotemSite);
+    Manager->SetSvetloyarSite(Save->SvetloyarSite);
+    TestEqual(TEXT("Отброшена только клетка страницы-заполнителя"), Manager->ApplySaveCells(Save->Cells), 1);
+    TestEqual(TEXT("Мест за сеткой нет"), UHerbalistSaveSubsystem::CountSitesOutsideGrid(*Manager), 0);
+    const FGridCell* TouchedAfterLoad = Manager->GetCellConst(5, 5);
+    if (TestNotNull(TEXT("Клетка (5, 5) после загрузки"), TouchedAfterLoad))
+    {
+        TestEqual(TEXT("Тронутая до расширения клетка без записи в сейве откатилась по пересчитанному индексу"),
+            TouchedAfterLoad->State.Meta.Distortion, UntouchedDistortion, 1e-6f);
+    }
+
+    const FGridCell* ShrineCell = Manager->GetCellConst(-22, 3);
+    if (TestNotNull(TEXT("Клетка капища загружена"), ShrineCell))
+    {
+        TestEqual(TEXT("...с сохранённым состоянием"), ShrineCell->State.Meta.Distortion, 0.66f, 1e-6f);
+    }
+    TestNotNull(TEXT("Клетка Тотема загружена"), Manager->GetCellConst(0, 30));
+    const FGridCell* SvetloyarCell = Manager->GetCellConst(-20, 25);
+    const TArray<EBiomeType> AllBiomes = FBiomeDefaults::GetAllBiomeTypes();
+    if (TestNotNull(TEXT("Клетка Светлояра загружена"), SvetloyarCell) && AllBiomes.Num() > 0)
+    {
+        // Блок (-4, 5): ширина строки блоков до расширения 28 / 5 = 5 даёт блок
+        // 21, после расширения было бы 42 / 5 = 8 -- блок 36.
+        const int32 BiomeCount = AllBiomes.Num();
+        const int32 Block = HerbalistCore::FloorDivCoord(25, 5) * (28 / 5) + HerbalistCore::FloorDivCoord(-20, 5);
+        TestEqual(TEXT("Фолбэк биома новой страницы -- по ширине сетки до расширения"),
+            SvetloyarCell->Biome, AllBiomes[(Block % BiomeCount + BiomeCount) % BiomeCount]);
+    }
+
+    // Тотем снят из текущего состояния: его страницу за краем держит только
+    // закрепление страниц мест расширения.
+    Manager->SetTotemSite(HerbalistCore::InvalidCell());
+
+    // Земля только под страницей (-1, -1), зритель там же. Страница (0, -1) без
+    // земли и без мест выгружается; страницы мест и страница (-1, 0) с соседом
+    // (-1, 5) капища (0, 5) -- закреплены. Активный чанк (-3, -2) лежит на
+    // заполнителе (-2, -1) -- стриминг его не грузит.
+    Manager->SetGroundCoverageForTests({ FBox2D(FVector2D(-12600.0, -12600.0), FVector2D(0.0, 0.0)) });
+    Manager->SetActiveChunkCentersForTests({ FIntPoint(-2, -2) });
+    Manager->CatchUpActivatedChunks();
+    TestNull(TEXT("Заполнитель (-2, -1) у активного зрителя не загружен"), Manager->GetCellConst(-20, -10));
+    TestNull(TEXT("Страница (0, -1) без земли и мест выгружена"), Manager->GetCellConst(5, -5));
+    TestNotNull(TEXT("Страница соседа капища закреплена"), Manager->GetCellConst(-5, 5));
+    TestNotNull(TEXT("Страница капища закреплена"), Manager->GetCellConst(-22, 3));
+    TestNotNull(TEXT("Страница Тотема закреплена"), Manager->GetCellConst(0, 30));
+    TestNotNull(TEXT("Страница Светлояра закреплена"), Manager->GetCellConst(-20, 25));
+    Manager->SetActiveChunkCentersForTests({});
+    Manager->ClearGroundCoverageForTests();
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSaveLayout_GridExtensionKeepsUnloadedDeltas,
+    "Herbalist.WorldLayout.Save.GridExtensionKeepsUnloadedDeltas",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSaveLayout_GridExtensionKeepsUnloadedDeltas::RunTest(const FString& Parameters)
+{
+    // Дельта клетки выгруженной страницы лежит по линейному индексу --
+    // расширение сетки обязано её пересчитать.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World))
+    {
+        return false;
+    }
+    FScopedSaveLayoutRadius ScopedRadius;
+    AGridWorldManager* Manager = SpawnSaveLayoutManager(World, 6300.0);
+    if (!TestNotNull(TEXT("Сетка 28 x 28 от (-14, -14)"), Manager))
+    {
+        return false;
+    }
+    Manager->SetEntityLandmarks({});
+    Manager->SetShrines({});
+    Manager->SetLegendaryAnchorsForTests({});
+    ClearPointsOfInterestForSaveLayoutTest(Manager);
+
+    const FGridCell* ToTouch = Manager->GetCellConst(13, 13);
+    if (!TestNotNull(TEXT("Клетка (13, 13)"), ToTouch))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    FStateDelta Delta;
+    FGridCell Touched = *ToTouch;
+    Touched.State.Meta.Distortion = 0.77f;
+    Delta.WorldChanges.Add(FIntPoint(13, 13), Touched);
+    Manager->ApplyStateDelta(Delta);
+
+    Manager->SetGroundCoverageForTests({ FBox2D(FVector2D(-12600.0, -12600.0), FVector2D(0.0, 0.0)) });
+    Manager->SetActiveChunkCentersForTests({ FIntPoint(-2, -2) });
+    Manager->CatchUpActivatedChunks();
+    TestNull(TEXT("Страница (0, 0) выгружена"), Manager->GetCellConst(13, 13));
+    TestEqual(TEXT("Дельта тронутой клетки"), Manager->GetUnloadedCellDeltaCountForTests(), 1);
+
+    TestEqual(TEXT("Страница места (-28, -28)"), Manager->EnsureGridCoversSites({ FIntPoint(-28, -28) }), 1);
+    TestEqual(TEXT("Сетка 42 x 42 от (-28, -28)"), FIntPoint(Manager->GridSizeX, Manager->GridSizeY), FIntPoint(42, 42));
+
+    Manager->SetGroundCoverageForTests({ FBox2D(FVector2D(-12600.0, -12600.0), FVector2D(12600.0, 12600.0)) });
+    Manager->SetActiveChunkCentersForTests({ FIntPoint(1, 1) });
+    Manager->CatchUpActivatedChunks();
+    const FGridCell* TouchedAfter = Manager->GetCellConst(13, 13);
+    if (TestNotNull(TEXT("Клетка (13, 13) снова загружена"), TouchedAfter))
+    {
+        TestEqual(TEXT("Дельта встала на свою клетку"), TouchedAfter->State.Meta.Distortion, 0.77f, 1e-6f);
+    }
+    const TArray<FSavedCellState> Captured = Manager->CaptureSaveCells();
+    TestTrue(TEXT("Клетка по-прежнему тронута"),
+        Captured.ContainsByPredicate([](const FSavedCellState& Saved) { return Saved.X == 13 && Saved.Y == 13; }));
+
+    Manager->SetActiveChunkCentersForTests({});
+    Manager->ClearGroundCoverageForTests();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSaveLayout_SitesInsideGridDoNotExtendIt,
+    "Herbalist.WorldLayout.Save.SitesInsideGridDoNotExtendIt",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSaveLayout_SitesInsideGridDoNotExtendIt::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World))
+    {
+        return false;
+    }
+    FScopedSaveLayoutRadius ScopedRadius;
+    AGridWorldManager* Manager = SpawnSaveLayoutManager(World, 6300.0);
+    if (!TestNotNull(TEXT("Сетка 28 x 28 от (-14, -14)"), Manager))
+    {
+        return false;
+    }
+    TestEqual(TEXT("Место в сетке и незаданное -- страниц не добавлено"),
+        Manager->EnsureGridCoversSites({ FIntPoint(0, 0), HerbalistCore::InvalidCell() }), 0);
+    TestEqual(TEXT("Сетка прежняя"), FIntPoint(Manager->GridSizeX, Manager->GridSizeY), FIntPoint(28, 28));
+    TestEqual(TEXT("Начало прежнее"), Manager->GetGridMinCell(), FIntPoint(-14, -14));
+
+    // Место за 1,8 км: прямоугольник 28 x ~200 тыс. клеток больше предела сетки
+    // (4 млн) -- расширения нет, сетка не тронута.
+    TestEqual(TEXT("Место за пределом размера сетки не восстановлено"),
+        Manager->EnsureGridCoversSites({ FIntPoint(0, 200000) }), 0);
+    TestEqual(TEXT("...и сетка прежняя"), FIntPoint(Manager->GridSizeX, Manager->GridSizeY), FIntPoint(28, 28));
+    Manager->Destroy();
+
+    // Без разметки сетка ручная и не расширяется.
+    AGridWorldManager* Plain = SpawnAndBeginPlay(World);
+    if (TestNotNull(TEXT("Менеджер без разметки"), Plain))
+    {
+        TestEqual(TEXT("Без разметки -- не расширяется"), Plain->EnsureGridCoversSites({ FIntPoint(-100, -100) }), 0);
+        TestFalse(TEXT("...и место остаётся за сеткой"), Plain->IsCellInGrid(-100, -100));
+        Plain->Destroy();
+    }
     return true;
 }
 

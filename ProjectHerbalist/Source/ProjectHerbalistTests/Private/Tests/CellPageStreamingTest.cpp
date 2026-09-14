@@ -76,6 +76,12 @@ namespace
             Manager->SetEntityLandmarks({});
             Manager->SetShrines({});
             Manager->SetLegendaryAnchorsForTests({});
+            // Точки интереса тоже закрепляют страницы (2026-09-13).
+            Manager->SetTotemSite(HerbalistCore::InvalidCell());
+            Manager->SetSvetloyarSite(HerbalistCore::InvalidCell());
+            Manager->SetGoryuchKamenSite(HerbalistCore::InvalidCell());
+            Manager->SetSoloveySite(HerbalistCore::InvalidCell());
+            Manager->SetKalinovMostSite(HerbalistCore::InvalidCell());
         }
         return Manager;
     }

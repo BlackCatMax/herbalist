@@ -705,6 +705,7 @@ TSet<FIntPoint> AGridWorldManager::ComputeChunksWithinRadius(const TArray<FIntPo
     GetGridChunkRange(MinChunk, MaxChunk);
 
     TSet<FIntPoint> Result;
+    const int32 ChunkCells = GetChunkSizeInCells();
     for (const FIntPoint& Center : Centers)
     {
         const int32 MinX = FMath::Max(Center.X - Radius, MinChunk.X);
@@ -715,6 +716,13 @@ TSet<FIntPoint> AGridWorldManager::ComputeChunksWithinRadius(const TArray<FIntPo
         {
             for (int32 X = MinX; X <= MaxX; ++X)
             {
+                // Чанк страницы-заполнителя не активируется (ревью 2026-09-13):
+                // игрок у края ландшафта со стороны расширения загрузил бы
+                // страницу без земли, симулировал её и записал в сейв.
+                if (IsCellInExtensionFiller(X * ChunkCells, Y * ChunkCells))
+                {
+                    continue;
+                }
                 Result.Add(FIntPoint(X, Y));
             }
         }
@@ -1140,6 +1148,7 @@ void AGridWorldManager::CreateCellPages()
     CellPageSize = 0;
     LoadedCellCount = 0;
     bCellHeightsCached = false;
+    PinnedSitePages.Reset();
     if (GridSizeX <= 0 || GridSizeY <= 0)
     {
         return;
@@ -1194,6 +1203,181 @@ void AGridWorldManager::CreateCellPages()
         Page.bLoaded = true;
         LoadedCellCount += Page.Cells.Num();
     }
+}
+
+int32 AGridWorldManager::EnsureGridCoversSites(const TArray<FIntPoint>& Sites)
+{
+    // Места за убранными плитками ландшафта (решение пользователя 2026-09-13:
+    // «они должны жить, даже будучи отстримленными»). Плитки убирают в
+    // редакторе между сессиями, поэтому расширение нужно при загрузке сейва:
+    // сетка растёт до целых страниц с местами, страницы мест собираются из
+    // основы (регионы или фолбэк; земли нет) и закрепляются. Без разметки сетка
+    // ручная, сейв другого размера отклонён раньше.
+    if (CellPageSize <= 0 || CellPages.Num() == 0)
+    {
+        return 0;
+    }
+
+    FIntPoint TableMin = CellPageTableMin;
+    FIntPoint TableMax = CellPageTableMin + CellPageTableSize - FIntPoint(1, 1);
+    TSet<FIntPoint> SitePages;
+    for (const FIntPoint& Site : Sites)
+    {
+        if (!HerbalistCore::IsValidCell(Site) || IsCellInGrid(Site.X, Site.Y))
+        {
+            continue;
+        }
+        const FIntPoint SitePage(HerbalistCore::FloorDivCoord(Site.X, CellPageSize), HerbalistCore::FloorDivCoord(Site.Y, CellPageSize));
+        SitePages.Add(SitePage);
+        TableMin = FIntPoint(FMath::Min(TableMin.X, SitePage.X), FMath::Min(TableMin.Y, SitePage.Y));
+        TableMax = FIntPoint(FMath::Max(TableMax.X, SitePage.X), FMath::Max(TableMax.Y, SitePage.Y));
+    }
+    if (SitePages.Num() == 0)
+    {
+        return 0;
+    }
+
+    // С разметкой сетка -- целые страницы; сетку, изменённую после разметки
+    // (обрезанные страницы), не расширяем.
+    const FIntPoint OldGridMin = GetGridMinCell();
+    const int32 OldSizeX = GridSizeX;
+    if (OldGridMin != CellPageTableMin * CellPageSize || FIntPoint(GridSizeX, GridSizeY) != CellPageTableSize * CellPageSize)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Layout] Сетка %dx%d от (%d, %d) не кратна страницам -- места за её краем не восстановлены"),
+            GridSizeX, GridSizeY, OldGridMin.X, OldGridMin.Y);
+        return 0;
+    }
+
+    // Предел сетки разметки (ревью): место за километры от ландшафта -- скорее
+    // сейв другой карты с тем же отпечатком, чем убранная плитка, и прямоугольник
+    // до него не должен съесть память. Считается в int64 до первой записи: из
+    // битого сейва координаты бывают такими, что размер в клетках не влезает в
+    // int32.
+    const int64 NewCellsX = (static_cast<int64>(TableMax.X) - TableMin.X + 1) * CellPageSize;
+    const int64 NewCellsY = (static_cast<int64>(TableMax.Y) - TableMin.Y + 1) * CellPageSize;
+    if (NewCellsX * NewCellsY > FWorldLayoutSolver::MaxGridCells)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Layout] Места за краем сетки потребовали бы %lldx%lld клеток (предел %lld) -- не восстановлены"),
+            NewCellsX, NewCellsY, FWorldLayoutSolver::MaxGridCells);
+        return 0;
+    }
+    const FIntPoint NewTableSize = TableMax - TableMin + FIntPoint(1, 1);
+    const FIntPoint NewGridMin = TableMin * CellPageSize;
+    const FIntPoint NewGridSize = NewTableSize * CellPageSize;
+    const auto RemapIndex = [OldGridMin, OldSizeX, NewGridMin, NewSizeX = NewGridSize.X](int32 OldIndex)
+    {
+        const int32 X = OldGridMin.X + OldIndex % OldSizeX;
+        const int32 Y = OldGridMin.Y + OldIndex / OldSizeX;
+        return (Y - NewGridMin.Y) * NewSizeX + (X - NewGridMin.X);
+    };
+
+    // Линейные индексы клеток зависят от угла и ширины сетки.
+    TSet<int32> RemappedDirty;
+    RemappedDirty.Reserve(DirtyCellIndices.Num());
+    for (int32 Index : DirtyCellIndices)
+    {
+        RemappedDirty.Add(RemapIndex(Index));
+    }
+    DirtyCellIndices = MoveTemp(RemappedDirty);
+
+    const auto RemapKeys = [&RemapIndex](auto& Map)
+    {
+        std::remove_reference_t<decltype(Map)> Remapped;
+        Remapped.Reserve(Map.Num());
+        for (auto& Pair : Map)
+        {
+            Remapped.Add(RemapIndex(Pair.Key), MoveTemp(Pair.Value));
+        }
+        Map = MoveTemp(Remapped);
+    };
+    RemapKeys(UnloadedCellDeltas);
+    RemapKeys(UnloadedCellRosters);
+    RemapKeys(PendingRegrowthsOnLoad);
+
+    TBitArray<> RemappedSeeded(false, NewGridSize.X * NewGridSize.Y);
+    for (TConstSetBitIterator<> It(SeededCellMask); It; ++It)
+    {
+        RemappedSeeded[RemapIndex(It.GetIndex())] = true;
+    }
+    SeededCellMask = MoveTemp(RemappedSeeded);
+
+    // Таблица страниц: прежние страницы переезжают вместе с клетками (буферы
+    // клеток не копируются), новые -- пустые и выгруженные.
+    TArray<FHerbalistCellPage> NewPages;
+    NewPages.SetNum(NewTableSize.X * NewTableSize.Y);
+    for (int32 PageY = 0; PageY < NewTableSize.Y; ++PageY)
+    {
+        for (int32 PageX = 0; PageX < NewTableSize.X; ++PageX)
+        {
+            const FIntPoint PageCoord(TableMin.X + PageX, TableMin.Y + PageY);
+            FHerbalistCellPage& NewPage = NewPages[PageY * NewTableSize.X + PageX];
+            const FIntPoint OldLocal = PageCoord - CellPageTableMin;
+            if (OldLocal.X >= 0 && OldLocal.X < CellPageTableSize.X && OldLocal.Y >= 0 && OldLocal.Y < CellPageTableSize.Y)
+            {
+                NewPage = MoveTemp(CellPages[OldLocal.Y * CellPageTableSize.X + OldLocal.X]);
+            }
+            else
+            {
+                NewPage.MinCell = PageCoord * CellPageSize;
+                NewPage.Size = FIntPoint(CellPageSize, CellPageSize);
+            }
+        }
+    }
+    CellPages = MoveTemp(NewPages);
+    CellPageTableMin = TableMin;
+    CellPageTableSize = NewTableSize;
+
+    // Отпечаток разметки границ не содержит (решение 14) -- сейв остаётся
+    // совместимым. Сводки ключуются глобальными чанками и от расширения не
+    // устаревают: ключ кэша переносится на новый прямоугольник, иначе следующий
+    // шаг графа пересобрал бы все выгруженные чанки из основы (ревью). Окно
+    // карты встанет заново.
+    const bool bSummaryCacheCurrent = ChunkSummaryChunkSize == GetChunkSizeInCells()
+        && ChunkSummaryMinCell == OldGridMin && ChunkSummaryGridSize == FIntPoint(OldSizeX, GridSizeY);
+    ResolvedLayout.MinCell = NewGridMin;
+    ResolvedLayout.GridSize = NewGridSize;
+    GridSizeX = NewGridSize.X;
+    GridSizeY = NewGridSize.Y;
+    bWorldStateWindowPlaced = false;
+    if (bSummaryCacheCurrent)
+    {
+        ChunkSummaryMinCell = NewGridMin;
+        ChunkSummaryGridSize = NewGridSize;
+    }
+
+    for (const FIntPoint& SitePage : SitePages)
+    {
+        const FIntPoint PageMinCell = SitePage * CellPageSize;
+        PinnedSitePages.Add(PageMinCell);
+        if (FHerbalistCellPage* Page = FindCellPage(PageMinCell.X, PageMinCell.Y); Page && !Page->bLoaded)
+        {
+            LoadCellPage(*Page);
+        }
+    }
+
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[Layout] Сетка расширена до %dx%d от (%d, %d): %d страниц мест за краем ландшафта закреплены"),
+        GridSizeX, GridSizeY, NewGridMin.X, NewGridMin.Y, SitePages.Num());
+    return SitePages.Num();
+}
+
+bool AGridWorldManager::IsCellInExtensionFiller(int32 X, int32 Y) const
+{
+    // Страница-заполнитель (ревью 2026-09-13): расширение растит сетку
+    // прямоугольником, и между краем ландшафта и местом встают страницы без
+    // земли и без мест. Их клетки -- не часть мира: сохранённые клетки там
+    // отбрасываются, как за убранными плитками (решение 14), а сводки не входят
+    // в биомный граф и отчёты.
+    if (CellPageSize <= 0 || !IsCellInGrid(X, Y))
+    {
+        return false;
+    }
+    if (X >= LandscapeGridMinCell.X && X < LandscapeGridMinCell.X + LandscapeGridSize.X
+        && Y >= LandscapeGridMinCell.Y && Y < LandscapeGridMinCell.Y + LandscapeGridSize.Y)
+    {
+        return false;
+    }
+    const FIntPoint PageMinCell(HerbalistCore::FloorDivCoord(X, CellPageSize) * CellPageSize, HerbalistCore::FloorDivCoord(Y, CellPageSize) * CellPageSize);
+    return !PinnedSitePages.Contains(PageMinCell);
 }
 
 FHerbalistCellPage* AGridWorldManager::FindCellPage(int32 X, int32 Y)
@@ -1401,11 +1585,19 @@ void AGridWorldManager::ForEachChunkSummary(TFunctionRef<void(const FHerbalistCh
     const bool bAllLive = Radius < 0 || ActiveChunkCenters.Num() == 0;
     const TSet<FIntPoint> LiveChunks = bAllLive ? TSet<FIntPoint>() : ComputeChunksWithinRadius(ActiveChunkCenters, Radius);
 
+    const int32 ChunkCells = GetChunkSizeInCells();
     for (int32 ChunkY = MinChunk.Y; ChunkY <= MaxChunk.Y; ++ChunkY)
     {
         for (int32 ChunkX = MinChunk.X; ChunkX <= MaxChunk.X; ++ChunkX)
         {
             const FIntPoint Chunk(ChunkX, ChunkY);
+            // Страница-заполнитель расширения сетки -- не мир: её основа размыла
+            // бы биомный граф и отчёты (ревью 2026-09-13). Чанк делит страницу,
+            // поэтому хватает его первой клетки.
+            if (IsCellInExtensionFiller(ChunkX * ChunkCells, ChunkY * ChunkCells))
+            {
+                continue;
+            }
             // Чанк выгруженной страницы и без центров активности не живой (этап
             // 8в): у него последняя сводка, а не сборка основы на каждый запрос.
             if (bAllLive && IsChunkInLoadedPage(Chunk))
@@ -1790,6 +1982,9 @@ void AGridWorldManager::InitializeCells()
 {
     const int32 TotalCells = GetGridCellCount();
     CreateCellPages();
+    FallbackBiomeBlocksX = GridSizeX / HerbalistFallbackBiomeBlockCells;
+    LandscapeGridMinCell = GetGridMinCell();
+    LandscapeGridSize = FIntPoint(GridSizeX, GridSizeY);
     if (TotalCells == 0)
     {
         UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: сетка %d x %d пуста -- клеток нет"), GridSizeX, GridSizeY);
@@ -1987,7 +2182,7 @@ FHerbalistCellBaseContext AGridWorldManager::MakeCellBaseContext() const
     }
     const UGameInstance* GameInstance = GetGameInstance();
     Context.WaterSubsystem = GameInstance ? GameInstance->GetSubsystem<UWaterTypeRegistrySubsystem>() : nullptr;
-    Context.BlocksX = GridSizeX / HerbalistFallbackBiomeBlockCells;
+    Context.BlocksX = FallbackBiomeBlocksX > 0 ? FallbackBiomeBlocksX : GridSizeX / HerbalistFallbackBiomeBlockCells;
     return Context;
 }
 
@@ -2360,6 +2555,12 @@ bool AGridWorldManager::IsCellPagePinned(const FHerbalistCellPage& Page) const
         return Cell.X >= Page.MinCell.X && Cell.X < Page.MinCell.X + Page.Size.X
             && Cell.Y >= Page.MinCell.Y && Cell.Y < Page.MinCell.Y + Page.Size.Y;
     };
+    // Страница места за убранными плитками ландшафта (2026-09-13): под ней нет
+    // земли, и без закрепления место не жило бы никогда.
+    if (PinnedSitePages.Contains(Page.MinCell))
+    {
+        return true;
+    }
     for (const FEntityLandmark& Landmark : EntityLandmarks)
     {
         if (InPage(Landmark.Cell))
@@ -2369,7 +2570,13 @@ bool AGridWorldManager::IsCellPagePinned(const FHerbalistCellPage& Page) const
     }
     for (const FShrine& Shrine : Shrines)
     {
-        if (InPage(Shrine.Cell))
+        // И страницы четырёх прямых соседей: гашение утечки Морока на стыке
+        // биомов читает их клетки (CollectBorderShrineDamping), и у капища на
+        // краю страницы сосед на выгруженной странице молча выпадал (ревью
+        // 2026-09-13).
+        if (HerbalistCore::IsValidCell(Shrine.Cell)
+            && (InPage(Shrine.Cell) || InPage(Shrine.Cell + FIntPoint(1, 0)) || InPage(Shrine.Cell - FIntPoint(1, 0))
+                || InPage(Shrine.Cell + FIntPoint(0, 1)) || InPage(Shrine.Cell - FIntPoint(0, 1))))
         {
             return true;
         }
@@ -2377,6 +2584,15 @@ bool AGridWorldManager::IsCellPagePinned(const FHerbalistCellPage& Page) const
     for (const TPair<FName, FIntPoint>& Anchor : LegendaryAnchors)
     {
         if (InPage(Anchor.Value))
+        {
+            return true;
+        }
+    }
+    // Точки интереса (ревью 2026-09-13): под ними может не оказаться земли --
+    // плитку убрали внутри ландшафта, и страница иначе не грузилась бы никогда.
+    for (const FIntPoint& Site : { GetTotemSite(), GetSvetloyarSite(), GetGoryuchKamenSite(), GetSoloveySite(), GetKalinovMostSite() })
+    {
+        if (HerbalistCore::IsValidCell(Site) && InPage(Site))
         {
             return true;
         }

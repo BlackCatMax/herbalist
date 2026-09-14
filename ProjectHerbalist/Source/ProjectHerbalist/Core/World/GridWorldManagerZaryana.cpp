@@ -243,6 +243,11 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
         for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             if (Cell.bIsWater) continue;
+            // Только материализованные чанки (ревью 2026-09-13): загружены и
+            // закреплённые страницы мест, под которыми земли может не быть
+            // вовсе (за убранными плитками) -- фрагмент встал бы над пустотой, где
+            // его не подобрать, а слот ActiveFragment был бы занят.
+            if (!IsCellMaterialized(Cell)) continue;
             const FIntPoint CellCoord(Cell.X, Cell.Y);
             const bool bLowDistortion = Cell.State.Meta.Distortion < DistortionThreshold;
 

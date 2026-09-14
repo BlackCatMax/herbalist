@@ -48,6 +48,13 @@ public:
     // за сеткой -- после уборки плиток ландшафта (ревью этапа 8а).
     static int32 CountSitesOutsideGrid(const AGridWorldManager& Manager);
 
+    // Места сейва, которым сетка обязана дать страницу (2026-09-13): капища
+    // (капища за краем сетки -- с четырьмя соседними клетками), ориентиры
+    // сущностей, точки интереса. Курганов нет -- им страница не нужна.
+    // Незаданные -- как есть, AGridWorldManager::EnsureGridCoversSites их
+    // пропускает.
+    static TArray<FIntPoint> CollectSaveSiteCells(const UHerbalistSaveGame& Save, const AGridWorldManager& Manager);
+
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Save")
     bool SaveGame(const FString& SlotName = TEXT(""));
 

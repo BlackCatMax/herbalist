@@ -140,7 +140,9 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
 
     for (const FSavedCellState& Saved : InCells)
     {
-        if (!IsCellInGrid(Saved.X, Saved.Y))
+        // Страница-заполнитель расширения сетки до мест -- та же убранная земля
+        // (ревью 2026-09-13): её клетки отбрасываются, как за краем сетки.
+        if (!IsCellInGrid(Saved.X, Saved.Y) || IsCellInExtensionFiller(Saved.X, Saved.Y))
         {
             // Одна строка на загрузку, а не на клетку (этап 8): после того как
             // убрали плитку ландшафта, таких клеток тысячи.

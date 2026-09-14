@@ -31,8 +31,9 @@ struct FHerbalistCellBaseContext
 {
     TArray<EBiomeType> AllBiomes;
     const UWaterTypeRegistrySubsystem* WaterSubsystem = nullptr;
-    // Ширина строки блоков фолбэка 5 x 5 -- от размера сетки, фиксированного
-    // на сессию.
+    // Ширина строки блоков фолбэка 5 x 5 -- от размера сетки при инициализации
+    // (AGridWorldManager::FallbackBiomeBlocksX): расширение сетки до страниц
+    // мест основу не меняет.
     int32 BlocksX = 0;
 };
 

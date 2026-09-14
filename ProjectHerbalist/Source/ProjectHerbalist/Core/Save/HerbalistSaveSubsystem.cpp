@@ -56,6 +56,8 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // от начала сетки World Partition.
     // v5 (2026-09-13, разметка мира, этап 8): разметка, в которой записаны
     // координаты клеток; загрузка другой разметки отказывает.
+    // v6 (2026-09-13): вода только из регионов воды -- формат прежний, мир
+    // другой (довод у предупреждения в LoadGame).
     Save->SaveVersion = CurrentSaveVersion;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
@@ -225,6 +227,36 @@ int32 UHerbalistSaveSubsystem::CountSitesOutsideGrid(const AGridWorldManager& Ma
     return Count;
 }
 
+TArray<FIntPoint> UHerbalistSaveSubsystem::CollectSaveSiteCells(const UHerbalistSaveGame& Save, const AGridWorldManager& Manager)
+{
+    TArray<FIntPoint> Sites;
+    for (const FShrine& Shrine : Save.Shrines)
+    {
+        Sites.Add(Shrine.Cell);
+        // Соседи капища за убранными плитками: гашение утечки Морока читает
+        // четыре прямые соседние клетки (CollectBorderShrineDamping, ревью
+        // 2026-09-13). У капища внутри сетки сосед за её краем -- настоящий край
+        // мира: без этой проверки каждая загрузка наращивала бы сетку страницей
+        // без земли.
+        if (HerbalistCore::IsValidCell(Shrine.Cell) && !Manager.IsCellInGrid(Shrine.Cell.X, Shrine.Cell.Y))
+        {
+            Sites.Append({ Shrine.Cell + FIntPoint(1, 0), Shrine.Cell - FIntPoint(1, 0), Shrine.Cell + FIntPoint(0, 1), Shrine.Cell - FIntPoint(0, 1) });
+        }
+    }
+    for (const FEntityLandmark& Landmark : Save.EntityLandmarks)
+    {
+        Sites.Add(Landmark.Cell);
+    }
+    Sites.Add(Save.TotemSite);
+    Sites.Add(Save.SvetloyarSite);
+    Sites.Add(Save.GoryuchKamenSite);
+    Sites.Add(Save.SoloveySite);
+    Sites.Add(Save.KalinovMostSite);
+    // Курганов нет намеренно (ревью): разграбление по координате клетку не
+    // читает, страница кургану не нужна.
+    return Sites;
+}
+
 bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
 {
     const FString Slot = SlotName.IsEmpty() ? DefaultSlotName : SlotName;
@@ -300,6 +332,12 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     // временной точке оберег как ещё активный на полный WardDurationSeconds
     // заново — см. подробный довод у ResetSessionOnlyWardTimers.
     WorldManager->ResetSessionOnlyWardTimers();
+
+    // Места за убранными плитками ландшафта живут (решение пользователя
+    // 2026-09-13): сетка расширяется до их страниц до записи мест и клеток
+    // сейва -- иначе ApplySaveCells отбросил бы и клетки самих мест.
+    WorldManager->EnsureGridCoversSites(CollectSaveSiteCells(*Save, *WorldManager));
+
     WorldManager->SetEntityLandmarks(Save->EntityLandmarks);
     WorldManager->SetShrines(Save->Shrines);
     WorldManager->Molva = Save->Molva;
@@ -332,10 +370,9 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetSoloveyCalmed(Save->bSoloveyCalmed);
     WorldManager->SetKalinovMostSite(Save->KalinovMostSite);
 
-    // Места за сеткой (ревью этапа 8а): после уборки плиток ландшафта капище,
-    // ориентир или точка интереса могли остаться на исчезнувшей земле.
-    // Падать нечему -- потребители проверяют клетку, -- но место молча
-    // пропадает, и строка в логе -- единственный след.
+    // Места за сеткой (ревью этапа 8а). С разметкой сетка выше уже расширена до
+    // их страниц (2026-09-13); строка остаётся для карты без разметки, где сетка
+    // ручная и место за её краем пропадает.
     const int32 SitesOutsideGrid = CountSitesOutsideGrid(*WorldManager);
     if (SitesOutsideGrid > 0)
     {
