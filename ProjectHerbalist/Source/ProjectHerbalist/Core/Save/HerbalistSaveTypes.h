@@ -118,6 +118,23 @@ struct PROJECTHERBALIST_API FSavedHomeStorage
     TArray<FInventoryItem> Items;
 };
 
+// Контейнеры, расставленные на карте (сундуки, станции), 2026-09-14 --
+// только содержимое, по имени актора: актор приходит с уровнем, пересоздавать
+// его незачем, а имя актора уровня (и внешнего актора World Partition)
+// стабильно между запусками. До v7 такие контейнеры попадали в HomeStorages, и
+// загрузка уничтожала их, пересоздавая у стола голыми хранилищами.
+USTRUCT()
+struct PROJECTHERBALIST_API FSavedPlacedContainer
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FName ActorName;
+
+    UPROPERTY()
+    TArray<FInventoryItem> Items;
+};
+
 // Чанк поля вытоптанности (2026-09-12, UTrampleSubsystem). Тропа живёт
 // неделю игрового времени -- без сейва любая загрузка стирала бы её.
 // Значения уже с применённым распадом, uint16 (довод -- у
@@ -224,6 +241,10 @@ public:
     // FSavedHomeStorage выше.
     UPROPERTY()
     TArray<FSavedHomeStorage> HomeStorages;
+
+    // Сундуки и станции на карте (v7) — см. FSavedPlacedContainer выше.
+    UPROPERTY()
+    TArray<FSavedPlacedContainer> PlacedContainers;
 
     // Молва общины (DESIGN_Community_And_Homestead.md §1, 2026-08-31) — тот
     // же принцип, что Shrines/EntityLandmarks выше: растёт/падает только

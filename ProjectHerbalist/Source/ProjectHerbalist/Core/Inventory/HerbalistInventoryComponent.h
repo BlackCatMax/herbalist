@@ -114,6 +114,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     int32 GetAvailableCapacityFor(const FInventoryItem& Item) const;
 
+    // То же, если строка RemovedIndex будет снята целиком раньше, чем предмет
+    // кладётся (2026-09-14): торговля с общиной отдаёт весь стек, и при полной
+    // сумке освобождённая строка идёт в счёт. INDEX_NONE -- ничего не снимается.
+    int32 GetAvailableCapacityForAfterRemovingSlot(const FInventoryItem& Item, int32 RemovedIndex) const;
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool RemoveItem(int32 Index, int32 Amount = 1);
 

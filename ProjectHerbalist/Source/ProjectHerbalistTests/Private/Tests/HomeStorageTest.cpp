@@ -229,4 +229,95 @@ bool FHerbalistHomeStorage_BuildRequiresRespectAndMaterial::RunTest(const FStrin
     return true;
 }
 
+// Построенное хранилище открывается (2026-09-14): спавн голого
+// AStorageContainer давал хранилище без TransferWidgetClass -- "Missing components".
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistHomeStorage_BuiltStorageIsOpenableAndMarkedHome,
+    "Herbalist.HomeStorage.BuiltStorageIsOpenableAndMarkedHome",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistHomeStorage_BuiltStorageIsOpenableAndMarkedHome::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    AStorageContainer* Built = Manager->SpawnHomeStorageContainer(FIntPoint(5, 5), EStorageContainerType::Cellar);
+    if (TestNotNull(TEXT("Хранилище построено"), Built))
+    {
+        TestTrue(TEXT("Помечено как домашнее"), Built->bIsHomeStorage);
+        TestNotNull(TEXT("Класс окна переноса задан -- хранилище открывается"), Built->GetTransferWidgetClass());
+        Built->Destroy();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+// Сундук карты, выставленный погребом, не считается дублем домашнего погреба.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistHomeStorage_PlacedChestDoesNotBlockBuild,
+    "Herbalist.HomeStorage.PlacedChestDoesNotBlockBuild",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistHomeStorage_PlacedChestDoesNotBlockBuild::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    // Та же изоляция, что у BuildRequiresRespectAndMaterial выше.
+    for (TActorIterator<AStorageContainer> It(World); It; ++It)
+    {
+        if (AStorageContainer* Stale = *It) { Stale->Destroy(); }
+    }
+    for (TActorIterator<AAlchemyTableActor> It(World); It; ++It)
+    {
+        if (AAlchemyTableActor* Stale = *It) { Stale->Destroy(); }
+    }
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    AAlchemyTableActor* Table = World->SpawnActor<AAlchemyTableActor>(AAlchemyTableActor::StaticClass(), Manager->GetCellWorldPosition(4, 4), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Alchemy table spawned"), Table)) { Manager->Destroy(); return false; }
+    Table->DispatchBeginPlay();
+
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    FEntityLandmark* Landmark = Manager->FindLandmarkAt(Table->GetGridCoords());
+    if (!TestNotNull(TEXT("PlayerController spawned"), PC) || !TestNotNull(TEXT("Домовой registered at the table's cell"), Landmark))
+    {
+        Table->Destroy(); Manager->Destroy(); if (PC) PC->Destroy(); return false;
+    }
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    Landmark->Respect = (Settings ? Settings->HomeStorageRespectThreshold : 0.6f) + 0.05f;
+    const int32 MaterialCount = Settings ? Settings->HomeStorageMaterialCount : 3;
+    FInventoryItem Bark;
+    Bark.IngredientID = FName(TEXT("broad_10"));
+    Bark.Count = MaterialCount;
+    PC->InventoryComponent->AddItem(Bark, MaterialCount);
+
+    AStorageContainer* PlacedChest = World->SpawnActor<AStorageContainer>(AStorageContainer::StaticClass(), Manager->GetCellWorldPosition(7, 7), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Сундук карты"), PlacedChest)) { Table->Destroy(); Manager->Destroy(); PC->Destroy(); return false; }
+    PlacedChest->InventoryComponent->ContainerType = EStorageContainerType::Cellar;
+
+    PC->BuildHomeStorage(TEXT("cellar"));
+
+    int32 BuiltCellars = 0;
+    for (TActorIterator<AStorageContainer> It(World); It; ++It)
+    {
+        if (It->bIsHomeStorage && It->InventoryComponent && It->InventoryComponent->ContainerType == EStorageContainerType::Cellar) ++BuiltCellars;
+    }
+    TestEqual(TEXT("Погреб построен рядом с сундуком-погребом карты"), BuiltCellars, 1);
+
+    for (TActorIterator<AStorageContainer> It(World); It; ++It)
+    {
+        It->Destroy();
+    }
+    Table->Destroy();
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

@@ -58,6 +58,8 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // координаты клеток; загрузка другой разметки отказывает.
     // v6 (2026-09-13): вода только из регионов воды -- формат прежний, мир
     // другой (довод у предупреждения в LoadGame).
+    // v7 (2026-09-14): HomeStorages -- только построенные хранилища; сундуки и
+    // станции карты -- PlacedContainers, по имени актора.
     Save->SaveVersion = CurrentSaveVersion;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
@@ -82,6 +84,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->ChosenBuyanPath = WorldManager->GetChosenBuyanPath();
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
     Save->HomeStorages = WorldManager->CaptureHomeStorages();
+    Save->PlacedContainers = WorldManager->CapturePlacedContainers();
     Save->TieredWards = WorldManager->CaptureTieredWards();
     Save->bSilverWardActive = WorldManager->IsSilverWardActive();
     Save->KurganSites = WorldManager->GetKurganSites();
@@ -311,6 +314,13 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
         UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: slot '%s' has SaveVersion %d, written before water-only-from-regions (6): former blob water cells load as land, legendary anchors re-seed elsewhere"),
             *Slot, Save->SaveVersion);
     }
+    // v7 (2026-09-14): контейнеры карты сохраняются отдельно. В старом сейве их
+    // содержимого нет, а записи о них в HomeStorages RestoreHomeStorages пропускает.
+    else if (Save->SaveVersion < 7)
+    {
+        UE_LOG(LogHerbalistSave, Warning, TEXT("LoadGame: slot '%s' has SaveVersion %d, written before placed containers (7): chests and stations on the map keep their current contents"),
+            *Slot, Save->SaveVersion);
+    }
 
     WorldManager->RngBaseSeed = Save->RngBaseSeed;
     WorldManager->SetCurrentTickID(Save->CurrentTickID);
@@ -355,6 +365,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));
     WorldManager->ApplySaveCells(Save->Cells);
     WorldManager->RestoreHomeStorages(Save->HomeStorages);
+    WorldManager->RestorePlacedContainers(Save->PlacedContainers);
     WorldManager->RestoreTieredWards(Save->TieredWards);
     WorldManager->SetSilverWardActive(Save->bSilverWardActive);
     WorldManager->SetKurganSites(Save->KurganSites);

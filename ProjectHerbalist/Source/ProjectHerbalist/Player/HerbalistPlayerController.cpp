@@ -974,8 +974,11 @@ void AHerbalistPlayerController::TradeWithCommunity(FString OfferedIngredientID,
     // переполнении молча роняет остаток, а предложенный товар списывался бы
     // уже безвозвратно к этому моменту -- игрок терял и товар, и оплату
     // разом. Раз то, что предлагает община, физически некуда положить --
-    // сделка честно отказывает целиком, ничего не списывается.
-    if (InventoryComponent->GetAvailableCapacityFor(Received) < Received.Count)
+    // сделка честно отказывает целиком, ничего не списывается. Весь
+    // предложенный стек снимается раньше, чем кладётся полученное, -- его
+    // строка идёт в счёт (2026-09-14): без этого полная сумка отказывала в
+    // сделке, которая помещается.
+    if (InventoryComponent->GetAvailableCapacityForAfterRemovingSlot(Received, FoundIndex) < Received.Count)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("TradeWithCommunity: not enough room for %d x '%s', trade refused"),
             Received.Count, *WantedIngredientID);
@@ -1433,13 +1436,13 @@ void AHerbalistPlayerController::BuildHomeStorage(FString ContainerTypeName)
     // Не давать построить второй экземпляр того же типа хранения дома —
     // простое v1-ограничение: без него повторный BuildHomeStorage cellar
     // тихо давал бы два независимых Погреба (каждый со своим MaxSlots),
-    // что читается как дублирующий баг, не как расширение дома. Проверка
-    // по всем AStorageContainer в мире (не по отдельному списку "домашних")
-    // — сознательно просто для v1.
+    // что читается как дублирующий баг, не как расширение дома. Среди
+    // построенных (bIsHomeStorage, 2026-09-14): сундук карты, выставленный
+    // погребом, постройку погреба не запрещает.
     for (TActorIterator<AStorageContainer> It(GetWorld()); It; ++It)
     {
         AStorageContainer* Existing = *It;
-        if (Existing && Existing->InventoryComponent && Existing->InventoryComponent->ContainerType == ContainerType)
+        if (Existing && Existing->bIsHomeStorage && Existing->InventoryComponent && Existing->InventoryComponent->ContainerType == ContainerType)
         {
             UE_LOG(LogHerbalistPlayer, Warning, TEXT("BuildHomeStorage: a %s already exists, refusing a duplicate"), *ContainerTypeName);
             return;

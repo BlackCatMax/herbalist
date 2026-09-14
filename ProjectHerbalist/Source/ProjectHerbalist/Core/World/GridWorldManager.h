@@ -1197,6 +1197,12 @@ public:
     // отчиталась причиной, здесь второго лога не требуется.
     AStorageContainer* SpawnHomeStorageContainer(const FIntPoint& AnchorCell, EStorageContainerType ContainerType);
 
+    // Класс построенного хранилища (2026-09-14): Blueprint с окном переноса --
+    // TransferWidgetClass у AStorageContainer задаётся только в Blueprint, голый
+    // класс не открывался.
+    UPROPERTY(EditAnywhere, Category = "Homestead")
+    TSoftClassPtr<AStorageContainer> HomeStorageContainerClass = TSoftClassPtr<AStorageContainer>(FSoftObjectPath(TEXT("/Game/Blueprints/BP_StorageContainer.BP_StorageContainer_C")));
+
     // ---- Общинный кластер (DESIGN_Community_And_Homestead.md §1,
     // 17_Hero_And_Community.md §17.3, реализация 2026-08-31): Молва,
     // Подношение общине, Торговля с общиной — один накопитель, три
@@ -1417,9 +1423,21 @@ public:
     // TActorIterator по миру, в точности как уже делает BuildHomeStorage
     // при проверке "такой тип уже есть". Позиция не сохраняется отдельно —
     // контейнер всегда пересоздаётся у ТЕКУЩЕЙ клетки-якоря дома
-    // (AAlchemyTableActor), той же логикой, что и исходный спавн.
+    // (AAlchemyTableActor), той же логикой, что и исходный спавн. Только
+    // построенные (bIsHomeStorage, 2026-09-14).
     TArray<FSavedHomeStorage> CaptureHomeStorages() const;
     void RestoreHomeStorages(const TArray<FSavedHomeStorage>& InStorages);
+
+    // Сундуки и станции карты (2026-09-14) — содержимое по имени актора, сам
+    // актор приходит с уровнем. См. FSavedPlacedContainer.
+    TArray<FSavedPlacedContainer> CapturePlacedContainers() const;
+    void RestorePlacedContainers(const TArray<FSavedPlacedContainer>& InContainers);
+
+    // Выгрузка и загрузка контейнера карты World Partition
+    // (AStorageContainer::EndPlay/BeginPlay): пока актора нет, содержимое
+    // держит менеджер. Claim отдаёт и забывает.
+    void StashPlacedContainerContents(FName ActorName, const TArray<FInventoryItem>& Items);
+    bool ClaimPlacedContainerContents(FName ActorName, TArray<FInventoryItem>& OutItems);
 
     const TArray<FEntityLandmark>& GetEntityLandmarks() const { return EntityLandmarks; }
     void SetEntityLandmarks(const TArray<FEntityLandmark>& InLandmarks) { EntityLandmarks = InLandmarks; }
@@ -2175,6 +2193,12 @@ protected:
     // 2026-09-06) -- см. SeedKurganSites/LootKurgan выше. Персистентна
     // (Save/Load): разграбленный курган не должен "возрождаться" при загрузке.
     TMap<FIntPoint, FName> KurganSites;
+
+    // Содержимое контейнеров карты, чей актор сейчас выгружен World Partition
+    // (2026-09-14): выгрузка уничтожает актор, и сундук, от которого отошли,
+    // возвращался пустым, а сейв вдали от него терял его содержимое. Ключ --
+    // имя актора, см. FSavedPlacedContainer.
+    TMap<FName, TArray<FInventoryItem>> PendingPlacedContainerContents;
 
     // ---- Точки интереса, §4 (см. POITypes.h) -- по одной клетке на вид,
     // HerbalistCore::InvalidCell() значит "не размещена" (та же сигнальная величина,

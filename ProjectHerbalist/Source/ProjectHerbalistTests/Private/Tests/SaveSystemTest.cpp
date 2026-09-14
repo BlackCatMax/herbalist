@@ -21,6 +21,7 @@
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Storage/AlchemyTableActor.h"
+#include "Core/Storage/DryingRackActor.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -458,6 +459,188 @@ bool FHerbalistSave_HomeStorageContentsSurviveCaptureAndRestore::RunTest(const F
     TestEqual(TEXT("Повторное восстановление в той же сессии не плодит второй Погреб"), CountCellarsAndVerify(TEXT("Повторное восстановление")), 1);
 
     Table->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+static int32 CountHomeStoragesForSaveTest(UWorld* World, EStorageContainerType Type)
+{
+    int32 Count = 0;
+    for (TActorIterator<AStorageContainer> It(World); It; ++It)
+    {
+        AStorageContainer* Container = *It;
+        if (Container && Container->bIsHomeStorage && Container->InventoryComponent && Container->InventoryComponent->ContainerType == Type)
+        {
+            ++Count;
+        }
+    }
+    return Count;
+}
+
+static void DestroyStorageAndTablesForSaveTest(UWorld* World)
+{
+    for (TActorIterator<AStorageContainer> It(World); It; ++It)
+    {
+        if (AStorageContainer* Stale = *It) { Stale->Destroy(); }
+    }
+    for (TActorIterator<AAlchemyTableActor> It(World); It; ++It)
+    {
+        if (AAlchemyTableActor* Stale = *It) { Stale->Destroy(); }
+    }
+}
+
+// Сундуки и станции карты (2026-09-14): раньше попадали в HomeStorages, и
+// загрузка уничтожала их, пересоздавая у стола голыми хранилищами. Теперь
+// актор остаётся тем же, из сейва -- только содержимое по имени актора.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_PlacedContainersKeepActorAndContents,
+    "Herbalist.Save.PlacedContainersKeepActorAndContents",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_PlacedContainersKeepActorAndContents::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    DestroyStorageAndTablesForSaveTest(World);
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    AAlchemyTableActor* Table = World->SpawnActor<AAlchemyTableActor>(AAlchemyTableActor::StaticClass(), Manager->GetCellWorldPosition(4, 4), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Alchemy table spawned"), Table)) { Manager->Destroy(); return false; }
+    Table->DispatchBeginPlay();
+
+    ADryingRackActor* Rack = World->SpawnActor<ADryingRackActor>(ADryingRackActor::StaticClass(), Manager->GetCellWorldPosition(6, 6), FRotator::ZeroRotator);
+    AStorageContainer* Cellar = Manager->SpawnHomeStorageContainer(Table->GetGridCoords(), EStorageContainerType::Cellar);
+    if (!TestNotNull(TEXT("Сушилка на карте"), Rack) || !TestNotNull(TEXT("Погреб построен"), Cellar)
+        || !TestNotNull(TEXT("У сушилки инвентарь"), Rack->InventoryComponent) || !TestNotNull(TEXT("У погреба инвентарь"), Cellar->InventoryComponent))
+    {
+        DestroyStorageAndTablesForSaveTest(World); Manager->Destroy(); return false;
+    }
+    TestFalse(TEXT("Сушилка карты -- не домашнее хранилище"), Rack->bIsHomeStorage);
+    TestTrue(TEXT("Построенный погреб -- домашнее хранилище"), Cellar->bIsHomeStorage);
+
+    FInventoryItem Herb;
+    Herb.IngredientID = FName(TEXT("Ромашка"));
+    Herb.Count = 3;
+    Rack->InventoryComponent->AddItem(Herb, 3);
+    Cellar->InventoryComponent->AddItem(Herb, 3);
+
+    const TArray<FSavedHomeStorage> Home = Manager->CaptureHomeStorages();
+    TestEqual(TEXT("В домашних -- только погреб"), Home.Num(), 1);
+
+    const TArray<FSavedPlacedContainer> Placed = Manager->CapturePlacedContainers();
+    const FSavedPlacedContainer* RackEntry = Placed.FindByPredicate([Rack](const FSavedPlacedContainer& Entry) { return Entry.ActorName == Rack->GetFName(); });
+    if (TestNotNull(TEXT("Сушилка сохранена по имени актора"), RackEntry))
+    {
+        TestEqual(TEXT("Сохранено содержимое сушилки"), RackEntry->Items.Num(), 1);
+    }
+    TestNull(TEXT("Погреба среди контейнеров карты нет"),
+        Placed.FindByPredicate([Cellar](const FSavedPlacedContainer& Entry) { return Entry.ActorName == Cellar->GetFName(); }));
+
+    // Содержимое сушилки поменялось после сейва -- загрузка возвращает сохранённое.
+    Rack->InventoryComponent->Clear();
+    Manager->RestoreHomeStorages(Home);
+    Manager->RestorePlacedContainers(Placed);
+
+    TestFalse(TEXT("Сушилка -- тот же актор, загрузка её не уничтожила"), Rack->IsActorBeingDestroyed());
+    TestEqual(TEXT("Содержимое сушилки восстановлено"), Rack->InventoryComponent->GetNumSlots(), 1);
+    TestEqual(TEXT("Погреб один"), CountHomeStoragesForSaveTest(World, EStorageContainerType::Cellar), 1);
+
+    DestroyStorageAndTablesForSaveTest(World);
+    Manager->Destroy();
+    return true;
+}
+
+// Контейнер карты, выгруженный World Partition (2026-09-14): выгрузка
+// уничтожает актор, и без менеджера сундук возвращался пустым, а сейв вдали
+// от него терял его содержимое.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_UnloadedPlacedContainerKeepsContents,
+    "Herbalist.Save.UnloadedPlacedContainerKeepsContents",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_UnloadedPlacedContainerKeepsContents::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    DestroyStorageAndTablesForSaveTest(World);
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FInventoryItem Herb;
+    Herb.IngredientID = FName(TEXT("Ромашка"));
+    Herb.Count = 2;
+
+    // 1) Сейв знает контейнер, которого сейчас нет: содержимое ждёт у менеджера
+    // и уходит в следующий сейв.
+    FSavedPlacedContainer Far;
+    Far.ActorName = FName(TEXT("SaveTestUnloadedChest"));
+    Far.Items = { Herb };
+    Manager->RestorePlacedContainers({ Far });
+    const TArray<FSavedPlacedContainer> Recaptured = Manager->CapturePlacedContainers();
+    const FSavedPlacedContainer* FarEntry = Recaptured.FindByPredicate([](const FSavedPlacedContainer& Entry) { return Entry.ActorName == FName(TEXT("SaveTestUnloadedChest")); });
+    if (TestNotNull(TEXT("Невыгруженный контейнер остаётся в следующем сейве"), FarEntry))
+    {
+        TestEqual(TEXT("С тем же содержимым"), FarEntry->Items.Num(), 1);
+    }
+
+    // 2) Выгрузка отдаёт содержимое менеджеру. Сам EndPlay(RemovedFromWorld) в
+    // редакторском мире не вызвать: акторы не инициализированы, RouteEndPlay
+    // до него не доходит -- проверяется то, что EndPlay зовёт.
+    AStorageContainer* Chest = World->SpawnActor<AStorageContainer>(AStorageContainer::StaticClass(), Manager->GetCellWorldPosition(3, 3), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Сундук"), Chest)) { Manager->Destroy(); return false; }
+    Chest->InventoryComponent->AddItem(Herb, 2);
+    Chest->StashContentsForUnload();
+    TArray<FInventoryItem> Claimed;
+    TestTrue(TEXT("Выгруженный сундук оставил содержимое менеджеру"), Manager->ClaimPlacedContainerContents(Chest->GetFName(), Claimed));
+    TestEqual(TEXT("То самое содержимое"), Claimed.Num(), 1);
+    TestFalse(TEXT("Забранное второй раз не отдаётся"), Manager->ClaimPlacedContainerContents(Chest->GetFName(), Claimed));
+
+    // 3) Загрузка: BeginPlay забирает своё.
+    AStorageContainer* Reloaded = World->SpawnActor<AStorageContainer>(AStorageContainer::StaticClass(), Manager->GetCellWorldPosition(3, 4), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Сундук после загрузки"), Reloaded)) { Chest->Destroy(); Manager->Destroy(); return false; }
+    Manager->StashPlacedContainerContents(Reloaded->GetFName(), { Herb });
+    Reloaded->DispatchBeginPlay();
+    TestEqual(TEXT("Загруженный сундук забрал содержимое"), Reloaded->InventoryComponent->GetNumSlots(), 1);
+
+    Chest->Destroy();
+    Reloaded->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+// Записи сейва старее v7 о контейнерах карты (не cellar/cabinet/jar) дома не
+// пересоздаются; сейв без хранилищ убирает построенное после него.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSave_HomeStorageRestoreRebuildsOnlyHomeTypes,
+    "Herbalist.Save.HomeStorageRestoreRebuildsOnlyHomeTypes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSave_HomeStorageRestoreRebuildsOnlyHomeTypes::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    DestroyStorageAndTablesForSaveTest(World);
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    AAlchemyTableActor* Table = World->SpawnActor<AAlchemyTableActor>(AAlchemyTableActor::StaticClass(), Manager->GetCellWorldPosition(4, 4), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Alchemy table spawned"), Table)) { Manager->Destroy(); return false; }
+    Table->DispatchBeginPlay();
+
+    FSavedHomeStorage LegacyBasket;
+    LegacyBasket.ContainerType = EStorageContainerType::Basket;
+    FSavedHomeStorage Jar;
+    Jar.ContainerType = EStorageContainerType::Jar;
+    Manager->RestoreHomeStorages({ LegacyBasket, Jar });
+
+    TestEqual(TEXT("Корзина из старого сейва дома не пересоздана"), CountHomeStoragesForSaveTest(World, EStorageContainerType::Basket), 0);
+    TestEqual(TEXT("Кувшин пересоздан"), CountHomeStoragesForSaveTest(World, EStorageContainerType::Jar), 1);
+
+    Manager->RestoreHomeStorages({});
+    TestEqual(TEXT("Сейв без хранилищ убирает построенное"), CountHomeStoragesForSaveTest(World, EStorageContainerType::Jar), 0);
+
+    DestroyStorageAndTablesForSaveTest(World);
     Manager->Destroy();
     return true;
 }

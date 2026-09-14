@@ -3,7 +3,22 @@
 #include "HerbalistLogChannels.h"
 #include "Player/HerbalistPlayerController.h"
 #include "UI/InventoryTransferWidget.h"
+#include "Core/World/GridWorldManager.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+
+namespace
+{
+    AGridWorldManager* FindGridWorldManagerForStorage(UWorld* World)
+    {
+        if (!World) return nullptr;
+        for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+        {
+            return *It;
+        }
+        return nullptr;
+    }
+}
 
 AStorageContainer::AStorageContainer()
 {
@@ -15,13 +30,51 @@ AStorageContainer::AStorageContainer()
     InventoryComponent->ContainerType = EStorageContainerType::Basket;
 }
 
+UClass* AStorageContainer::GetTransferWidgetClass() const
+{
+    return TransferWidgetClass.Get();
+}
+
 void AStorageContainer::BeginPlay()
 {
     Super::BeginPlay();
     if (InventoryComponent)
     {
         InventoryComponent->MaxSlots = MaxSlots;
+
+        // Контейнер карты снова загружен World Partition (или загружен после
+        // LoadGame) -- забирает содержимое, которое держал менеджер (2026-09-14).
+        if (!bIsHomeStorage)
+        {
+            TArray<FInventoryItem> PendingItems;
+            AGridWorldManager* Manager = FindGridWorldManagerForStorage(GetWorld());
+            if (Manager && Manager->ClaimPlacedContainerContents(GetFName(), PendingItems))
+            {
+                InventoryComponent->RestoreItems(PendingItems);
+            }
+        }
     }
+}
+
+void AStorageContainer::StashContentsForUnload()
+{
+    // Построенные хранилища живут в постоянном уровне и не выгружаются.
+    if (bIsHomeStorage || !InventoryComponent) return;
+    if (AGridWorldManager* Manager = FindGridWorldManagerForStorage(GetWorld()))
+    {
+        Manager->StashPlacedContainerContents(GetFName(), InventoryComponent->GetItems());
+    }
+}
+
+void AStorageContainer::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    // Выгрузка World Partition уничтожает актор; содержимое переживает её у
+    // менеджера (2026-09-14).
+    if (EndPlayReason == EEndPlayReason::RemovedFromWorld)
+    {
+        StashContentsForUnload();
+    }
+    Super::EndPlay(EndPlayReason);
 }
 
 void AStorageContainer::OnInteract_Implementation(AHerbalistPlayerController* PC)

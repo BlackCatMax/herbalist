@@ -173,6 +173,49 @@ bool FHerbalistFullBagLosses_SplitDropIsWholeOrNothing::RunTest(const FString& P
 }
 
 // ---------------------------------------------------------------------------
+// Торговля с общиной отдаёт стек целиком раньше, чем кладёт полученное:
+// освобождённая строка идёт в счёт места, иначе полная сумка отказывала в
+// сделке, которая помещается.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFullBagLosses_CapacityCountsTheRowBeingRemoved,
+    "Herbalist.FullBagLosses.CapacityCountsTheRowBeingRemoved",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFullBagLosses_CapacityCountsTheRowBeingRemoved::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AActor* Owner = World->SpawnActor<AActor>();
+    UHerbalistInventoryComponent* Bag = NewObject<UHerbalistInventoryComponent>(Owner);
+    Bag->RegisterComponent();
+    Bag->MaxSlots = 2;
+
+    FInventoryItem Offered = MakeStackTestItemForFullBagLosses(TEXT("FullBagLossesOffered"));
+    Offered.Count = 3;
+    Bag->AddItem(Offered, 3);
+    FInventoryItem Other = MakeStackTestItemForFullBagLosses(TEXT("FullBagLossesOther"));
+    Bag->AddItem(Other, 1);
+
+    FInventoryItem Wanted = MakeStackTestItemForFullBagLosses(TEXT("FullBagLossesWanted"));
+    Wanted.Count = 2;
+
+    TestEqual(TEXT("Полная сумка -- места под новый вид нет"), Bag->GetAvailableCapacityFor(Wanted), 0);
+    TestEqual(TEXT("Строка отдаваемого стека освобождается -- целая стопка"), Bag->GetAvailableCapacityForAfterRemovingSlot(Wanted, 0), 9);
+    TestEqual(TEXT("INDEX_NONE -- как без снятия"), Bag->GetAvailableCapacityForAfterRemovingSlot(Wanted, INDEX_NONE), 0);
+
+    // Тот же вид, что отдаётся: место в его стопке пропадает вместе с ней, а не
+    // складывается с освобождённой строкой.
+    FInventoryItem SameAsOffered = Offered;
+    SameAsOffered.Count = 1;
+    TestEqual(TEXT("Свой же стек до снятия -- 6 свободных в стопке"), Bag->GetAvailableCapacityFor(SameAsOffered), 6);
+    TestEqual(TEXT("Свой же стек после снятия -- только новая строка"), Bag->GetAvailableCapacityForAfterRemovingSlot(SameAsOffered, 0), 9);
+
+    Owner->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Отменённый сплит возвращается в свою строку. Стопка в процессе станции не
 // складывается ни с чем, даже с собственным сплитом, и прежний возврат через
 // AddItem при занятых строках пропадал.

@@ -293,17 +293,30 @@ int32 AGridWorldManager::ApplySaveCells(const TArray<FSavedCellState>& InCells)
     return DroppedCount;
 }
 
+namespace
+{
+    // Дома строятся только эти типы (BuildHomeStorage: cellar/cabinet/jar).
+    bool IsBuildableHomeStorageType(EStorageContainerType Type)
+    {
+        return Type == EStorageContainerType::Cellar
+            || Type == EStorageContainerType::Cabinet
+            || Type == EStorageContainerType::Jar;
+    }
+}
+
 TArray<FSavedHomeStorage> AGridWorldManager::CaptureHomeStorages() const
 {
     // TActorIterator, не отдельный список -- у AStorageContainer нет ни
     // одного постоянного держателя ссылки (ни здесь, ни на контроллере, см.
     // BuildHomeStorage/SpawnHomeStorageContainer) -- тот же путь, что уже
     // использует сам BuildHomeStorage при проверке "такой тип уже есть".
+    // Только построенные (bIsHomeStorage, 2026-09-14): сундуки и станции
+    // карты -- CapturePlacedContainers.
     TArray<FSavedHomeStorage> Result;
     for (TActorIterator<AStorageContainer> It(GetWorld()); It; ++It)
     {
         AStorageContainer* Container = *It;
-        if (!Container || !Container->InventoryComponent) continue;
+        if (!Container || !Container->bIsHomeStorage || !Container->InventoryComponent) continue;
 
         FSavedHomeStorage Saved;
         Saved.ContainerType = Container->InventoryComponent->ContainerType;
@@ -313,9 +326,113 @@ TArray<FSavedHomeStorage> AGridWorldManager::CaptureHomeStorages() const
     return Result;
 }
 
+TArray<FSavedPlacedContainer> AGridWorldManager::CapturePlacedContainers() const
+{
+    TArray<FSavedPlacedContainer> Result;
+    TSet<FName> CapturedNames;
+    for (TActorIterator<AStorageContainer> It(GetWorld()); It; ++It)
+    {
+        AStorageContainer* Container = *It;
+        if (!Container || Container->bIsHomeStorage || !Container->InventoryComponent) continue;
+
+        const FName ActorName = Container->GetFName();
+        if (CapturedNames.Contains(ActorName))
+        {
+            UE_LOG(LogHerbalistSave, Warning, TEXT("CapturePlacedContainers: два контейнера с именем '%s' -- при загрузке содержимое получит один"),
+                *ActorName.ToString());
+        }
+        CapturedNames.Add(ActorName);
+
+        FSavedPlacedContainer Saved;
+        Saved.ActorName = ActorName;
+        Saved.Items = Container->InventoryComponent->GetItems();
+        Result.Add(MoveTemp(Saved));
+    }
+
+    // Выгруженные сейчас World Partition -- их содержимое держит менеджер.
+    for (const TPair<FName, TArray<FInventoryItem>>& Pending : PendingPlacedContainerContents)
+    {
+        if (CapturedNames.Contains(Pending.Key)) continue;
+        FSavedPlacedContainer Saved;
+        Saved.ActorName = Pending.Key;
+        Saved.Items = Pending.Value;
+        Result.Add(MoveTemp(Saved));
+    }
+    return Result;
+}
+
+void AGridWorldManager::StashPlacedContainerContents(FName ActorName, const TArray<FInventoryItem>& Items)
+{
+    PendingPlacedContainerContents.Add(ActorName, Items);
+}
+
+bool AGridWorldManager::ClaimPlacedContainerContents(FName ActorName, TArray<FInventoryItem>& OutItems)
+{
+    return PendingPlacedContainerContents.RemoveAndCopyValue(ActorName, OutItems);
+}
+
+void AGridWorldManager::RestorePlacedContainers(const TArray<FSavedPlacedContainer>& InContainers)
+{
+    // Пустой список -- сейв старее v7: содержимое, накопленное в сессии, в том
+    // числе у выгруженных, остаётся.
+    if (InContainers.Num() == 0) return;
+
+    // Сейв заменяет содержимое, накопленное в сессии, и у выгруженных тоже.
+    PendingPlacedContainerContents.Reset();
+
+    TMap<FName, AStorageContainer*> PlacedByName;
+    for (TActorIterator<AStorageContainer> It(GetWorld()); It; ++It)
+    {
+        AStorageContainer* Container = *It;
+        if (Container && !Container->bIsHomeStorage && Container->InventoryComponent)
+        {
+            PlacedByName.Add(Container->GetFName(), Container);
+        }
+    }
+
+    for (const FSavedPlacedContainer& Saved : InContainers)
+    {
+        AStorageContainer* const* Found = PlacedByName.Find(Saved.ActorName);
+        if (!Found)
+        {
+            // Не загружен сейчас (World Partition) -- заберёт в BeginPlay.
+            PendingPlacedContainerContents.Add(Saved.ActorName, Saved.Items);
+            UE_LOG(LogHerbalistSave, Log, TEXT("RestorePlacedContainers: '%s' не загружен -- содержимое применится, когда он появится"),
+                *Saved.ActorName.ToString());
+            continue;
+        }
+        (*Found)->InventoryComponent->RestoreItems(Saved.Items);
+    }
+}
+
 void AGridWorldManager::RestoreHomeStorages(const TArray<FSavedHomeStorage>& InStorages)
 {
-    if (InStorages.Num() == 0) return;
+    // Уничтожаем уже существующие домашние хранилища ПЕРЕД восстановлением —
+    // тот же принцип, что уже ApplySaveCells делает с ResourceActors выше:
+    // загрузка происходит в уже живой сессии (не путешествует по уровням,
+    // см. UHerbalistSaveSubsystem::LoadGame), WorldManager мог успеть
+    // построить хранилище САМ (BuildHomeStorage) ещё до вызова LoadGame —
+    // без этой очистки восстановление плодило бы дубликаты того же типа.
+    // Только построенные (2026-09-14): раньше уничтожались все контейнеры
+    // мира, со станциями и сундуками карты. И до раннего выхода: сейв без
+    // хранилищ тоже убирает построенное после него.
+    auto DestroyBuiltStorages = [this]()
+    {
+        for (TActorIterator<AStorageContainer> It(GetWorld()); It; ++It)
+        {
+            AStorageContainer* Existing = *It;
+            if (Existing && Existing->bIsHomeStorage)
+            {
+                Existing->Destroy();
+            }
+        }
+    };
+
+    if (InStorages.Num() == 0)
+    {
+        DestroyBuiltStorages();
+        return;
+    }
 
     // Клетка-якорь дома -- ровно та же логика поиска, что уже
     // AHerbalistPlayerController::BuildHomeStorage использует при постройке:
@@ -329,27 +446,24 @@ void AGridWorldManager::RestoreHomeStorages(const TArray<FSavedHomeStorage>& InS
     }
     if (!Table)
     {
-        UE_LOG(LogHerbalistSave, Warning, TEXT("RestoreHomeStorages: no alchemy table (home anchor) in world, %d storages skipped"), InStorages.Num());
+        // Стол не загружен (World Partition) -- построенные не трогаем: без
+        // якоря пересоздать их негде (ревью 2026-09-14).
+        UE_LOG(LogHerbalistSave, Warning, TEXT("RestoreHomeStorages: no alchemy table (home anchor) in world, %d storages skipped, built ones kept"), InStorages.Num());
         return;
     }
     const FIntPoint AnchorCell = Table->GetGridCoords();
-
-    // Уничтожаем уже существующие домашние хранилища ПЕРЕД восстановлением —
-    // тот же принцип, что уже ApplySaveCells делает с ResourceActors выше:
-    // загрузка происходит в уже живой сессии (не путешествует по уровням,
-    // см. UHerbalistSaveSubsystem::LoadGame), WorldManager мог успеть
-    // построить хранилище САМ (BuildHomeStorage) ещё до вызова LoadGame —
-    // без этой очистки восстановление плодило бы дубликаты того же типа.
-    for (TActorIterator<AStorageContainer> It(GetWorld()); It; ++It)
-    {
-        if (AStorageContainer* Existing = *It)
-        {
-            Existing->Destroy();
-        }
-    }
+    DestroyBuiltStorages();
 
     for (const FSavedHomeStorage& Saved : InStorages)
     {
+        // Сейв старее v7 писал сюда и контейнеры карты (корзина по умолчанию,
+        // станции) -- дома такие не строятся, пересоздавать их у стола нельзя.
+        if (!IsBuildableHomeStorageType(Saved.ContainerType))
+        {
+            UE_LOG(LogHerbalistSave, Warning, TEXT("RestoreHomeStorages: запись типа %d -- не домашнее хранилище (сейв старее v7), пропущена"),
+                (int32)Saved.ContainerType);
+            continue;
+        }
         AStorageContainer* Container = SpawnHomeStorageContainer(AnchorCell, Saved.ContainerType);
         if (Container && Container->InventoryComponent)
         {

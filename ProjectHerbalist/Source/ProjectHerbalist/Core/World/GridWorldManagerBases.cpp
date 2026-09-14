@@ -111,15 +111,35 @@ AStorageContainer* AGridWorldManager::SpawnHomeStorageContainer(const FIntPoint&
     // же голый SpawnActor, без трассировки).
     FVector SpawnPos = GetCellWorldPositionFlat(AnchorCell.X, AnchorCell.Y);
     SpawnPos.X += CellSize * 0.5f;
+    // Погреб, шкаф и кувшин -- не в одной точке (ревью 2026-09-14): у Blueprint
+    // есть меш, и совпавшие меши делали выбор хранилища трассой IA_Interact
+    // случайным. Разнос вдоль Y на четверть клетки -- все три в пределах клетки.
+    const float TypeOffset = ContainerType == EStorageContainerType::Cabinet ? 1.0f
+        : (ContainerType == EStorageContainerType::Jar ? -1.0f : 0.0f);
+    SpawnPos.Y += CellSize * 0.25f * TypeOffset;
     SpawnPos.Z = GetCellHeight(AnchorCell.X, AnchorCell.Y) + 5.0f;
 
+    // Класс с окном переноса (2026-09-14): TransferWidgetClass задаётся только
+    // в Blueprint, и голый AStorageContainer не открывался -- "Missing components".
+    UClass* ContainerClass = HomeStorageContainerClass.LoadSynchronous();
+    if (!ContainerClass)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[HomeStorage] HomeStorageContainerClass не загрузился -- голый AStorageContainer, окно не откроется"));
+        ContainerClass = AStorageContainer::StaticClass();
+    }
+
+    // Отложенный спавн: флаг должен стоять до BeginPlay, иначе хранилище
+    // забирало бы содержимое выгруженного контейнера карты с тем же именем.
     UWorld* World = GetWorld();
-    AStorageContainer* NewContainer = World ? World->SpawnActor<AStorageContainer>(AStorageContainer::StaticClass(), SpawnPos, FRotator::ZeroRotator) : nullptr;
+    const FTransform SpawnTransform(FRotator::ZeroRotator, SpawnPos);
+    AStorageContainer* NewContainer = World ? World->SpawnActorDeferred<AStorageContainer>(ContainerClass, SpawnTransform) : nullptr;
     if (!NewContainer)
     {
         UE_LOG(LogHerbalistWorld, Warning, TEXT("[HomeStorage] SpawnActor failed near (%d,%d)"), AnchorCell.X, AnchorCell.Y);
         return nullptr;
     }
+    NewContainer->bIsHomeStorage = true;
+    NewContainer->FinishSpawning(SpawnTransform);
 
     // AStorageContainer's constructor defaults ContainerType to Basket
     // (see StorageContainer.cpp) -- overridden here to what was actually built.

@@ -441,14 +441,22 @@ void UHerbalistInventoryComponent::ApplyDecayToItem(FInventoryItem& Item, float 
 
 int32 UHerbalistInventoryComponent::GetAvailableCapacityFor(const FInventoryItem& Item) const
 {
+    return GetAvailableCapacityForAfterRemovingSlot(Item, INDEX_NONE);
+}
+
+int32 UHerbalistInventoryComponent::GetAvailableCapacityForAfterRemovingSlot(const FInventoryItem& Item, int32 RemovedIndex) const
+{
+    const bool bRemovesSlot = Items.IsValidIndex(RemovedIndex);
     int32 Capacity = 0;
 
     // Место в уже существующих стекуемых слотах -- тот же критерий, что
     // FindStackableSlot использует внутри AddItem, но здесь суммируем ВСЕ
     // подходящие слоты разом, не первый найденный (AddItem сам переходит к
     // следующему, если текущий заполнился -- см. цикл ниже).
-    for (const FInventoryItem& Slot : Items)
+    for (int32 i = 0; i < Items.Num(); ++i)
     {
+        if (bRemovesSlot && i == RemovedIndex) continue;
+        const FInventoryItem& Slot = Items[i];
         if (Slot.IngredientID == Item.IngredientID && Slot.Count < MAX_STACK_SIZE && AreItemsStackable(Slot, Item))
         {
             Capacity += MAX_STACK_SIZE - Slot.Count;
@@ -456,7 +464,8 @@ int32 UHerbalistInventoryComponent::GetAvailableCapacityFor(const FInventoryItem
     }
 
     // Плюс свободные слоты (до MaxSlots), каждый -- целая новая стопка.
-    const int32 FreeSlots = FMath::Max(0, MaxSlots - Items.Num());
+    const int32 UsedSlots = Items.Num() - (bRemovesSlot ? 1 : 0);
+    const int32 FreeSlots = FMath::Max(0, MaxSlots - UsedSlots);
     Capacity += FreeSlots * MAX_STACK_SIZE;
 
     return Capacity;
