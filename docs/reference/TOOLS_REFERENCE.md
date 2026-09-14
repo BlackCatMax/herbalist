@@ -26,6 +26,13 @@
 | `extract_ingredients.py` | Извлекает параметры ингредиентов из карточек `04_Compendium/Растительность` |
 | `extract_water.py [путь.json]` | Выводит `water_types.json` (типы воды по биомам) из карточек `04_Compendium/Биомы`: Potency/Stability из фронтматтера, Purity/Distortion/Corruption из раздела «Вода». Без пути пишет `CSV_tabs/water_types.json` |
 
+## Проверка документации (`tools/docs_audit/`)
+
+| Скрипт | Что делает |
+|---|---|
+| `audit_docs.py [--only C06,C09] [--strict] [--list]` | Только читает: фронтматтер и поля карточек, ссылки, глоссарий, нумерация GDD, упоминания кода/тестов/команд, легаси, индексы `docs/README.md` и этого справочника, эталоны гайдов проверки, сверка карточек с `CSV_tabs`. Отчёт — `build/docs_audit/report.md`, код выхода 1 при ошибках. Как читать — `docs/maintenance/DOCS_AUDIT_CHECKLIST.md` |
+| `test_audit_docs.py` | Тесты проверок на искусственном мини-репозитории: `py -m unittest tools/docs_audit/test_audit_docs.py` |
+
 ## Правило добавления
 
 Новый коммандлет/скрипт — новая строка в подходящую таблицу выше, с датой.
