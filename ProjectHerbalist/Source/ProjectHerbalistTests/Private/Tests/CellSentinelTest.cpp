@@ -13,6 +13,8 @@
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Storage/AlchemyTableActor.h"
+#include "Core/Zaryana/MemoryFragmentActor.h"
+#include "EngineUtils.h"
 #include "Core/World/GridWorldManager.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Misc/AutomationTest.h"
@@ -161,6 +163,11 @@ bool FHerbalistCellSentinel_BrewFragmentNeedsARealCell::RunTest(const FString& P
     Manager->TryTriggerCoherentBrewFragment(FIntPoint(5, 5), 1.0f, 0.0f, 1.0f);
     TestEqual(TEXT("Та же варка в клетке (5,5) -- фрагмент появился"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("PERVAYA_VARKA")));
 
+    // Фрагмент не оставляем в редакторском мире -- его нашли бы тесты Заряны.
+    for (TActorIterator<AMemoryFragmentActor> It(World); It; ++It)
+    {
+        It->Destroy();
+    }
     Manager->Destroy();
     return true;
 }

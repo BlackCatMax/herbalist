@@ -429,7 +429,16 @@ void AGridWorldManager::CollectMemoryFragment(FName DefinitionID, bool bIsFalse,
         }
     }
 
-    ActiveFragment.Reset();
+    // Слот освобождается, только если собран именно фрагмент, лежащий в мире
+    // (2026-09-14). Прямые выдачи -- NIT_MATERI при добыче Клубочка, финальный
+    // фрагмент пути у Буяна -- тоже приходят сюда, и безусловный сброс
+    // отвязывал менеджер от другого, ещё не подобранного фрагмента: гейт
+    // "не больше одного за раз" в TrySpawnStateBasedFragment/
+    // TryTriggerCoherentBrewFragment пропускал второй.
+    if (ActiveFragment.IsValid() && ActiveFragment->GetDefinitionID() == DefinitionID && ActiveFragment->IsFalse() == bIsFalse)
+    {
+        ActiveFragment.Reset();
+    }
 }
 
 void AGridWorldManager::CheckBuyanCondition()

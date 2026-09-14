@@ -6,7 +6,9 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Zaryana/MemoryFragmentDefinitions.h"
+#include "Core/Zaryana/MemoryFragmentActor.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "EngineUtils.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -969,6 +971,61 @@ bool FHerbalistZaryana_NitMateriDeliveredOnYarnBallAcquisition::RunTest(const FS
     TestTrue(TEXT("NIT_MATERI delivered directly on acquisition"),
         Manager->GetCollectedFragmentIDs().Contains(FName(TEXT("NIT_MATERI"))));
 
+    Manager->Destroy();
+    return true;
+}
+
+// Прямая выдача фрагмента (NIT_MATERI при добыче Клубочка) идёт через тот же
+// CollectMemoryFragment, что и подбор фрагмента в мире. Безусловный сброс
+// ActiveFragment отвязывал менеджер от ещё не подобранного фрагмента, и гейт
+// "не больше одного за раз" пропускал второй.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistZaryana_DirectDeliveryKeepsWorldFragmentActive,
+    "Herbalist.Zaryana.DirectDeliveryKeepsWorldFragmentActive",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistZaryana_DirectDeliveryKeepsWorldFragmentActive::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FName WorldFragmentID(TEXT("PERVAYA_VARKA"));
+    auto DestroyWorldFragments = [World, WorldFragmentID]()
+    {
+        for (TActorIterator<AMemoryFragmentActor> It(World); It; ++It)
+        {
+            if (It->GetDefinitionID() == WorldFragmentID) It->Destroy();
+        }
+    };
+
+    // Фрагменты прошлых тестов в мире сбили бы поиск IsFalse ниже.
+    DestroyWorldFragments();
+
+    // Порог связности тот же, что у CellSentinelTest: 1.0 / 0.0 / 1.0.
+    Manager->TryTriggerCoherentBrewFragment(FIntPoint(5, 5), 1.0f, 0.0f, 1.0f);
+    if (!TestEqual(TEXT("Sanity: фрагмент первой варки лежит в мире"), Manager->GetActiveFragmentDefinitionID(), WorldFragmentID))
+    {
+        DestroyWorldFragments();
+        Manager->Destroy();
+        return false;
+    }
+    bool bWorldFragmentIsFalse = false;
+    for (TActorIterator<AMemoryFragmentActor> It(World); It; ++It)
+    {
+        if (It->GetDefinitionID() == WorldFragmentID) { bWorldFragmentIsFalse = It->IsFalse(); break; }
+    }
+
+    Manager->CollectMemoryFragment(FName(TEXT("NIT_MATERI")), /*bIsFalse=*/false, nullptr);
+    TestTrue(TEXT("NIT_MATERI выдан"), Manager->GetCollectedFragmentIDs().Contains(FName(TEXT("NIT_MATERI"))));
+    TestEqual(TEXT("Прямая выдача -- фрагмент в мире по-прежнему активен"), Manager->GetActiveFragmentDefinitionID(), WorldFragmentID);
+
+    // Подбор самого фрагмента слот освобождает.
+    Manager->CollectMemoryFragment(WorldFragmentID, bWorldFragmentIsFalse, nullptr);
+    TestEqual(TEXT("Подобран фрагмент из мира -- слот свободен"), Manager->GetActiveFragmentDefinitionID(), FName(NAME_None));
+
+    DestroyWorldFragments();
     Manager->Destroy();
     return true;
 }

@@ -46,7 +46,7 @@ Active fragment in world: <ID>|none
 |---|---|
 | `GiveZaryanaGifts` — отладочный ярлык мимо честной добычи | `GiveZaryanaGifts: mirror and yarn ball granted` |
 | `UseMirror` | текст наблюдения Заряны; без зеркальца — `UseMirror: player does not have the mirror` |
-| `UseYarnBall N` (N — индекс базы, базы — `FoundBase`, раздел 6) | `UseYarnBall: travelled to base N (… units, +…s game time)` — двигает игровые часы; удобно дождаться ночи, отстоя, отрастания |
+| `UseYarnBall N` (N — индекс базы, базы — `FoundBase`, раздел 6) | `UseYarnBall: travelled to base N (… units, +…s game time)` — двигает игровые часы: ночь и фазы луны наступают сразу, короткие обереги и эффекты артефактов истекают, клетки чанков, проснувшихся в точке прибытия, догоняют весь скачок; отстой, сушка и отрастание растений идут от времени мира и клубочком не ускоряются (раздел 3: `slomo`) |
 
 ## Артефакты Легендарных
 
