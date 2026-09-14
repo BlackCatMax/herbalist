@@ -190,6 +190,11 @@ class GlossaryAndGddTest(AuditFixture):
         self.assertAnyMessage("термин не внесён", messages)
         self.assertAnyMessage("статус 'draft'", messages)
 
+    def test_index_prefix_of_another_term_does_not_count(self):
+        self.write(f"{VAULT}/01_Glossary/Pur.md", "---\ntags: [glossary]\nstatus: ✅\n---\n# Pur\n")
+        self.assertEqual([f.path.split("/")[-1] for f in self.findings("C07")], ["Pur.md"],
+                         "[[Purity]] в индексе не вносит термин Pur")
+
     def test_gdd_gap_duplicate_section_and_foreign_number(self):
         self.write(f"{VAULT}/02_GDD/03_Narrative.md",
                    "---\nstatus: draft\n---\n# 3. Сюжет\n## 3.1 Начало\n## 3.1 Снова\n## 4.2 Чужой\n")
@@ -215,6 +220,17 @@ class CodeRefTest(AuditFixture):
         ]))
         self.assertEqual(self.messages("C10"), ["документа DESIGN_Gone.md нет в репозитории"])
 
+    def test_removed_or_proposed_names_are_legitimate(self):
+        self.write("docs/design/DESIGN_X.md",
+                   "Суммы по биому (раньше `FGridBiomeSample`).\n"
+                   "`FHerbalistHarvest::Harvest` в коде не существует.\n"
+                   "Простое поле, а не `FInfluenceSource`.\n"
+                   "Новый `UStaleType` здесь.\n"
+                   "`UStaleRow` удаляет ряд.\n"
+                   "`UNewThing` вместо `UOldThing`.\n")
+        self.assertEqual(sorted(self.messages("C09")),
+                         ["`UNewThing` нет в коде", "`UStaleRow` нет в коде", "`UStaleType` нет в коде"])
+
 
 class LegacyAndIndexTest(AuditFixture):
     def test_backups_report_superseded_foreign_drive_and_roadmap(self):
@@ -235,12 +251,18 @@ class LegacyAndIndexTest(AuditFixture):
     def test_unlisted_doc_commandlet_script_and_exec(self):
         self.write("docs/design/DESIGN_New.md", "# Новое\n")
         self.write("ProjectHerbalist/Source/ProjectHerbalistTests/Private/Commandlets/MapSetupCommandlet.h", "\n")
+        self.write("ProjectHerbalist/Source/ProjectHerbalistTests/Private/Commandlets/IngredientAppendCommandlet.h", "\n")
+        self.write("ProjectHerbalist/Source/ProjectHerbalistTests/Private/Commandlets/ArtifactIngredientAppendCommandlet.h", "\n")
+        self.write("docs/reference/TOOLS_REFERENCE.md",
+                   "| `-run=BiomeDefaultsSync` | ... |\n| `-run=ArtifactIngredientAppendCommandlet` | ... |\n")
         self.write("tools/data_extraction/extract_new.py", "\n")
         self.write("ProjectHerbalist/Source/ProjectHerbalist/Player/Controller.h",
                    "UFUNCTION(Exec)\nvoid HarvestHere();\nstatic FAutoConsoleCommandWithWorld Cmd(\n    TEXT(\"Herbalist.Graph.Print\"),\n")
         messages = self.messages("C12")
         self.assertAnyMessage("документ не внесён в docs/README.md", messages)
         self.assertAnyMessage("коммандлет MapSetup не описан", messages)
+        self.assertAnyMessage("коммандлет IngredientAppend не описан", messages)
+        self.assertFalse(any("ArtifactIngredientAppend" in m for m in messages), "описан строкой с суффиксом Commandlet")
         self.assertAnyMessage("скрипт не описан", messages)
         self.assertAnyMessage("Exec-команда HarvestHere не описана", messages)
         self.assertAnyMessage("консольная команда Herbalist.Graph.Print не описана", messages)

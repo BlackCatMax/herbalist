@@ -70,7 +70,7 @@ based_on: ProjectHerbalist source, 2026-09-06
 качество, бонус воды) на каждый крафт. То, что вызывающий код кладёт в
 `Cmd.Apply.Intent.Coherence`, `ProcessApplyCommand` безусловно
 перезаписывает своим значением — реального потребителя этого поля со
-стороны вызывающего кода нет (`Herbalist.PipelineV2.ApplyIgnoresCallerCoherence`
+стороны вызывающего кода нет (`ProjectHerbalist.PipelineV2.ApplyIgnoresCallerCoherence`
 проверяет это явно). `UAlchemyTransferWidget` вызывает `ComputeIntentCoherence`
 напрямую для превью до фактической варки.
 

@@ -4,10 +4,10 @@
 // HarvestTimeWindow/bRequiresMoonPhase+RequiredMoonPhase/bRequiresDryWeather,
 // см. FIngredientTableRow, IngredientTableRow.h) на уже существующих рядах
 // DT_IngredientClass — не добавляет и не удаляет ряды (в отличие от
-// IngredientAppendCommandlet), только точечно мержит эти 5 ключей поверх
-// живого JSON таблицы (тот же приём GetTableAsJSON/CreateTableFromJSONString,
-// что и там), не трогая остальные поля (BaseState/Icon/ResourceMesh и т.д.),
-// даже если те были правлены в редакторе после исходного импорта.
+// IngredientAppendCommandlet), только точечно правит эти 5 полей через
+// FindRow, не трогая остальные поля и ряды. Полный JSON-проход
+// (GetTableAsJSON/CreateTableFromJSONString) убран 2026-09-04: он молча терял
+// ряды с пробелом в имени (см. .cpp).
 //
 // Источник данных — herbalist_docs/CSV_tabs/ingredient_harvest_windows.json,
 // вручную составлен по отчёту агента, прочитавшего все 76 карточек компендиума

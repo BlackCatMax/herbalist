@@ -224,9 +224,9 @@ status: final
 
 Перед применением [[Morok]] к агрегированному состоянию ингредиентов добавляется **контекст биома**:
 
-- [[MorokField]] узла увеличивает эффективную силу [[Morok]].
-- [[ZaryanaField]] усиливает стабилизацию [[Zaryana]].
-- [[Memory.AxisDrift]] добавляет смещение к осям [[Direction]].
+- [[Morok Field|MorokField]] узла увеличивает эффективную силу [[Morok]].
+- [[Zaryana Field|ZaryanaField]] усиливает стабилизацию [[Zaryana]].
+- `Memory.AxisDrift` добавляет смещение к осям [[Direction]].
 
-Контекст вычисляется в `UBiomeGraphSubsystem::ResolveContext()` (в v1 используется напрямую [[MorokField]]/[[ZaryanaField]]).
+Контекст подмешивается в `PipelineV2.cpp` (`ComputeApplyResult`, шаг Biome Context Injection) из полей узла [[Morok Field|MorokField]]/[[Zaryana Field|ZaryanaField]]; отдельной функции разрешения контекста в коде нет.
 

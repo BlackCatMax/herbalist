@@ -2,10 +2,9 @@
 //
 // Проставляет bIronAverse/bDelicate/GardenNiche (DESIGN_Community_And_
 // Homestead.md §2.3/§2.4, см. FIngredientTableRow) на уже существующих
-// рядах DT_IngredientClass — тот же приём GetTableAsJSON/
-// CreateTableFromJSONString, что уже применён IngredientHarvestWindowPatch
-// Commandlet (не добавляет/не удаляет ряды, мержит только присланные ключи
-// поверх живого JSON, остальные поля не трогает).
+// рядах DT_IngredientClass — точечно через FindRow, тем же приёмом, что
+// IngredientHarvestWindowPatchCommandlet (не добавляет и не удаляет ряды,
+// правит только присланные поля; полный JSON-проход убран 2026-09-04, см. .cpp).
 //
 // Источник данных — herbalist_docs/CSV_tabs/ingredient_gathering_and_garden_
 // flags.json. bIronAverse/bDelicate — три карточки (Плакун-трава/Чистотел/

@@ -117,6 +117,18 @@ ENGINE_NAMES = frozenset({
     "WorldPartition.h", "LandscapeProxy.h", "TimerManager.h",
 })
 
+# Задуманное, но сознательно не построенное: документы называют его именно
+# так («не реализован и не будет»). Новое имя -- сюда с причиной.
+PROPOSED_NAMES = frozenset({
+    "FInfluenceSource",  # DESIGN_World_State.md Часть V; Молва сделана простым полем (17_Hero_And_Community.md, 2026-08-31)
+})
+
+# Строка говорит об удалённом или прежнем -- упоминание типа законно. Только
+# для типов: файлы и тесты проверяются всегда. «`Новый` вместо `Старого`» глушит
+# лишь то, что после «вместо».
+HISTORY_LINE_RE = re.compile(r"удален|удалён|не существует|раньше (?:—|`)|бывш|до 20\d\d-\d\d-\d\d", re.I)
+REPLACED_RE = re.compile(r"вместо `([^`\n]+)`")
+
 STALE_REPORT_DAYS = 30
 
 
@@ -443,6 +455,11 @@ def check_wikilinks(ctx):
                       f"нет изображений: {len(names)} (например: {sample})")
 
 
+def indexed(stem, index_text_lower):
+    """Ссылка именно на эту страницу: [[Morok Field]] не значит [[Morok]]."""
+    return re.search(r"\[\[%s(?:\]\]|\||#)" % re.escape(stem.lower()), index_text_lower) is not None
+
+
 def check_glossary(ctx):
     base = ctx.vault / "01_Glossary"
     index = base / "_Index.md"
@@ -455,7 +472,7 @@ def check_glossary(ctx):
         if path.name == "_Index.md":
             continue
         rel = ctx.rel(path)
-        if index.exists() and f"[[{path.stem.lower()}" not in index_text:
+        if index.exists() and not indexed(path.stem, index_text):
             yield Finding("C07", "warn", rel, 0, "термин не внесён в 01_Glossary/_Index.md")
         status = ctx.frontmatters.get(path, (None, {}, None))[1].get("status")
         if status is not None and str(status) not in GLOSSARY_STATUSES:
@@ -479,7 +496,7 @@ def check_gdd(ctx):
             continue
         number = int(match.group(1))
         numbers[number].append(path)
-        if index.exists() and f"[[{path.stem.lower()}" not in index_text:
+        if index.exists() and not indexed(path.stem, index_text):
             yield Finding("C08", "warn", rel, 0, "глава не внесена в 02_GDD/_Index.md")
         status = ctx.frontmatters.get(path, (None, {}, None))[1].get("status")
         if status != "final":
@@ -528,8 +545,13 @@ def check_code_refs(ctx):
         for match in INLINE_CODE_RE.finditer(text):
             code = match.group(1)
             line = line_of(text, match.start())
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line_end = text.find("\n", match.end())
+            line_text = text[line_start:line_end if line_end != -1 else len(text)]
+            historical = bool(HISTORY_LINE_RE.search(line_text)) or code in REPLACED_RE.findall(line_text)
             for name in sorted(set(type_re.findall(code))):
-                if name not in ctx.source_words and name not in ENGINE_NAMES:
+                if (not historical and name not in ctx.source_words and name not in ENGINE_NAMES
+                        and name not in PROPOSED_NAMES):
                     yield Finding("C09", "warn", rel, line, f"`{name}` нет в коде")
             for name in sorted(set(file_re.findall(code))):
                 if name not in ctx.project_file_names and name not in ENGINE_NAMES:
@@ -597,7 +619,8 @@ def check_engineering_index(ctx):
             if not stem.endswith(("Commandlet", "Builder")):
                 continue
             name = stem[:-len("Commandlet")] if stem.endswith("Commandlet") else stem
-            if name not in tools_text:
+            # По границе слова: IngredientAppend не описан строкой ArtifactIngredientAppend.
+            if not re.search(r"(?<![A-Za-z])%s(?:Commandlet)?(?![A-Za-z])" % re.escape(name), tools_text):
                 yield Finding("C12", "warn", ctx.rel(header), 0, f"коммандлет {name} не описан в {TOOLS_REFERENCE.as_posix()}")
     scripts = sorted((ctx.repo / "tools").rglob("*.py")) if (ctx.repo / "tools").exists() else []
     scripts += sorted(ctx.vault.glob("*.py")) if ctx.vault.exists() else []

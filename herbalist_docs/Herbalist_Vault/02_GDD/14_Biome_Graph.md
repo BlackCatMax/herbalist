@@ -13,7 +13,7 @@ status: final
 - определяет допустимую степень искажения [[Morok]]
 - ограничивает или усиливает стабилизацию [[Zaryana]]
 
-Формально биом описывается структурой `FBiomeGraphNode` (см. [[03_Technical/Future/BiomeGraph_Technical|техническую спецификацию]]).
+Формально биом описывается структурой `FBiomeGraphNode` (см. [[03_Technical/Current/BiomeGraph_Technical|техническую спецификацию]]).
 
 ## 14.2 Мир как граф состояний
 
@@ -110,4 +110,4 @@ Footprint обновляет память узла и влияет на буду
 
 ---
 
-> **Техническая документация:** [[03_Technical/Future/BiomeGraph_Technical|Biome Graph — Техническая спецификация]]
+> **Техническая документация:** [[03_Technical/Current/BiomeGraph_Technical|Biome Graph — Техническая спецификация]]

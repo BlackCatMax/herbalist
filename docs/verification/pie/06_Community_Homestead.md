@@ -13,6 +13,11 @@
 | `OfferToCommunity "id1,id2"` | `[Community] Offered N item(s), ΔMolva=…, Molva=…`; нет в инвентаре — `OfferToCommunity: no matching items in inventory` |
 | `TradeWithCommunity <отдаю> <хочу>` | `[Community] Trade A(xN) -> B(xM), rate=…, Molva=…`; мало Молвы — `[Community] Trade A -> B refused: rate … too low for even 1 unit`; `TradeWithCommunity: '<id>' not found in inventory`; `TradeWithCommunity: not enough room for …` |
 
+**Торговля стеком** (был баг, 2026-08-31; единственная сквозная проверка —
+автотест курса без реестра невозможен): собрать один ингредиент трижды, чтобы
+лёг одним стеком (`ShowInventory`: количество ≥ 3), отдать его
+`TradeWithCommunity`. Стек обязан уйти **целиком**, а не на одну единицу.
+
 ## Сад
 
 Порядок: грядка → посадочный материал → посадка → перегной.
@@ -24,7 +29,9 @@
 | Посадка | `PlantSeed X Y <id>` | `[Garden] PlantSeedInCell: (x,y) planted with <id>`. Отказы: `PlantSeed: no planting stock of '<id>' in inventory …`, `[Garden] PlantSeedInCell: (x,y) is niche N, species <id> needs niche M, refused`, `… has no garden plot registered` |
 | Перегной | `ApplyFertilizer X Y` | `[Fertilizer] ApplyFertilizerToCell: (x,y) Fertility now F`; `ApplyFertilizer: no Peregnoy in inventory` |
 
-Посаженное растение отрастает тем же видом (раздел 2, «Отрастание»).
+Посаженное растение отрастает тем же видом (раздел 2, «Отрастание»). Грядка
+с пристройкой без посадки со временем растит растения своей ниши, а не
+туземные для биома: у `pond` — пойменные и водные.
 
 ## Обереги
 

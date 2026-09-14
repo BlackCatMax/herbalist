@@ -17,6 +17,48 @@
 | `-run=WorldStateMapSetup [-map=<путь>]` | Создаёт `RT_WorldStateMap` (размер = сетке, линейная гамма, билинейный, clamp), заводит в `MPC_WorldStateFields` параметры рамки карты (`WorldStateMapOrigin`/`WorldStateMapSize`) и назначает всё менеджеру на карте (по умолчанию `L_TestDev`). На карте World Partition менеджер — внешний актор, коммандлет его не находит и карту не трогает. Идемпотентен | 2026-09-08 |
 | `-run=WorldPartitionBuilderCommandlet <карта> -Builder=WorldLayoutSyncBuilder [-ReportOnly]` | Разметка мира (`DESIGN_World_Layout.md`): собирает с карты ландшафт и сетку стриминга World Partition, пересчитывает разметку менеджера сетки (клетка, размер, начало, страница, чанк) и сохраняет его внешний актор. `-ReportOnly` — только печатает исходные величины и разметку, ничего не сохраняя. То же, что кнопка «Сверить с World Partition» на менеджере | 2026-09-12 |
 | `-run=TrampleMapSetup` | Создаёт `RT_TrampleMap` (1024×1024, RGBA8, линейная гамма, билинейный, **wrap**) и заводит в `MPC_WorldStateFields` параметры `TrampleMapFrame`/`TramplePlayerPosition`. Карты не трогает — пути лежат в Herbalist Settings. Идемпотентен | 2026-09-12 |
+| `-run=CompendiumAudit [-CompendiumPath=<папка>]` | Только чтение: сверка карточек компендиума с DataTable (ранги, оси, биомы; геймплейного тюнинга в карточках нет — его не сверяет) | 2026-09-03 |
+| `-run=PlaytestMapCreate` | Создаёт карту `L_Playtest`: восемь `ABiomeRegionVolume` полосами, менеджер сетки, домашний якорь. `L_TestDev` не трогает | 2026-09-06 |
+| `-run=BiomeGraphExport` | `DA_BiomeGraph` → `CSV_tabs/DA_BiomeGraph.json`, чтобы значения графа ревьюились в git | 2026-08-24 |
+| `-run=BiomeGraphImport` | `CSV_tabs/DA_BiomeGraph.json` → живой `DA_BiomeGraph` (запись пакета) | 2026-08-24 |
+| `-run=BestiaryRankMove` | Переносит Курганников, Жердяев и Курганных огней из `DT_Landmarks` в `DT_AmbientEntities` (`AddRow` + `RemoveRow`) — ранг по компендиуму | 2026-09-03 |
+
+### Создание таблиц с нуля (`*Create`: ассет уже есть — ничего не делает)
+
+| Команда | Что делает | Добавлен |
+|---|---|---|
+| `-run=AmbientEntitiesCreate` | `DT_AmbientEntities` — Низший ранг бестиария | 2026-09-02 |
+| `-run=LandmarksCreate` | `DT_Landmarks` — хозяева мест | 2026-09-02 |
+| `-run=LegendaryEntitiesCreate` | `DT_LegendaryEntities` — 17 Легендарных, включая Берегиню | 2026-09-02 |
+| `-run=ArtifactsCreate` | `DT_Artifacts` — 8 артефактов | 2026-09-02 |
+| `-run=DialogueCreate` | `DT_Dialogue` — дерево Домового | 2026-09-02 |
+| `-run=MemoryFragmentsCreate` | `DT_MemoryFragments` — 12 фрагментов памяти | 2026-09-02 |
+
+### Добавление рядов (`*Append`: ряд уже есть — пропускает)
+
+| Команда | Что делает | Добавлен |
+|---|---|---|
+| `-run=IngredientAppend -Names=<id,…>` | Ряды из `CSV_tabs/ingredients.json` в `DT_IngredientClass`. Работает полным JSON-проходом по таблице — по заголовкам Patch-коммандлетов такой проход молча терял ряды с пробелом в имени («Молодильное яблоко», «Перо …»): после прогона сверить таблицу (`-run=DataTableExport`) | 2026-08-24 |
+| `-run=ContainerAppend` | Корзина, Мешок, Туёс | 2026-09-04 |
+| `-run=GatheringToolAppend` | Железный и Медный серп, Костяной нож, Серебряный оберег | 2026-09-06 |
+| `-run=PeregnoyAppend` | Перегной — продукт гниения, в мире не растёт | 2026-09-04 |
+| `-run=WardCrystalAppend` | Кристаллы-обереги Пещеры | 2026-09-04 |
+| `-run=TieredWardCrystalAppend` | Три тиражных кристалла-оберега (награда ритуалов перехода ярусов) | 2026-09-04 |
+| `-run=BestiaryStubsAppend` | Заготовки рядов для карточек бестиария без ряда; ставки эффекта нулевые, пока их не проставят | 2026-09-03 |
+| `-run=KalinovMostDialogueAppend` | Ряд «ЗмейГорыныч» в `DT_Dialogue`: ветки «Бой» и «Сделка» | 2026-09-06 |
+
+### Точечные правки рядов (`*Patch`: `FindRow`, остальные ряды не трогает)
+
+| Команда | Что делает | Добавлен |
+|---|---|---|
+| `-run=AmbientEntitySpacingPatch` | `MinSpacingMeters` из `CSV_tabs/ambient_entity_spacing.json` | 2026-09-04 |
+| `-run=IngredientBiomeRangePatch` | `AllowedBiomes` из `ingredient_biome_range_patch.json` | 2026-09-04 |
+| `-run=IngredientHarvestWindowPatch` | Окна сбора (сезоны, время суток, луна, сухая погода) из `ingredient_harvest_windows.json` | 2026-08-29 |
+| `-run=IngredientGatheringAndGardenPatch` | `bIronAverse`, `bDelicate`, `GardenNiche` из `ingredient_gathering_and_garden_flags.json` | 2026-08-31 |
+| `-run=DryingStatePatch` | `DriedStateDelta` из `ingredient_drying_state_patch.json` | 2026-09-05 |
+| `-run=IngredientDryingDurationPatch` | `DryingDurationSeconds` всем растениям и грибам из `ingredient_drying_duration_patch.json` | 2026-09-05 |
+| `-run=DomovoiMilkOfferingPatch` | Символическое подношение в ветке Домового «блюдце молока» | 2026-09-06 |
+| `-run=KalinovMostDealPatch` | Флаг сделки в ветке Змея «Откупиться подношением» | 2026-09-06 |
 
 ## Python-скрипты (`tools/data_extraction/`, запуск из корня репозитория)
 
@@ -25,6 +67,12 @@
 | `extract_biomes.py` | Выводит числовые параметры биомов (включая `StressRecoveryMultiplier`) из Fertility/Distortion/характера воды карточек компендиума |
 | `extract_ingredients.py` | Извлекает параметры ингредиентов из карточек `04_Compendium/Растительность` |
 | `extract_water.py [путь.json]` | Выводит `water_types.json` (типы воды по биомам) из карточек `04_Compendium/Биомы`: Potency/Stability из фронтматтера, Purity/Distortion/Corruption из раздела «Вода». Без пути пишет `CSV_tabs/water_types.json` |
+
+## Хранилище документации (`herbalist_docs/Herbalist_Vault/`)
+
+| Скрипт | Что делает |
+|---|---|
+| `build_docs.py` | Склеивает главы GDD, глоссарий, растения, бестиарий и биомы в `Herbalist_Vault/build/*.md` (в git не попадают) |
 
 ## Проверка документации (`tools/docs_audit/`)
 

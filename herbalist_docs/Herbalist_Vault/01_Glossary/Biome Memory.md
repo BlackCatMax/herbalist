@@ -15,4 +15,4 @@ status: ✅
 - [[Footprint]]
 - [[Propagation]]
 - [[Biome Graph]]
-- [[AxisDrift]]
+- `Memory.AxisDrift` (смещение осей в памяти узла)

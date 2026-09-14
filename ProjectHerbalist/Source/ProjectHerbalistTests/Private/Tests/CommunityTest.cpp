@@ -23,7 +23,7 @@
 // собрать без реального реестра, а PlayerController нигде в этом проекте не
 // поднимается в automation-тестах (нет прецедента, заводить его ради одной
 // правки — непропорционально). Реальная сквозная проверка — ручной прогон
-// по PIE_VERIFICATION_PLAN.md, "Приоритет 3".
+// по docs/verification/pie/06_Community_Homestead.md.
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Types/BiomeTypes.h"
@@ -381,7 +381,7 @@ bool FHerbalistCommunity_MolvaSurvivesSaveLoad::RunTest(const FString& Parameter
     // SaveGame/LoadGame реально делают (HerbalistSaveSubsystem.cpp) --
     // проверяет корректность добавленного поля и его копирования в обе
     // стороны, не диск. Реальный сквозной прогон через диск -- предмет
-    // ручной PIE-проверки (PIE_VERIFICATION_PLAN.md), не этого теста.
+    // ручной PIE-проверки (docs/verification/pie/08_Saves.md), не этого теста.
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 

@@ -14,6 +14,7 @@ tags: [glossary, index]
 - [[Mind]] ✅
 - [[Spirit]] ✅
 - [[Nature]] ✅
+- [[Direction]] ✅
 
 ## Мета-параметры
 - [[Magnitude]] ✅
@@ -23,12 +24,18 @@ tags: [glossary, index]
 - [[Potency]] ✅
 - [[Resonance]] ✅
 - [[Corruption]] ✅
+- [[Meta]] ✅
 
 ## Контекст
 - [[Environment]] ✅
 - [[MemoryState]] ⚠️ (частично)
 - [[Intent]] ⚠️ (только Coherence)
 - [[RngState]] ✅
+- [[Coherence]] ✅
+- [[Perception]] ✅
+- [[Fertility]] 🟡
+- [[Moisture]] ❌
+- [[Toxicity]] ❌
 
 ## Механики
 - [[Inventory]] ✅
@@ -37,10 +44,13 @@ tags: [glossary, index]
 - [[Fold]] ✅
 - [[Bifurcation]] ✅
 - [[Interaction Rules]] 📐
+- [[Delta]] ✅
 
 ## Системы
 - [[GridWorldManager]] ✅
 - [[BiomeState]] ✅ (динамично, `UBiomeGraphSubsystem`)
+- [[Morok]] ✅
+- [[Zaryana]] ✅
 
 ## Стихии
 - [[Вода]]

@@ -67,6 +67,11 @@
 | 4 | Основать базу, построить хранилище, положить предмет; сохранить, перезапуск, загрузить | хранилище с предметом на месте |
 | 5 | Перезапечь разметку карты, `LoadGame` старого сейва | `rejected, nothing applied: written for another world layout` — ожидаемый отказ |
 | 6 | Удалить `HerbalistSave.sav`, `LoadGame` | `does not exist` |
+| 7 | Поднести общине (`OfferToCommunity`), `SaveGame`, поднести ещё раз, `LoadGame` | Молва — как на момент сохранения, не текущая и не ноль (`[Community] … Molva=…` при следующем подношении) |
+| 8 | `SetGardenPlot X Y pond`, `SaveGame`, `SetGardenPlot X Y none`, `LoadGame` | пристройка вернулась на (X, Y) |
+
+Сценарии 7 и 8 — единственная сквозная проверка через `UHerbalistSaveSubsystem`
+и диск: автотесты проверяют копирование полей, но не сам путь сохранения.
 
 ## Ловушки
 
