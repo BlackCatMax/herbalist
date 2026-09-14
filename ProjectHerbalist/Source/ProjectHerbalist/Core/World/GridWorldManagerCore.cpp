@@ -3667,7 +3667,10 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
     // по dt и один шаг по N*dt дают одно и то же (2026-09-07, проверка
     // математики). У экспоненциальной формы такой эквивалентности как раз
     // НЕ было бы -- если релаксацию когда-нибудь переведут на неё, догон
-    // придётся считать иначе.
+    // придётся считать иначе. Направление идёт к нормированной цели
+    // экспоненциально, через точную долю 1-exp(-k*dt), у которой то же
+    // свойство (2026-09-14; раньше там стоял шаг Эйлера k*dt к сырой цели, и
+    // догон перелетал её или расходился с непрерывным счётом).
     //
     // Тело вынесено в лямбду, а выбор ОБХОДА — наружу: раньше оба режима
     // (обычный тик и догон одного чанка) шли одним и тем же полным
@@ -3905,18 +3908,35 @@ void AGridWorldManager::RegenerateCellParameters(float DeltaTime, const FIntPoin
         // укладывается в MoveToward построчно; пропускаем полностью, если
         // отклонение уже пренебрежимо мало — это и есть "не обходить клетки
         // с нулевым отклонением" из плана.
-        const FDirection& TargetDir = T.Direction;
+        // Цель -- доли осей (ревью 2026-09-14). У TargetState.Direction сумма
+        // не обязана быть 1: ночной толчок Spirit, Низшие и хозяева мест
+        // прибавляют к оси без нормировки (ApplyLandmarkAxisNudge). Состояние же
+        // нормируется каждый шаг и до сырой цели не доходило никогда: отклонение
+        // не падало ниже порога, клетка вечно считалась тронутой, а догон
+        // спящего чанка расходился с непрерывным счётом (NormalizeSum делал шаг
+        // нелинейным). Скорость теперь k, а не k на сумму осей цели.
+        FDirection TargetDir = T.Direction;
+        TargetDir.NormalizeSum();
         const float DirDeviation = FMath::Abs(S.Direction.Body - TargetDir.Body)
                                   + FMath::Abs(S.Direction.Mind - TargetDir.Mind)
                                   + FMath::Abs(S.Direction.Spirit - TargetDir.Spirit)
                                   + FMath::Abs(S.Direction.Nature - TargetDir.Nature);
         if (DirDeviation > KINDA_SMALL_NUMBER)
         {
+            // Доля пути к цели за DeltaTime -- точное решение затухания
+            // dS/dt = k(T-S), а не шаг Эйлера k*dt (2026-09-14): догон
+            // проснувшегося чанка зовёт эту функцию одним шагом на всё время
+            // сна (CatchUpActivatedChunks), и при k*dt > 1 направление
+            // перелетало цель, упиралось в клампы и нормализовалось в
+            // произвольное значение. На обычном шаге 0.1 с доля отличается от
+            // Эйлера на (k*dt)^2/2 -- 5e-7 при k = 0.01; к нормированной цели N
+            // шагов по dt дают тот же итог, что один по N*dt.
             const float DirRate = 0.01f * DirectionRateMultiplier;
-            S.Direction.Body   = FMath::Clamp(S.Direction.Body   + (TargetDir.Body   - S.Direction.Body) * DirRate * DeltaTime, 0.0f, 1.0f);
-            S.Direction.Mind   = FMath::Clamp(S.Direction.Mind   + (TargetDir.Mind   - S.Direction.Mind) * DirRate * DeltaTime, 0.0f, 1.0f);
-            S.Direction.Spirit = FMath::Clamp(S.Direction.Spirit + (TargetDir.Spirit - S.Direction.Spirit) * DirRate * DeltaTime, 0.0f, 1.0f);
-            S.Direction.Nature = FMath::Clamp(S.Direction.Nature + (TargetDir.Nature - S.Direction.Nature) * DirRate * DeltaTime, 0.0f, 1.0f);
+            const float DirAlpha = 1.0f - FMath::Exp(-DirRate * DeltaTime);
+            S.Direction.Body   = FMath::Clamp(S.Direction.Body   + (TargetDir.Body   - S.Direction.Body)   * DirAlpha, 0.0f, 1.0f);
+            S.Direction.Mind   = FMath::Clamp(S.Direction.Mind   + (TargetDir.Mind   - S.Direction.Mind)   * DirAlpha, 0.0f, 1.0f);
+            S.Direction.Spirit = FMath::Clamp(S.Direction.Spirit + (TargetDir.Spirit - S.Direction.Spirit) * DirAlpha, 0.0f, 1.0f);
+            S.Direction.Nature = FMath::Clamp(S.Direction.Nature + (TargetDir.Nature - S.Direction.Nature) * DirAlpha, 0.0f, 1.0f);
             S.Direction.NormalizeSum();
         }
 

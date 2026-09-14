@@ -250,6 +250,135 @@ bool FHerbalistGridStreaming_CatchUpMatchesContinuousSimulation::RunTest(const F
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_CatchUpDirectionMatchesContinuousSimulation,
+    "Herbalist.GridStreaming.CatchUpDirectionMatchesContinuousSimulation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_CatchUpDirectionMatchesContinuousSimulation::RunTest(const FString& Parameters)
+{
+    // Направление клетки идёт к цели экспоненциально (2026-09-14). Раньше шаг
+    // Эйлера k*dt при догоне за 300 с (k*dt = 3) перелетал цель: Body уходил
+    // в 0, остальные оси -- к 1/3, вместо непрерывного Body ≈ 0.27.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+
+        // Те же две клетки в разных чанках, что у CatchUpMatchesContinuousSimulation.
+        FGridCell* Continuous = Manager->GetCell(1, 1);
+        FGridCell* Streamed   = Manager->GetCell(17, 17);
+        if (!Continuous || !Streamed) { Manager->Destroy(); return false; }
+
+        for (FGridCell* C : { Continuous, Streamed })
+        {
+            // Сумма осей цели и состояния -- 1: NormalizeSum не вносит своей
+            // нелинейности, сравнивается только сама релаксация.
+            C->State.Direction.Body = 0.7f;
+            C->State.Direction.Mind = 0.1f;
+            C->State.Direction.Spirit = 0.1f;
+            C->State.Direction.Nature = 0.1f;
+            C->TargetState.Direction.Body = 0.25f;
+            C->TargetState.Direction.Mind = 0.25f;
+            C->TargetState.Direction.Spirit = 0.25f;
+            C->TargetState.Direction.Nature = 0.25f;
+        }
+
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+        Manager->CatchUpActivatedChunks();   // зафиксировать стартовое время чанка
+        for (int32 i = 0; i < 300; ++i)
+        {
+            Manager->SetGameClockSeconds(Manager->GetGameClockSeconds() + 1.0f);
+            Manager->RegenerateCellParameters(1.0f);
+        }
+
+        TestTrue(TEXT("Sanity: the continuously simulated cell moved toward the target"),
+            Continuous->State.Direction.Body < 0.7f && Continuous->State.Direction.Body > 0.25f);
+        TestEqual(TEXT("Sanity: the streamed-out cell did not move"), Streamed->State.Direction.Body, 0.7f);
+
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });
+        Manager->CatchUpActivatedChunks();
+
+        TestTrue(FString::Printf(TEXT("Caught-up Direction.Body %.5f matches continuous %.5f"),
+                Streamed->State.Direction.Body, Continuous->State.Direction.Body),
+            FMath::IsNearlyEqual(Streamed->State.Direction.Body, Continuous->State.Direction.Body, 1e-3f));
+        TestTrue(FString::Printf(TEXT("Caught-up Direction.Mind %.5f matches continuous %.5f"),
+                Streamed->State.Direction.Mind, Continuous->State.Direction.Mind),
+            FMath::IsNearlyEqual(Streamed->State.Direction.Mind, Continuous->State.Direction.Mind, 1e-3f));
+        // Скорость k = 0.01: остаток отклонения e^-3. Body = 0.25 + 0.45 * e^-3.
+        TestTrue(FString::Printf(TEXT("Direction.Body %.5f after 300 s at k = 0.01 is 0.2724"), Continuous->State.Direction.Body),
+            FMath::IsNearlyEqual(Continuous->State.Direction.Body, 0.25f + 0.45f * FMath::Exp(-3.0f), 1e-3f));
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_CatchUpDirectionWithUnnormalizedTarget,
+    "Herbalist.GridStreaming.CatchUpDirectionWithUnnormalizedTarget",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistGridStreaming_CatchUpDirectionWithUnnormalizedTarget::RunTest(const FString& Parameters)
+{
+    // Сумма осей цели не 1 -- обычное дело: ночной толчок Spirit прибавляет к
+    // цели без нормировки (ревью 2026-09-14). Направление идёт к нормированной
+    // цели: догон совпадает с непрерывным счётом, скорость -- k.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedChunkSettings Scoped(/*RadiusMeters=*/0.0f, /*ChunkSize=*/4);
+
+        FGridCell* Continuous = Manager->GetCell(2, 2);
+        FGridCell* Streamed   = Manager->GetCell(18, 18);
+        if (!Continuous || !Streamed) { Manager->Destroy(); return false; }
+
+        for (FGridCell* C : { Continuous, Streamed })
+        {
+            C->State.Direction.Body = 0.7f;
+            C->State.Direction.Mind = 0.1f;
+            C->State.Direction.Spirit = 0.1f;
+            C->State.Direction.Nature = 0.1f;
+            // Сумма 2: как после ночи толчков Spirit.
+            C->TargetState.Direction.Body = 0.25f;
+            C->TargetState.Direction.Mind = 0.25f;
+            C->TargetState.Direction.Spirit = 1.25f;
+            C->TargetState.Direction.Nature = 0.25f;
+        }
+
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(0, 0) });
+        Manager->CatchUpActivatedChunks();
+        for (int32 i = 0; i < 300; ++i)
+        {
+            Manager->SetGameClockSeconds(Manager->GetGameClockSeconds() + 1.0f);
+            Manager->RegenerateCellParameters(1.0f);
+        }
+
+        Manager->SetActiveChunkCentersForTests({ FIntPoint(4, 4) });
+        Manager->CatchUpActivatedChunks();
+
+        TestTrue(FString::Printf(TEXT("Caught-up Direction.Spirit %.5f matches continuous %.5f"),
+                Streamed->State.Direction.Spirit, Continuous->State.Direction.Spirit),
+            FMath::IsNearlyEqual(Streamed->State.Direction.Spirit, Continuous->State.Direction.Spirit, 1e-3f));
+        TestTrue(FString::Printf(TEXT("Caught-up Direction.Body %.5f matches continuous %.5f"),
+                Streamed->State.Direction.Body, Continuous->State.Direction.Body),
+            FMath::IsNearlyEqual(Streamed->State.Direction.Body, Continuous->State.Direction.Body, 1e-3f));
+        // Нормированная цель Spirit = 1.25 / 2 = 0.625; остаток отклонения e^-3.
+        const float ExpectedSpirit = 0.625f + (0.1f - 0.625f) * FMath::Exp(-3.0f);
+        TestTrue(FString::Printf(TEXT("Direction.Spirit %.5f heads to the normalized target at k = 0.01 (%.5f)"), Continuous->State.Direction.Spirit, ExpectedSpirit),
+            FMath::IsNearlyEqual(Continuous->State.Direction.Spirit, ExpectedSpirit, 1e-3f));
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistGridStreaming_CatchUpDoesNotDoubleCountWhileChunkStaysActive,
     "Herbalist.GridStreaming.CatchUpDoesNotDoubleCountWhileChunkStaysActive",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
