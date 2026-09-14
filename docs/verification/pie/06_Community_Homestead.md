@@ -1,0 +1,45 @@
+# 6. Община, сад, обереги, хозяйство
+
+**Зачем.** Всё это v1-консольное: механика работает, физических построек и
+окон нет. Проверка — команда и строка лога. Материалы и пороги — черновые
+числа кода (`GardenNicheUnlockTypes.h`, `HerbalistSettings`).
+
+Списки ингредиентов в командах — через запятую, в кавычках: `"bol_01,tai_05"`.
+
+## Молва: подношение и торговля
+
+| Команда | Что ждать |
+|---|---|
+| `OfferToCommunity "id1,id2"` | `[Community] Offered N item(s), ΔMolva=…, Molva=…`; нет в инвентаре — `OfferToCommunity: no matching items in inventory` |
+| `TradeWithCommunity <отдаю> <хочу>` | `[Community] Trade A(xN) -> B(xM), rate=…, Molva=…`; мало Молвы — `[Community] Trade A -> B refused: rate … too low for even 1 unit`; `TradeWithCommunity: '<id>' not found in inventory`; `TradeWithCommunity: not enough room for …` |
+
+## Сад
+
+Порядок: грядка → посадочный материал → посадка → перегной.
+
+| Шаг | Команда | Что ждать |
+|---|---|---|
+| Грядка с нишей | `SetGardenPlot X Y mycelium` (`cellar`, `pond`, `sunny`, `shade`, `cave`; `none` — снять) | `[Garden] Plot at (x,y) set to niche N`; снять — `[Garden] Plot at (x,y) cleared`. Отказы: `SetGardenPlot: Molva … below threshold …, refused`, `SetGardenPlot: needs N '<материал>' in a single stack, not enough`, `SetGardenPlot: this niche is already built at (x,y)` |
+| Посадочный материал | `SetHarvestIntent seed`, затем собрать нужное растение (раздел 2) | в инвентаре — предмет-посадка |
+| Посадка | `PlantSeed X Y <id>` | `[Garden] PlantSeedInCell: (x,y) planted with <id>`. Отказы: `PlantSeed: no planting stock of '<id>' in inventory …`, `[Garden] PlantSeedInCell: (x,y) is niche N, species <id> needs niche M, refused`, `… has no garden plot registered` |
+| Перегной | `ApplyFertilizer X Y` | `[Fertilizer] ApplyFertilizerToCell: (x,y) Fertility now F`; `ApplyFertilizer: no Peregnoy in inventory` |
+
+Посаженное растение отрастает тем же видом (раздел 2, «Отрастание»).
+
+## Обереги
+
+| Команда | Что ждать |
+|---|---|
+| `ActivateWard <кристалл>` (точное имя ряда, например `Плакун-камень`) | `[Ward] BrewBoost active until T`, `[Ward] Concealment active at (x,y) until T` или `[Ward] MorokReduction active at (x,y) until T`; тиражный — `[Ward] Tiered ward activated (Type=N, K home biomes), no expiry`. Отказы: `ActivateWard: no '<id>' in inventory`, `ActivateWard: '<id>' is not a ward` |
+| `EquipSilverWard` | `EquipSilverWard: активен`; `EquipSilverWard: no '<id>' in inventory` (оберег — из кургана) |
+
+`T` — момент окончания на игровых часах мира, в секундах.
+
+## База и домашние хранилища
+
+| Команда | Что ждать |
+|---|---|
+| `FoundBase X Y` | `[Base] Founded at (x,y), biome=N`; `[Base] (x,y) is water — not registered`; `[Base] (x,y) already registered` |
+| `BuildHomeStorage cellar` (`cabinet`, `jar`) | `BuildHomeStorage: built 'cellar' near (x,y)` и `[HomeStorage] Built container type=N near (x,y)`. Отказы: `BuildHomeStorage: Домовой Respect … below threshold …, refused`, `BuildHomeStorage: needs N Дубовая кора (broad_10) in a single stack, not enough`, `BuildHomeStorage: a cellar already exists, refusing a duplicate`, `BuildHomeStorage: no alchemy table (home anchor) found in the world` |
+
+Построенное хранилище открывается `IA_Interact` — раздел 3.

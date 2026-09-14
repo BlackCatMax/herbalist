@@ -1,0 +1,55 @@
+# 5. Места и сущности
+
+**Зачем.** Хозяева мест, капища, курганы и точки интереса живут на своих
+клетках. Координаты всех — в паспорте мира (раздел 1).
+
+## Хозяева мест: разговор
+
+| Команда | Что ждать |
+|---|---|
+| `TalkTo X Y` (клетка из `[Entities] Seeded landmark`) | `[Talk:<диалог>] <реплика>` и ветки `[Talk] 0) …`, `[Talk] 1) …` |
+| `ChooseDialogueBranch N` | следующая реплика; `[Talk:<диалог>] Symbolic offering: Respect += … (now …)`; конец — `[Talk:<диалог>] (разговор окончен)` |
+
+Отказы: `TalkTo: no one to talk to at (x,y)`,
+`TalkTo: <сущность> has no dialogue tree yet`,
+`ChooseDialogueBranch: no active conversation (call TalkTo first)`,
+`ChooseDialogueBranch: N is not a valid branch (0..M)`. Разговор не
+сохраняется и не переживает уход из зоны.
+
+## Проявления сущностей
+
+Сущности бестиария проявляются акторами в активных чанках (радиус
+симуляции 63 м) и снимаются за его границей. Подпись актора в аутлайнере —
+`<Имя> (x,y)`: у всего бестиария пока один меш-заглушка, различать — по
+подписи. Своего взаимодействия у актора нет. Проверка: дойти до места
+хозяина, увидеть актора, отойти за 63 м — актор исчез, вернуться — снова на
+месте.
+
+## Курганы
+
+| Действие | Что ждать |
+|---|---|
+| Подойти к кургану (`[Kurgan] Seeded`), `IA_Interact` | `[Kurgan] Looted at (x,y): granted '<предмет>'` и `[Kurgan] Picked up '<предмет>' at (x,y)`; предмет в инвентаре |
+| Повторный `IA_Interact` | ничего — курган разграблен |
+
+Добыча — Костяной нож и Серебряный оберег (разделы 2 и 6).
+
+## Капища
+
+`ke * ShowShrines` → `=== SHRINES (N) ===` и по строке на капище:
+`[i] (x,y) type=T Restoration=R`. Restoration меняется со временем и
+действиями рядом (`15_Cycles_And_Shrines.md` §15.5); сравнить два вызова с
+промежутком.
+
+## Точки интереса
+
+| Место | Проверка | Что ждать |
+|---|---|---|
+| Тотем, Светлояр | акторы стоят на координатах `[POI] Seeded`, на земле | — |
+| Горюч-камень | применить зелье к его клетке (раздел 3) | `[GoryuchKamen] Thud at (x,y)`; сама клетка не меняется |
+| Соловей | пройти через его клетку | `[Solovey] Morok triggered at (x,y): AoE Purity/Stability radius N, burst B`; под сокрытием — `[Solovey] Passed at (x,y) under одолень-трава concealment -- no Morok`; после плакун-травы — `[Solovey] Calmed permanently by плакун-трава -- Morok will never trigger again` |
+| Калинов мост | `TalkTo` на клетке Змея; ветка «Бой» | `[KalinovMost] Fight chosen at (x,y): Purity/Stability cost C` |
+| | ветка «Сделка», затем `PayKalinovMostToll <артефакт>` | `[KalinovMost] Toll paid: <артефакт> given up безвозвратно, passage granted`; без сделки — `[KalinovMost] PayToll: no deal armed -- choose the Сделка branch first` |
+
+Отладка посева: `ke * SeedPointsOfInterest` засевает курганы и точки интереса
+заново — меняет мир сессии, только для проверки самого посева.
