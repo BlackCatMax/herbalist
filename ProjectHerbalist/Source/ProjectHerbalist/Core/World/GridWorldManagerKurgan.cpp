@@ -17,6 +17,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/KurganActor.h"
+#include "EngineUtils.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
@@ -53,20 +54,45 @@ void AGridWorldManager::SeedKurganSites()
         KurganSites.Add(Coord, Loot[LootIndex]);
         UE_LOG(LogHerbalistWorld, Log, TEXT("[Kurgan] Seeded '%s' at (%d,%d)"),
             *Loot[LootIndex].ToString(), Coord.X, Coord.Y);
-
-        // Физический подбор (DECISIONS_LOG.md решение №5, 2026-09-06) --
-        // AKurganActor спавнится сразу здесь, тем же приёмом, что
-        // Тотем/Светлояр/Горюч-камень в SeedPointsOfInterest.
-        if (UWorld* World = GetWorld())
-        {
-            if (AKurganActor* KurganPickup = World->SpawnActor<AKurganActor>(AKurganActor::StaticClass(),
-                GetCellWorldPosition(Coord.X, Coord.Y), FRotator::ZeroRotator))
-            {
-                KurganPickup->Init(this, Coord.X, Coord.Y, Loot[LootIndex]);
-            }
-        }
-
         ++LootIndex;
+    }
+
+    // Физический подбор (DECISIONS_LOG.md решение №5, 2026-09-06) -- акторы
+    // курганов, тем же приёмом, что Тотем/Светлояр/Горюч-камень в
+    // SeedPointsOfInterest. Той же функцией их ставит загрузка сейва.
+    SyncKurganActors();
+}
+
+void AGridWorldManager::SetKurganSites(const TMap<FIntPoint, FName>& InSites)
+{
+    KurganSites = InSites;
+    SyncKurganActors();
+}
+
+void AGridWorldManager::SyncKurganActors()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    // Только свои: в мире могут стоять акторы других менеджеров (автотесты
+    // делят один мир редактора).
+    for (TActorIterator<AKurganActor> It(World); It; ++It)
+    {
+        if (It->GetWorldManager() == this)
+        {
+            It->Destroy();
+        }
+    }
+    for (const TPair<FIntPoint, FName>& Site : KurganSites)
+    {
+        if (AKurganActor* KurganPickup = World->SpawnActor<AKurganActor>(AKurganActor::StaticClass(),
+            GetCellWorldPosition(Site.Key.X, Site.Key.Y), FRotator::ZeroRotator))
+        {
+            KurganPickup->Init(this, Site.Key.X, Site.Key.Y, Site.Value);
+        }
     }
 }
 

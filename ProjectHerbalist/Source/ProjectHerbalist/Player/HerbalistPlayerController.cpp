@@ -321,7 +321,7 @@ void AHerbalistPlayerController::Harvest()
         const float Dist = FVector::Dist(GetPawn()->GetActorLocation(), Hit.Location);
         if (Dist > MaxHarvestDistance)
         {
-            UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: до точки %.0f см, предел %.0f см -- подойди ближе"), Dist, MaxHarvestDistance);
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: до точки %.1f см, предел %.1f см -- подойди ближе"), Dist, MaxHarvestDistance);
             return;
         }
     }
@@ -362,9 +362,10 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
         // пешки (примерно на уровне пояса) до НАЧАЛА КООРДИНАТ растения (на
         // земле), поэтому даже стоя вплотную набегает почти метр по
         // вертикали. Без цифр в логе понять, что упираешься именно в
-        // MaxHarvestDistance, а не в промах прицела, невозможно.
+        // MaxHarvestDistance, а не в промах прицела, невозможно. Десятые
+        // (2026-09-14, по PIE-логу): «200 см при пределе 200» -- это 200.4.
         const float Dist = GetPawn() ? FVector::Dist(GetPawn()->GetActorLocation(), Resource->GetActorLocation()) : -1.0f;
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: %s далеко -- %.0f см при пределе MaxHarvestDistance=%.0f см"),
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: %s далеко -- %.1f см при пределе MaxHarvestDistance=%.1f см"),
             *Resource->GetName(), Dist, MaxHarvestDistance);
         return false;
     }

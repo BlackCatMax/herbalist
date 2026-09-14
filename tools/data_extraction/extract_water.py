@@ -1,7 +1,33 @@
-import re
-import yaml
+"""
+Генерация water_types.json (типы воды по биомам) из карточек компендиума биомов.
+
+Тот же принцип, что у extract_biomes.py: источник истины — написанный лор
+(04_Compendium/Биомы), json выводится из него, DT_WaterTypes импортируется из json.
+
+Что берётся из карточки биома:
+    id, name                        — тип воды <Биом>Water, отображаемое имя;
+    potency, stability              — из фронтматтера;
+    purity, distortion, corruption  — из раздела «##  Вода» ([[Purity]]: 0.x),
+                                      при его отсутствии — из фронтматтера.
+
+Запуск (из корня репозитория):  py tools/data_extraction/extract_water.py [путь_вывода.json]
+Без пути пишет herbalist_docs/CSV_tabs/water_types.json.
+
+2026-09-14: раньше скрипт читал склейку карточек build/biomes_compendium.md,
+которую собирает herbalist_docs/Herbalist_Vault/build_docs.py (папка build в
+.gitignore), и без предварительной сборки молча ничего не делал. Теперь карточки
+читаются напрямую, в том же порядке, что у сборки (по имени файла); результат
+совпадает с прежним один в один.
+"""
 import json
+import re
+import sys
 from pathlib import Path
+
+import yaml
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")  # иначе кириллица в отчёте ломается на cp1251-консоли
 
 ID_TO_BIOME_EN = {
     "boloto": "Bog",
@@ -14,6 +40,7 @@ ID_TO_BIOME_EN = {
     "tundra": "Tundra"
 }
 
+
 def parse_frontmatter(content):
     """Ищет YAML между ---, не обязательно в начале."""
     match = re.search(r'---\n(.*?)\n---', content, re.DOTALL)
@@ -21,8 +48,9 @@ def parse_frontmatter(content):
         return {}
     try:
         return yaml.safe_load(match.group(1))
-    except:
+    except yaml.YAMLError:
         return {}
+
 
 def extract_water_section_params(content):
     """Извлекает параметры воды из раздела ##  Вода."""
@@ -39,36 +67,21 @@ def extract_water_section_params(content):
             params[key] = float(m.group(1))
     return params
 
+
 def main():
-    # Было захардкожено на K:/herbalist -- тот же прежний диск, что у
-    # extract_ingredients.py до аудита 2026-08-24. Корень -- на два уровня выше
-    # скрипта (tools/data_extraction/, уборка корня 2026-09-14). Входного
-    # biomes_compendium.md (сборка хранилища) в репозитории на 2026-09-14 нет:
-    # скрипт напечатает, что файл не найден.
+    # Корень репозитория -- на два уровня выше скрипта (tools/data_extraction/).
     repo = Path(__file__).resolve().parents[2]
-    vault_dir = repo / "herbalist_docs" / "Herbalist_Vault"
-    biome_file = vault_dir / "build" / "biomes_compendium.md"
-    if not biome_file.exists():
-        biome_file = vault_dir / "biomes_compendium.md"
-    if not biome_file.exists():
-        print(f"Файл не найден: {biome_file}")
+    biomes_dir = repo / "herbalist_docs" / "Herbalist_Vault" / "04_Compendium" / "Биомы"
+    if not biomes_dir.exists():
+        print(f"Папка не найдена: {biomes_dir}")
         return
 
-    output_dir = repo / "herbalist_docs" / "CSV_tabs"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_json = output_dir / "water_types.json"
+    output_json = Path(sys.argv[1]) if len(sys.argv) > 1 else repo / "herbalist_docs" / "CSV_tabs" / "water_types.json"
+    output_json.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(biome_file, 'r', encoding='utf-8') as f:
-        full_text = f.read()
-
-    # Разделяем на секции по BEGIN ... md -->
-    sections = re.split(r'<!-- BEGIN.*?\.md -->', full_text)[1:]
     rows = []
-
-    for section in sections:
-        end_match = re.search(r'<!-- END.*?\.md -->', section)
-        if end_match:
-            section = section[:end_match.start()]
+    for card in sorted(biomes_dir.glob("*.md"), key=lambda p: p.name):
+        section = card.read_text(encoding="utf-8")
 
         front = parse_frontmatter(section)
         if not front or 'id' not in front:
@@ -123,6 +136,7 @@ def main():
         print("5. Убедитесь, что столбец Name соответствует RowName")
     else:
         print("Не удалось извлечь ни одного типа воды.")
+
 
 if __name__ == "__main__":
     main()

@@ -39,6 +39,10 @@ public:
 
     FIntPoint GetGridCell() const { return FIntPoint(GridX, GridY); }
 
+    // Менеджер, засеявший курган: при загрузке сейва он убирает свои акторы и
+    // ставит новые (AGridWorldManager::SyncKurganActors).
+    AGridWorldManager* GetWorldManager() const { return WorldManager; }
+
 protected:
     // TODO: заменить на финальный арт -- травяная насыпь с просадкой
     // (DESIGN_POI_Art_And_LevelDesign.md §6), меш не хардкодится (тот же

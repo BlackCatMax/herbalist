@@ -748,6 +748,26 @@ bool FHerbalistSaveLayout_SitesInsideGridDoNotExtendIt::RunTest(const FString& P
     TestEqual(TEXT("...и сетка прежняя"), FIntPoint(Manager->GridSizeX, Manager->GridSizeY), FIntPoint(28, 28));
     Manager->Destroy();
 
+    // Чанк 5 клеток не делит страницу 14: проверка заполнителя по первой клетке
+    // чанка была бы неверна -- расширения нет (ревью 2026-09-13).
+    for (TActorIterator<AGridWorldManager> It(World); It; ++It)
+    {
+        It->Destroy();
+    }
+    AGridWorldManager* OddChunk = World->SpawnActor<AGridWorldManager>();
+    if (TestNotNull(TEXT("Менеджер с чанком 5"), OddChunk))
+    {
+        OddChunk->BakedLayoutSource = MakeSaveLayoutTestSource(6300.0);
+        OddChunk->LayoutOverrides.bOverrideChunkSize = true;
+        OddChunk->LayoutOverrides.ChunkSizeInCells = 5;
+        OddChunk->DispatchBeginPlay();
+        TestEqual(TEXT("Sanity: чанк 5 клеток"), OddChunk->GetChunkSizeInCells(), 5);
+        TestEqual(TEXT("Sanity: страница по-прежнему 14 клеток"), OddChunk->ResolvedLayout.PageSizeInCells, 14);
+        TestEqual(TEXT("Чанк не делит страницу -- расширения нет"), OddChunk->EnsureGridCoversSites({ FIntPoint(-28, 0) }), 0);
+        TestFalse(TEXT("...и место остаётся за сеткой"), OddChunk->IsCellInGrid(-28, 0));
+        OddChunk->Destroy();
+    }
+
     // Без разметки сетка ручная и не расширяется.
     AGridWorldManager* Plain = SpawnAndBeginPlay(World);
     if (TestNotNull(TEXT("Менеджер без разметки"), Plain))

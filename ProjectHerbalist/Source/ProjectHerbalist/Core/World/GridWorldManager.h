@@ -232,6 +232,15 @@ public:
     // (клетки мельче 9 м) -- см. ContagionSpreadRate в HerbalistSettings.h.
     static constexpr float StateRelaxationPerSecond = 0.0005f;
 
+    // Шаг, с которым Tick зовёт RegenerateCellParameters (2026-09-14, ревью).
+    // Каждый кадр прибавлял бы к State/TargetState крошечный шаг: на клетке 30 м
+    // при 240 fps толчок заражения ~6e-7, релаксация ~2e-6, а соседние значения
+    // float около 0.2-0.9 отстоят на 1.5e-8-6e-8. Округление каждой прибавки в
+    // одну сторону уводило скорость на проценты. Шаг 0.1 с -- толчок ~1.5e-5,
+    // ошибка меньше 0.2%; тот же такт, что у проявлений сущностей
+    // (EntityManifestationIntervalSeconds).
+    static constexpr float CellRegenerationStepSeconds = 0.1f;
+
     // Пересчитывать разметку при каждом сохранении менеджера в редакторе.
     UPROPERTY(EditAnywhere, Category = "World|Layout")
     bool bSyncLayoutOnSave = true;
@@ -1681,7 +1690,13 @@ public:
     void SeedKurganSites();
     bool LootKurgan(const FIntPoint& Cell, FName& OutGrantedIngredientID);
     const TMap<FIntPoint, FName>& GetKurganSites() const { return KurganSites; }
-    void SetKurganSites(const TMap<FIntPoint, FName>& InSites) { KurganSites = InSites; }
+    // Ставит и акторы курганов (SyncKurganActors): загрузка сейва приходит сюда.
+    void SetKurganSites(const TMap<FIntPoint, FName>& InSites);
+
+    // Акторы курганов этого менеджера -- ровно по одному на курган KurganSites
+    // (2026-09-14). Раньше актор спавнился только при посеве, и после загрузки
+    // сейва акторы стояли на местах свежего посева, а разграблялись курганы сейва.
+    void SyncKurganActors();
 
     // ---- Точки интереса, §4 (см. POITypes.h за общим доводом) ----
     // Общая точка входа сева -- сеет курганы (без изменения их поведения),
@@ -1701,7 +1716,10 @@ public:
     // тем же честным пробелом, что уже Гнёздово-район у Курганов, §4.3) --
     // ROADMAP держит это открытым, не молчаливым упрощением.
     FIntPoint GetTotemSite() const { return TotemSite; }
-    void SetTotemSite(const FIntPoint& InSite) { TotemSite = InSite; }
+    // Сеттеры Тотема, Светлояра и Горюч-камня ставят и актор-визуал: прежний
+    // актор этого менеджера убирается, новый встаёт на место (загрузка сейва
+    // оставляла актор на месте свежего посева, ревью 2026-09-14).
+    void SetTotemSite(const FIntPoint& InSite);
     FString GetTotemRevealText() const;
 
     // Средний ярус (DESIGN_POI_Art_And_LevelDesign.md, "открытые вопросы —
@@ -1719,7 +1737,7 @@ public:
     // "прямым предком Буяна в миниатюре", один и тот же порог, не два
     // рассинхронизированных числа с одинаковым смыслом).
     FIntPoint GetSvetloyarSite() const { return SvetloyarSite; }
-    void SetSvetloyarSite(const FIntPoint& InSite) { SvetloyarSite = InSite; }
+    void SetSvetloyarSite(const FIntPoint& InSite);
     bool IsSvetloyarVisible() const;
 
     // Три звуковых уровня ПОВЕРХ самого порога видимости (DESIGN_POI_Art_
@@ -1741,7 +1759,7 @@ public:
     // (GridWorldManagerCore.cpp, см. довод у GoryuchKamenResistance рядом с
     // применением).
     FIntPoint GetGoryuchKamenSite() const { return GoryuchKamenSite; }
-    void SetGoryuchKamenSite(const FIntPoint& InSite) { GoryuchKamenSite = InSite; }
+    void SetGoryuchKamenSite(const FIntPoint& InSite);
 
     // Счётчик попыток применить зелье к Горюч-камню (DESIGN_POI_Art_And_
     // LevelDesign.md §3: "звук глухого удара, без видимого следствия
@@ -2204,6 +2222,10 @@ protected:
     bool BuildUnloadedCell(int32 X, int32 Y, FGridCell& OutCell, const FHerbalistCellBaseContext& Context) const;
 
     void CacheCellHeightsForPage(FHerbalistCellPage& Page);
+    // Акторы мест (курганы, точки интереса, маркеры якорей и хозяйства) на
+    // странице -- на землю. Спавн на выгруженной странице или до загрузки
+    // ландшафта под ней ставит их на высоту 0 (ревью 2026-09-14).
+    void PlaceSiteActorsOnGround(const FHerbalistCellPage& Page);
     void LoadCellPage(FHerbalistCellPage& Page);
     void UnloadCellPage(FHerbalistCellPage& Page);
     void EnsureChunkPagesLoaded(const FIntPoint& Chunk);
@@ -2289,6 +2311,9 @@ private:
     // UpdateEntityManifestations передаётся именно накопленное время, не
     // время кадра — ставки эффектов (rate/сек) остаются точными.
     float EntityManifestationAccumulator = 0.0f;
+
+    // Накопитель шага восстановления клеток (см. CellRegenerationStepSeconds).
+    float CellRegenerationAccumulator = 0.0f;
 
     // Чанки-центры активного множества (2026-09-03, стриминг сетки) —
     // координаты чанков, в которых сейчас находятся источники стриминга

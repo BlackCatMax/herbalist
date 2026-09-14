@@ -24,7 +24,7 @@
 |---|---|
 | `extract_biomes.py` | Выводит числовые параметры биомов (включая `StressRecoveryMultiplier`) из Fertility/Distortion/характера воды карточек компендиума |
 | `extract_ingredients.py` | Извлекает параметры ингредиентов из карточек `04_Compendium/Растительность` |
-| `extract_water.py` | Извлекает параметры воды по биомам. Читает `Herbalist_Vault/build/biomes_compendium.md` (или `Herbalist_Vault/biomes_compendium.md`) — на 2026-09-14 такого файла в репозитории нет |
+| `extract_water.py [путь.json]` | Выводит `water_types.json` (типы воды по биомам) из карточек `04_Compendium/Биомы`: Potency/Stability из фронтматтера, Purity/Distortion/Corruption из раздела «Вода». Без пути пишет `CSV_tabs/water_types.json` |
 
 ## Правило добавления
 

@@ -10,6 +10,9 @@
 #include "Engine/OverlapResult.h"
 #include "Core/Entities/HerbalistEntityActor.h"
 #include "Core/World/HomesteadMarkerActor.h"
+#include "Core/World/KurganActor.h"
+#include "Core/World/POIActors.h"
+#include "Core/Entities/LegendaryAnchorMarkerActor.h"
 #include "EngineUtils.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
@@ -1237,6 +1240,17 @@ int32 AGridWorldManager::EnsureGridCoversSites(const TArray<FIntPoint>& Sites)
         return 0;
     }
 
+    // Проверка заполнителя смотрит первую клетку чанка -- это верно, только
+    // если чанк делит страницу (ревью 2026-09-13). Ручной размер чанка, не
+    // делящий страницу, разметка лишь предупреждает; расширение с ним не строим.
+    const int32 ChunkCells = GetChunkSizeInCells();
+    if (ChunkCells <= 0 || CellPageSize % ChunkCells != 0)
+    {
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("[Layout] Чанк %d кл. не делит страницу %d кл. -- места за краем сетки не восстановлены"),
+            ChunkCells, CellPageSize);
+        return 0;
+    }
+
     // С разметкой сетка -- целые страницы; сетку, изменённую после разметки
     // (обрезанные страницы), не расширяем.
     const FIntPoint OldGridMin = GetGridMinCell();
@@ -2058,6 +2072,7 @@ void AGridWorldManager::InitializeCells()
     // в BuildCellBase.
     const FHerbalistCellBaseContext BaseContext = MakeCellBaseContext();
     int32 FallbackCellCount = 0;
+    int32 WaterCellCount = 0;
 
     // Координаты клеток -- глобальные, от начала сетки World Partition (этап 6
     // разметки мира); X, Y цикла -- локальный индекс в массиве.
@@ -2075,8 +2090,13 @@ void AGridWorldManager::InitializeCells()
             {
                 ++FallbackCellCount;
             }
+            WaterCellCount += Cell.bIsWater ? 1 : 0;
         }
     }
+
+    // Сколько воды дали регионы воды (2026-09-14, по PIE-логу пользователя):
+    // без этой строки из лога не видно, заработал ли поставленный регион.
+    UE_LOG(LogHerbalistWorld, Log, TEXT("InitializeCells: регионов воды %d, водных клеток %d"), CachedWaterRegions.Num(), WaterCellCount);
 
     if (BiomeRegions.Num() > 0 && FallbackCellCount > 0)
     {
@@ -2085,7 +2105,7 @@ void AGridWorldManager::InitializeCells()
         // SeedTestLandmarks выходят на таких клетках сразу
         // (IsCellClaimedByBiomeRegion), то есть там НЕЧЕГО СОБИРАТЬ и
         // сбор молча ничего не делает. Пишем следствие прямо.
-        UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: %d/%d клеток (%.0f%%) вне всех ABiomeRegionVolume -- блочный фолбэк даёт им биом для математики, но НЕ контент: ресурсы и хозяева мест там не появятся, собирать нечего. Расширь регионы или добавь новые."),
+        UE_LOG(LogHerbalistWorld, Warning, TEXT("InitializeCells: %d/%d клеток (%.1f%%) вне всех ABiomeRegionVolume -- блочный фолбэк даёт им биом для математики, но НЕ контент: ресурсы и хозяева мест там не появятся, собирать нечего. Расширь регионы или добавь новые."),
             FallbackCellCount, TotalCells, TotalCells > 0 ? 100.0f * FallbackCellCount / TotalCells : 0.0f);
     }
 
@@ -2322,21 +2342,65 @@ void AGridWorldManager::CacheCellHeightsForPage(FHerbalistCellPage& Page)
     // Без ландшафта нули -- правда; с ландшафтом высота известна, только когда
     // компонент под клеткой загружен (ревью этапа 8в).
     Page.bHeightsComplete = true;
-    if (!CachedLandscape)
+    if (CachedLandscape)
+    {
+        for (int32 LocalY = 0; LocalY < Page.Size.Y; ++LocalY)
+        {
+            for (int32 LocalX = 0; LocalX < Page.Size.X; ++LocalX)
+            {
+                FVector WorldPoint = GetCellWorldPositionFlat(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY);
+                WorldPoint.Z = 0.f;
+                const TOptional<float> OptHeight = CachedLandscape->GetHeightAtLocation(WorldPoint);
+                Page.Heights[LocalY * Page.Size.X + LocalX] = OptHeight.IsSet() ? OptHeight.GetValue() : 0.f;
+                Page.bHeightsComplete &= OptHeight.IsSet();
+            }
+        }
+    }
+    // Неполные высоты -- нули под частью клеток; актор переставится, когда
+    // материализация чанка их досчитает.
+    if (Page.bHeightsComplete)
+    {
+        PlaceSiteActorsOnGround(Page);
+    }
+}
+
+namespace
+{
+    template<typename ActorType>
+    void PlacePageActorsOnGround(const AGridWorldManager& Manager, UWorld& World, const FHerbalistCellPage& Page)
+    {
+        for (TActorIterator<ActorType> It(&World); It; ++It)
+        {
+            const FIntPoint Cell = It->GetGridCell();
+            if (Cell.X < Page.MinCell.X || Cell.X >= Page.MinCell.X + Page.Size.X
+                || Cell.Y < Page.MinCell.Y || Cell.Y >= Page.MinCell.Y + Page.Size.Y)
+            {
+                continue;
+            }
+            const FVector Ground = Manager.GetCellWorldPosition(Cell.X, Cell.Y);
+            // Не над своей клеткой -- актор другого менеджера (или сдвинут
+            // намеренно), по высоте не трогаем.
+            if (FVector2D(It->GetActorLocation()).Equals(FVector2D(Ground), 1.0))
+            {
+                It->SetActorLocation(Ground);
+            }
+        }
+    }
+}
+
+void AGridWorldManager::PlaceSiteActorsOnGround(const FHerbalistCellPage& Page)
+{
+    UWorld* World = GetWorld();
+    if (!World)
     {
         return;
     }
-    for (int32 LocalY = 0; LocalY < Page.Size.Y; ++LocalY)
-    {
-        for (int32 LocalX = 0; LocalX < Page.Size.X; ++LocalX)
-        {
-            FVector WorldPoint = GetCellWorldPositionFlat(Page.MinCell.X + LocalX, Page.MinCell.Y + LocalY);
-            WorldPoint.Z = 0.f;
-            const TOptional<float> OptHeight = CachedLandscape->GetHeightAtLocation(WorldPoint);
-            Page.Heights[LocalY * Page.Size.X + LocalX] = OptHeight.IsSet() ? OptHeight.GetValue() : 0.f;
-            Page.bHeightsComplete &= OptHeight.IsSet();
-        }
-    }
+    PlacePageActorsOnGround<AKurganActor>(*this, *World, Page);
+    PlacePageActorsOnGround<APOI_Totem>(*this, *World, Page);
+    PlacePageActorsOnGround<APOI_Svetloyar>(*this, *World, Page);
+    PlacePageActorsOnGround<APOI_GoryuchKamen>(*this, *World, Page);
+    PlacePageActorsOnGround<ALegendaryAnchorMarkerActor>(*this, *World, Page);
+    PlacePageActorsOnGround<AHomesteadMarkerActor>(*this, *World, Page);
 }
 
 void AGridWorldManager::GetPageChunkRange(const FHerbalistCellPage& Page, FIntPoint& OutMinChunk, FIntPoint& OutMaxChunk) const

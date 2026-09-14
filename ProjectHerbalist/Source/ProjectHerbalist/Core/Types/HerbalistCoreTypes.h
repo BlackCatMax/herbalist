@@ -194,7 +194,9 @@ enum class EAlchemyOutcome : uint8
 };
 
 // ========== Базовые структуры ==========
-USTRUCT(BlueprintType)
+// ScriptName (2026-09-14, по PIE-логу): в Python имя Direction совпадало с
+// EDirection плагина RigLogic, и одно из двух затенялось.
+USTRUCT(BlueprintType, meta = (ScriptName = "HerbalistDirection"))
 struct PROJECTHERBALIST_API FDirection
 {
     GENERATED_BODY()

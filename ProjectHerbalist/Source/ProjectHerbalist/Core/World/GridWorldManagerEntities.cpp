@@ -1084,13 +1084,15 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // ApplyBiomeInfluences после аудита 2026-08-24 (§7.1
         // AUDIT_AND_REFACTORING_PLAN.md): без этого клетка у потолка/пола
         // (Distortion/Corruption уже 1.0) всё равно помечалась бы грязной
-        // каждый тик безусловно, хотя реального сдвига нет.
+        // каждый тик безусловно, хотя реального сдвига нет. Сравнение точное,
+        // не KINDA_SMALL_NUMBER (2026-09-14, ревью): толчок за такт мельче 1e-4 --
+        // начало заката, такт проявлений 0 (каждый кадр) -- иначе не писался бы
+        // вовсе. Насыщенная ось (зажата в 0 или 1) не пишется и так.
         if (IsNight())
         {
             const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + NightHorrorDistortionRate * DeltaTime, 0.0f, 1.0f);
             const float NewCorruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
-            if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER) ||
-                !FMath::IsNearlyEqual(NewCorruption, NewTarget.Meta.Corruption, KINDA_SMALL_NUMBER))
+            if (NewDistortion != NewTarget.Meta.Distortion || NewCorruption != NewTarget.Meta.Corruption)
             {
                 NewTarget.Meta.Distortion = NewDistortion;
                 NewTarget.Meta.Corruption = NewCorruption;
@@ -1106,7 +1108,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // файле: NormalizeSum пересчитывает сумму отдельно при
             // релаксации, здесь клампить в 1.0 незачем.
             const float NewSpirit = FMath::Max(0.0f, NewTarget.Direction.Spirit + NightHorrorSpiritRate * DeltaTime);
-            if (!FMath::IsNearlyEqual(NewSpirit, NewTarget.Direction.Spirit, KINDA_SMALL_NUMBER))
+            if (NewSpirit != NewTarget.Direction.Spirit)
             {
                 NewTarget.Direction.Spirit = NewSpirit;
                 bChanged = true;
@@ -1121,8 +1123,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         {
             const float NewPurity    = FMath::Clamp(NewTarget.Meta.Purity    + DawnPurityRate    * DeltaTime, 0.0f, 1.0f);
             const float NewStability = FMath::Clamp(NewTarget.Meta.Stability + DawnStabilityRate * DeltaTime, 0.0f, 1.0f);
-            if (!FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER) ||
-                !FMath::IsNearlyEqual(NewStability, NewTarget.Meta.Stability, KINDA_SMALL_NUMBER))
+            if (NewPurity != NewTarget.Meta.Purity || NewStability != NewTarget.Meta.Stability)
             {
                 NewTarget.Meta.Purity    = NewPurity;
                 NewTarget.Meta.Stability = NewStability;
@@ -1138,7 +1139,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         if (IsDusk())
         {
             const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + DuskDistortionRate * GetDuskProgress01() * DeltaTime, 0.0f, 1.0f);
-            if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
+            if (NewDistortion != NewTarget.Meta.Distortion)
             {
                 NewTarget.Meta.Distortion = NewDistortion;
                 bChanged = true;
@@ -1153,7 +1154,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         if ((Cell.Biome == EBiomeType::Steppe || Cell.Biome == EBiomeType::ForestSteppe) && IsPoludnitsaWindow())
         {
             const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + PoludnitsaDistortionRate * DeltaTime, 0.0f, 1.0f);
-            if (!FMath::IsNearlyEqual(NewDistortion, NewTarget.Meta.Distortion, KINDA_SMALL_NUMBER))
+            if (NewDistortion != NewTarget.Meta.Distortion)
             {
                 NewTarget.Meta.Distortion = NewDistortion;
                 bChanged = true;
@@ -1171,7 +1172,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         if (bIsWinter)
         {
             const float NewPurity = FMath::Clamp(NewTarget.Meta.Purity + WinterPurityRate * DeltaTime, 0.0f, 1.0f);
-            if (!FMath::IsNearlyEqual(NewPurity, NewTarget.Meta.Purity, KINDA_SMALL_NUMBER))
+            if (NewPurity != NewTarget.Meta.Purity)
             {
                 NewTarget.Meta.Purity = NewPurity;
                 bChanged = true;

@@ -15,6 +15,7 @@
 #include "Core/World/WorldLayout.h"
 #include "Core/World/BiomeRegionVolume.h"
 #include "Core/World/WaterRegionVolume.h"
+#include "Core/World/KurganActor.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
@@ -462,6 +463,70 @@ bool FHerbalistCellPageStreaming_SitePagesStayLoaded::RunTest(const FString& Par
     TestTrue(TEXT("Легендарная сущность с якорем видна"), Manager->IsLegendaryManifested(AnchoredEntity));
 
     StopStreaming(Manager);
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistCellPageStreaming_SiteActorStandsOnGroundWhenPageLoads,
+    "Herbalist.WorldLayout.PageStreaming.SiteActorStandsOnGroundWhenPageLoads",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistCellPageStreaming_SiteActorStandsOnGroundWhenPageLoads::RunTest(const FString& Parameters)
+{
+    // Курган, поставленный на выгруженной странице, получил высоту 0 (ревью
+    // 2026-09-14). Загрузка страницы ставит его на землю. Неверную высоту
+    // изображает подъём актора над точкой спавна -- земля под тестовой сеткой
+    // может быть на любой высоте.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World))
+    {
+        return false;
+    }
+    FScopedStreamingTestRadius ScopedRadius;
+    AGridWorldManager* Manager = SpawnStreamingTestManager(World, 6300.0);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager))
+    {
+        return false;
+    }
+
+    // Курган на странице (0, 0); зритель на странице (-1, -1).
+    const FIntPoint KurganCell(5, 5);
+    Manager->SetKurganSites({ { KurganCell, FName(TEXT("PageStreamingKurganIngredient")) } });
+    StreamTo(Manager, GroundUnderWestPage, FIntPoint(-2, -2));
+    TestNull(TEXT("Sanity: страница кургана выгружена"), Manager->GetCellConst(KurganCell.X, KurganCell.Y));
+
+    AKurganActor* KurganPickup = nullptr;
+    for (TActorIterator<AKurganActor> It(World); It; ++It)
+    {
+        if (It->GetWorldManager() == Manager)
+        {
+            KurganPickup = *It;
+        }
+    }
+    if (!TestNotNull(TEXT("Актор кургана есть"), KurganPickup))
+    {
+        StopStreaming(Manager);
+        Manager->Destroy();
+        return false;
+    }
+    const double WrongHeightCm = 5000.0;
+    const double SpawnZ = KurganPickup->GetActorLocation().Z;
+    KurganPickup->SetActorLocation(KurganPickup->GetActorLocation() + FVector(0.0, 0.0, WrongHeightCm));
+    TestEqual(TEXT("Sanity: актор поднят над точкой спавна"), KurganPickup->GetActorLocation().Z, SpawnZ + WrongHeightCm, 1.0);
+
+    StreamTo(Manager, GroundUnderWholeSmallGrid, FIntPoint(1, 1));
+    TestNotNull(TEXT("Sanity: страница кургана загружена"), Manager->GetCellConst(KurganCell.X, KurganCell.Y));
+    TestTrue(TEXT("Загрузка страницы поставила курган на землю своей клетки"),
+        KurganPickup->GetActorLocation().Equals(Manager->GetCellWorldPosition(KurganCell.X, KurganCell.Y), 1.0));
+
+    StopStreaming(Manager);
+    for (TActorIterator<AKurganActor> It(World); It; ++It)
+    {
+        if (It->GetWorldManager() == Manager)
+        {
+            It->Destroy();
+        }
+    }
     Manager->Destroy();
     return true;
 }

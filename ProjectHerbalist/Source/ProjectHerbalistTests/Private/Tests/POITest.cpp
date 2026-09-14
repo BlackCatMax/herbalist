@@ -372,6 +372,71 @@ bool FHerbalistPOI_SeedingSpawnsOneVisualActorPerPOI::RunTest(const FString& Par
     return true;
 }
 
+namespace
+{
+    template<typename ActorType>
+    TArray<ActorType*> CollectBoundPOIActors(UWorld* World, const AGridWorldManager* Manager)
+    {
+        TArray<ActorType*> Result;
+        for (TActorIterator<ActorType> It(World); It; ++It)
+        {
+            if (It->GetWorldManager() == Manager)
+            {
+                Result.Add(*It);
+            }
+        }
+        return Result;
+    }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_LoadedSitesReplaceSeededActors,
+    "Herbalist.POI.LoadedSitesReplaceSeededActors",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPOI_LoadedSitesReplaceSeededActors::RunTest(const FString& Parameters)
+{
+    // Загрузка сейва ставит точки сеттерами (HerbalistSaveSubsystem). Раньше
+    // акторы оставались на местах свежего посева, а логика шла на местах сейва
+    // (ревью 2026-09-14, тот же баг, что у курганов).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const FIntPoint SeededTotem = Manager->GetTotemSite();
+    if (!TestTrue(TEXT("Sanity: Тотем засеян"), HerbalistCore::IsValidCell(SeededTotem)))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    TestEqual(TEXT("Sanity: после посева один актор Тотема"), CollectBoundPOIActors<APOI_Totem>(World, Manager).Num(), 1);
+
+    // Место из сейва -- соседняя клетка той же строки.
+    const FIntPoint LoadedTotem(Manager->IsCellInGrid(SeededTotem.X - 1, SeededTotem.Y) ? SeededTotem.X - 1 : SeededTotem.X + 1, SeededTotem.Y);
+    TestTrue(TEXT("Sanity: место сейва в сетке"), Manager->IsCellInGrid(LoadedTotem.X, LoadedTotem.Y));
+    Manager->SetTotemSite(LoadedTotem);
+    const TArray<APOI_Totem*> Totems = CollectBoundPOIActors<APOI_Totem>(World, Manager);
+    TestEqual(TEXT("После загрузки актор Тотема один"), Totems.Num(), 1);
+    if (Totems.Num() == 1)
+    {
+        TestTrue(TEXT("Актор Тотема на клетке сейва"), Totems[0]->GetGridCell() == LoadedTotem);
+        TestTrue(TEXT("Актор Тотема стоит над клеткой сейва"),
+            Totems[0]->GetActorLocation().Equals(Manager->GetCellWorldPosition(LoadedTotem.X, LoadedTotem.Y), 1.0));
+    }
+
+    Manager->SetSvetloyarSite(HerbalistCore::InvalidCell());
+    TestEqual(TEXT("Точки в сейве нет -- актора Светлояра нет"), CollectBoundPOIActors<APOI_Svetloyar>(World, Manager).Num(), 0);
+
+    Manager->SetGoryuchKamenSite(Manager->GetGoryuchKamenSite());
+    TestEqual(TEXT("То же место -- актор Горюч-камня не задвоен"), CollectBoundPOIActors<APOI_GoryuchKamen>(World, Manager).Num(), 1);
+
+    Manager->SetTotemSite(HerbalistCore::InvalidCell());
+    Manager->SetGoryuchKamenSite(HerbalistCore::InvalidCell());
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPOI_ApplyingPlakunTravaToSoloveyCalmsItPermanently,
     "Herbalist.POI.ApplyingPlakunTravaToSoloveyCalmsItPermanently",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

@@ -165,4 +165,35 @@ bool FHerbalistDayCycle_PoludnitsaOnlyStrikesOpenBiomesAtMidday::RunTest(const F
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDayCycle_SmallStepNudgeIsStillWritten,
+    "Herbalist.DayCycle.SmallStepNudgeIsStillWritten",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDayCycle_SmallStepNudgeIsStillWritten::RunTest(const FString& Parameters)
+{
+    // Толчок за шаг мельче KINDA_SMALL_NUMBER (2026-09-14, ревью): рассвет при
+    // шаге 0.01 с -- ~4e-5 по Purity. Сравнение с эпсилоном перед записью его
+    // пропускало; то же с началом заката и с тактом проявлений 0 (каждый кадр).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Tundra;
+    Cell->bIsWater = false;
+
+    Manager->SetGameClockSeconds(1.0f);   // Рассвет
+    const float PurityBefore = Cell->TargetState.Meta.Purity;
+    Manager->UpdateEntityManifestations(0.01f);
+
+    TestTrue(TEXT("Sanity: Purity не у потолка"), PurityBefore < 1.0f);
+    TestTrue(TEXT("Толчок Purity за шаг 0.01 с записан"), Cell->TargetState.Meta.Purity > PurityBefore);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

@@ -38,6 +38,9 @@ public:
 
     void Init(AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
 
+    FIntPoint GetGridCell() const { return FIntPoint(GridX, GridY); }
+    AGridWorldManager* GetWorldManager() const { return WorldManager; }
+
 protected:
     virtual void Tick(float DeltaTime) override;
 
@@ -93,6 +96,9 @@ public:
 
     void Init(AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
 
+    FIntPoint GetGridCell() const { return FIntPoint(GridX, GridY); }
+    AGridWorldManager* GetWorldManager() const { return WorldManager; }
+
     // 0 = немо (Clarity ниже основного порога), 1 = дальний колокол,
     // 2 = колокол+пение, 3 = вспышка купола+полный хор (DESIGN_POI_Art_And_
     // LevelDesign.md §2, три уровня после самого порога видимости).
@@ -133,6 +139,9 @@ public:
     APOI_GoryuchKamen();
 
     void Init(AGridWorldManager* InWorldManager, int32 InGridX, int32 InGridY);
+
+    FIntPoint GetGridCell() const { return FIntPoint(GridX, GridY); }
+    AGridWorldManager* GetWorldManager() const { return WorldManager; }
 
 protected:
     virtual void Tick(float DeltaTime) override;

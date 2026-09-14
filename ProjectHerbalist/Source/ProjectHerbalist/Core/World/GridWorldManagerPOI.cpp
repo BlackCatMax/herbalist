@@ -9,6 +9,8 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/POIActors.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 
@@ -38,6 +40,52 @@ namespace
         }
         return HerbalistCore::InvalidCell();
     }
+
+    // Актор-визуал точки -- один на менеджер, на её клетке; без точки актора
+    // нет. Тот же принцип, что SyncKurganActors.
+    template<typename ActorType>
+    void SyncSinglePOIActor(AGridWorldManager& Manager, const FIntPoint& Site)
+    {
+        UWorld* World = Manager.GetWorld();
+        if (!World)
+        {
+            return;
+        }
+        for (TActorIterator<ActorType> It(World); It; ++It)
+        {
+            if (It->GetWorldManager() == &Manager)
+            {
+                It->Destroy();
+            }
+        }
+        if (!HerbalistCore::IsValidCell(Site))
+        {
+            return;
+        }
+        if (ActorType* SiteActor = World->SpawnActor<ActorType>(ActorType::StaticClass(),
+            Manager.GetCellWorldPosition(Site.X, Site.Y), FRotator::ZeroRotator))
+        {
+            SiteActor->Init(&Manager, Site.X, Site.Y);
+        }
+    }
+}
+
+void AGridWorldManager::SetTotemSite(const FIntPoint& InSite)
+{
+    TotemSite = InSite;
+    SyncSinglePOIActor<APOI_Totem>(*this, TotemSite);
+}
+
+void AGridWorldManager::SetSvetloyarSite(const FIntPoint& InSite)
+{
+    SvetloyarSite = InSite;
+    SyncSinglePOIActor<APOI_Svetloyar>(*this, SvetloyarSite);
+}
+
+void AGridWorldManager::SetGoryuchKamenSite(const FIntPoint& InSite)
+{
+    GoryuchKamenSite = InSite;
+    SyncSinglePOIActor<APOI_GoryuchKamen>(*this, GoryuchKamenSite);
 }
 
 void AGridWorldManager::SeedPointsOfInterest()
@@ -69,49 +117,26 @@ void AGridWorldManager::SeedPointsOfInterest()
         Occupied.Add(Pair.Value);
     }
 
-    TotemSite = SeedSinglePOISite(*this, WorldRNG, Occupied);
+    // Актор-визуал (DESIGN_POI_Art_And_LevelDesign.md §1, 2026-09-06) --
+    // спавнится самим менеджером в уже выбранной клетке, не размещается
+    // вручную (в отличие от AShrineActor). Ставит его сеттер -- тот же путь,
+    // что у загрузки сейва.
+    SetTotemSite(SeedSinglePOISite(*this, WorldRNG, Occupied));
     if (HerbalistCore::IsValidCell(TotemSite))
     {
         Occupied.Add(TotemSite);
-        // Актор-визуал (DESIGN_POI_Art_And_LevelDesign.md §1, 2026-09-06) --
-        // спавнится самим менеджером в уже выбранной клетке, не размещается
-        // вручную (в отличие от AShrineActor).
-        if (UWorld* World = GetWorld())
-        {
-            if (APOI_Totem* TotemActor = World->SpawnActor<APOI_Totem>(APOI_Totem::StaticClass(),
-                GetCellWorldPosition(TotemSite.X, TotemSite.Y), FRotator::ZeroRotator))
-            {
-                TotemActor->Init(this, TotemSite.X, TotemSite.Y);
-            }
-        }
     }
 
-    SvetloyarSite = SeedSinglePOISite(*this, WorldRNG, Occupied);
+    SetSvetloyarSite(SeedSinglePOISite(*this, WorldRNG, Occupied));
     if (HerbalistCore::IsValidCell(SvetloyarSite))
     {
         Occupied.Add(SvetloyarSite);
-        if (UWorld* World = GetWorld())
-        {
-            if (APOI_Svetloyar* SvetloyarActor = World->SpawnActor<APOI_Svetloyar>(APOI_Svetloyar::StaticClass(),
-                GetCellWorldPosition(SvetloyarSite.X, SvetloyarSite.Y), FRotator::ZeroRotator))
-            {
-                SvetloyarActor->Init(this, SvetloyarSite.X, SvetloyarSite.Y);
-            }
-        }
     }
 
-    GoryuchKamenSite = SeedSinglePOISite(*this, WorldRNG, Occupied);
+    SetGoryuchKamenSite(SeedSinglePOISite(*this, WorldRNG, Occupied));
     if (HerbalistCore::IsValidCell(GoryuchKamenSite))
     {
         Occupied.Add(GoryuchKamenSite);
-        if (UWorld* World = GetWorld())
-        {
-            if (APOI_GoryuchKamen* StoneActor = World->SpawnActor<APOI_GoryuchKamen>(APOI_GoryuchKamen::StaticClass(),
-                GetCellWorldPosition(GoryuchKamenSite.X, GoryuchKamenSite.Y), FRotator::ZeroRotator))
-            {
-                StoneActor->Init(this, GoryuchKamenSite.X, GoryuchKamenSite.Y);
-            }
-        }
     }
 
     SoloveySite = SeedSinglePOISite(*this, WorldRNG, Occupied);

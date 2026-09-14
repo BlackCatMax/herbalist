@@ -136,10 +136,17 @@ void AGridWorldManager::Tick(float DeltaTime)
 
     // ========================================================================
     // ВОССТАНОВЛЕНИЕ ПАРАМЕТРОВ КЛЕТОК (ЭКОЛОГИЯ)
-    // Непрерывный процесс релаксации к TargetState, не часть пайплайна —
-    // идёт каждый кадр с реальным DeltaTime, как и раньше.
+    // Непрерывный процесс релаксации к TargetState, не часть пайплайна.
+    // Шагом CellRegenerationStepSeconds с накопленным временем, а не каждый
+    // кадр (2026-09-14): покадровые прибавки теряли точность float и уводили
+    // скорости на проценты (довод у константы). rate*dt в сумме тот же.
     // ========================================================================
-    RegenerateCellParameters(DeltaTime);
+    CellRegenerationAccumulator += DeltaTime;
+    if (CellRegenerationAccumulator >= CellRegenerationStepSeconds)
+    {
+        RegenerateCellParameters(CellRegenerationAccumulator);
+        CellRegenerationAccumulator = 0.0f;
+    }
 
     // ========================================================================
     // ПРОЯВЛЕНИЕ СУЩНОСТЕЙ (16_Entity_Manifestation, вертикальный срез)

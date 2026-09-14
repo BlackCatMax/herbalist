@@ -249,4 +249,57 @@ bool FHerbalistContagion_FrameSizedStepsAccumulate::RunTest(const FString& Param
     return true;
 }
 
+// Tick копит кадровое время и зовёт RegenerateCellParameters шагом
+// CellRegenerationStepSeconds (2026-09-14, ревью): покадровые прибавки теряли
+// точность float и уводили скорость порчи и релаксации на проценты.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistContagion_TickRegeneratesInStepsNotFrames,
+    "Herbalist.Contagion.TickRegeneratesInStepsNotFrames",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistContagion_TickRegeneratesInStepsNotFrames::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World, {}, -1, 900.0f);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+    // День: ночные толчки Corruption не мешают.
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+    FGridCell* Source = Manager->GetCell(5, 5);
+    FGridCell* North = Manager->GetCell(5, 4);
+    if (!TestNotNull(TEXT("Source cell exists"), Source) || !TestNotNull(TEXT("North neighbor exists"), North))
+    {
+        Manager->Destroy();
+        return false;
+    }
+    Source->Biome = EBiomeType::Bog;
+    Source->Memory.bDegrading = true;
+    Source->TargetState.Meta.Corruption = 1.0f;
+    Source->TargetState.Meta.Purity = 0.0f;
+    Source->State.Meta.Corruption = 1.0f;
+    North->Biome = EBiomeType::Taiga;
+    North->bIsWater = false;
+    North->TargetState.Meta.Corruption = 0.18f;
+    North->State.Meta.Corruption = 0.18f;
+    North->Memory.bDegrading = false;
+
+    const float FrameSeconds = 1.0f / 240.0f;
+    const float CorruptionBefore = North->TargetState.Meta.Corruption;
+    Manager->Tick(FrameSeconds);
+    // Точное сравнение: TestEqual для float берёт допуск 1e-4, а толчок за кадр
+    // ~2e-6 -- проверка с допуском прошла бы и на покадровом коде (ревью).
+    TestTrue(TEXT("Один кадр 1/240 с -- шаг восстановления не набран, толчка нет"),
+        North->TargetState.Meta.Corruption == CorruptionBefore);
+
+    for (int32 Frame = 0; Frame < 30; ++Frame)
+    {
+        Manager->Tick(FrameSeconds);
+    }
+    TestTrue(TEXT("31 кадр (0.129 с) -- шаг набран, толчок записан"), North->TargetState.Meta.Corruption > CorruptionBefore);
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR

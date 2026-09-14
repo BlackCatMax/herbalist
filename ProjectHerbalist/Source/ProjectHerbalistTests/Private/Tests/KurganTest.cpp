@@ -241,4 +241,53 @@ bool FHerbalistKurgan_InteractingWithPickupActorGrantsItemAndClearsSite::RunTest
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistKurgan_LoadedSitesReplaceSeededPickupActors,
+    "Herbalist.Kurgan.LoadedSitesReplaceSeededPickupActors",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistKurgan_LoadedSitesReplaceSeededPickupActors::RunTest(const FString& Parameters)
+{
+    // Загрузка сейва (2026-09-14, найдено ревью): SetKurganSites раньше менял
+    // только карту курганов, а акторы оставались на местах свежего посева --
+    // разграблялись курганы сейва, а видны были другие.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    const auto BoundPickups = [World, Manager]()
+    {
+        TArray<AKurganActor*> Pickups;
+        for (TActorIterator<AKurganActor> It(World); It; ++It)
+        {
+            if (It->GetWorldManager() == Manager && !It->IsActorBeingDestroyed())
+            {
+                Pickups.Add(*It);
+            }
+        }
+        return Pickups;
+    };
+
+    const TArray<AKurganActor*> Seeded = BoundPickups();
+    TestEqual(TEXT("Sanity: по актору на засеянный курган"), Seeded.Num(), Manager->GetKurganSites().Num());
+
+    TMap<FIntPoint, FName> Loaded;
+    Loaded.Add(FIntPoint(3, 17), FName(TEXT("Костяной нож")));
+    Manager->SetKurganSites(Loaded);
+
+    const TArray<AKurganActor*> AfterLoad = BoundPickups();
+    if (TestEqual(TEXT("После загрузки -- по актору на курган сейва"), AfterLoad.Num(), 1))
+    {
+        TestEqual(TEXT("...на клетке кургана сейва"), AfterLoad[0]->GetGridCell(), FIntPoint(3, 17));
+    }
+    for (AKurganActor* Old : Seeded)
+    {
+        TestTrue(TEXT("Акторы свежего посева убраны"), !IsValid(Old) || Old->IsActorBeingDestroyed());
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
