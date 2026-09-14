@@ -1,6 +1,7 @@
 #include "HerbalistNameUtils.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Misc/Crc.h"
 
 // ============================================================================
@@ -429,4 +430,57 @@ FString GetItemDisplayName(const FInventoryItem& Item, UIngredientRegistrySubsys
         }
     }
     return Item.IngredientID.ToString();
+}
+
+// ============================================================================
+// Состояние процессов станций (2026-09-14) -- см. объявление в .h
+// ============================================================================
+
+namespace
+{
+    // Остаток -- секунды мира: таймеры станций считают DeltaTime
+    // (HerbalistInventoryComponent::TickComponent). Округление вверх: на
+    // последних секундах "осталось 0 мин" читалось бы как "готово".
+    FString FormatProcessRemaining(float Seconds)
+    {
+        const int32 WholeSeconds = FMath::Max(1, FMath::CeilToInt(Seconds));
+        if (WholeSeconds >= 60)
+        {
+            return FString::Printf(TEXT("%d мин"), FMath::DivideAndRoundUp(WholeSeconds, 60));
+        }
+        return FString::Printf(TEXT("%d с"), WholeSeconds);
+    }
+
+    // Одна пара "флаг итога + таймер" на предмете; таймер -1 -- процесс не
+    // начинался (сентинел FInventoryItem, HerbalistCoreTypes.h).
+    void AppendProcessStatus(TArray<FString>& Parts, bool bDone, float RemainingSeconds, bool bInItsStation,
+        const FString& DoneText, const FString& RunningText, const FString& PausedText, const FString& StationName)
+    {
+        if (bDone)
+        {
+            Parts.Add(DoneText);
+        }
+        else if (RemainingSeconds >= 0.0f)
+        {
+            const FString Remaining = FormatProcessRemaining(RemainingSeconds);
+            Parts.Add(bInItsStation
+                ? FString::Printf(TEXT("%s, осталось %s"), *RunningText, *Remaining)
+                : FString::Printf(TEXT("%s, осталось %s — в %s"), *PausedText, *Remaining, *StationName));
+        }
+    }
+}
+
+FString GetItemProcessStatus(const FInventoryItem& Item, EProcessingStationType HostStation)
+{
+    TArray<FString> Parts;
+    AppendProcessStatus(Parts, Item.bIsDried, Item.DryingTimeRemainingSeconds,
+        HostStation == EProcessingStationType::DryingRack,
+        TEXT("высушено"), TEXT("сохнет"), TEXT("сушка не закончена"), TEXT("сушилку"));
+    AppendProcessStatus(Parts, Item.bHasSettled, Item.SettlingTimeRemainingSeconds,
+        HostStation == EProcessingStationType::SettlingStand,
+        TEXT("отстоялось"), TEXT("отстаивается"), TEXT("отстой не закончен"), TEXT("отстойник"));
+    AppendProcessStatus(Parts, Item.bHasEvaporated, Item.EvaporationTimeRemainingSeconds,
+        HostStation == EProcessingStationType::EvaporationStill,
+        TEXT("выпарено"), TEXT("выпаривается"), TEXT("выпаривание не закончено"), TEXT("выпарной куб"));
+    return FString::Join(Parts, TEXT(" · "));
 }

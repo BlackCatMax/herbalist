@@ -26,7 +26,13 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
     if (TimeSinceLastDecayUpdate < DecayUpdateInterval)
         return;
 
-    TimeSinceLastDecayUpdate = 0.0f;
+    // Остаток переносится (2026-09-14): раньше накопитель обнулялся, и при
+    // тике компонента раз в 0.2 с (при 60 кадрах тики приходят через ~0.217 с)
+    // каждое обновление теряло ~0.08 с -- порча, сушка, отстой и выпаривание
+    // шли процентов на 8 медленнее заявленного. Одно обновление за тик: после
+    // долгого кадра отставание догоняется за несколько тиков, работа за тик
+    // ограничена.
+    TimeSinceLastDecayUpdate -= DecayUpdateInterval;
 
     const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
     const float GlobalDecayRate = Settings ? Settings->InventoryDecayRate : 0.02f;
@@ -103,6 +109,7 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
 
     for (FInventoryItem& Item : Items)
     {
+        bool bTurnedToPeregnoy = false;
         if (Item.bSubjectToDecay)
         {
             // Вода живёт в отдельной таблице (FWaterTypeRow), не в
@@ -156,57 +163,74 @@ void UHerbalistInventoryComponent::TickComponent(float DeltaTime, ELevelTick Tic
                         Item.State = PeregnoyRow->BaseState;
                     }
                 }
+                // Процессы станций к Перегною не относятся: без сброса подсказка
+                // вечно писала бы "сохнет" про сгнившее, а флаги не давали бы
+                // перегною сложиться в стопку (ревью 2026-09-14).
+                Item.bIsDried = false;
+                Item.DryingTimeRemainingSeconds = -1.0f;
+                Item.bHasSettled = false;
+                Item.SettlingTimeRemainingSeconds = -1.0f;
+                Item.bHasEvaporated = false;
+                Item.EvaporationTimeRemainingSeconds = -1.0f;
+                bTurnedToPeregnoy = true;
             }
-            // Сушилка (2026-09-04) -- только если этот КОНКРЕТНЫЙ инвентарь
-            // сейчас сушилка (StationType==DryingRack, обобщено с bool
-            // bIsDryingRack 2026-09-05, см. довод у EProcessingStationType,
-            // HerbalistInventoryComponent.h), предмет не вода (сушат
-            // листья/корни/грибы, не воду) и ещё не высох. "else if", не
-            // отдельный if -- предмет, только что превратившийся в Перегной
-            // строкой выше, больше не тот ингредиент, которым был секунду
-            // назад, и сушить (взводить его же таймер) уже нечего в этом же
-            // тике.
-            else if (StationType == EProcessingStationType::DryingRack && !Item.bIsWater && !Item.bIsDried)
-            {
-                // Приоритет карточки над глобальным фолбэком (2026-09-05,
-                // "процесс сушки у разных растений разный") -- резолв самой
-                // карточки здесь (обращение к реестру), решение "какое число
-                // использовать" -- в чистой ResolveDryingDurationSeconds.
-                const FIngredientTableRow* DryingRow = IngredientReg ? IngredientReg->GetRow(Item.IngredientID) : nullptr;
-                const float ItemDryingDuration = ResolveDryingDurationSeconds(DryingRow, GlobalDryingDurationFallback);
+        }
 
-                if (TickDryingItem(Item, DecayUpdateInterval, ItemDryingDuration))
+        // Процессы станций -- вне гейта порчи (ревью 2026-09-14): готовое зелье
+        // из котла не портится (bSubjectToDecay=false, PipelineV2.cpp), и отстой
+        // с выпариванием внутри гейта не шли никогда. Предмет, только что
+        // ставший Перегноем, этим тиком уже не тот ингредиент -- пропускаем.
+        if (bTurnedToPeregnoy)
+        {
+            continue;
+        }
+
+        // Сушилка (2026-09-04) -- только если этот КОНКРЕТНЫЙ инвентарь
+        // сейчас сушилка (StationType==DryingRack, обобщено с bool
+        // bIsDryingRack 2026-09-05, см. довод у EProcessingStationType,
+        // HerbalistInventoryComponent.h), предмет портится (трава; артефакт и
+        // готовое зелье не сохнут), не вода (сушат листья/корни/грибы, не воду)
+        // и ещё не высох.
+        if (StationType == EProcessingStationType::DryingRack && Item.bSubjectToDecay && !Item.bIsWater && !Item.bIsDried)
+        {
+            // Приоритет карточки над глобальным фолбэком (2026-09-05,
+            // "процесс сушки у разных растений разный") -- резолв самой
+            // карточки здесь (обращение к реестру), решение "какое число
+            // использовать" -- в чистой ResolveDryingDurationSeconds.
+            const FIngredientTableRow* DryingRow = IngredientReg ? IngredientReg->GetRow(Item.IngredientID) : nullptr;
+            const float ItemDryingDuration = ResolveDryingDurationSeconds(DryingRow, GlobalDryingDurationFallback);
+
+            if (TickDryingItem(Item, DecayUpdateInterval, ItemDryingDuration))
+            {
+                // Только что досохло этим тиком -- честная дельта
+                // алхимических осей (если карточка её несёт, см. довод у
+                // FIngredientTableRow::DriedStateDelta). DryingRow уже
+                // резолвлен выше для длительности -- переиспользуем, не
+                // ходим в реестр второй раз за тот же предмет.
+                if (DryingRow)
                 {
-                    // Только что досохло этим тиком -- честная дельта
-                    // алхимических осей (если карточка её несёт, см. довод у
-                    // FIngredientTableRow::DriedStateDelta). DryingRow уже
-                    // резолвлен выше для длительности -- переиспользуем, не
-                    // ходим в реестр второй раз за тот же предмет.
-                    if (DryingRow)
-                    {
-                        ApplyDriedStateDelta(Item.State.Meta, DryingRow->DriedStateDelta);
-                    }
+                    ApplyDriedStateDelta(Item.State.Meta, DryingRow->DriedStateDelta);
                 }
             }
-            // Отстойник (2026-09-05) -- только готовое зелье (см. довод у
-            // PotionIngredientID выше), ещё не отстоявшееся.
-            else if (StationType == EProcessingStationType::SettlingStand && !Item.bIsWater
-                && !Item.bHasSettled && Item.IngredientID == PotionIngredientID)
+        }
+        // Отстойник (2026-09-05) -- только готовое зелье (см. довод у
+        // PotionIngredientID выше), ещё не отстоявшееся.
+        else if (StationType == EProcessingStationType::SettlingStand && !Item.bIsWater
+            && !Item.bHasSettled && Item.IngredientID == PotionIngredientID)
+        {
+            if (TickSettlingItem(Item, DecayUpdateInterval, SettlingDuration))
             {
-                if (TickSettlingItem(Item, DecayUpdateInterval, SettlingDuration))
-                {
-                    ApplySettlingEffect(Item.State, SettlingDominantAxisBoost, SettlingMagnitudeLossFactor);
-                }
+                ApplySettlingEffect(Item.State, SettlingDominantAxisBoost, SettlingMagnitudeLossFactor);
             }
-            // Выпарной куб (2026-09-05) -- та же оговорка "только готовое
-            // зелье", ещё не выпаренное.
-            else if (StationType == EProcessingStationType::EvaporationStill && !Item.bIsWater
-                && !Item.bHasEvaporated && Item.IngredientID == PotionIngredientID)
+        }
+        // Выпарной куб (2026-09-05) -- та же оговорка "только готовое
+        // зелье", ещё не выпаренное.
+        else if (StationType == EProcessingStationType::EvaporationStill && !Item.bIsWater
+            && !Item.bHasEvaporated && Item.IngredientID == PotionIngredientID)
+        {
+            if (TickEvaporationItem(Item, DecayUpdateInterval, EvaporationDuration))
             {
-                if (TickEvaporationItem(Item, DecayUpdateInterval, EvaporationDuration))
-                {
-                    ApplyEvaporationEffect(Item.State, EvaporationMagnitudeBoost, EvaporationPotencyBoost, EvaporationRiskMultiplier);
-                }
+                ApplyEvaporationEffect(Item.State, EvaporationMagnitudeBoost, EvaporationPotencyBoost, EvaporationRiskMultiplier);
             }
         }
     }

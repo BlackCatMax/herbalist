@@ -252,7 +252,10 @@ bool FHerbalistInventorySlot_FindRealIndexSurvivesStateDrift::RunTest(const FStr
     // TickComponent), никогда не оповещая UI (аудит 2026-09-05) -- имитируем
     // это напрямую, не тикая весь компонент: реальный Distortion уходит
     // далеко от закэшированных 0.9, CreationTime порча не трогает.
-    FInventoryItem& RealItemB = const_cast<FInventoryItem&>(Items[RealIndexB]);
+    // GetSlot, не Items[...]: GetItems() возвращает копию массива, и правка её
+    // элемента настоящий инвентарь не трогала -- тест проходил, не проверяя
+    // дрейф (найдено 2026-09-14).
+    FInventoryItem& RealItemB = const_cast<FInventoryItem&>(*PC->InventoryComponent->GetSlot(RealIndexB));
     RealItemB.State.Meta.Distortion = 0.05f;
 
     TestEqual(TEXT("FindRealIndex всё ещё находит ItemB по CreationTime, несмотря на разъехавшийся State"),

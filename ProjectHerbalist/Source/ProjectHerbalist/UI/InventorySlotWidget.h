@@ -9,6 +9,7 @@
 class UImage;
 class UTextBlock;
 class UItemTooltipWidget;
+struct FPerceivedInventory;
 
 UCLASS()
 class PROJECTHERBALIST_API UInventorySlotWidget : public UUserWidget
@@ -24,6 +25,24 @@ public:
     // Публично только для теста на устойчивость к дрейфу State (аудит
     // 2026-09-05, см. подробный комментарий у FindRealIndex() в .cpp).
     int32 FindRealIndexForTest() const { return FindRealIndex(); }
+    bool TryGetPerceivedItemForTest(FInventoryItem& OutItem) const { return TryGetPerceivedItem(OutItem); }
+    FString GetProcessStatusForTest() const { return BuildProcessStatus(); }
+
+    // Искажение одного предмета той же ComputePerceivedInventory, что у
+    // восприятия менеджера: шум детерминирован от предмета и ясности.
+    static FInventoryItem PerceiveSingleItem(const FInventoryItem& Item, float Clarity);
+
+    // Искажённая копия предмета Inventory[RealIndex] для имени и подсказки.
+    // Восприятие менеджера считает только сумку игрока (контейнер 0,
+    // FSnapshotService::CaptureInventory) -- раньше слот ЛЮБОГО инвентаря брал
+    // оттуда предмет с тем же номером строки, и в окне хранилища или станции
+    // подсказка показывала числа чужого предмета из сумки (2026-09-14). Сумка
+    // берёт кэш, если под этим номером всё ещё тот же предмет; остальное
+    // искажается на месте той же ComputePerceivedInventory -- шум
+    // детерминирован от предмета, результат тот же, что дал бы кэш.
+    static bool ResolvePerceivedItem(const UHerbalistInventoryComponent* Inventory, int32 RealIndex,
+        const UHerbalistInventoryComponent* PlayerInventory, const FPerceivedInventory* PlayerPerceived,
+        float Clarity, FInventoryItem& OutItem);
 
 protected:
     virtual void NativeConstruct() override;
@@ -51,12 +70,21 @@ protected:
 private:
     int32 FindRealIndex() const;
 
-    // Искажённая (S_perceived) версия CachedItem — из
-    // AGridWorldManager::GetPerceivedInventory(), по индексу того же слота в
-    // контейнере 0 (инвентарь игрока). false, если Perception ещё не тикнул
-    // ни разу (первые ~0.5с игры) — тогда экран деградирует к реальному
-    // значению, а не остаётся пустым.
+    // Искажённая (S_perceived) версия предмета этого слота -- см.
+    // ResolvePerceivedItem. false, если предмета в инвентаре больше нет.
     bool TryGetPerceivedItem(FInventoryItem& OutItem) const;
+
+    // Ясность восприятия менеджера; 0 без контроллера (автотесты).
+    float GetPerceptionClarity() const;
+
+    // Искажённый предмет для имени и подсказки. Предмета под слотом уже нет
+    // (окно не успело пересобраться) -- искажается снимок слота: настоящее
+    // состояние игроку не показывается.
+    FInventoryItem GetPerceivedForDisplay() const;
+
+    // Строка процессов станций настоящего предмета (GetItemProcessStatus):
+    // снимок слота стоит, пока идут таймеры, OnInventoryChanged они не шлют.
+    FString BuildProcessStatus() const;
 
     int32 SlotIndex = -1;
 

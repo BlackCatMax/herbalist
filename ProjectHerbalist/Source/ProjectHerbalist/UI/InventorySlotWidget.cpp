@@ -17,6 +17,9 @@
 #include "Core/Data/IngredientTableRow.h"
 #include "Core/World/GridWorldManager.h"
 #include "UI/HerbalistWidgetSizing.h"
+#include "Core/Simulation/Private/PerceptionService.h"
+#include "Core/Simulation/Public/PerceivedTypes.h"
+#include "Core/Simulation/Public/SnapshotTypes.h"
 
 void UInventorySlotWidget::InitializeSlot(int32 InIndex, const FInventoryItem& InItem, UHerbalistInventoryComponent* InInventory)
 {
@@ -30,6 +33,18 @@ int32 UInventorySlotWidget::FindRealIndex() const
 {
     if (!InventoryComponent) return -1;
     const TArray<FInventoryItem>& Items = InventoryComponent->GetItems();
+
+    // Сначала свой номер (ревью 2026-09-14): список слотов пересобирается на
+    // каждое изменение состава (OnInventoryChanged), номер под слотом верен,
+    // пока предмет на месте. Поиск ниже берёт ПЕРВЫЙ совпавший CreationTime, а
+    // одна стопка, разошедшаяся по станциям (одну ромашку из пяти -- в
+    // сушилку), даёт несколько слотов с одним CreationTime -- подсказка и
+    // перенос брали чужой. ID не сверяется: гниение меняет его на месте.
+    if (Items.IsValidIndex(SlotIndex)
+        && FMath::IsNearlyEqual(Items[SlotIndex].CreationTime, CachedItem.CreationTime, 0.01f))
+    {
+        return SlotIndex;
+    }
 
     // CreationTime — стабильный якорь идентичности стопки (аудит 2026-09-05):
     // HerbalistInventoryComponent::TickComponent порчей/сушкой/отстоем/
@@ -70,19 +85,74 @@ int32 UInventorySlotWidget::FindRealIndex() const
 bool UInventorySlotWidget::TryGetPerceivedItem(FInventoryItem& OutItem) const
 {
     AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
-    if (!HPC) return false;
+    AGridWorldManager* WorldManager = HPC ? HPC->FindWorldManager() : nullptr;
+    return ResolvePerceivedItem(InventoryComponent, FindRealIndex(),
+        HPC ? HPC->InventoryComponent : nullptr,
+        WorldManager ? WorldManager->GetPerceivedInventory() : nullptr,
+        GetPerceptionClarity(),
+        OutItem);
+}
 
-    AGridWorldManager* WorldManager = HPC->FindWorldManager();
-    const FPerceivedInventory* PerceivedInv = WorldManager ? WorldManager->GetPerceivedInventory() : nullptr;
-    if (!PerceivedInv) return false;
+float UInventorySlotWidget::GetPerceptionClarity() const
+{
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+    AGridWorldManager* WorldManager = HPC ? HPC->FindWorldManager() : nullptr;
+    return WorldManager ? WorldManager->GetGlobalPerceptionClarity() : 0.0f;
+}
 
-    const int32 RealIndex = FindRealIndex();
-    if (RealIndex == -1) return false;
+FInventoryItem UInventorySlotWidget::GetPerceivedForDisplay() const
+{
+    FInventoryItem Perceived;
+    if (TryGetPerceivedItem(Perceived))
+    {
+        return Perceived;
+    }
+    return PerceiveSingleItem(CachedItem, GetPerceptionClarity());
+}
 
-    const TArray<FInventoryItem>* PerceivedItems = PerceivedInv->ContainerContents.Find(0);
-    if (!PerceivedItems || !PerceivedItems->IsValidIndex(RealIndex)) return false;
+FString UInventorySlotWidget::BuildProcessStatus() const
+{
+    const FInventoryItem* RealSlot = InventoryComponent ? InventoryComponent->GetSlot(FindRealIndex()) : nullptr;
+    return RealSlot ? GetItemProcessStatus(*RealSlot, InventoryComponent->StationType) : FString();
+}
 
-    OutItem = (*PerceivedItems)[RealIndex];
+FInventoryItem UInventorySlotWidget::PerceiveSingleItem(const FInventoryItem& Item, float Clarity)
+{
+    FInventorySnapshot SingleItem;
+    SingleItem.ContainerContents.Add(0, TArray<FInventoryItem>{ Item });
+    const FPerceivedInventory Perceived = Simulation::FPerceptionService::ComputePerceivedInventory(SingleItem, Clarity);
+    const TArray<FInventoryItem>* PerceivedItems = Perceived.ContainerContents.Find(0);
+    return (PerceivedItems && PerceivedItems->Num() == 1) ? (*PerceivedItems)[0] : Item;
+}
+
+bool UInventorySlotWidget::ResolvePerceivedItem(const UHerbalistInventoryComponent* Inventory, int32 RealIndex,
+    const UHerbalistInventoryComponent* PlayerInventory, const FPerceivedInventory* PlayerPerceived,
+    float Clarity, FInventoryItem& OutItem)
+{
+    // GetSlot, не GetItems()[i]: GetItems возвращает копию массива, ссылка на
+    // её элемент повисла бы сразу после строки.
+    const FInventoryItem* RealSlot = Inventory ? Inventory->GetSlot(RealIndex) : nullptr;
+    if (!RealSlot) return false;
+    const FInventoryItem& RealItem = *RealSlot;
+
+    if (Inventory == PlayerInventory && PlayerPerceived)
+    {
+        const TArray<FInventoryItem>* PerceivedItems = PlayerPerceived->ContainerContents.Find(0);
+        if (PerceivedItems && PerceivedItems->IsValidIndex(RealIndex))
+        {
+            // Кэш обновляется раз в 0.5 с: после переноса или слияния под
+            // этим номером мог оказаться другой предмет.
+            const FInventoryItem& Cached = (*PerceivedItems)[RealIndex];
+            if (Cached.IngredientID == RealItem.IngredientID
+                && FMath::IsNearlyEqual(Cached.CreationTime, RealItem.CreationTime, 0.01f))
+            {
+                OutItem = Cached;
+                return true;
+            }
+        }
+    }
+
+    OutItem = PerceiveSingleItem(RealItem, Clarity);
     return true;
 }
 
@@ -101,11 +171,10 @@ void UInventorySlotWidget::UpdateDisplay()
     {
         // Имя зелья зависит от State (доминирующая ось, Distortion/Purity) —
         // должно строиться по искажённому восприятию, а не по реальному составу.
-        FInventoryItem Perceived;
-        const FRealState& StateForName = TryGetPerceivedItem(Perceived) ? Perceived.State : CachedItem.State;
+        const FInventoryItem Perceived = GetPerceivedForDisplay();
         // BrewOutcome — честный факт события, не искажается восприятием,
         // берём с реального CachedItem, не с искажённой копии.
-        DisplayName = GeneratePotionName(CachedItem.BrewOutcome, StateForName).ToString();
+        DisplayName = GeneratePotionName(CachedItem.BrewOutcome, Perceived.State).ToString();
     }
     else
     {
@@ -260,11 +329,9 @@ void UInventorySlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const
 
     if (ActiveTooltip)
     {
-        // Тултип получает уже искажённую версию предмета (S_perceived) — если
-        // Perception ещё не тикнул ни разу, деградируем к реальному значению,
-        // чтобы тултип не был пустым в первые доли секунды игры.
-        FInventoryItem Perceived;
-        ActiveTooltip->SetItem(TryGetPerceivedItem(Perceived) ? Perceived : CachedItem);
+        // Тултип получает искажённую версию предмета (S_perceived) и строку
+        // процессов станций с настоящего предмета.
+        ActiveTooltip->SetItem(GetPerceivedForDisplay(), BuildProcessStatus());
 
         FVector2D MousePos = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorld());
         ActiveTooltip->SetPositionInViewport(MousePos + FVector2D(15, 15));

@@ -12,7 +12,12 @@ void UItemTooltipWidget::NativeConstruct()
     HerbalistUI::LetSizeBoxesGrowWithContent(WidgetTree);
 }
 
-void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
+FText UItemTooltipWidget::GetTypeLineForTest() const
+{
+    return TypeText ? TypeText->GetText() : FText::GetEmpty();
+}
+
+void UItemTooltipWidget::SetItem(const FInventoryItem& Item, const FString& ProcessStatus)
 {
     if (Item.IsEmpty()) return;
 
@@ -40,6 +45,11 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item)
     if (PC && PC->CurrentGlobalDistortion > 0.4f)
     {
         TypeLine += TEXT(" · Морочники путают чувства");
+    }
+    // Станции (2026-09-14) -- та же строка типа, отдельного поля в WBP нет.
+    if (!ProcessStatus.IsEmpty())
+    {
+        TypeLine += TEXT(" · ") + ProcessStatus;
     }
     if (TypeText) TypeText->SetText(FText::FromString(TypeLine));
 

@@ -4,6 +4,7 @@
 #include "HerbalistNameUtils.generated.h"
 
 class UIngredientRegistrySubsystem;
+enum class EProcessingStationType : uint8;
 
 // Падеж для склонения фольклорных имён зелий (GeneratePotionName ниже).
 // Проекту нужен только именительный сейчас (подписи в UI-слотах), остальные
@@ -42,3 +43,12 @@ PROJECTHERBALIST_API FText GeneratePotionName(EAlchemyOutcome Outcome, const FRe
 // перцептивно искажённую копию, эта функция сама ничего не искажает.
 PROJECTHERBALIST_API FString GetItemDisplayName(const FInventoryItem& Item, UIngredientRegistrySubsystem* Registry,
     EGrammaticalCase Case = EGrammaticalCase::Nominative);
+
+// Состояние процессов станций на предмете для подсказки (2026-09-14): сушка,
+// отстой, выпаривание -- идёт, закончен или прерван, сколько осталось. Раньше
+// игрок никак не видел ни хода, ни итога. HostStation -- станция, в инвентаре
+// которой предмет лежит сейчас (None -- сумка или обычное хранилище): таймер,
+// начатый в другой станции, стоит, и об этом надо сказать. Флаги и таймеры
+// восприятие не искажает -- годится и настоящий, и искажённый предмет.
+// Пустая строка -- процессов на предмете не было.
+PROJECTHERBALIST_API FString GetItemProcessStatus(const FInventoryItem& Item, EProcessingStationType HostStation);

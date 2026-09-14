@@ -14,10 +14,14 @@ class PROJECTHERBALIST_API UItemTooltipWidget : public UUserWidget
 
 public:
     // Item — уже искажённая (S_perceived) версия предмета, см.
-    // AGridWorldManager::GetPerceivedInventory(). Виджет ничего сам не
+    // UInventorySlotWidget::ResolvePerceivedItem. Виджет ничего сам не
     // искажает и не имеет доступа к реальному значению — по дизайну
     // (01_Introduction.md: игрок никогда не видит S_real напрямую).
-    void SetItem(const FInventoryItem& Item);
+    // ProcessStatus -- GetItemProcessStatus настоящего предмета (HerbalistNameUtils.h);
+    // пустая -- строки процесса нет.
+    void SetItem(const FInventoryItem& Item, const FString& ProcessStatus = FString());
+
+    FText GetTypeLineForTest() const;
 
 protected:
     virtual void NativeConstruct() override;
