@@ -18,13 +18,13 @@
 | `-run=WorldPartitionBuilderCommandlet <карта> -Builder=WorldLayoutSyncBuilder [-ReportOnly]` | Разметка мира (`DESIGN_World_Layout.md`): собирает с карты ландшафт и сетку стриминга World Partition, пересчитывает разметку менеджера сетки (клетка, размер, начало, страница, чанк) и сохраняет его внешний актор. `-ReportOnly` — только печатает исходные величины и разметку, ничего не сохраняя. То же, что кнопка «Сверить с World Partition» на менеджере | 2026-09-12 |
 | `-run=TrampleMapSetup` | Создаёт `RT_TrampleMap` (1024×1024, RGBA8, линейная гамма, билинейный, **wrap**) и заводит в `MPC_WorldStateFields` параметры `TrampleMapFrame`/`TramplePlayerPosition`. Карты не трогает — пути лежат в Herbalist Settings. Идемпотентен | 2026-09-12 |
 
-## Python-скрипты (`herbalist_docs/`)
+## Python-скрипты (`tools/data_extraction/`, запуск из корня репозитория)
 
 | Скрипт | Что делает |
 |---|---|
 | `extract_biomes.py` | Выводит числовые параметры биомов (включая `StressRecoveryMultiplier`) из Fertility/Distortion/характера воды карточек компендиума |
 | `extract_ingredients.py` | Извлекает параметры ингредиентов из карточек `04_Compendium/Растительность` |
-| `extract_water.py` | Извлекает параметры воды по биомам |
+| `extract_water.py` | Извлекает параметры воды по биомам. Читает `Herbalist_Vault/build/biomes_compendium.md` (или `Herbalist_Vault/biomes_compendium.md`) — на 2026-09-14 такого файла в репозитории нет |
 
 ## Правило добавления
 
@@ -35,5 +35,5 @@
 ## Проверка системы в движке
 
 Пошаговый гайд «как проверить всю игровую систему» —
-`ENGINE_VERIFICATION_GUIDE.md` в корне: пять уровней от сборки до долгого прогона, эталонные значения
+`docs/verification/ENGINE_VERIFICATION_GUIDE.md`: пять уровней от сборки до долгого прогона, эталонные значения
 здорового мира, разбор логов и список ловушек.

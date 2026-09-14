@@ -40,7 +40,13 @@ def extract_water_section_params(content):
     return params
 
 def main():
-    vault_dir = Path("K:/herbalist/herbalist_docs/Herbalist_Vault")
+    # Было захардкожено на K:/herbalist -- тот же прежний диск, что у
+    # extract_ingredients.py до аудита 2026-08-24. Корень -- на два уровня выше
+    # скрипта (tools/data_extraction/, уборка корня 2026-09-14). Входного
+    # biomes_compendium.md (сборка хранилища) в репозитории на 2026-09-14 нет:
+    # скрипт напечатает, что файл не найден.
+    repo = Path(__file__).resolve().parents[2]
+    vault_dir = repo / "herbalist_docs" / "Herbalist_Vault"
     biome_file = vault_dir / "build" / "biomes_compendium.md"
     if not biome_file.exists():
         biome_file = vault_dir / "biomes_compendium.md"
@@ -48,7 +54,7 @@ def main():
         print(f"Файл не найден: {biome_file}")
         return
 
-    output_dir = Path("K:/herbalist/herbalist_docs/CSV_tabs")
+    output_dir = repo / "herbalist_docs" / "CSV_tabs"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_json = output_dir / "water_types.json"
 

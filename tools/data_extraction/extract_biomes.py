@@ -23,7 +23,7 @@
 того же документа, он это печатает и оставляет как есть (берётся фронтматтер,
 как машиночитаемый источник).
 
-Запуск:  py extract_biomes.py [--write]
+Запуск (из корня репозитория):  py tools/data_extraction/extract_biomes.py [--write]
 Без --write только показывает, что изменится.
 """
 import io
@@ -35,7 +35,8 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # иначе кириллица в отчёте ломается на cp1251-консоли
 
-REPO = Path(__file__).resolve().parent
+# Скрипт лежит в tools/data_extraction/ (уборка корня 2026-09-14) -- корень на два уровня выше.
+REPO = Path(__file__).resolve().parents[2]
 BIOMES_DIR = REPO / "herbalist_docs" / "Herbalist_Vault" / "04_Compendium" / "Биомы"
 OUT_JSON = REPO / "herbalist_docs" / "CSV_tabs" / "DT_BiomeDefaults.json"
 

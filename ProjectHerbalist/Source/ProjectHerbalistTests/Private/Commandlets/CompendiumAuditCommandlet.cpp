@@ -197,7 +197,7 @@ namespace
         }
     }
 
-    // Тот же словарь, что уже у extract_biomes.py в корне репозитория --
+    // Тот же словарь, что уже у tools/data_extraction/extract_biomes.py --
     // компендиум называет биомы по-русски, код держит enum.
     const TMap<FString, EBiomeType>& RussianBiomeMap()
     {

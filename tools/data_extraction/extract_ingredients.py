@@ -68,7 +68,8 @@ def main():
     # Было захардкожено на K:/herbalist — путь с прежней буквы диска, script
     # молча не находил папку при запуске из репозитория на G:. Найдено при
     # аудите 2026-08-24 (extract_biomes.py уже брал REPO относительно себя).
-    repo = Path(__file__).resolve().parent
+    # С 2026-09-14 скрипт лежит в tools/data_extraction/ -- корень на два уровня выше.
+    repo = Path(__file__).resolve().parents[2]
     ingredients_dir = repo / "herbalist_docs" / "Herbalist_Vault" / "04_Compendium" / "Растительность"
     if not ingredients_dir.exists():
         print(f"Папка не найдена: {ingredients_dir}")
