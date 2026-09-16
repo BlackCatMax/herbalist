@@ -17,11 +17,28 @@
 | `-run=WorldStateMapSetup [-map=<путь>]` | Создаёт `RT_WorldStateMap` (размер = сетке, линейная гамма, билинейный, clamp), заводит в `MPC_WorldStateFields` параметры рамки карты (`WorldStateMapOrigin`/`WorldStateMapSize`) и назначает всё менеджеру на карте (по умолчанию `L_TestDev`). На карте World Partition менеджер — внешний актор, коммандлет его не находит и карту не трогает. Идемпотентен | 2026-09-08 |
 | `-run=WorldPartitionBuilderCommandlet <карта> -Builder=WorldLayoutSyncBuilder [-ReportOnly]` | Разметка мира (`DESIGN_World_Layout.md`): собирает с карты ландшафт и сетку стриминга World Partition, пересчитывает разметку менеджера сетки (клетка, размер, начало, страница, чанк) и сохраняет его внешний актор. `-ReportOnly` — только печатает исходные величины и разметку, ничего не сохраняя. То же, что кнопка «Сверить с World Partition» на менеджере | 2026-09-12 |
 | `-run=TrampleMapSetup` | Создаёт `RT_TrampleMap` (1024×1024, RGBA8, линейная гамма, билинейный, **wrap**) и заводит в `MPC_WorldStateFields` параметры `TrampleMapFrame`/`TramplePlayerPosition`. Карты не трогает — пути лежат в Herbalist Settings. Идемпотентен | 2026-09-12 |
+| `-run=MaterialFunctionsSetup [-rebuild] [-verify]` | Собирает функции материалов для карт мира в `/Game/Materials/Functions`: `MF_SampleWorldState`, `MF_SampleTrample`, `MF_TrampleCompressWPO` (подключение — раздел «Функции материалов» ниже). Нужны ассеты двух коммандлетов выше. Существующую функцию не трогает; `-rebuild` перестраивает граф (правки в редакторе теряются, Id входов и выходов сохраняются — подключения в материалах не рвутся). Материалы не трогает. `-verify` компилирует каждую функцию во временном материале (шейдер пикселей и вершин, обе ветки `Trampleable`) и печатает ошибки компилятора; запускать **без** `-nullrhi` и с `-AllowCommandletRendering`, иначе ресурса материала нет и проверка отказывает | 2026-09-16 |
 | `-run=CompendiumAudit [-CompendiumPath=<папка>]` | Только чтение: сверка карточек компендиума с DataTable (ранги, оси, биомы; геймплейного тюнинга в карточках нет — его не сверяет) | 2026-09-03 |
 | `-run=PlaytestMapCreate` | Создаёт карту `L_Playtest`: восемь `ABiomeRegionVolume` полосами, менеджер сетки, домашний якорь. `L_TestDev` не трогает | 2026-09-06 |
 | `-run=BiomeGraphExport` | `DA_BiomeGraph` → `CSV_tabs/DA_BiomeGraph.json`, чтобы значения графа ревьюились в git | 2026-08-24 |
 | `-run=BiomeGraphImport` | `CSV_tabs/DA_BiomeGraph.json` → живой `DA_BiomeGraph` (запись пакета) | 2026-08-24 |
 | `-run=BestiaryRankMove` | Переносит Курганников, Жердяев и Курганных огней из `DT_Landmarks` в `DT_AmbientEntities` (`AddRow` + `RemoveRow`) — ранг по компендиуму | 2026-09-03 |
+
+### Функции материалов для карт мира
+
+Собираются `-run=MaterialFunctionsSetup`. Категория `Herbalist` в палитре
+материала. Позиция по умолчанию — абсолютная мировая без смещений шейдера, так
+что функции работают и в World Position Offset.
+
+| Функция | Входы | Выходы | Куда |
+|---|---|---|---|
+| `MF_SampleWorldState` | `WorldPosition` | `Distortion` (R), `Corruption` (G), `HarvestStress` (B), `ShrineInfluence` (A), `UV`, `InsideWindow` | цвет травы и ландшафта по клетке; за окном карты оси — крайние тексели, умножать или смешивать по `InsideWindow` |
+| `MF_SampleTrample` | `Position` | `Trample` (с затуханием к краю окна), `RawTrample`, `Fade` | земля на тропе: `Lerp` к слою тропы по `Trample` |
+| `MF_TrampleCompressWPO` | `WPO` (ветер) | `WPO`, `Trample` | трава на тропе: выход `WPO` — в World Position Offset вместо ветра. Переключатель `Trampleable` (выключен) включить в инстансах низкого покрова — список в `CHANGELOG.md`, «схема травы на тропе» |
+
+Выборки карт — с явным мипом 0 (в шейдере вершин нет производных), основание
+кустика — `Instance & Particle Space` (PCG-трава — Nanite). Компиляцию проверяет
+`-verify`; после подключения в материал — Apply без ошибок в редакторе.
 
 ### Создание таблиц с нуля (`*Create`: ассет уже есть — ничего не делает)
 

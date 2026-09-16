@@ -39,6 +39,11 @@ public class ProjectHerbalistTests : ModuleRules
         if (Target.bBuildEditor)
         {
             PrivateDependencyModuleNames.Add("UnrealEd");
+            // UMaterialEditingLibrary -- сборка функций материалов
+            // (MaterialFunctionsSetupCommandlet.cpp, 2026-09-16).
+            PrivateDependencyModuleNames.Add("MaterialEditor");
+            // GMaxRHIShaderPlatform -- проверка компиляции функций (-verify).
+            PrivateDependencyModuleNames.Add("RHI");
         }
 
         // Путь к приватной папке основного модуля относительно Source
