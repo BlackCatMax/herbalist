@@ -120,6 +120,7 @@
 |---|---|
 | `extract_biomes.py` | Выводит числовые параметры биомов (включая `StressRecoveryMultiplier`) из Fertility/Distortion/характера воды карточек компендиума |
 | `extract_ingredients.py` | Извлекает параметры ингредиентов из карточек `04_Compendium/Растительность` |
+| `extract_flower_open_phase.py [путь.json]` | Начальные окна раскрытия цветов для `MF_FlowerOpen` из карточек `04_Compendium/Растительность` и `CSV_tabs/ingredient_harvest_windows.json`: цветущие виды (трава и кустарники с цветением в тексте), `OpenPhase` [рассвет, день, закат, ночь] из окна сбора, пометки `Review` там, где текст о сборе или цветении называет другую фазу суток, сбор нераскрытым или раскрытие и закрытие. Без пути пишет `CSV_tabs/ingredient_flower_open_phase.json`, список на разметку — в консоль |
 | `extract_water.py [путь.json]` | Выводит `water_types.json` (типы воды по биомам) из карточек `04_Compendium/Биомы`: Potency/Stability из фронтматтера, Purity/Distortion/Corruption из раздела «Вода». Без пути пишет `CSV_tabs/water_types.json` |
 
 ## Хранилище документации (`herbalist_docs/Herbalist_Vault/`)
