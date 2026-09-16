@@ -433,4 +433,12 @@ public:
     // меняется.
     UPROPERTY()
     TArray<FSavedTrampleChunk> TrampleChunks;
+
+    // Небо и погода Ultra Dynamic Sky / Weather (2026-09-16, этап 2) --
+    // структура FUDS_and_UDW_State Blueprint'а текстом (UUltraDynamicSkyBridge::
+    // CaptureState): погода UDW недетерминирована, без сейва загрузка давала
+    // бы другую. Время и дата в ней перезаписываются из часов симуляции.
+    // Новое поле с дефолтом: старый сейв -- "погода текущая", версия не меняется.
+    UPROPERTY()
+    FString SkyAndWeatherState;
 };

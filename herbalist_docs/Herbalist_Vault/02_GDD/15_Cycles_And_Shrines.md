@@ -348,6 +348,14 @@ Blueprint-моста (см. "Мост в C++" ниже, без изменени�
 
 ### Мост реализован (2026-09-04) — плагин физически в проекте
 
+> **2026-09-16:** мост целиком в C++ — `UUltraDynamicSkyBridge`
+> (`Core/World/Sky/`), через отражение по именам Blueprint'ов UDS/UDW, без
+> Blueprint-кода: время суток и дата → UDS, сезон UDW от даты UDS
+> (метеорологический), погода `Global Weather State` UDW →
+> `SetWeatherBridgeIntensities`, состояние неба и погоды — в сейв. Инструкция
+> ниже про Blueprint-мост в редакторе — история. Подробности —
+> `docs/research/DESIGN_Living_Vegetation_Research.md` §5.
+
 Пользователь залил `Content/UltraDynamicSky` (783 файла, оба актора —
 `Ultra_Dynamic_Sky.uasset` и `Ultra_Dynamic_Weather.uasset`, полный
 Content-only пакет, не C++-плагин). Swap-точка, обещанная разделом с

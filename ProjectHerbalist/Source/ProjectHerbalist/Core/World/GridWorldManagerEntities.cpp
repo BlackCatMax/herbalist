@@ -388,6 +388,11 @@ void AGridWorldManager::SetWeatherBridgeIntensities(float RainIntensity01, float
     bWeatherBridgeActive = true;
 }
 
+void AGridWorldManager::ClearWeatherBridge()
+{
+    bWeatherBridgeActive = false;
+}
+
 float AGridWorldManager::ComputePerceptionDistortion(int32 X, int32 Y) const
 {
     const FGridCell* Cell = GetCellConst(X, Y);

@@ -3,6 +3,7 @@
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/Trample/TrampleSubsystem.h"
+#include "Core/World/Sky/UltraDynamicSkyBridge.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
@@ -93,6 +94,12 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     if (UTrampleSubsystem* Trample = World ? World->GetSubsystem<UTrampleSubsystem>() : nullptr)
     {
         Save->TrampleChunks = Trample->CaptureSaveChunks();
+    }
+
+    // Небо и погода UDS/UDW (2026-09-16) -- тоже мировая подсистема.
+    if (UUltraDynamicSkyBridge* SkyBridge = World ? World->GetSubsystem<UUltraDynamicSkyBridge>() : nullptr)
+    {
+        Save->SkyAndWeatherState = SkyBridge->CaptureState();
     }
 
     // Точки интереса, §4 (2026-09-06) -- см. довод у полей в HerbalistSaveTypes.h.
@@ -331,6 +338,17 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     if (UTrampleSubsystem* Trample = World ? World->GetSubsystem<UTrampleSubsystem>() : nullptr)
     {
         Trample->RestoreSaveChunks(Save->TrampleChunks);
+    }
+
+    // Небо и погода -- после часов: мост ставит время UDS из них. Применяется,
+    // как только UDS найден и начал игру (стриминг). Старый сейв без
+    // состояния -- погода остаётся текущей.
+    if (UUltraDynamicSkyBridge* SkyBridge = World ? World->GetSubsystem<UUltraDynamicSkyBridge>() : nullptr)
+    {
+        if (!Save->SkyAndWeatherState.IsEmpty())
+        {
+            SkyBridge->QueueStateForLoad(Save->SkyAndWeatherState, *WorldManager);
+        }
     }
 
     // Аудит 2026-09-05: таймеры оберегов/артефактных эффектов "короткого

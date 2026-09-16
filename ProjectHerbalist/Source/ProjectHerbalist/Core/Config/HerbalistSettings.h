@@ -1480,6 +1480,22 @@ public:
     // самой короткой фазы (3 минуты), поэтому шире 6 минут не бывает.
     UPROPERTY(config, EditAnywhere, Category = "TimeDisplay", meta = (ClampMin = "0.0", ClampMax = "6.0"))
     float DayPhaseBlendMinutes = 1.0f;
+
+    // --- Мост Ultra Dynamic Sky / Weather (2026-09-16, этап 2, UUltraDynamicSkyBridge) ---
+    // Классы акторов, которые мост ищет в мире; дочерние Blueprint'ы
+    // (Ultra_Dynamic_Sky_Child и т.п.) подходят. Пусто или акторов нет --
+    // моста нет, погода симуляции -- прежний шум.
+    UPROPERTY(config, EditAnywhere, Category = "Sky")
+    TSoftClassPtr<AActor> UltraDynamicSkyClass;
+
+    UPROPERTY(config, EditAnywhere, Category = "Sky")
+    TSoftClassPtr<AActor> UltraDynamicWeatherClass;
+
+    // Полуширина рассвета и заката на часах UDS, часы. Середина 6-минутного
+    // рассвета симуляции ложится на Dawn Time UDS, заката -- на Dusk Time;
+    // рассвет симуляции занимает Dawn Time ± это число. Визуальная настройка.
+    UPROPERTY(config, EditAnywhere, Category = "Sky", meta = (ClampMin = "0.0", ClampMax = "6.0"))
+    float UltraDynamicSkyTwilightHalfHours = 1.0f;
 };
 
 // PROJECTHERBALIST_API добавлен 2026-09-04 (обнаружено при линковке

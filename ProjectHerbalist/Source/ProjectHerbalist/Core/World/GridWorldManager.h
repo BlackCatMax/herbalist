@@ -1094,7 +1094,7 @@ public:
     //
     // 2026-09-04: UDW физически в проекте (Content/UltraDynamicSky) --
     // swap-точка сработала ровно так, как и была обещана §15.7. Если
-    // Blueprint-мост хоть раз позвал SetWeatherBridgeIntensities() ниже
+    // мост UDS/UDW (UUltraDynamicSkyBridge, C++) позвал SetWeatherBridgeIntensities() ниже
     // (bWeatherBridgeActive==true), эти функции читают Cached*Intensity, а
     // не шум. Без моста в сцене (все автотесты, старые уровни без UDW) --
     // ровно прежнее поведение, шум от GameClockSeconds+RngBaseSeed, ноль
@@ -1151,14 +1151,16 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Herbalist|Weather")
     bool bWeatherBridgeActive = false;
 
-    // Единственный Blueprint-код во всей интеграции (GDD §15.7, п.2) --
-    // маленький Blueprint-мост (подкласс AGridWorldManager или отдельный
-    // актор в сцене с UDW) на Tick или по событию UDW "State Change - *"
-    // читает у найденного в сцене Ultra Dynamic Weather его Wind
-    // Intensity/Rain Intensity/... и зовёт это. Клампится на входе -- сами
+    // Зовёт UUltraDynamicSkyBridge (Core/World/Sky/, 2026-09-16) каждый кадр
+    // с погодой Global Weather State найденного в мире Ultra Dynamic Weather;
+    // Blueprint-кода для этого не нужно. Клампится на входе -- сами
     // Get*Intensity ниже везде подряд предполагают строго [0,1].
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Weather")
     void SetWeatherBridgeIntensities(float RainIntensity01, float SnowIntensity01, float WindIntensity01, float FogIntensity01 = 0.0f);
+
+    // UDW пропал (выгружен, удалён) -- обратно к собственному шуму погоды, а не
+    // последняя погода навсегда.
+    void ClearWeatherBridge();
 
     // Игровые часы, независимые от GetWorld()->GetTimeSeconds() (движковое,
     // level-relative, обнуляется при перезапуске сессии) — нужны, чтобы фаза
