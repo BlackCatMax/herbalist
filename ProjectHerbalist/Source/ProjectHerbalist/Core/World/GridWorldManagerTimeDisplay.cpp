@@ -38,6 +38,16 @@ float AGridWorldManager::GetLeafDrop01() const
     return HerbalistCore::TimeDisplay::LeafDrop01(GetSeasonUDW());
 }
 
+float AGridWorldManager::GetLeafFall01() const
+{
+    return HerbalistCore::TimeDisplay::LeafFall01(GetSeasonUDW());
+}
+
+float AGridWorldManager::GetLeafLitter01() const
+{
+    return HerbalistCore::TimeDisplay::LeafLitter01(GetSeasonUDW());
+}
+
 float AGridWorldManager::GetMoonFull01() const
 {
     return HerbalistCore::TimeDisplay::MoonFull01(GetMoonCycle01());
@@ -50,6 +60,8 @@ namespace
     const FName SeasonWeightsName(TEXT("SeasonWeights"));
     const FName SeasonUDWName(TEXT("SeasonUDW"));
     const FName LeafDrop01Name(TEXT("LeafDrop01"));
+    const FName LeafFall01Name(TEXT("LeafFall01"));
+    const FName LeafLitter01Name(TEXT("LeafLitter01"));
     const FName MoonFull01Name(TEXT("MoonFull01"));
 }
 
@@ -92,6 +104,8 @@ bool AGridWorldManager::WriteTimeDisplayParameters(UMaterialParameterCollection*
     bAllFound &= Instance->SetVectorParameterValue(SeasonWeightsName, GetSeasonWeights());
     bAllFound &= Instance->SetScalarParameterValue(SeasonUDWName, GetSeasonUDW());
     bAllFound &= Instance->SetScalarParameterValue(LeafDrop01Name, GetLeafDrop01());
+    bAllFound &= Instance->SetScalarParameterValue(LeafFall01Name, GetLeafFall01());
+    bAllFound &= Instance->SetScalarParameterValue(LeafLitter01Name, GetLeafLitter01());
     bAllFound &= Instance->SetScalarParameterValue(MoonFull01Name, GetMoonFull01());
     return bAllFound;
 }

@@ -6,7 +6,7 @@
 // MF_LeafDrop, MF_GrassSquash, MF_FlowerOpen) в /Game/Materials/Functions.
 //
 // Существующую функцию не трогает (её могли поправить в редакторе); -rebuild
-// перестраивает граф заново. Материалы не трогает: подключение -- в
+// перестраивает граф заново, -rebuild -only=MF_A,MF_B -- только перечисленные. Материалы не трогает: подключение -- в
 // docs/reference/TOOLS_REFERENCE.md.
 //
 // Нужны RT_WorldStateMap, RT_TrampleMap и параметры в MPC_WorldStateFields --
@@ -17,7 +17,7 @@
 // -nullrhi и с -AllowCommandletRendering: иначе коммандлет не создаёт ресурсы
 // рендера материалов, и проверять нечего.
 //
-// Запуск: UnrealEditor-Cmd.exe <uproject> -run=MaterialFunctionsSetup [-rebuild] [-verify -AllowCommandletRendering]
+// Запуск: UnrealEditor-Cmd.exe <uproject> -run=MaterialFunctionsSetup [-rebuild [-only=MF_A,MF_B]] [-verify -AllowCommandletRendering]
 #pragma once
 
 #include "CoreMinimal.h"

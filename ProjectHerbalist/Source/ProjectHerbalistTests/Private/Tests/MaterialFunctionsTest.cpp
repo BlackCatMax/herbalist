@@ -460,9 +460,9 @@ bool FHerbalistMaterialFunctions_SeasonLayerReadsTimeCollection::RunTest(const F
     UMaterialFunction* Weights = NewTransientMaterialFunction();
     if (TestTrue(TEXT("MF_SeasonWeights собрана"), BuildSeasonWeights(Weights, Sources)))
     {
-        CheckNames(*this, Weights, {}, { TEXT("SeasonWeights"), TEXT("Spring"), TEXT("Summer"), TEXT("Autumn"), TEXT("Winter"), TEXT("SeasonUDW"), TEXT("LeafDrop01") });
+        CheckNames(*this, Weights, {}, { TEXT("SeasonWeights"), TEXT("Spring"), TEXT("Summer"), TEXT("Autumn"), TEXT("Winter"), TEXT("SeasonUDW"), TEXT("LeafDrop01"), TEXT("LeafFall01"), TEXT("LeafLitter01") });
         CheckCommonMaterialFunctionWiring(*this, Weights, nullptr);
-        for (const TCHAR* Name : { TEXT("SeasonWeights"), TEXT("SeasonUDW"), TEXT("LeafDrop01") })
+        for (const TCHAR* Name : { TEXT("SeasonWeights"), TEXT("SeasonUDW"), TEXT("LeafDrop01"), TEXT("LeafFall01"), TEXT("LeafLitter01") })
         {
             TestTrue(*FString::Printf(TEXT("Веса сезона читают %s"), Name), UsesCollectionParameter(Weights, Sources.Collection, Name));
         }

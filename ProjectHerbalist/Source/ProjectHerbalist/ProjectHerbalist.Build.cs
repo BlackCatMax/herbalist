@@ -25,7 +25,8 @@ public class ProjectHerbalist : ModuleRules
             "Landscape",     // <--- добавлено для работы с ландшафтом
             "PCG",           // <--- узел «состояние сетки -> PCG-граф» (2026-09-03)
             "RenderCore",    // <--- выгрузка карты состояния мира в текстуру (2026-09-07)
-            "RHI"
+            "RHI",
+            "Niagara"        // <--- листопад у игрока (2026-09-17, ULeafFallSubsystem)
         });
 
         PublicIncludePaths.AddRange(new string[]

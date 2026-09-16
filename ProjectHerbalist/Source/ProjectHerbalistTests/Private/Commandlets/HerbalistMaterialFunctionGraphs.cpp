@@ -396,12 +396,14 @@ bool HerbalistMaterialFunctions::BuildSeasonWeights(UMaterialFunction* Function,
     using namespace Detail;
     if (!Function || !Sources.Collection) return false;
 
-    DescribeFunction(Function, TEXT("Сезон из MPC_WorldStateFields (пишет менеджер сетки, Core/Types/HerbalistTimeDisplay.h): веса весна/лето/осень/зима в сумме 1, SeasonUDW -- шкала Ultra Dynamic Sky 0..4 (целое -- середина сезона), LeafDrop01 -- доля опавшей листвы."));
+    DescribeFunction(Function, TEXT("Сезон из MPC_WorldStateFields (пишет менеджер сетки, Core/Types/HerbalistTimeDisplay.h): веса весна/лето/осень/зима в сумме 1, SeasonUDW -- шкала Ultra Dynamic Sky 0..4 (целое -- середина сезона), LeafDrop01 -- доля опавшей листвы, LeafFall01 -- темп листопада, LeafLitter01 -- подстилка на земле."));
 
     UMaterialExpressionCollectionParameter* Weights = AddCollectionParameter(Function, Sources.Collection, TEXT("SeasonWeights"), 1, 0);
     UMaterialExpressionCollectionParameter* Udw = AddCollectionParameter(Function, Sources.Collection, TEXT("SeasonUDW"), 1, 5);
     UMaterialExpressionCollectionParameter* LeafDrop = AddCollectionParameter(Function, Sources.Collection, TEXT("LeafDrop01"), 1, 6);
-    if (!Weights || !Udw || !LeafDrop) return false;
+    UMaterialExpressionCollectionParameter* LeafFall = AddCollectionParameter(Function, Sources.Collection, TEXT("LeafFall01"), 1, 7);
+    UMaterialExpressionCollectionParameter* LeafLitter = AddCollectionParameter(Function, Sources.Collection, TEXT("LeafLitter01"), 1, 8);
+    if (!Weights || !Udw || !LeafDrop || !LeafFall || !LeafLitter) return false;
 
     UMaterialExpressionComponentMask* All = AddMask(Function, Weights, 0, true, true, true, true, 2, 0);
     AddOutput(Function, TEXT("SeasonWeights"), TEXT("R весна, G лето, B осень, A зима; сумма 1."), 0, All, 0, 3, 0);
@@ -411,6 +413,8 @@ bool HerbalistMaterialFunctions::BuildSeasonWeights(UMaterialFunction* Function,
     AddOutput(Function, TEXT("Winter"), TEXT("Вес зимы."), 4, AddMask(Function, Weights, 0, false, false, false, true, 2, 4), 0, 3, 4);
     AddOutput(Function, TEXT("SeasonUDW"), TEXT("Сезон 0..4 в шкале UDS: 0 середина весны, 1 лета, 2 осени, 3 зимы."), 5, Udw, 0, 3, 5);
     AddOutput(Function, TEXT("LeafDrop01"), TEXT("0 с середины весны до конца лета, 1 в середине зимы."), 6, LeafDrop, 0, 3, 6);
+    AddOutput(Function, TEXT("LeafFall01"), TEXT("Темп листопада: 0 вне спада листвы, 1 на пике."), 7, LeafFall, 0, 3, 7);
+    AddOutput(Function, TEXT("LeafLitter01"), TEXT("Подстилка на земле: растёт до середины зимы, лежит до конца зимы, к середине весны сходит. Слой подстилки ландшафта -- Lerp по ней."), 8, LeafLitter, 0, 3, 8);
     return true;
 }
 

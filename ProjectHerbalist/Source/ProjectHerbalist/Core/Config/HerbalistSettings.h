@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "Core/Types/HerbalistCoreTypes.h"
 #include "HerbalistSettings.generated.h"
 
 class UStaticMesh;
@@ -1496,6 +1497,24 @@ public:
     // рассвет симуляции занимает Dawn Time ± это число. Визуальная настройка.
     UPROPERTY(config, EditAnywhere, Category = "Sky", meta = (ClampMin = "0.0", ClampMax = "6.0"))
     float UltraDynamicSkyTwilightHalfHours = 1.0f;
+
+    // --- Листопад у игрока (2026-09-17, этап 4, ULeafFallSubsystem) ---
+    // Система Niagara, которую подсистема держит на пешке игрока. Пусто --
+    // листопада нет. Пользовательские параметры системы: LeafFallRate (float
+    // 0..1, темп) и WindIntensity (float 0..1, ветер симуляции); цвет листьев
+    // материал частиц берёт из MPC_WorldStateFields сам.
+    UPROPERTY(config, EditAnywhere, Category = "LeafFall")
+    TSoftObjectPtr<class UNiagaraSystem> LeafFallSystem;
+
+    // Биомы, где у игрока падают листья: лиственные и смешанные. Тайга --
+    // хвойная, степь, тундра и болото -- без крон.
+    UPROPERTY(config, EditAnywhere, Category = "LeafFall")
+    TArray<EBiomeType> DeciduousBiomes = { EBiomeType::MixedForest, EBiomeType::BroadleafForest, EBiomeType::ForestSteppe, EBiomeType::Floodplain };
+
+    // Доля темпа листопада, которую даёт ветер: темп = LeafFall01 x ((1 - доля)
+    // + доля x ветер). 0 -- ветер не влияет, 1 -- в штиль листья не падают.
+    UPROPERTY(config, EditAnywhere, Category = "LeafFall", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float LeafFallWindShare = 0.6f;
 };
 
 // PROJECTHERBALIST_API добавлен 2026-09-04 (обнаружено при линковке

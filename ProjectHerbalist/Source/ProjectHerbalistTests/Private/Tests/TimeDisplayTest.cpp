@@ -15,6 +15,7 @@
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "Core/World/Sky/LeafFallSubsystem.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -197,7 +198,7 @@ bool FHerbalistTimeDisplay_ParametersReachTheMaterialCollection::RunTest(const F
 
     // 15 октября, минута 22 (закат), середина лунного цикла.
     Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(10, 15) * TimeDisplayDaySecondsFromSettings() + 22.0 * 60.0);
-    TestTrue(TEXT("Все шесть параметров заведены в коллекции"), Manager->WriteTimeDisplayParameters(Collection));
+    TestTrue(TEXT("Все восемь параметров заведены в коллекции"), Manager->WriteTimeDisplayParameters(Collection));
 
     UMaterialParameterCollectionInstance* Instance = World->GetParameterCollectionInstance(Collection);
     if (!TestNotNull(TEXT("Экземпляр коллекции в мире"), Instance)) { Manager->Destroy(); return false; }
@@ -218,6 +219,9 @@ bool FHerbalistTimeDisplay_ParametersReachTheMaterialCollection::RunTest(const F
     CheckScalar(TEXT("TimeOfDay01"), Manager->GetTimeOfDay01());
     CheckScalar(TEXT("SeasonUDW"), Manager->GetSeasonUDW());
     CheckScalar(TEXT("LeafDrop01"), Manager->GetLeafDrop01());
+    CheckScalar(TEXT("LeafFall01"), Manager->GetLeafFall01());
+    CheckScalar(TEXT("LeafLitter01"), Manager->GetLeafLitter01());
+    TestTrue(TEXT("Sanity: 15 октября листья падают"), Manager->GetLeafFall01() > 0.1f);
     CheckScalar(TEXT("MoonFull01"), Manager->GetMoonFull01());
     CheckVector(TEXT("DayPhaseWeights"), Manager->GetDayPhaseWeights());
     CheckVector(TEXT("SeasonWeights"), Manager->GetSeasonWeights());
@@ -272,6 +276,88 @@ bool FHerbalistTimeDisplay_JumpGameClockMovesDateAndResetsWardsBackward::RunTest
     // Ниже нуля часы не уходят.
     Manager->JumpGameClock(-100.0);
     TestEqual(TEXT("Отрицательное время -- 0"), Manager->GetGameClockSeconds(), 0.0);
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTimeDisplay_LeafFallPeaksInAutumnAndLitterLastsIntoWinter,
+    "Herbalist.TimeDisplay.LeafFallPeaksInAutumnAndLitterLastsIntoWinter",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTimeDisplay_LeafFallPeaksInAutumnAndLitterLastsIntoWinter::RunTest(const FString& Parameters)
+{
+    using namespace HerbalistCore::TimeDisplay;
+
+    // Шкала SeasonUDW: 1.5 начало осени, 2.25 середина спада листвы, 3 середина
+    // зимы, 3.5 конец зимы и начало весны, 4 = 0 середина весны.
+    TestEqual(TEXT("Лето -- листья не падают"), LeafFall01(1.0f), 0.0f);
+    TestEqual(TEXT("Начало осени -- ещё 0"), LeafFall01(1.5f), 0.0f);
+    TestTrue(TEXT("Пик листопада в середине спада"), FMath::IsNearlyEqual(LeafFall01(2.25f), 1.0f, 1.0e-4f));
+    TestEqual(TEXT("Середина зимы -- падать нечему"), LeafFall01(3.0f), 0.0f);
+    TestEqual(TEXT("Весна -- не листопад"), LeafFall01(0.5f), 0.0f);
+
+    TestEqual(TEXT("Подстилки летом нет"), LeafLitter01(1.2f), 0.0f);
+    TestTrue(TEXT("Подстилка осенью растёт вместе с опавшей листвой"), FMath::IsNearlyEqual(LeafLitter01(2.25f), LeafDrop01(2.25f), 1.0e-5f));
+    TestEqual(TEXT("С середины до конца зимы -- подстилка лежит"), LeafLitter01(3.2f), 1.0f);
+    TestTrue(TEXT("Начало весны -- сходит"), FMath::IsNearlyEqual(LeafLitter01(3.75f), 0.5f, 1.0e-4f));
+    TestTrue(TEXT("К середине весны сошла"), LeafLitter01(3.999f) < 0.01f && LeafLitter01(0.0f) == 0.0f);
+
+    // Без скачков по году: шаг 1/1000 шкалы.
+    float WorstFall = 0.0f;
+    float WorstLitter = 0.0f;
+    for (int32 Step = 1; Step <= 4000; ++Step)
+    {
+        const float U = Step / 1000.0f;
+        const float Prev = (Step - 1) / 1000.0f;
+        WorstFall = FMath::Max(WorstFall, FMath::Abs(LeafFall01(U) - LeafFall01(Prev)));
+        WorstLitter = FMath::Max(WorstLitter, FMath::Abs(LeafLitter01(U) - LeafLitter01(Prev)));
+    }
+    TestTrue(*FString::Printf(TEXT("Темп листопада без скачков (%.4f)"), WorstFall), WorstFall < 0.01f);
+    TestTrue(*FString::Printf(TEXT("Подстилка без скачков (%.4f)"), WorstLitter), WorstLitter < 0.01f);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTimeDisplay_LeafFallOnlyInDeciduousBiomesAndFollowsWind,
+    "Herbalist.TimeDisplay.LeafFallOnlyInDeciduousBiomesAndFollowsWind",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTimeDisplay_LeafFallOnlyInDeciduousBiomesAndFollowsWind::RunTest(const FString& Parameters)
+{
+    TestEqual(TEXT("Не лиственный биом -- 0"), ULeafFallSubsystem::LeafFallRate(1.0f, 1.0f, false, 0.6f), 0.0f);
+    TestTrue(TEXT("Штиль -- доля без ветра"), FMath::IsNearlyEqual(ULeafFallSubsystem::LeafFallRate(1.0f, 0.0f, true, 0.6f), 0.4f, 1.0e-4f));
+    TestTrue(TEXT("Полный ветер -- полный темп"), FMath::IsNearlyEqual(ULeafFallSubsystem::LeafFallRate(1.0f, 1.0f, true, 0.6f), 1.0f, 1.0e-4f));
+    TestEqual(TEXT("Не сезон -- 0 при любом ветре"), ULeafFallSubsystem::LeafFallRate(0.0f, 1.0f, true, 0.6f), 0.0f);
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    ULeafFallSubsystem* LeafFall = World->GetSubsystem<ULeafFallSubsystem>();
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+    if (!TestNotNull(TEXT("Подсистема листопада"), LeafFall)) { Manager->Destroy(); return false; }
+
+    // Пик листопада, биом клетки под точкой решает.
+    const double DayLength = TimeDisplayDaySecondsFromSettings();
+    Manager->SetGameClockSeconds((HerbalistCore::Calendar::DayOfYearFromDate(10, 15) + 0.3) * DayLength);
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0)"), Cell)) { Manager->Destroy(); return false; }
+    // Середина клетки: GetCellWorldPosition -- её угол, ровно на границе.
+    const FVector Location = Manager->GetCellWorldPosition(0, 0) + FVector(Manager->CellSize * 0.5, Manager->CellSize * 0.5, 0.0);
+
+    Cell->bIsWater = false;
+    Cell->Biome = EBiomeType::BroadleafForest;
+    TestTrue(TEXT("Широколиственный лес в октябре -- листья падают"), LeafFall->ComputeLeafFallRate(*Manager, Location) > 0.1f);
+    Cell->Biome = EBiomeType::Taiga;
+    TestEqual(TEXT("Тайга -- хвойная, не падают"), LeafFall->ComputeLeafFallRate(*Manager, Location), 0.0f);
+    Cell->Biome = EBiomeType::BroadleafForest;
+    Cell->bIsWater = true;
+    TestEqual(TEXT("Над водой -- не падают"), LeafFall->ComputeLeafFallRate(*Manager, Location), 0.0f);
+    TestEqual(TEXT("За сеткой -- не падают"), LeafFall->ComputeLeafFallRate(*Manager, FVector(1.0e8, 1.0e8, 0.0)), 0.0f);
+
+    // Без системы частиц компонент не создаётся.
+    LeafFall->ApplyRate(Manager, nullptr, 1.0f, 1.0f, 0.1f);
+    TestNull(TEXT("Без ассета Niagara -- ничего не спавнится"), LeafFall->GetLeafFallComponent());
+    TestFalse(TEXT("Без компонента -- не запрошен"), LeafFall->IsLeafFallRequestedActive());
 
     Manager->Destroy();
     return true;

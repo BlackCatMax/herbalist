@@ -76,6 +76,43 @@ namespace HerbalistCore::TimeDisplay
         return 4.0f - Wrapped;
     }
 
+    // Темп листопада (этап 4 плана): 0 вне осеннего спада листвы, 1 на пике.
+    // Нормированная производная LeafDrop01 по SeasonUDW на отрезке 1.5..3:
+    // smoothstep' = 6t(1-t), максимум 1.5 -> 4t(1-t). Весеннее отрастание
+    // листопадом не считается.
+    inline float LeafFall01(float InSeasonUDW)
+    {
+        const float Wrapped = FMath::Fmod(FMath::Fmod(InSeasonUDW, 4.0f) + 4.0f, 4.0f);
+        if (Wrapped < 1.5f || Wrapped >= 3.0f)
+        {
+            return 0.0f;
+        }
+        const float T = (Wrapped - 1.5f) / 1.5f;
+        return 4.0f * T * (1.0f - T);
+    }
+
+    // Подстилка опавшей листвы на земле (целое SeasonUDW -- середина сезона):
+    // растёт вместе с опавшей листвой от начала осени до середины зимы
+    // (1.5..3), лежит с середины до конца зимы (3..3.5; под снегом её прячет
+    // снег UDW в материале), с начала до середины весны сходит линейно (3.5..4).
+    inline float LeafLitter01(float InSeasonUDW)
+    {
+        const float Wrapped = FMath::Fmod(FMath::Fmod(InSeasonUDW, 4.0f) + 4.0f, 4.0f);
+        if (Wrapped < 1.5f)
+        {
+            return 0.0f;
+        }
+        if (Wrapped < 3.0f)
+        {
+            return LeafDrop01(Wrapped);
+        }
+        if (Wrapped < 3.5f)
+        {
+            return 1.0f;
+        }
+        return (4.0f - Wrapped) * 2.0f;
+    }
+
     // Близость к полнолунию: 1 в середине фазы FullMoon (третья из четырёх,
     // доля цикла 0.625), 0 в середине Новолуния, плавный косинус между ними.
     inline float MoonFull01(float MoonCycle01)

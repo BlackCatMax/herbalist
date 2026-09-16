@@ -17,8 +17,8 @@
 | `-run=WorldStateMapSetup [-map=<путь>]` | Создаёт `RT_WorldStateMap` (размер = сетке, линейная гамма, билинейный, clamp), заводит в `MPC_WorldStateFields` параметры рамки карты (`WorldStateMapOrigin`/`WorldStateMapSize`) и назначает всё менеджеру на карте (по умолчанию `L_TestDev`). На карте World Partition менеджер — внешний актор, коммандлет его не находит и карту не трогает. Идемпотентен | 2026-09-08 |
 | `-run=WorldPartitionBuilderCommandlet <карта> -Builder=WorldLayoutSyncBuilder [-ReportOnly]` | Разметка мира (`DESIGN_World_Layout.md`): собирает с карты ландшафт и сетку стриминга World Partition, пересчитывает разметку менеджера сетки (клетка, размер, начало, страница, чанк) и сохраняет его внешний актор. `-ReportOnly` — только печатает исходные величины и разметку, ничего не сохраняя. То же, что кнопка «Сверить с World Partition» на менеджере | 2026-09-12 |
 | `-run=TrampleMapSetup` | Создаёт `RT_TrampleMap` (1024×1024, RGBA8, линейная гамма, билинейный, **wrap**) и заводит в `MPC_WorldStateFields` параметры `TrampleMapFrame`/`TramplePlayerPosition`. Карты не трогает — пути лежат в Herbalist Settings. Идемпотентен | 2026-09-12 |
-| `-run=TimeDisplaySetup` | Заводит в `MPC_WorldStateFields` (путь — `TimeDisplayCollection` в Herbalist Settings) параметры времени для материалов: скаляры `TimeOfDay01`, `SeasonUDW`, `LeafDrop01`, `MoonFull01`, векторы `DayPhaseWeights` (R рассвет, G день, B закат, A ночь) и `SeasonWeights` (R весна, G лето, B осень, A зима). Значения пишет менеджер сетки каждый тик. Карты не трогает. Идемпотентен | 2026-09-16 |
-| `-run=MaterialFunctionsSetup [-rebuild] [-verify]` | Собирает функции материалов в `/Game/Materials/Functions`: для карт мира `MF_SampleWorldState`, `MF_SampleTrample`, `MF_TrampleCompressWPO`; слой сезона и суток `MF_SeasonWeights`, `MF_SeasonColor`, `MF_LeafDrop`, `MF_GrassSquash`, `MF_FlowerOpen` (подключение — раздел «Функции материалов» ниже). Нужны ассеты коммандлетов выше (`WorldStateMapSetup`, `TrampleMapSetup`, `TimeDisplaySetup`) и коллекция Ultra Dynamic Weather. Существующую функцию не трогает; `-rebuild` перестраивает граф (правки в редакторе теряются, Id входов и выходов сохраняются — подключения в материалах не рвутся). Материалы не трогает. `-verify` компилирует каждую функцию во временном материале (шейдер пикселей и вершин, обе ветки `Trampleable` у `MF_TrampleCompressWPO` и `MF_GrassSquash`) и печатает ошибки компилятора; запускать **без** `-nullrhi` и с `-AllowCommandletRendering`, иначе ресурса материала нет и проверка отказывает | 2026-09-16 |
+| `-run=TimeDisplaySetup` | Заводит в `MPC_WorldStateFields` (путь — `TimeDisplayCollection` в Herbalist Settings) параметры времени для материалов: скаляры `TimeOfDay01`, `SeasonUDW`, `LeafDrop01`, `LeafFall01`, `LeafLitter01`, `MoonFull01`, векторы `DayPhaseWeights` (R рассвет, G день, B закат, A ночь) и `SeasonWeights` (R весна, G лето, B осень, A зима). Значения пишет менеджер сетки каждый тик. Карты не трогает. Идемпотентен | 2026-09-16 |
+| `-run=MaterialFunctionsSetup [-rebuild [-only=MF_A,MF_B]] [-verify]` | Собирает функции материалов в `/Game/Materials/Functions`: для карт мира `MF_SampleWorldState`, `MF_SampleTrample`, `MF_TrampleCompressWPO`; слой сезона и суток `MF_SeasonWeights`, `MF_SeasonColor`, `MF_LeafDrop`, `MF_GrassSquash`, `MF_FlowerOpen` (подключение — раздел «Функции материалов» ниже). Нужны ассеты коммандлетов выше (`WorldStateMapSetup`, `TrampleMapSetup`, `TimeDisplaySetup`) и коллекция Ultra Dynamic Weather. Существующую функцию не трогает; `-rebuild` перестраивает граф (правки в редакторе теряются, Id входов и выходов сохраняются — подключения в материалах не рвутся), с `-only=` — только перечисленные функции (без `-rebuild` не действует; перестроенная `MF_SampleTrample` тянет за собой зовущие её `MF_TrampleCompressWPO` и `MF_GrassSquash`). Материалы не трогает. `-verify` компилирует каждую функцию во временном материале (шейдер пикселей и вершин, обе ветки `Trampleable` у `MF_TrampleCompressWPO` и `MF_GrassSquash`) и печатает ошибки компилятора; запускать **без** `-nullrhi` и с `-AllowCommandletRendering`, иначе ресурса материала нет и проверка отказывает | 2026-09-16 |
 | `-run=CompendiumAudit [-CompendiumPath=<папка>]` | Только чтение: сверка карточек компендиума с DataTable (ранги, оси, биомы; геймплейного тюнинга в карточках нет — его не сверяет) | 2026-09-03 |
 | `-run=PlaytestMapCreate` | Создаёт карту `L_Playtest`: восемь `ABiomeRegionVolume` полосами, менеджер сетки, домашний якорь. `L_TestDev` не трогает | 2026-09-06 |
 | `-run=BiomeGraphExport` | `DA_BiomeGraph` → `CSV_tabs/DA_BiomeGraph.json`, чтобы значения графа ревьюились в git | 2026-08-24 |
@@ -41,6 +41,25 @@
 кустика — `Instance & Particle Space` (PCG-трава — Nanite). Компиляцию проверяет
 `-verify`; после подключения в материал — Apply без ошибок в редакторе.
 
+### Листопад у игрока (`ULeafFallSubsystem`)
+
+Этап 4 плана. Подсистема держит систему Niagara из Herbalist Settings
+(`LeafFallSystem`, пусто — листопада нет) на пешке игрока в лиственных биомах
+(`DeciduousBiomes`: смешанный и широколиственный лес, лесостепь, пойма) и
+выключает её вне листопада, над водой и за сеткой. Уже падающие листья
+долетают. Систему частиц собирает художник, пользовательские параметры:
+
+| Параметр | Тип | Значение |
+|---|---|---|
+| `LeafFallRate` | float 0..1 | темп: `LeafFall01 × ((1 − LeafFallWindShare) + LeafFallWindShare × ветер)`, `LeafFallWindShare` = 0.6 — множитель частоты спавна |
+| `WindIntensity` | float 0..1 | ветер симуляции (от UDW через мост) — снос и скорость листьев |
+
+Цвет листьев материал частиц берёт из `MF_SeasonWeights` / `MF_SeasonColor`.
+Короткий нулевой темп (клетка с водой) — только `LeafFallRate` = 0, система
+деактивируется после 10 секунд нулевого темпа подряд. `DeciduousBiomes` в
+ini можно дополнить или заменить, но не очистить до пустого — пустой список
+возвращает значение по умолчанию из кода.
+
 ### Функции материалов: сезон и сутки
 
 Этап 3 `docs/research/DESIGN_Living_Vegetation_Research.md`. Значения времени
@@ -52,7 +71,7 @@
 
 | Функция | Входы (по умолчанию) | Выходы | Куда |
 |---|---|---|---|
-| `MF_SeasonWeights` | — | `SeasonWeights` (R весна, G лето, B осень, A зима), `Spring`…`Winter`, `SeasonUDW`, `LeafDrop01` | свои смеси по сезону |
+| `MF_SeasonWeights` | — | `SeasonWeights` (R весна, G лето, B осень, A зима), `Spring`…`Winter`, `SeasonUDW`, `LeafDrop01`, `LeafFall01` (темп листопада), `LeafLitter01` (подстилка на земле) | свои смеси по сезону; слой подстилки ландшафта — `Lerp` к опавшей листве по `LeafLitter01` |
 | `MF_SeasonColor` | `Color`, `SpringTint` (0.95, 1.08, 0.9), `SummerTint` (1), `AutumnTint` (1.25, 0.95, 0.45), `WinterTint` (0.85, 0.8, 0.7), `Strength` (1) | `Color`, `Tint` | между текущим цветом и Base Color; оттенки подбирать в инстансах |
 | `MF_LeafDrop` | `OpacityMask` (1), `ClumpSize` (30 см), `Position` | `OpacityMask`, `Kept`, `LeafDrop01` | маскированная листва деревьев: между текущей маской и Opacity Mask |
 | `MF_GrassSquash` | `WPO` (ветер), `WinterStrength` (0.8), `SnowStrength` (1), `Snow` (`Snowy` UDW) | `WPO`, `Squash`, `Trample` | трава: `WPO` — в World Position Offset вместо ветра; ложится от максимума тропы (`Trampleable`), зимы и снега; `Squash` — для пожухлого цвета |
@@ -73,7 +92,9 @@
   `MF_GrassSquash.WPO` → World Position Offset; у цветов между ними
   `MF_FlowerOpen`: `SimpleGrassWind` → `MF_FlowerOpen.WPO` →
   `MF_GrassSquash.WPO`, `OpenPhase` — параметр вектора.
-- `M_landscape`: цвет слоя травы → `MF_SeasonColor`. Снега в нём сейчас нет
+- `M_landscape`: цвет слоя травы → `MF_SeasonColor`; подстилка — `Lerp` цвета
+  земли к текстуре опавшей листвы по `MF_SeasonWeights.LeafLitter01` (текстура
+  подстилки — выбор художника). Снега в нём сейчас нет
   (UDW-функций `M_landscape` не читает, проверено по ассету); снег на земле —
   `DLWE_SnowCoverage` UDW ❓, подключать отдельно.
 

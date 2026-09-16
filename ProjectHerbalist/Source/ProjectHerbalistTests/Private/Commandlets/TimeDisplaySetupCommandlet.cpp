@@ -82,6 +82,8 @@ int32 UTimeDisplaySetupCommandlet::Main(const FString& Params)
     bChanged |= AddTimeDisplayScalar(Collection, TEXT("TimeOfDay01"), 13.0f / 32.0f);
     bChanged |= AddTimeDisplayScalar(Collection, TEXT("SeasonUDW"), 1.0f);
     bChanged |= AddTimeDisplayScalar(Collection, TEXT("LeafDrop01"), 0.0f);
+    bChanged |= AddTimeDisplayScalar(Collection, TEXT("LeafFall01"), 0.0f);
+    bChanged |= AddTimeDisplayScalar(Collection, TEXT("LeafLitter01"), 0.0f);
     bChanged |= AddTimeDisplayScalar(Collection, TEXT("MoonFull01"), 0.0f);
     bChanged |= AddTimeDisplayVector(Collection, TEXT("DayPhaseWeights"), FLinearColor(0.0f, 1.0f, 0.0f, 0.0f));
     bChanged |= AddTimeDisplayVector(Collection, TEXT("SeasonWeights"), FLinearColor(0.0f, 1.0f, 0.0f, 0.0f));

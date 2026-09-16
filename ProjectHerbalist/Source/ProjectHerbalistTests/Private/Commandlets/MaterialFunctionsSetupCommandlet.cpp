@@ -168,6 +168,16 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
     using namespace HerbalistMaterialFunctions;
     UE_LOG(LogTemp, Display, TEXT("=== MaterialFunctionsSetup ==="));
     const bool bRebuild = FParse::Param(*Params, TEXT("rebuild"));
+    // -only=MF_A,MF_B -- -rebuild только перечисленных: остальные функции могли
+    // поправить в редакторе, их незачем пересобирать ради новой.
+    FString OnlyList;
+    FParse::Value(*Params, TEXT("only="), OnlyList);
+    TArray<FString> OnlyNames;
+    OnlyList.ParseIntoArray(OnlyNames, TEXT(","), true);
+    if (OnlyNames.Num() > 0 && !bRebuild)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("-only= действует только вместе с -rebuild -- ничего не перестраиваю"));
+    }
 
     FSources Sources;
     Sources.Collection = LoadObject<UMaterialParameterCollection>(nullptr, CollectionPath);
@@ -216,6 +226,14 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         { FlowerOpenName, &FlowerOpen, [&Sources](UMaterialFunction* F) { return BuildFlowerOpen(F, Sources); } },
     };
 
+    for (const FString& Only : OnlyNames)
+    {
+        if (!Steps.ContainsByPredicate([&Only](const FStep& Step) { return Only == Step.Name; }))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("-only=: функции %s нет (имена с MF_)"), *Only);
+        }
+    }
+
     for (const FStep& Step : Steps)
     {
         // Вызов MF_SampleTrample внутри сжатия запоминает её входы и выходы --
@@ -223,7 +241,8 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         const bool bDependsOnRebuiltTrample = (Step.Slot == &Compress || Step.Slot == &GrassSquash) && bTrampleBuilt;
 
         FFunctionPinIds PinIds;
-        const EMaterialFunctionPrepareResult Prepared = PrepareMaterialFunction(Step.Name, bRebuild || bDependsOnRebuiltTrample, *Step.Slot, PinIds);
+        const bool bSelected = OnlyNames.Num() == 0 || OnlyNames.Contains(Step.Name);
+        const EMaterialFunctionPrepareResult Prepared = PrepareMaterialFunction(Step.Name, (bRebuild && bSelected) || bDependsOnRebuiltTrample, *Step.Slot, PinIds);
         if (Prepared == EMaterialFunctionPrepareResult::Failed)
         {
             return 1;
@@ -263,6 +282,7 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         // Слой сезона: текстур не читает, кроме тропы у MF_GrassSquash.
         bAllCompile &= VerifyMaterialFunctionCompiles(SeasonWeights, TEXT("Winter"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
         bAllCompile &= VerifyMaterialFunctionCompiles(SeasonWeights, TEXT("LeafDrop01"), MP_WorldPositionOffset, TEXT("шейдер вершин"), Sources.TrampleMap, false);
+        bAllCompile &= VerifyMaterialFunctionCompiles(SeasonWeights, TEXT("LeafLitter01"), MP_BaseColor, TEXT("подстилка, шейдер пикселей"), Sources.TrampleMap, false);
         bAllCompile &= VerifyMaterialFunctionCompiles(SeasonColor, TEXT("Color"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
         bAllCompile &= VerifyMaterialFunctionCompiles(LeafDrop, TEXT("OpacityMask"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
         bAllCompile &= VerifyMaterialFunctionCompiles(LeafDrop, TEXT("OpacityMask"), MP_OpacityMask, TEXT("маска, маскированный материал"), Sources.TrampleMap, false);

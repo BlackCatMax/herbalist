@@ -1065,13 +1065,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     float GetLeafDrop01() const;
 
+    // Темп листопада 0..1 (пик в середине спада листвы) и подстилка на земле
+    // 0..1 (растёт до середины зимы, лежит до конца зимы, к середине весны
+    // сходит). Этап 4 плана, Core/Types/HerbalistTimeDisplay.h.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetLeafFall01() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetLeafLitter01() const;
+
     // Близость к полнолунию: 1 в середине Полнолуния, 0 в середине Новолуния.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     float GetMoonFull01() const;
 
     // Пишет TimeOfDay01, DayPhaseWeights, SeasonWeights, SeasonUDW,
-    // LeafDrop01, MoonFull01. Параметры заводит -run=TimeDisplaySetup.
-    // true -- коллекция есть и все шесть параметров в ней нашлись.
+    // LeafDrop01, LeafFall01, LeafLitter01, MoonFull01. Параметры заводит
+    // -run=TimeDisplaySetup. true -- коллекция есть и все восемь нашлись.
     bool WriteTimeDisplayParameters(UMaterialParameterCollection* Collection);
 
     // То же в TimeDisplayCollection из Herbalist Settings; зовёт Tick().
