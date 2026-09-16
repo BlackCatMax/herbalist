@@ -58,6 +58,17 @@
 Атрибуты точек: `Distortion`, `Corruption`, `Purity`, `Stability`,
 `HarvestStress`, `ShrineRestoration`, `Biome`, `bIsWater`, `ManifestedEntity`.
 
+Сезон травы (`PCG_Grass`, узел **Sample Herbalist Cell**): точкам пишутся
+`SeasonKey` (Spring/Summer/Autumn/Winter на момент генерации) и
+`SeasonMeshKey` (`Healthy_Winter`), трава прореживается по доле сезона
+(`WinterDensity` 0.4). Работает только при **Generate at Runtime**: при
+`GenerateOnLoad` граф запекается в редакторе без сетки, в логе графа
+предупреждение «Сетка недоступна», сезона нет. Проверка: `SkipGameDays 275`
+(зима), уйти от места дальше радиуса генерации и вернуться — травы заметно
+меньше; в логе `LogHerbalistWorld Verbose` — `прорежено сезоном Winter: N`.
+Узел не кэшируется, так что вернувшаяся клетка пересчитывается с текущим
+сезоном.
+
 ## Карта состояния мира
 
 `RT_WorldStateMap` — живая ли, следует ли за симуляцией, сглажены ли

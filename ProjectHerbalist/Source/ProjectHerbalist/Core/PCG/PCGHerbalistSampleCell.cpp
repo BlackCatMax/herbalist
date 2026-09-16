@@ -28,6 +28,45 @@ namespace PCGHerbalistSampleCellAttributes
     const FName Biome(TEXT("Biome"));
     const FName Degrading(TEXT("bDegrading"));
     const FName MeshKey(TEXT("MeshKey"));
+    const FName SeasonKey(TEXT("SeasonKey"));
+    const FName SeasonMeshKey(TEXT("SeasonMeshKey"));
+}
+
+FString UPCGHerbalistSampleCellSettings::SeasonKeyFor(ESeason Season)
+{
+    switch (Season)
+    {
+    case ESeason::Spring: return TEXT("Spring");
+    case ESeason::Summer: return TEXT("Summer");
+    case ESeason::Autumn: return TEXT("Autumn");
+    default:              return TEXT("Winter");
+    }
+}
+
+FString UPCGHerbalistSampleCellSettings::SeasonMeshKeyFor(const FString& MeshKey, ESeason Season)
+{
+    return MeshKey + TEXT("_") + SeasonKeyFor(Season);
+}
+
+float UPCGHerbalistSampleCellSettings::SeasonDensityFor(ESeason Season) const
+{
+    switch (Season)
+    {
+    case ESeason::Spring: return SpringDensity;
+    case ESeason::Summer: return SummerDensity;
+    case ESeason::Autumn: return AutumnDensity;
+    default:              return WinterDensity;
+    }
+}
+
+bool UPCGHerbalistSampleCellSettings::KeepPointForSeason(int32 Seed, float Density)
+{
+    if (Density >= 1.0f) return true;
+    if (Density <= 0.0f) return false;
+    // Своя соль: сид точки уже потрачен графом на смещения и масштаб, без неё
+    // прореживание коррелировало бы с размером кустика.
+    const FRandomStream Stream(static_cast<int32>(HashCombine(static_cast<uint32>(Seed), 0x5EA50Du)));
+    return Stream.GetFraction() < Density;
 }
 
 TArray<FPCGPinProperties> UPCGHerbalistSampleCellSettings::InputPinProperties() const
@@ -97,6 +136,14 @@ bool FPCGHerbalistSampleCellElement::ExecuteInternal(FPCGContext* Context) const
     int32 TotalPoints = 0;
     int32 OutsideGrid = 0;
     int32 DegradingPoints = 0;
+    int32 ThinnedBySeason = 0;
+
+    // Сезон -- на момент генерации (вариант А, шапка заголовка).
+    const ESeason Season = Manager->GetSeason();
+    const FString SeasonKeyValue = UPCGHerbalistSampleCellSettings::SeasonKeyFor(Season);
+    const FString HealthySeasonMeshKey = UPCGHerbalistSampleCellSettings::SeasonMeshKeyFor(Settings->HealthyMeshKey, Season);
+    const FString DegradingSeasonMeshKey = UPCGHerbalistSampleCellSettings::SeasonMeshKeyFor(Settings->DegradingMeshKey, Season);
+    const float SeasonDensity = Settings->SeasonDensityFor(Season);
 
     for (const FPCGTaggedData& Input : Inputs)
     {
@@ -110,12 +157,22 @@ bool FPCGHerbalistSampleCellElement::ExecuteInternal(FPCGContext* Context) const
         const FConstPCGPointValueRanges InRanges(InPointData);
 
         // Считаем, какие точки доживут до выхода: при bDropPointsOutsideGrid
-        // число точек на выходе меньше входного, и знать его надо до
-        // аллокации.
+        // и прореживании по сезону число точек на выходе меньше входного, и
+        // знать его надо до аллокации.
         TArray<int32> KeptIndices;
         KeptIndices.Reserve(NumPoints);
         for (int32 Index = 0; Index < NumPoints; ++Index)
         {
+            // Без сида у точек (0) решение было бы одним на всю плитку -- сид
+            // из позиции, как у сэмплеров движка.
+            const int32 PointSeed = InRanges.SeedRange[Index] != 0
+                ? InRanges.SeedRange[Index]
+                : PCGHelpers::ComputeSeedFromPosition(InRanges.TransformRange[Index].GetLocation());
+            if (!UPCGHerbalistSampleCellSettings::KeepPointForSeason(PointSeed, SeasonDensity))
+            {
+                ++ThinnedBySeason;
+                continue;
+            }
             const FVector Location = InRanges.TransformRange[Index].GetLocation();
             int32 CellX = -1, CellY = -1;
             const bool bInside = Manager->WorldPositionToCell(Location, CellX, CellY);
@@ -144,6 +201,10 @@ bool FPCGHerbalistSampleCellElement::ExecuteInternal(FPCGContext* Context) const
             PCGHerbalistSampleCellAttributes::Degrading, false, false, false);
         FPCGMetadataAttribute<FString>* AttrMeshKey = OutPointData->Metadata->CreateAttribute<FString>(
             PCGHerbalistSampleCellAttributes::MeshKey, Settings->HealthyMeshKey, false, false);
+        OutPointData->Metadata->CreateAttribute<FString>(
+            PCGHerbalistSampleCellAttributes::SeasonKey, SeasonKeyValue, false, false);
+        FPCGMetadataAttribute<FString>* AttrSeasonMeshKey = OutPointData->Metadata->CreateAttribute<FString>(
+            PCGHerbalistSampleCellAttributes::SeasonMeshKey, HealthySeasonMeshKey, false, false);
 
         OutPointData->SetNumPoints(KeptIndices.Num(), /*bInitializeValues=*/false);
         OutPointData->AllocateProperties(EPCGPointNativeProperties::All);
@@ -181,6 +242,7 @@ bool FPCGHerbalistSampleCellElement::ExecuteInternal(FPCGContext* Context) const
             {
                 // Вне сетки и не выброшена: оси нулевые, ключ здоровый.
                 AttrMeshKey->SetValue(Entry, Settings->HealthyMeshKey);
+                AttrSeasonMeshKey->SetValue(Entry, HealthySeasonMeshKey);
                 continue;
             }
 
@@ -195,17 +257,19 @@ bool FPCGHerbalistSampleCellElement::ExecuteInternal(FPCGContext* Context) const
             {
                 ++DegradingPoints;
                 AttrMeshKey->SetValue(Entry, Settings->DegradingMeshKey);
+                AttrSeasonMeshKey->SetValue(Entry, DegradingSeasonMeshKey);
             }
             else
             {
                 AttrMeshKey->SetValue(Entry, Settings->HealthyMeshKey);
+                AttrSeasonMeshKey->SetValue(Entry, HealthySeasonMeshKey);
             }
         }
     }
 
     UE_LOG(LogHerbalistWorld, Verbose,
-        TEXT("[PCG] SampleHerbalistCell: точек %d, вне сетки %d, в испорченном полюсе %d"),
-        TotalPoints, OutsideGrid, DegradingPoints);
+        TEXT("[PCG] SampleHerbalistCell: точек %d, вне сетки %d, в испорченном полюсе %d, прорежено сезоном %s: %d"),
+        TotalPoints, OutsideGrid, DegradingPoints, *SeasonKeyValue, ThinnedBySeason);
 
     return true;
 }

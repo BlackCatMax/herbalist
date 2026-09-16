@@ -24,6 +24,10 @@
 #include "PCGPin.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
+#include "Commandlets/PcgGrassSeasonSetupCommandlet.h"
+#include "PCGGraph.h"
+#include "PCGNode.h"
+#include "PCGEdge.h"
 #include "Misc/Paths.h"
 
 #if WITH_AUTOMATION_TESTS
@@ -126,6 +130,8 @@ bool FHerbalistPcgSampleCell_AttributeNamesAreAStableContract::RunTest(const FSt
         TEXT("Biome"),
         TEXT("bDegrading"),
         TEXT("MeshKey"),
+        TEXT("SeasonKey"),
+        TEXT("SeasonMeshKey"),
     };
 
     for (const FString& Name : Expected)
@@ -176,6 +182,125 @@ bool FHerbalistPcgSampleCell_SharedAttributeNamesMatchTheSourceNode::RunTest(con
             SamplerSource.Contains(Needle) && GridSource.Contains(Needle));
     }
 
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPcgSampleCell_SeasonKeysAndThinningAreNested,
+    "Herbalist.PcgSampleCell.SeasonKeysAndThinningAreNested",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPcgSampleCell_SeasonKeysAndThinningAreNested::RunTest(const FString& Parameters)
+{
+    // Ключи -- контракт с записями PCGMeshSelectorByAttribute (сопоставление по строке).
+    TestEqual(TEXT("SeasonKey зимы"), UPCGHerbalistSampleCellSettings::SeasonKeyFor(ESeason::Winter), FString(TEXT("Winter")));
+    TestEqual(TEXT("SeasonKey осени"), UPCGHerbalistSampleCellSettings::SeasonKeyFor(ESeason::Autumn), FString(TEXT("Autumn")));
+    TestEqual(TEXT("SeasonMeshKey = MeshKey_Season"), UPCGHerbalistSampleCellSettings::SeasonMeshKeyFor(TEXT("Healthy"), ESeason::Winter), FString(TEXT("Healthy_Winter")));
+
+    const UPCGHerbalistSampleCellSettings* Defaults = GetDefault<UPCGHerbalistSampleCellSettings>();
+    TestEqual(TEXT("Весной трава вся"), Defaults->SeasonDensityFor(ESeason::Spring), 1.0f);
+    TestEqual(TEXT("Летом трава вся"), Defaults->SeasonDensityFor(ESeason::Summer), 1.0f);
+    TestTrue(TEXT("Зимой травы меньше, чем осенью"), Defaults->SeasonDensityFor(ESeason::Winter) < Defaults->SeasonDensityFor(ESeason::Autumn));
+
+    // Доля оставшихся точек близка к доле сезона, и меньшая доля -- подмножество
+    // большей: при смене сезона трава не перетасовывается.
+    const int32 Points = 20000;
+    int32 KeptAutumn = 0, KeptWinter = 0, WinterNotInAutumn = 0;
+    for (int32 Seed = 0; Seed < Points; ++Seed)
+    {
+        const int32 PointSeed = static_cast<int32>(HashCombine(static_cast<uint32>(Seed), 977u));
+        const bool bAutumn = UPCGHerbalistSampleCellSettings::KeepPointForSeason(PointSeed, 0.8f);
+        const bool bWinter = UPCGHerbalistSampleCellSettings::KeepPointForSeason(PointSeed, 0.4f);
+        KeptAutumn += bAutumn ? 1 : 0;
+        KeptWinter += bWinter ? 1 : 0;
+        WinterNotInAutumn += (bWinter && !bAutumn) ? 1 : 0;
+    }
+    TestTrue(*FString::Printf(TEXT("Осенью остаётся ~80%% (%d из %d)"), KeptAutumn, Points), FMath::Abs(KeptAutumn / static_cast<float>(Points) - 0.8f) < 0.02f);
+    TestTrue(*FString::Printf(TEXT("Зимой остаётся ~40%% (%d из %d)"), KeptWinter, Points), FMath::Abs(KeptWinter / static_cast<float>(Points) - 0.4f) < 0.02f);
+    TestEqual(TEXT("Зимний набор -- подмножество осеннего"), WinterNotInAutumn, 0);
+    TestTrue(TEXT("Доля 1 -- все точки"), UPCGHerbalistSampleCellSettings::KeepPointForSeason(12345, 1.0f));
+    TestFalse(TEXT("Доля 0 -- ни одной"), UPCGHerbalistSampleCellSettings::KeepPointForSeason(12345, 0.0f));
+
+    // Узел не кэшируется: результат зависит от живого мира (сезон, клетки).
+    FString Source;
+    if (TestTrue(TEXT("Sampler header is readable"), LoadPcgSampleCellSource(TEXT("Source/ProjectHerbalist/Core/PCG/PCGHerbalistSampleCell.h"), Source)))
+    {
+        TestTrue(TEXT("IsCacheable возвращает false"), Source.Contains(TEXT("IsCacheable(const UPCGSettings* InSettings) const override { return false; }")));
+    }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPcgSampleCell_GrassGraphSamplesCellBeforeNoise,
+    "Herbalist.PcgSampleCell.GrassGraphSamplesCellBeforeNoise",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPcgSampleCell_GrassGraphSamplesCellBeforeNoise::RunTest(const FString& Parameters)
+{
+    auto FindSampler = [](UPCGGraph* Graph) -> UPCGNode*
+    {
+        for (UPCGNode* Node : Graph->GetNodes())
+        {
+            if (Node && Node->GetSettings() && Node->GetSettings()->IsA<UPCGHerbalistSampleCellSettings>()) return Node;
+        }
+        return nullptr;
+    };
+    auto SamplerWiring = [](const UPCGNode* Sampler, FString& OutFrom, FString& OutTo)
+    {
+        for (const UPCGPin* Pin : Sampler->GetInputPins())
+            for (const UPCGEdge* Edge : Pin->Edges)
+                if (Edge && Edge->InputPin && Edge->InputPin->Node && Edge->InputPin->Node->GetSettings())
+                    OutFrom = Edge->InputPin->Node->GetSettings()->GetClass()->GetName();
+        for (const UPCGPin* Pin : Sampler->GetOutputPins())
+            for (const UPCGEdge* Edge : Pin->Edges)
+                if (Edge && Edge->OutputPin && Edge->OutputPin->Node && Edge->OutputPin->Node->GetSettings())
+                    OutTo = Edge->OutputPin->Node->GetSettings()->GetClass()->GetName();
+    };
+
+    UPCGGraph* Asset = LoadObject<UPCGGraph>(nullptr, TEXT("/Game/PCG/PCG_Grass.PCG_Grass"));
+    if (!TestNotNull(TEXT("PCG_Grass загружается"), Asset)) return false;
+
+    // Ассет: узел вставлен -run=PcgGrassSeasonSetup между World Raycast и Attribute Noise.
+    const UPCGNode* InAsset = FindSampler(Asset);
+    if (TestNotNull(TEXT("Sample Herbalist Cell стоит в PCG_Grass"), InAsset))
+    {
+        FString From, To;
+        SamplerWiring(InAsset, From, To);
+        TestEqual(TEXT("Вход -- из World Raycast"), From, FString(TEXT("PCGWorldRaycastElementSettings")));
+        TestEqual(TEXT("Выход -- в Attribute Noise"), To, FString(TEXT("PCGAttributeNoiseSettings")));
+    }
+
+    // Повторный запуск на копии -- ничего не добавляет.
+    UPCGGraph* Copy = DuplicateObject<UPCGGraph>(Asset, GetTransientPackage());
+    TestEqual(TEXT("Узел уже есть -- вставка не повторяется"), UPcgGrassSeasonSetupCommandlet::InsertSeasonSampler(Copy), 0);
+
+    // Сама вставка: на копии убрать узел, вернуть прямую связь и вставить заново.
+    UPCGNode* CopySampler = FindSampler(Copy);
+    UPCGNode* Raycast = nullptr;
+    UPCGNode* Noise = nullptr;
+    FName RaycastLabel, NoiseLabel;
+    if (CopySampler)
+    {
+        for (const UPCGPin* Pin : CopySampler->GetInputPins())
+            for (const UPCGEdge* Edge : Pin->Edges)
+                if (Edge && Edge->InputPin) { Raycast = Edge->InputPin->Node; RaycastLabel = Edge->InputPin->Properties.Label; }
+        for (const UPCGPin* Pin : CopySampler->GetOutputPins())
+            for (const UPCGEdge* Edge : Pin->Edges)
+                if (Edge && Edge->OutputPin) { Noise = Edge->OutputPin->Node; NoiseLabel = Edge->OutputPin->Properties.Label; }
+    }
+    if (TestTrue(TEXT("На копии найдены соседи узла"), Raycast && Noise))
+    {
+        Copy->RemoveNode(CopySampler);
+        Copy->AddLabeledEdge(Raycast, RaycastLabel, Noise, NoiseLabel);
+        TestNull(TEXT("Узел убран с копии"), FindSampler(Copy));
+        TestEqual(TEXT("Вставка на графе без узла -- 1"), UPcgGrassSeasonSetupCommandlet::InsertSeasonSampler(Copy), 1);
+        const UPCGNode* Inserted = FindSampler(Copy);
+        if (TestNotNull(TEXT("Узел вставлен"), Inserted))
+        {
+            FString From, To;
+            SamplerWiring(Inserted, From, To);
+            TestEqual(TEXT("Вставленный: вход из World Raycast"), From, FString(TEXT("PCGWorldRaycastElementSettings")));
+            TestEqual(TEXT("Вставленный: выход в Attribute Noise"), To, FString(TEXT("PCGAttributeNoiseSettings")));
+        }
+    }
     return true;
 }
 

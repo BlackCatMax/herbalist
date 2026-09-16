@@ -32,14 +32,26 @@
 // случайным шумом. Изобретать второй порог поверх существующего было бы
 // дублированием одного решения в двух местах.
 //
-// ЦЕНА, КОТОРУЮ НАДО ЗНАТЬ. Узел считается на CPU. В графе `PCG_Grass` все
-// четыре спавнера стоят с `bExecuteOnGPU`, и вставка CPU-узла в такую
-// цепочку заставит PCG гонять данные между CPU и GPU. Для ДИСКРЕТНОЙ смены
+// ЦЕНА, КОТОРУЮ НАДО ЗНАТЬ. Узел считается на CPU, на игровом потоке. В графе
+// `PCG_Grass` три спавнера на GPU (сверено 2026-09-17), узел стоит выше
+// шума и фильтров, которые и так на CPU, -- лишнего перегона данных между
+// CPU и GPU он не добавляет. Для ДИСКРЕТНОЙ смены
 // флоры это приемлемо: узел работает только при перегенерации, а она редка
 // (флаг липкий). Для НЕПРЕРЫВНОГО отклика — пожелтения травы по мере порчи
 // — этот путь не годится вовсе, и он для него и не предназначен: непрерывное
 // делает карта состояния мира (GridWorldManagerWorldStateMap.cpp), которая
 // обновляется без всякой перегенерации.
+//
+// СЕЗОН (2026-09-17, этап 5 docs/research/DESIGN_Living_Vegetation_Research.md
+// §4, решение пользователя -- вариант А). Узел пишет точкам SeasonKey
+// (технический сезон на момент генерации: Spring/Summer/Autumn/Winter) и
+// SeasonMeshKey = MeshKey + "_" + SeasonKey (Healthy_Winter) для
+// PCGMeshSelectorByAttribute, и прореживает точки по доле сезона
+// (Spring/Summer/Autumn/WinterDensity). Смена набора без хлопка: при генерации
+// в рантайме новый сезон получают только клетки, которые генерируются после
+// смены, остальные -- когда выйдут из радиуса и вернутся. Прореживание
+// детерминировано по сиду точки и вложено: зимний набор -- подмножество
+// осеннего, при смене сезона трава не перетасовывается.
 //
 // ВРЕМЯ ИСПОЛНЕНИЯ. То же ограничение, что у «Get Herbalist Grid»: клетки
 // существуют только после InitializeCells (BeginPlay). В редакторе до
@@ -49,6 +61,7 @@
 
 #include "CoreMinimal.h"
 #include "PCGSettings.h"
+#include "Core/Types/HerbalistCoreTypes.h"
 #include "PCGHerbalistSampleCell.generated.h"
 
 /**
@@ -96,6 +109,34 @@ public:
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Settings, meta = (PCG_Overridable))
     bool bDropPointsOutsideGrid = false;
 
+    /**
+     * Доля точек, остающихся в сезон (1 -- все). Зимой травы меньше: трава
+     * жухнет и ложится материалом (MF_GrassSquash), а часть кустиков
+     * пропадает совсем. Визуальная настройка, подбирается глазами. Набор с
+     * меньшей долей -- подмножество набора с большей: чтобы зимой не
+     * появлялись кустики, которых не было осенью, держать WinterDensity <=
+     * AutumnDensity.
+     */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Season", meta = (PCG_Overridable, ClampMin = "0.0", ClampMax = "1.0"))
+    float SpringDensity = 1.0f;
+
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Season", meta = (PCG_Overridable, ClampMin = "0.0", ClampMax = "1.0"))
+    float SummerDensity = 1.0f;
+
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Season", meta = (PCG_Overridable, ClampMin = "0.0", ClampMax = "1.0"))
+    float AutumnDensity = 0.8f;
+
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Season", meta = (PCG_Overridable, ClampMin = "0.0", ClampMax = "1.0"))
+    float WinterDensity = 0.4f;
+
+    // ---- Сезон: чистые функции (тесты; сам элемент без графа не исполнить) ----
+    static FString SeasonKeyFor(ESeason Season);
+    static FString SeasonMeshKeyFor(const FString& MeshKey, ESeason Season);
+    float SeasonDensityFor(ESeason Season) const;
+    // Остаётся ли точка с сидом Seed при доле Density. Одно случайное число на
+    // точку для всех сезонов: при меньшей доле остаётся подмножество.
+    static bool KeepPointForSeason(int32 Seed, float Density);
+
 protected:
     virtual TArray<FPCGPinProperties> InputPinProperties() const override;
     virtual TArray<FPCGPinProperties> OutputPinProperties() const override;
@@ -111,4 +152,8 @@ protected:
     // страницы (разметка мира, этап 8в) -- читать их из рабочего потока PCG
     // нельзя.
     virtual bool CanExecuteOnlyOnMainThread(FPCGContext* Context) const override { return true; }
+    // Не кэшировать: результат зависит от живого мира (состояние клетки,
+    // сезон), а ключ кэша PCG -- только настройки и входные точки. Иначе
+    // вернувшаяся в радиус клетка получала бы прошлый сезон (ревью этапа 5).
+    virtual bool IsCacheable(const UPCGSettings* InSettings) const override { return false; }
 };
