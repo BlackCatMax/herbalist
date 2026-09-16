@@ -30,6 +30,7 @@
 | `DESIGN_KCD2_Alchemy_Research.md` | Алхимия в Kingdom Come: Deliverance II |
 | `DESIGN_Diegetic_UI_Research.md` | Диегетический интерфейс |
 | `DESIGN_Kena_Corruption_Research.md` | Порча и очищение в Kena: Bridge of Spirits |
+| `DESIGN_Living_Vegetation_Research.md` | Живая растительность: сезоны, сутки, погода — материалы, PCG, UDS/UDW |
 
 ## `reference/` — справочники
 
