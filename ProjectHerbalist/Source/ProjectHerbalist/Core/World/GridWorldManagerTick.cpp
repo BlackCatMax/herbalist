@@ -2,6 +2,7 @@
 // Полный файл с трассировкой, реплеем и восстановлением экологии
 
 #include "Core/World/GridWorldManager.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "DrawDebugHelpers.h"
@@ -78,6 +79,10 @@ void AGridWorldManager::Tick(float DeltaTime)
     // Игровые часы — не GetWorld()->GetTimeSeconds() (см. GridWorldManager.h):
     // должны пережить сохранение/загрузку, а движковое время level-relative.
     AdvanceGameClock(DeltaTime);
+
+    // Время в материалах -- каждый кадр: раскрытие цветка за 6-минутный
+    // рассвет при записи раз в секунду шло бы видимыми ступеньками.
+    WriteTimeDisplayParametersFromSettings();
 
     // ========================================================================
     // ПАЙПЛАЙН НА ФИКСИРОВАННОМ ШАГЕ

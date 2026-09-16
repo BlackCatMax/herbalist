@@ -1466,6 +1466,20 @@ public:
     // с биомом, сезоном и капищем), отдельного числа у троп нет.
     UPROPERTY(config, EditAnywhere, Category = "Trample", meta = (ClampMin = "0.01"))
     float TrampleTestTimeScale = 1.0f;
+
+    // --- Время в материалах (2026-09-16, этап 1б DESIGN_Living_Vegetation_Research.md) ---
+    // MPC, куда AGridWorldManager каждый тик пишет время суток, веса фаз суток
+    // и сезонов, листопад и луну (Core/Types/HerbalistTimeDisplay.h).
+    // Параметры заводит -run=TimeDisplaySetup. Пусто -- показа нет.
+    UPROPERTY(config, EditAnywhere, Category = "TimeDisplay")
+    TSoftObjectPtr<UMaterialParameterCollection> TimeDisplayCollection;
+
+    // Ширина перехода между фазами суток в DayPhaseWeights, игровые минуты
+    // (из 32). Визуальная настройка, на механику не влияет: IsNight и прочие
+    // переключаются в середине перехода. Полуширина ограничена половиной
+    // самой короткой фазы (3 минуты), поэтому шире 6 минут не бывает.
+    UPROPERTY(config, EditAnywhere, Category = "TimeDisplay", meta = (ClampMin = "0.0", ClampMax = "6.0"))
+    float DayPhaseBlendMinutes = 1.0f;
 };
 
 // PROJECTHERBALIST_API добавлен 2026-09-04 (обнаружено при линковке

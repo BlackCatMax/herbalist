@@ -237,6 +237,12 @@ bool AGridWorldManager::IsPoludnitsaWindow() const
 
 EMoonPhase AGridWorldManager::GetMoonPhase() const
 {
+    const int32 PhaseIndex = FMath::Clamp(FMath::FloorToInt(GetMoonCycle01() * 4.0f), 0, 3);
+    return static_cast<EMoonPhase>(PhaseIndex);
+}
+
+float AGridWorldManager::GetMoonCycle01() const
+{
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
     // 7 игровых суток на фазу — тот же StressRecoveryGameDays, что уже
@@ -246,9 +252,8 @@ EMoonPhase AGridWorldManager::GetMoonPhase() const
     const float PhaseDurationDays = FMath::Max(0.01f, Settings ? Settings->StressRecoveryGameDays : 7.0f);
     const float MoonCycleSeconds = PhaseDurationDays * 4.0f * DayLengthSeconds;
 
-    const float CycleFraction = FMath::Fmod(GameClockSeconds, MoonCycleSeconds) / MoonCycleSeconds;
-    const int32 PhaseIndex = FMath::Clamp(FMath::FloorToInt(CycleFraction * 4.0f), 0, 3);
-    return static_cast<EMoonPhase>(PhaseIndex);
+    const float CycleFraction = static_cast<float>(FMath::Fmod(FMath::Max(0.0, GameClockSeconds), static_cast<double>(MoonCycleSeconds)) / MoonCycleSeconds);
+    return FMath::Clamp(CycleFraction, 0.0f, 0.99999f);
 }
 
 // ============================================================================

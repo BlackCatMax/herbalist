@@ -105,6 +105,14 @@ public:
     UFUNCTION(Exec)
     void ShowInventory();
 
+    // Перемотка часов для проверки времени в материалах (этап 1б,
+    // DESIGN_Living_Vegetation_Research.md): абсолютные секунды игровых
+    // часов и сдвиг на N игровых суток (дробь -- доля суток, минус -- назад).
+    UFUNCTION(Exec)
+    void SetGameClock(float Seconds);
+    UFUNCTION(Exec)
+    void SkipGameDays(float Days);
+
     // Сбор без участия ввода (2026-09-03). Делает ровно то же, что Harvest()
     // по клавише: тот же трейс от камеры, та же проверка дистанции, тот же
     // путь в пайплайн. Нужен, чтобы отделить «сломан ввод» от «сломан сбор»

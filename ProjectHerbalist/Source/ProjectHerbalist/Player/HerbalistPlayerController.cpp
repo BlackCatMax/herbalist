@@ -677,6 +677,23 @@ void AHerbalistPlayerController::ShowInventory()
     Inventory();
 }
 
+void AHerbalistPlayerController::SetGameClock(float Seconds)
+{
+    if (AGridWorldManager* WorldManager = FindWorldManager())
+    {
+        WorldManager->JumpGameClock(Seconds);
+    }
+}
+
+void AHerbalistPlayerController::SkipGameDays(float Days)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return;
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const double DaySeconds = (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0;
+    WorldManager->JumpGameClock(WorldManager->GetGameClockSeconds() + Days * DaySeconds);
+}
+
 void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
 {
     ToolName.ToLowerInline();

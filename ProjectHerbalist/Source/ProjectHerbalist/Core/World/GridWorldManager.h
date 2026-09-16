@@ -1003,6 +1003,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     EMoonPhase GetMoonPhase() const;
 
+    // Доля лунного цикла [0,1): четыре фазы по четверти, начиная с Новолуния.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetMoonCycle01() const;
+
     // ---- Годовой круг (02_GDD/15_Cycles_And_Shrines.md §15.4) ----
     // Календарь (2026-09-16, решение пользователя): год 365 суток, обычные
     // месяцы без високосных, сутки 0 -- 1 марта; сезон -- метеорологический,
@@ -1037,6 +1041,47 @@ public:
     // 23 июня (§16.2, Купальские).
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     bool IsKupalaNight() const;
+
+    // ---- Время в материалах (2026-09-16, этап 1б DESIGN_Living_Vegetation_Research.md §2) ----
+    // Готовые плавные веса вместо часов: материал не считает календарь сам
+    // (Core/Types/HerbalistTimeDisplay.h). Каждый тик пишутся в
+    // UHerbalistSettings::TimeDisplayCollection (MPC_WorldStateFields).
+
+    // Веса фаз суток: R рассвет, G день, B закат, A ночь; сумма 1.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    FLinearColor GetDayPhaseWeights() const;
+
+    // Сезон числом 0..4 в шкале UDS: целое -- середина сезона. Для моста в UDW
+    // (этап 2) и отладки.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetSeasonUDW() const;
+
+    // Веса сезонов: R весна, G лето, B осень, A зима; сумма 1.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    FLinearColor GetSeasonWeights() const;
+
+    // Доля опавшей листвы: 0 с середины весны до конца лета, растёт осенью до 1
+    // в середине зимы, к середине весны снова 0.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetLeafDrop01() const;
+
+    // Близость к полнолунию: 1 в середине Полнолуния, 0 в середине Новолуния.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    float GetMoonFull01() const;
+
+    // Пишет TimeOfDay01, DayPhaseWeights, SeasonWeights, SeasonUDW,
+    // LeafDrop01, MoonFull01. Параметры заводит -run=TimeDisplaySetup.
+    // true -- коллекция есть и все шесть параметров в ней нашлись.
+    bool WriteTimeDisplayParameters(UMaterialParameterCollection* Collection);
+
+    // То же в TimeDisplayCollection из Herbalist Settings; зовёт Tick().
+    void WriteTimeDisplayParametersFromSettings();
+
+    // Перемотка часов для проверки глазами (консоль: SetGameClock,
+    // SkipGameDays у AHerbalistPlayerController). Назад -- сбрасывает
+    // таймеры оберегов, как загрузка (ResetSessionOnlyWardTimers): иначе
+    // уже истёкший оберег снова читался бы активным.
+    void JumpGameClock(double NewClockSeconds);
 
     // ---- Погода (02_GDD/15_Cycles_And_Shrines.md §15.7) ----
     // Собственный C++-сигнал, 2026-08-29, по прямому решению пользователя:
@@ -2453,6 +2498,11 @@ private:
     // до ухода игрока, никогда бы не восстановилась: при первой встрече
     // догонять было бы «нечего», и дальний мир стоял бы замороженным.
     float GridInitGameClock = 0.0f;
+
+    // Коллекция времени для материалов, разрешённая из настроек один раз
+    // (WriteTimeDisplayParametersFromSettings).
+    TWeakObjectPtr<UMaterialParameterCollection> TimeDisplayCollectionCached;
+    bool bTimeDisplayCollectionResolved = false;
     void RunSimulationStep();
 
     // ---- Очередь команд нового пайплайна ----
