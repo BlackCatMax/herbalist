@@ -558,11 +558,8 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|DayCycle", meta = (ClampMin = "0.0", ClampMax = "0.2"))
     float PoludnitsaDistortionRate = 0.02f;
 
-    // Годовой круг (15_Cycles_And_Shrines.md §15.4). Длина сезона в игровых
-    // сутках — "самое условное число во всём разделе", менять свободно.
-    // 117 = 13 недель × 9 суток/неделя (компендиум), три сезона = 351/год.
-    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "1.0"))
-    float SeasonDurationDays = 117.0f;
+    // Годовой круг (15_Cycles_And_Shrines.md §15.4): длина года и сезонов --
+    // календарь (Core/Types/HerbalistCalendar.h, 365 суток), не настройка.
 
     // Весна: "временный бонус к скорости зарастания клеток во всех биомах".
     // Множится на биомный StressRecoveryMultiplier, не заменяет его. ВАЖНО:
@@ -589,27 +586,6 @@ public:
     // NightHorror*Rate выше (разлито по всей сетке, не точечный эффект).
     UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float WinterPurityRate = 0.002f;
-
-    // --- Окна внутри сезона (2026-08-29) — Листовики/Купальские требуют
-    // "осень"/конкретную ночь в году, которых в трёхсезонной модели нет как
-    // отдельных понятий. Прямое решение пользователя: не заводить четвёртый
-    // сезон/полноценный календарь, найти узкие окна внутри существующих
-    // трёх сезонов через GetSeasonProgress01(). ---
-
-    // Листовики: последняя доля Лета читается как "осень" (увядание перед
-    // Зимой) — тот же смысловой промежуток года, что настоящая осень.
-    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float LateSummerProgressThreshold = 0.8f;
-
-    // Купальская ночь — узкое окно внутри Лета (не привязано к реальной
-    // григорианской дате, у проекта свой календарь). [Start, End) по
-    // GetSeasonProgress01() — интервал уже достаточно узкий (3% сезона —
-    // около 3-4 игровых суток при 117-суточном сезоне), чтобы читаться как
-    // "определённая ночь", не "всё лето".
-    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float KupalaWindowStart = 0.15f;
-    UPROPERTY(config, EditAnywhere, Category = "Time|Season", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-    float KupalaWindowEnd = 0.18f;
 
     // --- Погода (§15.7) — 2026-08-29, собственный C++-сигнал, по прямому
     // решению пользователя, пока Ultra Dynamic Weather не установлен в

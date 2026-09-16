@@ -15006,3 +15006,52 @@ UDS (рекомендация сменилась на передачу даты)
 ночь — на 24 июня; осень в механике нейтральна; GDD §15.4 переписывается под
 календарь на этапе 1а; мост передаёт UDS дату, сезон выводится по
 метеорологической схеме. Открытых вопросов по плану нет.
+
+---
+
+## 2026-09-16 — календарь: четыре технических сезона в механике
+
+Этап 1а плана `DESIGN_Living_Vegetation_Research.md`, по решениям пользователя
+§8. Год — 365 суток, обычные месяцы без високосных, сутки 0 — 1 марта.
+`Core/Types/HerbalistCalendar.h` — чистые функции дат и сезонов.
+`ESeason::Autumn` добавлен последним значением, прежние значения в данных не
+сдвигаются. Сезон — метеорологический, по месяцам, как у Ultra Dynamic Sky,
+чтобы мост показа (этап 2) передавал UDS дату, а не выдумывал свою шкалу.
+
+`AGridWorldManager`: `GetSeason` по месяцу, `GetLoreSeason` (осень — Лето),
+`GetDayOfYear`/`GetCalendarMonth`/`GetCalendarDay`, `GetSeasonProgress01` по
+суткам внутри сезона, `IsAutumn` вместо `IsLateSummer`, `IsKupalaNight` — ночная
+фаза 23 июня (ночь на 24-е). Удалены настройки `SeasonDurationDays`,
+`LateSummerProgressThreshold`, `KupalaWindowStart/End` и поле
+`FHarvestContext::bLateSummer`.
+
+Сбор: травы с Летом — только июнь–август; у `bAutumnOnly` Лето в
+`AllowedSeasons` означает осень — летом закрыты, всю осень открыты, Весна и Зима
+не затронуты. Данные трав не менялись. Листовики — вся осень (поле
+`bRequiresLateSummer` сохранило имя, оно лежит в `DT_AmbientEntities`). Осень
+нейтральна: множитель зарастания 1.0, зимней Purity нет.
+
+Тесты: `Herbalist.Season.*` переписаны на даты (новый
+`CalendarDatesStartOnMarchFirst`, `CyclesThroughFourSeasonsByMonth`; осень
+нейтральна в скорости зарастания и Purity);
+`Herbalist.AmbientEntity.ListovikiManifestAllAutumnNotSummer` вместо
+`...ListovikiOnlyManifestLateSummerNotEarly`; Купальские — ночи 22/23/24 июня и
+через год; `Herbalist.Registry.SummerHerbIsNotAutumnHerb` — новый;
+`AutumnOnlyDoesNotBlockItsOtherAllowedSeason`, `StressRegrowth`,
+`SystemInteraction`, метель и годовой замер — на календарь.
+`Herbalist.AmbientEntity.LedyanyeDukhiLowerMagnitudeInWinterOnly` и
+`...SukhoveykiAndStepnyeOgniShareSteppeCorrectly` держали длину сезона 117
+суток прямо в тесте — первый прогон это поймал (день 234 теперь октябрь);
+переведены на даты.
+
+Ревью нашло: `GameClockSeconds` был `float` — с 2^19 с (конец ноября) кадр
+1/60 с терялся целиком и часы вставали, зима в непрерывной игре не наступала
+(при 120+ кадрах — уже с июля). Часы и поле сейва теперь `double`, ход кадра —
+`AdvanceGameClock`; старые сейвы с `float` читаются тегированной сериализацией,
+версия не поднималась. Тест `Herbalist.Season.ClockKeepsRunningThroughWinter`.
+`GetSeasonProgress01` берёт день и долю суток из одного `double`.
+
+Замер года (§15.8, 11 680 выборок): ночь и закат по 18.75%, ветрено 36.39%,
+метель 4.21%, осень 24.93%, Купальская ночь 0.051%.
+GDD §15.4 переписан (календарь сверху, прежняя модель — историей), §15.7,
+§15.8 и `16_Entity_Manifestation.md` — отметки о замене.

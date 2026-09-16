@@ -11,6 +11,7 @@
 // [0,1], не мигает ли ManifestedEntityID каждый тик.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Entities/LegendaryEntityTypes.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
@@ -363,8 +364,7 @@ bool FHerbalistSystemInteraction_MaximumStackDoesNotBreak::RunTest(const FString
     // Зима -- добавляет разлитый по сетке WinterPurityRate нудж поверх всего
     // остального (§15.4), тот же прокси, что уже использует SeasonTest.cpp.
     const float DayLength = 32.0f * 60.0f;
-    const float YearLength = 117.0f * 3.0f * DayLength;
-    const float WinterStart = YearLength * 2.0f / 3.0f;
+    const float WinterStart = HerbalistCore::Calendar::DayOfYearFromDate(12, 1) * DayLength;
     Manager->SetGameClockSeconds(WinterStart + 10.0f * 60.0f);
     if (!TestEqual(TEXT("Sanity: we are actually in Winter"), Manager->GetSeason(), ESeason::Winter))
     {

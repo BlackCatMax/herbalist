@@ -14,9 +14,9 @@
 // сглаживающим `SmoothStep`, и распределение результата уже не равномерное
 // — доля «ветрено» НЕ равна 1 − порог.
 //
-// Год: `SeasonDurationDays` (117) × 3 сезона × `GameDayMinutes` (32) × 60 =
-// 673 920 игровых секунд. Шаг выборки 60 с выбран под самое узкое окно в
-// проекте — Купальская ночь (3% лета И ночь, то есть ~0.19% года): при
+// Год: 365 суток календаря (Core/Types/HerbalistCalendar.h) × `GameDayMinutes`
+// (32) × 60 = 700 800 игровых секунд. Шаг выборки 60 с выбран под самое узкое
+// окно в проекте — Купальская ночь (одна ночь в году, 6 минут из 11 680): при
 // более крупном шаге она попадала бы в отчёт нулём и читалась бы как
 // «недостижима», хотя это неправда.
 //
@@ -28,6 +28,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
@@ -56,7 +57,7 @@ namespace
                 ? Manager.IsBlizzard() : Manager.IsWindy();
             if (!bWeatherOk) return false;
         }
-        if (Def.bRequiresLateSummer && !Manager.IsLateSummer()) return false;
+        if (Def.bRequiresLateSummer && !Manager.IsAutumn()) return false;
         if (Def.bRequiresKupalaNight && !Manager.IsKupalaNight()) return false;
         return true;
     }
@@ -69,7 +70,7 @@ namespace
         if (Def.bRequiresSeason) Parts.Add(FString::Printf(TEXT("сезон=%d"), static_cast<int32>(Def.RequiredSeason)));
         if (Def.bRequiresMoonPhase) Parts.Add(FString::Printf(TEXT("луна=%d"), static_cast<int32>(Def.RequiredMoonPhase)));
         if (Def.bRequiresWeather) Parts.Add(Def.RequiredWeather == EWeatherCondition::Blizzard ? TEXT("метель") : TEXT("ветер"));
-        if (Def.bRequiresLateSummer) Parts.Add(TEXT("конец лета"));
+        if (Def.bRequiresLateSummer) Parts.Add(TEXT("осень"));
         if (Def.bRequiresKupalaNight) Parts.Add(TEXT("Купальская ночь"));
         if (Def.bRequiresBiomeBorder) Parts.Add(TEXT("[граница биомов -- не время]"));
         if (Def.TriggerAxis != EAmbientTriggerAxis::None)
@@ -95,7 +96,7 @@ bool FHerbalistAmbientEntity_EveryCardHasANonZeroTemporalWindow::RunTest(const F
 
     const UHerbalistSettings* Settings = GetDefault<UHerbalistSettings>();
     const float DayLengthSeconds = Settings->GameDayMinutes * 60.0f;
-    const float YearSeconds = Settings->SeasonDurationDays * 3.0f * DayLengthSeconds;
+    const float YearSeconds = HerbalistCore::Calendar::DaysPerYear * DayLengthSeconds;
     const float SampleStep = 60.0f;
     const int32 SampleCount = FMath::FloorToInt(YearSeconds / SampleStep);
 
@@ -106,7 +107,7 @@ bool FHerbalistAmbientEntity_EveryCardHasANonZeroTemporalWindow::RunTest(const F
     OpenCounts.SetNumZeroed(Defs.Num());
 
     // Заодно замеряем сами фазы -- без них доли существ не с чем сравнить.
-    int32 NightCount = 0, DuskCount = 0, WindyCount = 0, BlizzardCount = 0, KupalaCount = 0, LateSummerCount = 0;
+    int32 NightCount = 0, DuskCount = 0, WindyCount = 0, BlizzardCount = 0, KupalaCount = 0, AutumnCount = 0;
 
     const float SavedClock = Manager->GetGameClockSeconds();
     for (int32 i = 0; i < SampleCount; ++i)
@@ -118,7 +119,7 @@ bool FHerbalistAmbientEntity_EveryCardHasANonZeroTemporalWindow::RunTest(const F
         if (Manager->IsWindy()) ++WindyCount;
         if (Manager->IsBlizzard()) ++BlizzardCount;
         if (Manager->IsKupalaNight()) ++KupalaCount;
-        if (Manager->IsLateSummer()) ++LateSummerCount;
+        if (Manager->IsAutumn()) ++AutumnCount;
 
         for (int32 d = 0; d < Defs.Num(); ++d)
         {
@@ -130,8 +131,8 @@ bool FHerbalistAmbientEntity_EveryCardHasANonZeroTemporalWindow::RunTest(const F
     const float Pct = 100.0f / static_cast<float>(SampleCount);
 
     AddInfo(FString::Printf(TEXT("Замер по %d выборкам за игровой год (%.0f с, шаг %.0f с)"), SampleCount, YearSeconds, SampleStep));
-    AddInfo(FString::Printf(TEXT("Фазы: ночь %.2f%%, закат %.2f%%, ветрено %.2f%%, метель %.2f%%, конец лета %.2f%%, Купальская ночь %.3f%%"),
-        NightCount * Pct, DuskCount * Pct, WindyCount * Pct, BlizzardCount * Pct, LateSummerCount * Pct, KupalaCount * Pct));
+    AddInfo(FString::Printf(TEXT("Фазы: ночь %.2f%%, закат %.2f%%, ветрено %.2f%%, метель %.2f%%, осень %.2f%%, Купальская ночь %.3f%%"),
+        NightCount * Pct, DuskCount * Pct, WindyCount * Pct, BlizzardCount * Pct, AutumnCount * Pct, KupalaCount * Pct));
 
     int32 Unreachable = 0;
     for (int32 d = 0; d < Defs.Num(); ++d)

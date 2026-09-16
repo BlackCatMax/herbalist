@@ -10,6 +10,7 @@
 
 #include "Core/World/GridWorldManager.h"
 #include "Core/Entities/AmbientEntityTypes.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
@@ -170,11 +171,11 @@ bool FHerbalistAmbientEntity_WeatherGatedEntitiesManifestWhenWindyOrBlizzard::Ru
     Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("Вихри manifest when windy"), SteppeCell->ManifestedEntityID, FName(TEXT("Вихри")));
 
-    // Метель: ветер И снег И Зима одновременно -- ищем внутри окна Зимы
-    // (3-й сезон, [2/3, 1) года; SeasonDurationDays=117 по умолчанию).
+    // Метель: ветер И снег И Зима одновременно -- ищем внутри Зимы
+    // (декабрь–февраль, конец года календаря от 1 марта).
     const float DayLength = 32.0f * 60.0f;
-    const float YearLength = 117.0f * 3.0f * DayLength;
-    const float WinterStart = YearLength * 2.0f / 3.0f;
+    const float YearLength = HerbalistCore::Calendar::DaysPerYear * DayLength;
+    const float WinterStart = HerbalistCore::Calendar::DayOfYearFromDate(12, 1) * DayLength;
 
     FGridCell* TundraCell = Manager->GetCell(1, 0);
     TundraCell->Biome = EBiomeType::Tundra;
@@ -195,12 +196,14 @@ bool FHerbalistAmbientEntity_WeatherGatedEntitiesManifestWhenWindyOrBlizzard::Ru
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_ListovikiOnlyManifestLateSummerNotEarly,
-    "Herbalist.AmbientEntity.ListovikiOnlyManifestLateSummerNotEarly",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_ListovikiManifestAllAutumnNotSummer,
+    "Herbalist.AmbientEntity.ListovikiManifestAllAutumnNotSummer",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistAmbientEntity_ListovikiOnlyManifestLateSummerNotEarly::RunTest(const FString& Parameters)
+bool FHerbalistAmbientEntity_ListovikiManifestAllAutumnNotSummer::RunTest(const FString& Parameters)
 {
+    // Листовики -- вся осень, сентябрь–ноябрь (решение пользователя
+    // 2026-09-16); до календаря -- последние 20% трёхсезонного Лета.
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
@@ -212,23 +215,32 @@ bool FHerbalistAmbientEntity_ListovikiOnlyManifestLateSummerNotEarly::RunTest(co
     Cell->bIsWater = false;
 
     const float DayLength = 32.0f * 60.0f;
-    const float YearLength = 117.0f * 3.0f * DayLength;
-    const float SummerStart = YearLength / 3.0f;
-    const float SummerEnd = YearLength * 2.0f / 3.0f;
+    const float MidDay = 10.0f * 60.0f;
+    auto AtDate = [DayLength, MidDay](int32 Month, int32 Day)
+    {
+        return HerbalistCore::Calendar::DayOfYearFromDate(Month, Day) * DayLength + MidDay;
+    };
 
-    // Начало Лета -- НЕ поздний конец, Листовики не должны проявиться.
-    Manager->SetGameClockSeconds(SummerStart + DayLength * 5.0f);
-    TestFalse(TEXT("Early summer is not late summer"), Manager->IsLateSummer());
+    // Конец августа -- ещё лето, Листовиков нет.
+    Manager->SetGameClockSeconds(AtDate(8, 31));
+    TestFalse(TEXT("31 августа -- не осень"), Manager->IsAutumn());
     Manager->UpdateEntityManifestations(1.0f);
-    TestNotEqual(TEXT("Листовики do not manifest in early summer"), Cell->ManifestedEntityID, FName(TEXT("Листовики")));
+    TestNotEqual(TEXT("Листовики не проявляются летом"), Cell->ManifestedEntityID, FName(TEXT("Листовики")));
 
-    // Самый конец Лета -- должны проявиться.
-    Manager->SetGameClockSeconds(SummerEnd - DayLength * 2.0f);
-    TestTrue(TEXT("Just before season end is late summer"), Manager->IsLateSummer());
-    const float NatureBefore = Cell->TargetState.Direction.Nature;
-    Manager->UpdateEntityManifestations(1.0f);
-    TestEqual(TEXT("Листовики manifest in late summer"), Cell->ManifestedEntityID, FName(TEXT("Листовики")));
-    TestTrue(TEXT("Листовики nudge Direction.Nature up"), Cell->TargetState.Direction.Nature > NatureBefore);
+    // Начало, середина и конец осени -- проявляются.
+    for (const FIntPoint& MonthDay : { FIntPoint(9, 1), FIntPoint(10, 15), FIntPoint(11, 30) })
+    {
+        Manager->SetGameClockSeconds(AtDate(MonthDay.X, MonthDay.Y));
+        TestTrue(*FString::Printf(TEXT("%d.%02d -- осень"), MonthDay.Y, MonthDay.X), Manager->IsAutumn());
+        const float NatureBefore = Cell->TargetState.Direction.Nature;
+        Manager->UpdateEntityManifestations(1.0f);
+        TestEqual(*FString::Printf(TEXT("Листовики проявляются %d.%02d"), MonthDay.Y, MonthDay.X), Cell->ManifestedEntityID, FName(TEXT("Листовики")));
+        TestTrue(TEXT("Листовики подталкивают Direction.Nature вверх"), Cell->TargetState.Direction.Nature > NatureBefore);
+    }
+
+    // Первое декабря -- зима, осень кончилась.
+    Manager->SetGameClockSeconds(AtDate(12, 1));
+    TestFalse(TEXT("1 декабря -- не осень"), Manager->IsAutumn());
 
     Manager->Destroy();
     return true;
@@ -240,6 +252,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_KupalskyeOnlyManifestOn
 
 bool FHerbalistAmbientEntity_KupalskyeOnlyManifestOnKupalaNight::RunTest(const FString& Parameters)
 {
+    // Купальская ночь -- ночь на 24 июня (старый стиль, решение пользователя
+    // 2026-09-16): ночная фаза суток 23 июня.
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
 
@@ -250,34 +264,34 @@ bool FHerbalistAmbientEntity_KupalskyeOnlyManifestOnKupalaNight::RunTest(const F
     Cell->Biome = EBiomeType::MixedForest;
     Cell->bIsWater = false;
 
+    // Ночь -- последние 6 минут 32-минутных суток; +3 минуты -- середина ночи.
     const float DayLength = 32.0f * 60.0f;
-    const float YearLength = 117.0f * 3.0f * DayLength;
-    const float SummerStart = YearLength / 3.0f;
-    const float SummerEnd = YearLength * 2.0f / 3.0f;
-
-    // Ночь в разгар Лета, но не в купальском окне (середина Лета) -- НЕ Купала.
-    Manager->SetGameClockSeconds(SummerStart + (SummerEnd - SummerStart) * 0.5f + DayLength * 0.9f);
-    TestFalse(TEXT("Midsummer night outside the Kupala window is not Kupala night"), Manager->IsKupalaNight());
-
-    // Ищем настоящую купальскую ночь внутри окна [SummerStart+0.15*SeasonLen,
-    // SummerStart+0.18*SeasonLen) -- перебором по времени суток, а не
-    // угадыванием конкретного часа.
-    const float SeasonLen = SummerEnd - SummerStart;
-    const float WindowStart = SummerStart + SeasonLen * 0.15f;
-    const float WindowEnd = SummerStart + SeasonLen * 0.18f;
-
-    const float KupalaTime = FindMoment(Manager, WindowStart, WindowEnd, 60.0f, [Manager]() { return Manager->IsKupalaNight(); });
-    if (!TestTrue(TEXT("Found an actual Kupala night within the window"), KupalaTime >= 0.0f))
+    const float MidNight = (32.0f - 3.0f) * 60.0f;
+    auto NightOf = [DayLength, MidNight](int32 Month, int32 Day)
     {
-        Manager->Destroy();
-        return false;
-    }
+        return HerbalistCore::Calendar::DayOfYearFromDate(Month, Day) * DayLength + MidNight;
+    };
 
-    Manager->SetGameClockSeconds(KupalaTime);
+    Manager->SetGameClockSeconds(NightOf(6, 22));
+    TestTrue(TEXT("Sanity: ночь 22 июня -- ночь"), Manager->IsNight());
+    TestFalse(TEXT("Ночь на 23 июня -- не Купальская"), Manager->IsKupalaNight());
+
+    Manager->SetGameClockSeconds(NightOf(6, 24));
+    TestFalse(TEXT("Ночь на 25 июня -- не Купальская"), Manager->IsKupalaNight());
+
+    Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(6, 23) * DayLength + 10.0f * 60.0f);
+    TestFalse(TEXT("День 23 июня -- ещё не ночь"), Manager->IsKupalaNight());
+
+    Manager->SetGameClockSeconds(NightOf(6, 23));
+    TestTrue(TEXT("Ночь на 24 июня -- Купальская"), Manager->IsKupalaNight());
     const float ResonanceBefore = Cell->TargetState.Meta.Resonance;
     Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("Купальские manifest on Kupala night"), Cell->ManifestedEntityID, FName(TEXT("Купальские")));
     TestTrue(TEXT("Купальские nudge Resonance up"), Cell->TargetState.Meta.Resonance > ResonanceBefore);
+
+    // Следующий год -- та же ночь.
+    Manager->SetGameClockSeconds(NightOf(6, 23) + HerbalistCore::Calendar::DaysPerYear * DayLength);
+    TestTrue(TEXT("Через год -- снова Купальская ночь"), Manager->IsKupalaNight());
 
     Manager->Destroy();
     return true;

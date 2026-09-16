@@ -77,7 +77,7 @@ void AGridWorldManager::Tick(float DeltaTime)
 
     // Игровые часы — не GetWorld()->GetTimeSeconds() (см. GridWorldManager.h):
     // должны пережить сохранение/загрузку, а движковое время level-relative.
-    GameClockSeconds += DeltaTime;
+    AdvanceGameClock(DeltaTime);
 
     // ========================================================================
     // ПАЙПЛАЙН НА ФИКСИРОВАННОМ ШАГЕ

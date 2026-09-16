@@ -2735,7 +2735,6 @@ FHarvestContext AGridWorldManager::BuildHarvestContextForCell(const FGridCell& C
     // растение подчиняется условиям МОМЕНТА отрастания, не момента сбора.
     FHarvestContext Context;
     Context.Season = GetSeason();
-    Context.bLateSummer = IsLateSummer();
     Context.TimeOfDay = IsDawn() ? EHarvestTimeWindow::Dawn
         : IsDusk() ? EHarvestTimeWindow::Dusk
         : IsNight() ? EHarvestTimeWindow::Night
@@ -3527,8 +3526,8 @@ void AGridWorldManager::DrawGridDebug()
 // водой держит след дольше, пойма промывает быстрее). Сезон —
 // 15_Cycles_And_Shrines.md §15.4: Весна "временный бонус к скорости
 // зарастания клеток во всех биомах" (< 1.0, короче срок), Зима
-// "клетки заживают медленнее" (> 1.0), Лето намеренно 1.0 (см.
-// комментарий у GetSeason() в GridWorldManagerEntities.cpp). Сезон УМНОЖАЕТ
+// "клетки заживают медленнее" (> 1.0), Лето и Осень намеренно 1.0 (осень
+// нейтральна, решение пользователя 2026-09-16). Сезон УМНОЖАЕТ
 // биомный множитель, а не заменяет его.
 float AGridWorldManager::GetStressRecoverySecondsForBiome(EBiomeType Biome) const
 {

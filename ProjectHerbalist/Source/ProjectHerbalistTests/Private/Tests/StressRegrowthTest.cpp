@@ -16,6 +16,7 @@
 // минуты остаются игровой настройкой.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Types/BiomeRow.h"
@@ -38,12 +39,12 @@ namespace
     // биомный множитель виден изолированно. +1 с -- твёрдо внутри сезона.
     float SummerClockSeconds()
     {
-        return GetDefault<UHerbalistSettings>()->SeasonDurationDays * StressRegrowthDaySeconds() + 1.0f;
+        return HerbalistCore::Calendar::DayOfYearFromDate(6, 1) * StressRegrowthDaySeconds() + 1.0f;
     }
 
     float WinterClockSeconds()
     {
-        return GetDefault<UHerbalistSettings>()->SeasonDurationDays * StressRegrowthDaySeconds() * 2.0f + 1.0f;
+        return HerbalistCore::Calendar::DayOfYearFromDate(12, 1) * StressRegrowthDaySeconds() + 1.0f;
     }
 
     // Предсказуемая клетка: известный биом, суша, заданный стресс, без

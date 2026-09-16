@@ -99,15 +99,16 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_AutumnOnlyDoesNotBlockItsOth
 bool FHerbalistRegistry_AutumnOnlyDoesNotBlockItsOtherAllowedSeason::RunTest(const FString& Parameters)
 {
     // Компендиумный паттерн "корень копают ранней весной ИЛИ поздней осенью":
-    // AllowedSeasons=[Spring, Summer] + bAutumnOnly=true. bAutumnOnly должен
-    // сузить только ветку Лета (до его позднего окна) и не трогать Весну.
+    // AllowedSeasons=[Spring, Summer] + bAutumnOnly=true. С календарём
+    // (2026-09-16) Лето у такой травы означает осень: летом её нет, осенью и
+    // весной есть.
     UDataTable* Table = MakeWindowTestTable();
 
     FIngredientTableRow Row;
     Row.AllowedBiomes = { EBiomeType::Bog };
     Row.AllowedSeasons = { ESeason::Spring, ESeason::Summer };
     Row.bAutumnOnly = true;
-    Table->AddRow(FName(TEXT("SpringOrLateAutumnRoot")), Row);
+    Table->AddRow(FName(TEXT("SpringOrAutumnRoot")), Row);
 
     FIngredientTableRow OtherRow;
     OtherRow.AllowedBiomes = { EBiomeType::Bog };
@@ -119,21 +120,62 @@ bool FHerbalistRegistry_AutumnOnlyDoesNotBlockItsOtherAllowedSeason::RunTest(con
     FGridCell Cell;
     Cell.Biome = EBiomeType::Bog;
 
-    FHarvestContext SpringContext;
-    SpringContext.Season = ESeason::Spring;
-    SpringContext.bLateSummer = false;
+    auto PicksIn = [&](ESeason Season, int32& OutRoot, int32& OutOther)
+    {
+        FHarvestContext Context;
+        Context.Season = Season;
+        CountPicks(Registry, Cell, Context, FName(TEXT("SpringOrAutumnRoot")), FName(TEXT("WinterOnlyOther")), OutRoot, OutOther);
+    };
 
-    int32 SpringPick = 0, WinterPick = 0;
-    CountPicks(Registry, Cell, SpringContext, FName(TEXT("SpringOrLateAutumnRoot")), FName(TEXT("WinterOnlyOther")), SpringPick, WinterPick);
-    TestTrue(TEXT("Spring is unaffected by bAutumnOnly -- picked far more than the Winter-only row"), SpringPick > WinterPick * 3);
+    int32 Root = 0, Other = 0;
+    PicksIn(ESeason::Spring, Root, Other);
+    TestTrue(TEXT("Весна не затронута bAutumnOnly -- корень выпадает намного чаще зимней травы"), Root > Other * 3);
 
-    FHarvestContext EarlySummerContext;
-    EarlySummerContext.Season = ESeason::Summer;
-    EarlySummerContext.bLateSummer = false;
+    PicksIn(ESeason::Autumn, Root, Other);
+    TestTrue(TEXT("Осень -- окно осенней травы: корень выпадает намного чаще"), Root > Other * 3);
 
-    int32 EarlySummerPick = 0, WinterPick2 = 0;
-    CountPicks(Registry, Cell, EarlySummerContext, FName(TEXT("SpringOrLateAutumnRoot")), FName(TEXT("WinterOnlyOther")), EarlySummerPick, WinterPick2);
-    TestTrue(TEXT("Early (non-late) Summer is gated by bAutumnOnly -- close to the Winter-only row"), EarlySummerPick < WinterPick2 * 3);
+    PicksIn(ESeason::Summer, Root, Other);
+    TestTrue(TEXT("Лето (июнь–август) закрыто для осенней травы -- близко к зимней"), Root < Other * 3);
+
+    Registry->Reset();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRegistry_SummerHerbIsNotAutumnHerb,
+    "Herbalist.Registry.SummerHerbIsNotAutumnHerb",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRegistry_SummerHerbIsNotAutumnHerb::RunTest(const FString& Parameters)
+{
+    // Летняя трава -- только июнь–август (решение пользователя 2026-09-16):
+    // осень хоть и Лето по лору, но окно летней травы закрыто.
+    UDataTable* Table = MakeWindowTestTable();
+
+    FIngredientTableRow SummerRow;
+    SummerRow.AllowedBiomes = { EBiomeType::Bog };
+    SummerRow.AllowedSeasons = { ESeason::Summer };
+    Table->AddRow(FName(TEXT("SummerHerb")), SummerRow);
+
+    FIngredientTableRow AnySeasonRow;
+    AnySeasonRow.AllowedBiomes = { EBiomeType::Bog };
+    Table->AddRow(FName(TEXT("AnySeasonHerb")), AnySeasonRow);
+
+    UIngredientRegistrySubsystem* Registry = MakeWindowTestRegistry(Table);
+
+    FGridCell Cell;
+    Cell.Biome = EBiomeType::Bog;
+
+    FHarvestContext AutumnContext;
+    AutumnContext.Season = ESeason::Autumn;
+    int32 SummerInAutumn = 0, AnyInAutumn = 0;
+    CountPicks(Registry, Cell, AutumnContext, FName(TEXT("SummerHerb")), FName(TEXT("AnySeasonHerb")), SummerInAutumn, AnyInAutumn);
+    TestTrue(TEXT("Осенью летняя трава подавлена"), SummerInAutumn * 3 < AnyInAutumn);
+
+    FHarvestContext SummerContext;
+    SummerContext.Season = ESeason::Summer;
+    int32 SummerInSummer = 0, AnyInSummer = 0;
+    CountPicks(Registry, Cell, SummerContext, FName(TEXT("SummerHerb")), FName(TEXT("AnySeasonHerb")), SummerInSummer, AnyInSummer);
+    TestTrue(TEXT("Летом летняя трава не подавлена"), SummerInSummer >= AnyInSummer * 0.7f);
 
     Registry->Reset();
     return true;

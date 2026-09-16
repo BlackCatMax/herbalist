@@ -182,12 +182,12 @@ struct PROJECTHERBALIST_API FAmbientEntityDefinition : public FTableRowBase
     UPROPERTY() bool bRequiresWeather = false;
     UPROPERTY() EWeatherCondition RequiredWeather = EWeatherCondition::Wind;
 
-    // Седьмой/восьмой гейты — окна внутри сезона (GridWorldManager::
-    // IsLateSummer/IsKupalaNight, §15.4/HerbalistSettings.h). Добавлены
-    // 2026-08-29 для Листовиков ("осень", проект признаёт только три
-    // сезона) и Купальских (нужен календарь, которого нет как отдельной
-    // системы) — оба прямые решения пользователя: не заводить четвёртый
-    // сезон/полноценный календарь, обойтись узкими окнами внутри Лета.
+    // Седьмой/восьмой гейты — осень и Купальская ночь (GridWorldManager::
+    // IsAutumn/IsKupalaNight, Core/Types/HerbalistCalendar.h). Добавлены
+    // 2026-08-29 как узкие окна внутри трёхсезонного Лета; с календарём
+    // 2026-09-16 bRequiresLateSummer -- вся осень (сентябрь–ноябрь, Листовики),
+    // bRequiresKupalaNight -- ночь на 24 июня. Имя поля прежнее: оно хранится в
+    // DT_AmbientEntities.
     UPROPERTY() bool bRequiresLateSummer = false;
     UPROPERTY() bool bRequiresKupalaNight = false;
 

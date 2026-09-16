@@ -13,6 +13,7 @@
 // DispatchBeginPlay-паттерн — тот же, что BistabilityTest.cpp/ShrineTest.cpp.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/Types/BiomeTypes.h"
@@ -298,7 +299,7 @@ bool FHerbalistAmbientEntity_LedyanyeDukhiLowerMagnitudeInWinterOnly::RunTest(co
     Cell->TargetState.Magnitude = 0.5f;   // ненулевая точка отсчёта -- нудж вниз от 0.0 не отличим от клампа
 
     const float DayLengthSeconds = 32.0f * 60.0f;
-    const float SeasonDurationSeconds = 117.0f * DayLengthSeconds;
+    const float WinterStartSeconds = HerbalistCore::Calendar::DayOfYearFromDate(12, 1) * DayLengthSeconds;
     const float MidDaySeconds = 10.0f * 60.0f;   // фаза "День", не Рассвет/Закат/Полудница
 
     Manager->SetGameClockSeconds(MidDaySeconds);   // Весна
@@ -307,7 +308,7 @@ bool FHerbalistAmbientEntity_LedyanyeDukhiLowerMagnitudeInWinterOnly::RunTest(co
     TestEqual(TEXT("No manifestation in Spring"), Cell->ManifestedEntityID, FName(NAME_None));
     TestEqual(TEXT("Magnitude untouched in Spring"), Cell->TargetState.Magnitude, MagnitudeInSpring);
 
-    Manager->SetGameClockSeconds(SeasonDurationSeconds * 2.0f + MidDaySeconds);   // Зима
+    Manager->SetGameClockSeconds(WinterStartSeconds + MidDaySeconds);   // Зима, 1 декабря
     const float MagnitudeBeforeWinter = Cell->TargetState.Magnitude;
     Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("Ледяные духи manifest on Tundra in Winter"), Cell->ManifestedEntityID, FName(TEXT("Ледяные духи")));
@@ -342,10 +343,10 @@ bool FHerbalistAmbientEntity_SukhoveykiAndStepnyeOgniShareSteppeCorrectly::RunTe
     Cell->TargetState.Magnitude = 0.5f;
 
     const float DayLengthSeconds = 32.0f * 60.0f;
-    const float SeasonDurationSeconds = 117.0f * DayLengthSeconds;
+    const float SummerStartSeconds = HerbalistCore::Calendar::DayOfYearFromDate(6, 1) * DayLengthSeconds;
     const float MidDaySeconds = 10.0f * 60.0f;   // День, не ночь -- Степные огни не должны быть eligible
 
-    Manager->SetGameClockSeconds(SeasonDurationSeconds * 1.0f + MidDaySeconds);   // Лето, День
+    Manager->SetGameClockSeconds(SummerStartSeconds + MidDaySeconds);   // Лето, 1 июня, День
     TestFalse(TEXT("Sanity: it's day, not night"), Manager->IsNight());
 
     const float MagnitudeBefore = Cell->TargetState.Magnitude;

@@ -224,9 +224,11 @@ public:
     // Игровые часы (AGridWorldManager::GameClockSeconds) — фаза суток и
     // будущая погода (UltraDynamicSky, ROADMAP.md "Реальный Ultra Dynamic
     // Weather") должны возобновляться с той же точки, а не с рассвета
-    // каждой новой сессии.
+    // каждой новой сессии. double с 2026-09-16 (см. AGridWorldManager::
+    // GetGameClockSeconds); старые сейвы с float читаются тегированной
+    // сериализацией без потерь, версия не поднималась.
     UPROPERTY()
-    float GameClockSeconds = 0.0f;
+    double GameClockSeconds = 0.0;
 
     UPROPERTY()
     TArray<FSavedCellState> Cells;

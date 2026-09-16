@@ -18,6 +18,7 @@
 // презентационно-атмосферный слой, а не игровая причинность.
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Core/Entities/LegendaryAnchorMarkerActor.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Entities/AmbientEntityTypes.h"
@@ -251,7 +252,9 @@ EMoonPhase AGridWorldManager::GetMoonPhase() const
 }
 
 // ============================================================================
-// ГОДОВОЙ КРУГ (02_GDD/15_Cycles_And_Shrines.md §15.4) — v1: сезон +
+// ГОДОВОЙ КРУГ (02_GDD/15_Cycles_And_Shrines.md §15.4) — календарь 365 суток,
+// четыре метеорологических сезона (2026-09-16, Core/Types/HerbalistCalendar.h).
+// v1 (2026-08-24): сезон +
 // эффект на скорость зарастания клеток (Весна/Зима) + разлитая по сетке
 // прибавка Purity зимой ("снег как чистота", в один ряд с ночным нуджем
 // §16.5 из UpdateEntityManifestations). "Резкое падение Fertility" зимой из
@@ -264,46 +267,61 @@ EMoonPhase AGridWorldManager::GetMoonPhase() const
 // предсказуемости... нарастающая грань к концу"), в отличие от Весны/Зимы.
 // ============================================================================
 
+namespace
+{
+    float CalendarDayLengthSeconds()
+    {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        return FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
+    }
+}
+
+int32 AGridWorldManager::GetDayOfYear() const
+{
+    const double Days = FMath::Max(0.0, GameClockSeconds) / CalendarDayLengthSeconds();
+    return static_cast<int32>(static_cast<int64>(FMath::FloorToDouble(Days)) % HerbalistCore::Calendar::DaysPerYear);
+}
+
+int32 AGridWorldManager::GetCalendarMonth() const
+{
+    return HerbalistCore::Calendar::DateFromDayOfYear(GetDayOfYear()).Month;
+}
+
+int32 AGridWorldManager::GetCalendarDay() const
+{
+    return HerbalistCore::Calendar::DateFromDayOfYear(GetDayOfYear()).Day;
+}
+
 ESeason AGridWorldManager::GetSeason() const
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
-    // §15.4: "самое условное число во всём разделе" — в отличие от 7-суточной
-    // фазы луны, тут не на что переиспользоваться, честная новая настройка.
-    const float SeasonDurationDays = FMath::Max(0.01f, Settings ? Settings->SeasonDurationDays : 117.0f);
-    const float YearDurationSeconds = SeasonDurationDays * 3.0f * DayLengthSeconds;
+    return HerbalistCore::Calendar::SeasonForMonth(GetCalendarMonth());
+}
 
-    const float CycleFraction = FMath::Fmod(GameClockSeconds, YearDurationSeconds) / YearDurationSeconds;
-    const int32 SeasonIndex = FMath::Clamp(FMath::FloorToInt(CycleFraction * 3.0f), 0, 2);
-    return static_cast<ESeason>(SeasonIndex);
+ESeason AGridWorldManager::GetLoreSeason() const
+{
+    return HerbalistCore::Calendar::LoreSeason(GetSeason());
 }
 
 float AGridWorldManager::GetSeasonProgress01() const
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float DayLengthSeconds = FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
-    const float SeasonDurationDays = FMath::Max(0.01f, Settings ? Settings->SeasonDurationDays : 117.0f);
-    const float YearDurationSeconds = SeasonDurationDays * 3.0f * DayLengthSeconds;
-
-    const float CycleFraction = FMath::Fmod(GameClockSeconds, YearDurationSeconds) / YearDurationSeconds;
-    return FMath::Frac(CycleFraction * 3.0f);
+    const ESeason Season = GetSeason();
+    // День года и доля суток -- из одного double, иначе у полуночи они
+    // расходятся и прогресс прыгает на сутки.
+    const double Days = FMath::Max(0.0, GameClockSeconds) / CalendarDayLengthSeconds();
+    const double DayFraction = Days - FMath::FloorToDouble(Days);
+    const int32 DaysIntoSeason = GetDayOfYear() - HerbalistCore::Calendar::SeasonStartDayOfYear(Season);
+    const double Length = HerbalistCore::Calendar::SeasonLengthDays(Season);
+    return static_cast<float>(FMath::Clamp((DaysIntoSeason + DayFraction) / Length, 0.0, 0.99999));
 }
 
-bool AGridWorldManager::IsLateSummer() const
+bool AGridWorldManager::IsAutumn() const
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float Threshold = Settings ? Settings->LateSummerProgressThreshold : 0.8f;
-    return GetSeason() == ESeason::Summer && GetSeasonProgress01() >= Threshold;
+    return GetSeason() == ESeason::Autumn;
 }
 
 bool AGridWorldManager::IsKupalaNight() const
 {
-    const UHerbalistSettings* Settings = GetHerbalistSettings();
-    const float WindowStart = Settings ? Settings->KupalaWindowStart : 0.15f;
-    const float WindowEnd   = Settings ? Settings->KupalaWindowEnd   : 0.18f;
-    if (GetSeason() != ESeason::Summer) return false;
-    const float Progress = GetSeasonProgress01();
-    return Progress >= WindowStart && Progress < WindowEnd && IsNight();
+    return IsNight() && GetDayOfYear() == HerbalistCore::Calendar::KupalaEveDayOfYear();
 }
 
 float AGridWorldManager::GetWindIntensity() const
@@ -898,7 +916,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             }
             if (Def.bRequiresLateSummer)
             {
-                bEligible = bEligible && IsLateSummer();
+                bEligible = bEligible && IsAutumn();
             }
             if (Def.bRequiresKupalaNight)
             {

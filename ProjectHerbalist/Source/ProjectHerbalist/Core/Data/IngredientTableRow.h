@@ -151,16 +151,18 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
 
     // Пусто = любой сезон. Небольшая проверенная свобода (не строгий гейт по
     // месяцу) — в компендиуме сроки цветения/сбора почти всегда указаны
-    // диапазоном ("май-июнь"), а проект осознанно держит только 3 сезона
-    // (см. bAutumnOnly ниже и комментарий у GridWorldManager::IsLateSummer).
+    // диапазоном ("май-июнь"). Summer -- технический летний квартал,
+    // июнь–август (решение пользователя 2026-09-16); осень задаёт bAutumnOnly.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
     TArray<ESeason> AllowedSeasons;
 
-    // Второй, более узкий гейт ВНУТРИ Лета — прокси "осени" (см. bRequiresLateSummer
-    // в AmbientEntityTypes.h, тот же принцип, тот же IsLateSummer()). Применяется
-    // ТОЛЬКО когда текущий сезон Лето: если AllowedSeasons также включает Весну,
-    // весенний сбор им не затрагивается — типичный случай компендиума "корень
-    // копают ранней весной ИЛИ поздней осенью" (два отдельных окна, не одно).
+    // Осенняя трава (с 2026-09-16 -- вся осень, сентябрь–ноябрь). Лето в
+    // AllowedSeasons у такой травы означает осень: летом (июнь–август) она не
+    // собирается, осенью -- собирается. Весна и Зима из AllowedSeasons не
+    // затрагиваются -- типичный случай компендиума "корень копают ранней
+    // весной ИЛИ поздней осенью" (два отдельных окна, не одно). Данные
+    // (ingredient_harvest_windows.json) прежние: до календаря осенью был конец
+    // Лета.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
     bool bAutumnOnly = false;
 
@@ -354,7 +356,6 @@ struct FHarvestContext
     GENERATED_BODY()
 
     ESeason Season = ESeason::Spring;
-    bool bLateSummer = false;
     EHarvestTimeWindow TimeOfDay = EHarvestTimeWindow::Day;
     EMoonPhase MoonPhase = EMoonPhase::NewMoon;
     bool bDryWeather = true;

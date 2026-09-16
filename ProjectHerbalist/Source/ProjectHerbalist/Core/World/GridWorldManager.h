@@ -1004,34 +1004,39 @@ public:
     EMoonPhase GetMoonPhase() const;
 
     // ---- Годовой круг (02_GDD/15_Cycles_And_Shrines.md §15.4) ----
+    // Календарь (2026-09-16, решение пользователя): год 365 суток, обычные
+    // месяцы без високосных, сутки 0 -- 1 марта; сезон -- метеорологический,
+    // по месяцам, как Meteorological Seasons у Ultra Dynamic Sky
+    // (Core/Types/HerbalistCalendar.h).
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     ESeason GetSeason() const;
 
-    // Доля пройденного текущего сезона, [0,1) — 0 в момент смены сезона,
-    // ближе к 1 перед следующей сменой. Добавлено 2026-08-29 для карточек
-    // §16.2, которым нужно не "какой сезон", а "какой момент внутри сезона"
-    // (Листовики — поздний конец Лета как прокси "осени", календарь Купалы —
-    // узкое окно внутри Лета). Тот же CycleFraction*3, что уже вычисляет
-    // GetSeason(), просто читается дробная часть, а не индекс.
+    // Сезон, как его называет игроку лор: осень -- часть Лета.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    ESeason GetLoreSeason() const;
+
+    // Доля пройденного текущего сезона, [0,1): 0 в первый миг сезона.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     float GetSeasonProgress01() const;
 
-    // Купальская ночь (02_GDD/15_Cycles_And_Shrines.md §15.4/16_Entity §16.2,
-    // "ночь на Купалу, нужно завести в календарь") — узкое окно внутри Лета,
-    // не сам факт лета. Лёгкий day-of-year-эквивалент через
-    // GetSeasonProgress01(), не полноценный календарь с названиями месяцев —
-    // осознанный выбор 2026-08-29, тот же масштаб решения, что и трёхполье.
+    // День года от 1 марта [0, 365), месяц 1..12, число 1..31.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    int32 GetDayOfYear() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    int32 GetCalendarMonth() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    int32 GetCalendarDay() const;
+
+    // Осень, сентябрь–ноябрь: Листовики (§16.2) и травы bAutumnOnly.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    bool IsAutumn() const;
+
+    // Купальская ночь -- ночь на 24 июня (старый стиль): ночная фаза суток
+    // 23 июня (§16.2, Купальские).
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     bool IsKupalaNight() const;
-
-    // Поздний конец Лета — прокси "осени" для Листовиков (§16.2), 2026-08-29
-    // по прямому решению пользователя: не заводить четвёртый сезон
-    // (переоткрывало бы уже принятое трёхпольное решение), а найти узкое
-    // окно внутри существующих трёх. "Осень" читается как последняя,
-    // увядающая часть Лета перед Зимой — то же смысловое место в году, что
-    // и настоящая осень занимает между летом и зимой.
-    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
-    bool IsLateSummer() const;
 
     // ---- Погода (02_GDD/15_Cycles_And_Shrines.md §15.7) ----
     // Собственный C++-сигнал, 2026-08-29, по прямому решению пользователя:
@@ -1116,9 +1121,14 @@ public:
     // Ultra Dynamic Weather") переживала сохранение/загрузку, а не начинала
     // каждую сессию с рассвета.
     // Копится в Tick() на DeltaTime, восстанавливается из сейва при загрузке.
+    // double (2026-09-16): год календаря -- 700 800 с; во float с 2^19 с (конец
+    // ноября) кадр 1/60 с меньше половины шага точности, и часы вставали.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
-    float GetGameClockSeconds() const { return GameClockSeconds; }
-    void SetGameClockSeconds(float InSeconds) { GameClockSeconds = InSeconds; }
+    double GetGameClockSeconds() const { return GameClockSeconds; }
+    void SetGameClockSeconds(double InSeconds) { GameClockSeconds = InSeconds; }
+
+    // Ход часов за кадр; Tick() зовёт первым делом.
+    void AdvanceGameClock(float DeltaTime) { GameClockSeconds += DeltaTime; }
 
     // Воспринятое (S_Perceived) искажение для клетки: базовое Memory.AccumulatedDistortion
     // + ночная надбавка (Морочники) + надбавка от местной проявленной сущности
@@ -2037,7 +2047,7 @@ protected:
     TMap<int32, float> LastHarvestTimeMap;
     const float HarvestCooldown = 0.2f;
 
-    float GameClockSeconds = 0.0f;
+    double GameClockSeconds = 0.0;
 
     // Клетки, отклонившиеся от детерминированной генерации (DESIGN_World_State.md
     // §3 Вариант A + разбор открытых миров — Valheim/Skyrim и т.п. сохраняют

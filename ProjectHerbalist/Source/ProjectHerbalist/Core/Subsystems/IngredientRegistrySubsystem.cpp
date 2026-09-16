@@ -314,12 +314,20 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
         const float Dist = HerbalistCore::Math::Distance(Cell.State, Row->BaseState);
         const float Suitability = FMath::Exp(-Falloff * Dist * Dist);
 
-        // Пусто = любой сезон (см. комментарий у AllowedSeasons в IngredientTableRow.h).
-        // bAutumnOnly — второй, более узкий гейт ВНУТРИ Лета (см. комментарий там же):
-        // применяется только когда СЕЙЧАС Лето, весенние/зимние окна не трогает.
-        const bool bSeasonOK = Row->AllowedSeasons.Num() == 0 || Row->AllowedSeasons.Contains(Context.Season);
-        const bool bAutumnOK = !Row->bAutumnOnly || Context.Season != ESeason::Summer || Context.bLateSummer;
-        const float SeasonWindow = (bSeasonOK && bAutumnOK) ? 1.0f : WindowMismatch;
+        // Пусто = любой сезон (см. комментарии у AllowedSeasons и bAutumnOnly в
+        // IngredientTableRow.h). У осенней травы Лето в AllowedSeasons означает
+        // осень: летом её нет, осенью есть; Весну и Зиму флаг не трогает.
+        const bool bAnySeason = Row->AllowedSeasons.Num() == 0;
+        bool bSeasonOK = bAnySeason || Row->AllowedSeasons.Contains(Context.Season);
+        if (Row->bAutumnOnly && Context.Season == ESeason::Summer)
+        {
+            bSeasonOK = false;
+        }
+        else if (Row->bAutumnOnly && Context.Season == ESeason::Autumn)
+        {
+            bSeasonOK = bAnySeason || Row->AllowedSeasons.Contains(ESeason::Summer) || Row->AllowedSeasons.Contains(ESeason::Autumn);
+        }
+        const float SeasonWindow = bSeasonOK ? 1.0f : WindowMismatch;
 
         const float TimeWindow = WindowMultiplier(Row->HarvestTimeWindow != EHarvestTimeWindow::Any,
             Row->HarvestTimeWindow == Context.TimeOfDay, WindowMismatch);
