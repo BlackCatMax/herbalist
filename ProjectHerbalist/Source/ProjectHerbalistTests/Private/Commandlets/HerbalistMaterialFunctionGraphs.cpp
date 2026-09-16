@@ -7,7 +7,18 @@
 #include "Engine/EngineTypes.h"
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "Materials/MaterialExpressionAdd.h"
+#include "Materials/MaterialExpressionAppendVector.h"
 #include "Materials/MaterialExpressionCollectionParameter.h"
+#include "Materials/MaterialExpressionConstant.h"
+#include "Materials/MaterialExpressionConstant4Vector.h"
+#include "Materials/MaterialExpressionDotProduct.h"
+#include "Materials/MaterialExpressionFloor.h"
+#include "Materials/MaterialExpressionLinearInterpolate.h"
+#include "Materials/MaterialExpressionMax.h"
+#include "Materials/MaterialExpressionPerInstanceRandom.h"
+#include "Materials/MaterialExpressionSaturate.h"
+#include "Materials/MaterialExpressionVertexColor.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionConstant3Vector.h"
 #include "Materials/MaterialExpressionDivide.h"
@@ -103,7 +114,7 @@ namespace HerbalistMaterialFunctions::Detail
         const FGuid ParameterId = Collection->GetParameterId(ParameterName);
         if (!ParameterId.IsValid())
         {
-            UE_LOG(LogTemp, Error, TEXT("В %s нет параметра %s -- сначала -run=WorldStateMapSetup и -run=TrampleMapSetup"),
+            UE_LOG(LogTemp, Error, TEXT("В %s нет параметра %s -- сначала -run=WorldStateMapSetup, -run=TrampleMapSetup и -run=TimeDisplaySetup"),
                 *Collection->GetPathName(), *ParameterName.ToString());
             return nullptr;
         }
@@ -135,6 +146,71 @@ namespace HerbalistMaterialFunctions::Detail
             + TEXT("\n\nСобрано -run=MaterialFunctionsSetup; повторный запуск с -rebuild перестроит граф.");
         Function->bExposeToLibrary = true;
         Function->LibraryCategoriesText = { FText::FromString(TEXT("Herbalist")) };
+    }
+
+    UMaterialExpressionConstant* AddConstant(UMaterialFunction* Function, float Value, int32 Column, int32 Row)
+    {
+        UMaterialExpressionConstant* Constant = AddNode<UMaterialExpressionConstant>(Function, Column, Row);
+        Constant->R = Value;
+        return Constant;
+    }
+
+    // Вход с числом по умолчанию.
+    UMaterialExpressionFunctionInput* AddScalarInput(UMaterialFunction* Function, FName Name, float DefaultValue,
+        const FString& Description, int32 SortPriority, int32 Column, int32 Row)
+    {
+        UMaterialExpressionFunctionInput* Input = AddInput(Function, Name, FunctionInput_Scalar, Description, SortPriority, Column, Row);
+        Input->Preview.Connect(0, AddConstant(Function, DefaultValue, Column - 1, Row));
+        Input->bUsePreviewValueAsDefault = true;
+        return Input;
+    }
+
+    UMaterialExpressionFunctionInput* AddVector3Input(UMaterialFunction* Function, FName Name, const FLinearColor& DefaultValue,
+        const FString& Description, int32 SortPriority, int32 Column, int32 Row)
+    {
+        UMaterialExpressionFunctionInput* Input = AddInput(Function, Name, FunctionInput_Vector3, Description, SortPriority, Column, Row);
+        UMaterialExpressionConstant3Vector* Default = AddNode<UMaterialExpressionConstant3Vector>(Function, Column - 1, Row);
+        Default->Constant = DefaultValue;
+        Input->Preview.Connect(0, Default);
+        Input->bUsePreviewValueAsDefault = true;
+        return Input;
+    }
+
+    // Сжатие к основанию экземпляра (как у MF_TrampleCompressWPO): ветер x
+    // (1 - Amount) - Transform(Instance -> World, LocalPosition x Amount).
+    // LocalPosition -- без смещений шейдера, иначе цикл через WPO.
+    UMaterialExpression* AddSquashTowardPivot(UMaterialFunction* Function, UMaterialExpression* Wind, UMaterialExpression* Amount,
+        bool bHorizontalOnly, int32 Column, int32 Row)
+    {
+        UMaterialExpressionLocalPosition* Local = AddNode<UMaterialExpressionLocalPosition>(Function, Column, Row + 2);
+        Local->LocalOrigin = ELocalPositionOrigin::Instance;
+        Local->IncludedOffsets = EPositionIncludedOffsets::ExcludeOffsets;
+        UMaterialExpression* Offset = Local;
+        if (bHorizontalOnly)
+        {
+            UMaterialExpressionComponentMask* XY = AddMask(Function, Local, 0, true, true, false, false, Column + 1, Row + 2);
+            UMaterialExpressionAppendVector* Flat = AddNode<UMaterialExpressionAppendVector>(Function, Column + 2, Row + 2);
+            Flat->A.Connect(0, XY);
+            Flat->B.Connect(0, AddConstant(Function, 0.0f, Column + 1, Row + 3));
+            Offset = Flat;
+        }
+        UMaterialExpressionMultiply* Squash = AddBinary<UMaterialExpressionMultiply>(Function, Offset, 0, Amount, 0, Column + 3, Row + 2);
+        UMaterialExpressionTransform* SquashWorld = AddNode<UMaterialExpressionTransform>(Function, Column + 4, Row + 2);
+        SquashWorld->TransformSourceType = TRANSFORMSOURCE_Instance;
+        SquashWorld->TransformType = TRANSFORM_World;
+        SquashWorld->Input.Connect(0, Squash);
+
+        UMaterialExpressionOneMinus* Standing = AddNode<UMaterialExpressionOneMinus>(Function, Column + 3, Row);
+        Standing->Input.Connect(0, Amount);
+        UMaterialExpressionMultiply* WeakWind = AddBinary<UMaterialExpressionMultiply>(Function, Wind, 0, Standing, 0, Column + 4, Row);
+        return AddBinary<UMaterialExpressionSubtract>(Function, WeakWind, 0, SquashWorld, 0, Column + 5, Row + 1);
+    }
+
+    // Вход ветра WPO: не подключён -- ноль.
+    UMaterialExpressionFunctionInput* AddWindInput(UMaterialFunction* Function, int32 SortPriority, int32 Column, int32 Row)
+    {
+        return AddVector3Input(Function, TEXT("WPO"), FLinearColor(0.0f, 0.0f, 0.0f),
+            TEXT("То, что сейчас подключено к World Position Offset (ветер). Не подключено -- ноль."), SortPriority, Column, Row);
     }
 
     // Выходы TextureSample: 0 RGB, 1 R, 2 G, 3 B, 4 A.
@@ -312,6 +388,280 @@ bool HerbalistMaterialFunctions::BuildTrampleCompressWPO(UMaterialFunction* Func
 
     AddOutput(Function, TEXT("WPO"), TEXT("В World Position Offset."), 0, Switch, 0, 7, 1);
     AddOutput(Function, TEXT("Trample"), TEXT("Вытоптанность у основания кустика, 0..1."), 1, SampleCall, TrampleOutput, 7, 3);
+    return true;
+}
+
+bool HerbalistMaterialFunctions::BuildSeasonWeights(UMaterialFunction* Function, const FSources& Sources)
+{
+    using namespace Detail;
+    if (!Function || !Sources.Collection) return false;
+
+    DescribeFunction(Function, TEXT("Сезон из MPC_WorldStateFields (пишет менеджер сетки, Core/Types/HerbalistTimeDisplay.h): веса весна/лето/осень/зима в сумме 1, SeasonUDW -- шкала Ultra Dynamic Sky 0..4 (целое -- середина сезона), LeafDrop01 -- доля опавшей листвы."));
+
+    UMaterialExpressionCollectionParameter* Weights = AddCollectionParameter(Function, Sources.Collection, TEXT("SeasonWeights"), 1, 0);
+    UMaterialExpressionCollectionParameter* Udw = AddCollectionParameter(Function, Sources.Collection, TEXT("SeasonUDW"), 1, 5);
+    UMaterialExpressionCollectionParameter* LeafDrop = AddCollectionParameter(Function, Sources.Collection, TEXT("LeafDrop01"), 1, 6);
+    if (!Weights || !Udw || !LeafDrop) return false;
+
+    UMaterialExpressionComponentMask* All = AddMask(Function, Weights, 0, true, true, true, true, 2, 0);
+    AddOutput(Function, TEXT("SeasonWeights"), TEXT("R весна, G лето, B осень, A зима; сумма 1."), 0, All, 0, 3, 0);
+    AddOutput(Function, TEXT("Spring"), TEXT("Вес весны."), 1, AddMask(Function, Weights, 0, true, false, false, false, 2, 1), 0, 3, 1);
+    AddOutput(Function, TEXT("Summer"), TEXT("Вес лета."), 2, AddMask(Function, Weights, 0, false, true, false, false, 2, 2), 0, 3, 2);
+    AddOutput(Function, TEXT("Autumn"), TEXT("Вес осени."), 3, AddMask(Function, Weights, 0, false, false, true, false, 2, 3), 0, 3, 3);
+    AddOutput(Function, TEXT("Winter"), TEXT("Вес зимы."), 4, AddMask(Function, Weights, 0, false, false, false, true, 2, 4), 0, 3, 4);
+    AddOutput(Function, TEXT("SeasonUDW"), TEXT("Сезон 0..4 в шкале UDS: 0 середина весны, 1 лета, 2 осени, 3 зимы."), 5, Udw, 0, 3, 5);
+    AddOutput(Function, TEXT("LeafDrop01"), TEXT("0 с середины весны до конца лета, 1 в середине зимы."), 6, LeafDrop, 0, 3, 6);
+    return true;
+}
+
+bool HerbalistMaterialFunctions::BuildSeasonColor(UMaterialFunction* Function, const FSources& Sources)
+{
+    using namespace Detail;
+    if (!Function || !Sources.Collection) return false;
+
+    DescribeFunction(Function, TEXT("Цвет, подкрашенный по сезону: Color x (веса сезонов . оттенки), смешано с исходным по Strength. Оттенки -- множители цвета; по умолчанию весна свежее, лето как есть, осень желтеет, зима пожухлая. Подбирать в инстансах."));
+
+    UMaterialExpressionFunctionInput* Color = AddVector3Input(Function, TEXT("Color"), FLinearColor(1.0f, 1.0f, 1.0f),
+        TEXT("Базовый цвет (то, что сейчас идёт в Base Color)."), 0, 1, 0);
+    UMaterialExpressionFunctionInput* Spring = AddVector3Input(Function, TEXT("SpringTint"), FLinearColor(0.95f, 1.08f, 0.9f),
+        TEXT("Множитель цвета весной."), 1, 1, 1);
+    UMaterialExpressionFunctionInput* Summer = AddVector3Input(Function, TEXT("SummerTint"), FLinearColor(1.0f, 1.0f, 1.0f),
+        TEXT("Множитель цвета летом."), 2, 1, 2);
+    UMaterialExpressionFunctionInput* Autumn = AddVector3Input(Function, TEXT("AutumnTint"), FLinearColor(1.25f, 0.95f, 0.45f),
+        TEXT("Множитель цвета осенью."), 3, 1, 3);
+    UMaterialExpressionFunctionInput* Winter = AddVector3Input(Function, TEXT("WinterTint"), FLinearColor(0.85f, 0.8f, 0.7f),
+        TEXT("Множитель цвета зимой."), 4, 1, 4);
+    UMaterialExpressionFunctionInput* Strength = AddScalarInput(Function, TEXT("Strength"), 1.0f,
+        TEXT("0 -- цвет как есть, 1 -- полностью по сезону."), 5, 1, 5);
+    UMaterialExpressionCollectionParameter* Weights = AddCollectionParameter(Function, Sources.Collection, TEXT("SeasonWeights"), 1, 6);
+    if (!Weights) return false;
+
+    UMaterialExpression* Tints[4] = { Spring, Summer, Autumn, Winter };
+    UMaterialExpression* Sum = nullptr;
+    for (int32 Index = 0; Index < 4; ++Index)
+    {
+        UMaterialExpressionComponentMask* Weight = AddMask(Function, Weights, 0, Index == 0, Index == 1, Index == 2, Index == 3, 2, 6 + Index);
+        UMaterialExpressionMultiply* Weighted = AddBinary<UMaterialExpressionMultiply>(Function, Tints[Index], 0, Weight, 0, 3, 1 + Index);
+        Sum = Sum ? AddBinary<UMaterialExpressionAdd>(Function, Sum, 0, Weighted, 0, 4, 1 + Index) : static_cast<UMaterialExpression*>(Weighted);
+    }
+    UMaterialExpressionMultiply* Tinted = AddBinary<UMaterialExpressionMultiply>(Function, Color, 0, Sum, 0, 5, 1);
+    UMaterialExpressionLinearInterpolate* Result = AddNode<UMaterialExpressionLinearInterpolate>(Function, 6, 0);
+    Result->A.Connect(0, Color);
+    Result->B.Connect(0, Tinted);
+    Result->Alpha.Connect(0, Strength);
+
+    AddOutput(Function, TEXT("Color"), TEXT("В Base Color."), 0, Result, 0, 7, 0);
+    AddOutput(Function, TEXT("Tint"), TEXT("Итоговый множитель сезона."), 1, Sum, 0, 7, 2);
+    return true;
+}
+
+bool HerbalistMaterialFunctions::BuildLeafDrop(UMaterialFunction* Function, const FSources& Sources)
+{
+    using namespace Detail;
+    if (!Function || !Sources.Collection) return false;
+
+    DescribeFunction(Function, TEXT("Листопад маской: листва остаётся, где шум кучки >= LeafDrop01. Шум -- хэш клетки мировой позиции размером ClumpSize (листья опадают кучками, не пикселями), на 20% сдвинут по экземпляру (деревья облетают не разом). Для маскированной листвы (r.Nanite.Foliage выключен; на Nanite-меше маска -- дорогой программируемый растеризатор). Выход OpacityMask -- в Opacity Mask."));
+
+    UMaterialExpressionFunctionInput* Mask = AddScalarInput(Function, TEXT("OpacityMask"), 1.0f,
+        TEXT("То, что сейчас идёт в Opacity Mask. Не подключено -- 1."), 0, 1, 0);
+    UMaterialExpressionFunctionInput* ClumpSize = AddScalarInput(Function, TEXT("ClumpSize"), 30.0f,
+        TEXT("Размер кучки листьев, опадающей разом, см."), 1, 1, 1);
+    UMaterialExpressionFunctionInput* Position = AddPositionInput(Function, TEXT("Position"),
+        TEXT("Абсолютная мировая позиция. Не подключена -- позиция пикселя без смещений шейдера (ветер не мерцает листопадом)."), 1, 3);
+    Position->SortPriority = 2;
+    UMaterialExpressionCollectionParameter* LeafDrop = AddCollectionParameter(Function, Sources.Collection, TEXT("LeafDrop01"), 1, 6);
+    if (!LeafDrop) return false;
+
+    // Хэш 3D -> 1D без sin (устойчив к большим координатам): p = frac(cell x
+    // 0.1031); p += dot(p, p.yzx + 33.33); h = frac((p.x + p.y) x p.z).
+    UMaterialExpressionDivide* Scaled = AddBinary<UMaterialExpressionDivide>(Function, Position, 0, ClumpSize, 0, 2, 2);
+    UMaterialExpressionFloor* Cell = AddNode<UMaterialExpressionFloor>(Function, 3, 2);
+    Cell->Input.Connect(0, Scaled);
+    UMaterialExpressionMultiply* CellScaled = AddNode<UMaterialExpressionMultiply>(Function, 4, 2);
+    CellScaled->A.Connect(0, Cell);
+    CellScaled->ConstB = 0.1031f;
+    UMaterialExpressionFrac* P = AddNode<UMaterialExpressionFrac>(Function, 5, 2);
+    P->Input.Connect(0, CellScaled);
+    UMaterialExpressionComponentMask* PX = AddMask(Function, P, 0, true, false, false, false, 6, 3);
+    UMaterialExpressionComponentMask* PY = AddMask(Function, P, 0, false, true, false, false, 6, 4);
+    UMaterialExpressionComponentMask* PZ = AddMask(Function, P, 0, false, false, true, false, 6, 5);
+    UMaterialExpressionAppendVector* YZ = AddBinary<UMaterialExpressionAppendVector>(Function, PY, 0, PZ, 0, 7, 4);
+    UMaterialExpressionAppendVector* YZX = AddBinary<UMaterialExpressionAppendVector>(Function, YZ, 0, PX, 0, 8, 4);
+    UMaterialExpressionAdd* Shifted = AddNode<UMaterialExpressionAdd>(Function, 9, 4);
+    Shifted->A.Connect(0, YZX);
+    Shifted->ConstB = 33.33f;
+    UMaterialExpressionDotProduct* Dot = AddBinary<UMaterialExpressionDotProduct>(Function, P, 0, Shifted, 0, 10, 3);
+    UMaterialExpressionAdd* Mixed = AddBinary<UMaterialExpressionAdd>(Function, P, 0, Dot, 0, 11, 2);
+    UMaterialExpressionComponentMask* MX = AddMask(Function, Mixed, 0, true, false, false, false, 12, 2);
+    UMaterialExpressionComponentMask* MY = AddMask(Function, Mixed, 0, false, true, false, false, 12, 3);
+    UMaterialExpressionComponentMask* MZ = AddMask(Function, Mixed, 0, false, false, true, false, 12, 4);
+    UMaterialExpressionAdd* XY = AddBinary<UMaterialExpressionAdd>(Function, MX, 0, MY, 0, 13, 2);
+    UMaterialExpressionMultiply* XYZ = AddBinary<UMaterialExpressionMultiply>(Function, XY, 0, MZ, 0, 14, 3);
+    UMaterialExpressionFrac* Hash = AddNode<UMaterialExpressionFrac>(Function, 15, 3);
+    Hash->Input.Connect(0, XYZ);
+
+    UMaterialExpressionPerInstanceRandom* InstanceRandom = AddNode<UMaterialExpressionPerInstanceRandom>(Function, 15, 5);
+    UMaterialExpressionLinearInterpolate* Noise = AddNode<UMaterialExpressionLinearInterpolate>(Function, 16, 4);
+    Noise->A.Connect(0, Hash);
+    Noise->B.Connect(0, InstanceRandom);
+    Noise->ConstAlpha = 0.2f;
+
+    // Step(Y, X) = X >= Y: остаётся, где шум не ниже доли опавшего.
+    UMaterialExpressionStep* Kept = AddNode<UMaterialExpressionStep>(Function, 17, 5);
+    Kept->X.Connect(0, Noise);
+    Kept->Y.Connect(0, LeafDrop);
+    UMaterialExpressionMultiply* Result = AddBinary<UMaterialExpressionMultiply>(Function, Mask, 0, Kept, 0, 18, 0);
+
+    AddOutput(Function, TEXT("OpacityMask"), TEXT("В Opacity Mask."), 0, Result, 0, 19, 0);
+    AddOutput(Function, TEXT("Kept"), TEXT("1 -- листва на месте, 0 -- опала."), 1, Kept, 0, 19, 2);
+    AddOutput(Function, TEXT("LeafDrop01"), TEXT("Доля опавшей листвы сезона."), 2, LeafDrop, 0, 19, 4);
+    return true;
+}
+
+bool HerbalistMaterialFunctions::BuildGrassSquash(UMaterialFunction* Function, const FSources& Sources, UMaterialFunction* SampleTrample)
+{
+    using namespace Detail;
+    if (!Function || !Sources.Collection || !Sources.WeatherCollection || !SampleTrample) return false;
+
+    DescribeFunction(Function, TEXT("Трава ложится к основанию (§3.1 плана): Squash = max(тропа, зима, снег). Зима -- вес зимы x WinterStrength со сдвигом порога по экземпляру (трава жухнет не разом); снег -- покрытие Snowy коллекции Ultra Dynamic Weather x SnowStrength; тропа -- за переключателем Trampleable, как у MF_TrampleCompressWPO. Выход WPO -- в World Position Offset вместо ветра."));
+
+    UMaterialExpressionFunctionInput* Wind = AddWindInput(Function, 0, 1, 0);
+    UMaterialExpressionFunctionInput* WinterStrength = AddScalarInput(Function, TEXT("WinterStrength"), 0.8f,
+        TEXT("Насколько трава ложится в середине зимы, 0..1."), 1, 1, 1);
+    UMaterialExpressionFunctionInput* SnowStrength = AddScalarInput(Function, TEXT("SnowStrength"), 1.0f,
+        TEXT("Насколько трава ложится под полным снегом, 0..1."), 2, 1, 2);
+    UMaterialExpressionFunctionInput* Snow = AddInput(Function, TEXT("Snow"), FunctionInput_Scalar,
+        TEXT("Покрытие снегом 0..1. Не подключено -- Snowy из коллекции Ultra Dynamic Weather."), 3, 1, 3);
+    UMaterialExpressionCollectionParameter* Snowy = nullptr;
+    if (Sources.WeatherCollection->GetParameterId(WeatherSnowParameterName).IsValid())
+    {
+        Snowy = AddCollectionParameter(Function, Sources.WeatherCollection, WeatherSnowParameterName, 0, 3);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("В %s нет параметра %s -- версия Ultra Dynamic Weather переименовала покрытие снегом"),
+            *Sources.WeatherCollection->GetPathName(), WeatherSnowParameterName);
+    }
+    UMaterialExpressionCollectionParameter* Weights = AddCollectionParameter(Function, Sources.Collection, TEXT("SeasonWeights"), 1, 5);
+    if (!Snowy || !Weights) return false;
+    Snow->Preview.Connect(0, Snowy);
+    Snow->bUsePreviewValueAsDefault = true;
+
+    // Тропа у основания -- тот же вызов MF_SampleTrample, что у MF_TrampleCompressWPO.
+    UMaterialExpressionConstant3Vector* Origin = AddNode<UMaterialExpressionConstant3Vector>(Function, 0, 7);
+    Origin->Constant = FLinearColor(0.0f, 0.0f, 0.0f);
+    UMaterialExpressionTransformPosition* Pivot = AddNode<UMaterialExpressionTransformPosition>(Function, 1, 7);
+    Pivot->TransformSourceType = TRANSFORMPOSSOURCE_Instance;
+    Pivot->TransformType = TRANSFORMPOSSOURCE_World;
+    Pivot->Input.Connect(0, Origin);
+    UMaterialExpressionMaterialFunctionCall* SampleCall = AddNode<UMaterialExpressionMaterialFunctionCall>(Function, 2, 7);
+    SampleCall->SetMaterialFunction(SampleTrample);
+    FExpressionInput* PositionPin = nullptr;
+    for (FFunctionExpressionInput& CallInput : SampleCall->FunctionInputs)
+    {
+        if (CallInput.ExpressionInput && CallInput.ExpressionInput->InputName == FName(TEXT("Position")))
+        {
+            PositionPin = &CallInput.Input;
+        }
+    }
+    int32 TrampleOutput = INDEX_NONE;
+    for (int32 i = 0; i < SampleCall->FunctionOutputs.Num(); ++i)
+    {
+        const UMaterialExpressionFunctionOutput* CallOutput = SampleCall->FunctionOutputs[i].ExpressionOutput;
+        if (CallOutput && CallOutput->OutputName == FName(TEXT("Trample")))
+        {
+            TrampleOutput = i;
+        }
+    }
+    if (!PositionPin || TrampleOutput == INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: у %s нет входа Position или выхода Trample"), *Function->GetName(), *SampleTrample->GetName());
+        return false;
+    }
+    PositionPin->Connect(0, Pivot);
+
+    UMaterialExpressionStaticSwitchParameter* Switch = AddNode<UMaterialExpressionStaticSwitchParameter>(Function, 3, 7);
+    Switch->ParameterName = TrampleableSwitchName;
+    Switch->DefaultValue = false;
+    Switch->A.Connect(TrampleOutput, SampleCall);                // True -- тропа
+    Switch->B.Connect(0, AddConstant(Function, 0.0f, 2, 8));      // False -- без тропы
+    Switch->UpdateParameterGuid(true, true);
+
+    // Зима: saturate((вес зимы - r x 0.3) / 0.7) x WinterStrength.
+    UMaterialExpressionComponentMask* WinterWeight = AddMask(Function, Weights, 0, false, false, false, true, 2, 5);
+    UMaterialExpressionPerInstanceRandom* InstanceRandom = AddNode<UMaterialExpressionPerInstanceRandom>(Function, 2, 6);
+    UMaterialExpressionMultiply* Offset = AddNode<UMaterialExpressionMultiply>(Function, 3, 6);
+    Offset->A.Connect(0, InstanceRandom);
+    Offset->ConstB = 0.3f;
+    UMaterialExpressionSubtract* Shifted = AddBinary<UMaterialExpressionSubtract>(Function, WinterWeight, 0, Offset, 0, 4, 5);
+    UMaterialExpressionDivide* Stretched = AddNode<UMaterialExpressionDivide>(Function, 5, 5);
+    Stretched->A.Connect(0, Shifted);
+    Stretched->ConstB = 0.7f;
+    UMaterialExpressionSaturate* WinterRamp = AddNode<UMaterialExpressionSaturate>(Function, 6, 5);
+    WinterRamp->Input.Connect(0, Stretched);
+    UMaterialExpressionMultiply* WinterSquash = AddBinary<UMaterialExpressionMultiply>(Function, WinterRamp, 0, WinterStrength, 0, 7, 4);
+
+    UMaterialExpressionMultiply* SnowSquash = AddBinary<UMaterialExpressionMultiply>(Function, Snow, 0, SnowStrength, 0, 7, 2);
+    UMaterialExpressionMax* TrampleOrWinter = AddBinary<UMaterialExpressionMax>(Function, Switch, 0, WinterSquash, 0, 8, 5);
+    UMaterialExpressionMax* AnySquash = AddBinary<UMaterialExpressionMax>(Function, TrampleOrWinter, 0, SnowSquash, 0, 9, 3);
+    UMaterialExpressionSaturate* Squash = AddNode<UMaterialExpressionSaturate>(Function, 10, 3);
+    Squash->Input.Connect(0, AnySquash);
+
+    UMaterialExpression* Result = AddSquashTowardPivot(Function, Wind, Squash, false, 11, 0);
+
+    AddOutput(Function, TEXT("WPO"), TEXT("В World Position Offset."), 0, Result, 0, 18, 1);
+    AddOutput(Function, TEXT("Squash"), TEXT("Итоговое сжатие 0..1: цвет пожухлости, тень."), 1, Squash, 0, 18, 3);
+    AddOutput(Function, TEXT("Trample"), TEXT("Вытоптанность у основания (0 при выключенном Trampleable)."), 2, Switch, 0, 18, 5);
+    return true;
+}
+
+bool HerbalistMaterialFunctions::BuildFlowerOpen(UMaterialFunction* Function, const FSources& Sources)
+{
+    using namespace Detail;
+    if (!Function || !Sources.Collection) return false;
+
+    DescribeFunction(Function, TEXT("Раскрытость цветка (§3.3 плана): Open = SmoothStep(r x 0.25, r x 0.25 + 0.5, OpenPhase . DayPhaseWeights), r -- случайное число экземпляра (поляна раскрывается волной). OpenPhase -- веса окна раскрытия рассвет/день/закат/ночь, параметр инстанса материала вида. Закрытый цветок: лепестки (PetalMask, по умолчанию красный канал цвета вершин) стягиваются к оси по горизонтали на CloseAmount."));
+
+    UMaterialExpressionFunctionInput* OpenPhase = AddInput(Function, TEXT("OpenPhase"), FunctionInput_Vector4,
+        TEXT("Окно раскрытия: R рассвет, G день, B закат, A ночь, 0..1. Не подключено -- днём."), 0, 1, 0);
+    UMaterialExpressionConstant4Vector* DayOnly = AddNode<UMaterialExpressionConstant4Vector>(Function, 0, 0);
+    DayOnly->Constant = FLinearColor(0.0f, 1.0f, 0.0f, 0.0f);
+    OpenPhase->Preview.Connect(0, DayOnly);
+    OpenPhase->bUsePreviewValueAsDefault = true;
+    UMaterialExpressionFunctionInput* Wind = AddWindInput(Function, 1, 1, 1);
+    UMaterialExpressionFunctionInput* PetalMask = AddInput(Function, TEXT("PetalMask"), FunctionInput_Scalar,
+        TEXT("Какие вершины -- лепестки, 0..1. Не подключено -- красный канал цвета вершин (у меша без цвета вершин -- весь меш)."), 2, 1, 2);
+    UMaterialExpressionVertexColor* VertexColor = AddNode<UMaterialExpressionVertexColor>(Function, 0, 2);
+    PetalMask->Preview.Connect(1, VertexColor);   // выход 1 -- R
+    PetalMask->bUsePreviewValueAsDefault = true;
+    UMaterialExpressionFunctionInput* CloseAmount = AddScalarInput(Function, TEXT("CloseAmount"), 0.7f,
+        TEXT("Насколько закрытые лепестки стягиваются к оси, 0..1."), 3, 1, 3);
+    UMaterialExpressionCollectionParameter* DayPhase = AddCollectionParameter(Function, Sources.Collection, TEXT("DayPhaseWeights"), 1, 5);
+    if (!DayPhase) return false;
+
+    UMaterialExpressionComponentMask* Weights = AddMask(Function, DayPhase, 0, true, true, true, true, 2, 5);
+    UMaterialExpressionDotProduct* InWindow = AddBinary<UMaterialExpressionDotProduct>(Function, OpenPhase, 0, Weights, 0, 3, 4);
+    UMaterialExpressionPerInstanceRandom* InstanceRandom = AddNode<UMaterialExpressionPerInstanceRandom>(Function, 2, 7);
+    UMaterialExpressionMultiply* Low = AddNode<UMaterialExpressionMultiply>(Function, 3, 7);
+    Low->A.Connect(0, InstanceRandom);
+    Low->ConstB = 0.25f;
+    UMaterialExpressionAdd* High = AddNode<UMaterialExpressionAdd>(Function, 4, 7);
+    High->A.Connect(0, Low);
+    High->ConstB = 0.5f;
+    UMaterialExpressionSmoothStep* Open = AddNode<UMaterialExpressionSmoothStep>(Function, 5, 5);
+    Open->Min.Connect(0, Low);
+    Open->Max.Connect(0, High);
+    Open->Value.Connect(0, InWindow);
+
+    UMaterialExpressionOneMinus* Closed = AddNode<UMaterialExpressionOneMinus>(Function, 6, 3);
+    Closed->Input.Connect(0, Open);
+    UMaterialExpressionMultiply* ClosedPetals = AddBinary<UMaterialExpressionMultiply>(Function, Closed, 0, PetalMask, 0, 7, 3);
+    UMaterialExpressionMultiply* Amount = AddBinary<UMaterialExpressionMultiply>(Function, ClosedPetals, 0, CloseAmount, 0, 8, 3);
+
+    UMaterialExpression* Result = AddSquashTowardPivot(Function, Wind, Amount, true, 9, 0);
+
+    AddOutput(Function, TEXT("WPO"), TEXT("В World Position Offset."), 0, Result, 0, 16, 1);
+    AddOutput(Function, TEXT("Open"), TEXT("Раскрытость 0..1: цвет, свечение ночных цветов."), 1, Open, 0, 16, 4);
     return true;
 }
 

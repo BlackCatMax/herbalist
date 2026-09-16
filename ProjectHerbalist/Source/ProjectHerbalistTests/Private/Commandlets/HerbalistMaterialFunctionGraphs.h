@@ -14,6 +14,19 @@
 //   MF_TrampleCompressWPO -- трава на тропе прижимается к основанию, ветер
 //                            слабеет; за переключателем Trampleable (шаг 2).
 //
+// Слой сезона и суток (2026-09-16, этап 3 docs/research/
+// DESIGN_Living_Vegetation_Research.md §3): значения времени приходят готовыми
+// из MPC_WorldStateFields (этап 1б), снег -- из коллекции Ultra Dynamic Weather.
+//   MF_SeasonWeights -- веса сезонов, SeasonUDW, LeafDrop01.
+//   MF_SeasonColor   -- цвет, подкрашенный по сезону (свежесть, сочность,
+//                       желтизна, пожухлость).
+//   MF_LeafDrop      -- маска листвы редеет по LeafDrop01 кучками, со
+//                       сдвигом по экземпляру.
+//   MF_GrassSquash   -- трава ложится к основанию: max(тропа, зима, снег UDW);
+//                       обобщение MF_TrampleCompressWPO.
+//   MF_FlowerOpen    -- раскрытость цветка по окну OpenPhase (веса фаз суток)
+//                       и WPO закрытия лепестков.
+//
 // Сборка графа вынесена из коммандлета, чтобы автотест проверял тот же код
 // на временных объектах.
 #pragma once
@@ -34,6 +47,15 @@ namespace HerbalistMaterialFunctions
     inline const TCHAR* SampleWorldStateName = TEXT("MF_SampleWorldState");
     inline const TCHAR* SampleTrampleName = TEXT("MF_SampleTrample");
     inline const TCHAR* TrampleCompressName = TEXT("MF_TrampleCompressWPO");
+    inline const TCHAR* SeasonWeightsName = TEXT("MF_SeasonWeights");
+    inline const TCHAR* SeasonColorName = TEXT("MF_SeasonColor");
+    inline const TCHAR* LeafDropName = TEXT("MF_LeafDrop");
+    inline const TCHAR* GrassSquashName = TEXT("MF_GrassSquash");
+    inline const TCHAR* FlowerOpenName = TEXT("MF_FlowerOpen");
+
+    // Коллекция Ultra Dynamic Weather: покрытие снегом материалов -- Snowy.
+    inline const TCHAR* WeatherCollectionPath = TEXT("/Game/UltraDynamicSky/Materials/Weather/UltraDynamicWeather_Parameters");
+    inline const TCHAR* WeatherSnowParameterName = TEXT("Snowy");
 
     // Имя переключателя -- то же, что в схеме бэклога и в инстансах травы.
     inline const TCHAR* TrampleableSwitchName = TEXT("Trampleable");
@@ -43,6 +65,7 @@ namespace HerbalistMaterialFunctions
         UMaterialParameterCollection* Collection = nullptr;
         UTexture* WorldStateMap = nullptr;
         UTexture* TrampleMap = nullptr;
+        UMaterialParameterCollection* WeatherCollection = nullptr;
     };
 
     // Строят граф в пустой функции. false -- чего-то не хватает (параметра в
@@ -50,6 +73,12 @@ namespace HerbalistMaterialFunctions
     bool BuildSampleWorldState(UMaterialFunction* Function, const FSources& Sources);
     bool BuildSampleTrample(UMaterialFunction* Function, const FSources& Sources);
     bool BuildTrampleCompressWPO(UMaterialFunction* Function, UMaterialFunction* SampleTrample);
+
+    bool BuildSeasonWeights(UMaterialFunction* Function, const FSources& Sources);
+    bool BuildSeasonColor(UMaterialFunction* Function, const FSources& Sources);
+    bool BuildLeafDrop(UMaterialFunction* Function, const FSources& Sources);
+    bool BuildGrassSquash(UMaterialFunction* Function, const FSources& Sources, UMaterialFunction* SampleTrample);
+    bool BuildFlowerOpen(UMaterialFunction* Function, const FSources& Sources);
 
     // Удаляет все узлы функции. false -- что-то осталось. Своя, а не
     // UMaterialEditingLibrary::DeleteAllMaterialExpressionsInFunction: та удаляет

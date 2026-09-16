@@ -5,7 +5,9 @@
 // сверяются со схемой бэклога: входы и выходы, цепочки узлов от выходов (каналы,
 // шаги маски окна, затухание, сжатие), параметры MPC, явный мип 0 (шейдер
 // вершин), Instance & Particle Space у основания, позиция без смещений шейдера,
-// переключатель Trampleable, перестройка графа. Компиляцию шейдера проверяет
+// переключатель Trampleable, перестройка графа; слой сезона и суток (этап 3
+// DESIGN_Living_Vegetation_Research.md): веса сезона, подкраска, листопад,
+// сжатие травы, раскрытие цветов. Компиляцию шейдера проверяет
 // -run=MaterialFunctionsSetup -verify (TOOLS_REFERENCE.md) -- автотест в
 // редакторском мире без рендера её не видит.
 
@@ -15,6 +17,13 @@
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Materials/MaterialExpressionCollectionParameter.h"
+#include "Materials/MaterialExpressionAdd.h"
+#include "Materials/MaterialExpressionAppendVector.h"
+#include "Materials/MaterialExpressionDotProduct.h"
+#include "Materials/MaterialExpressionFrac.h"
+#include "Materials/MaterialExpressionMax.h"
+#include "Materials/MaterialExpressionSaturate.h"
+#include "Materials/MaterialExpressionPerInstanceRandom.h"
 #include "Materials/MaterialExpressionFunctionInput.h"
 #include "Materials/MaterialExpressionFunctionOutput.h"
 #include "Materials/MaterialExpressionLength.h"
@@ -44,6 +53,7 @@ namespace HerbalistMaterialFunctionsTest
         Sources.Collection = LoadObject<UMaterialParameterCollection>(nullptr, CollectionPath);
         Sources.WorldStateMap = LoadObject<UTexture>(nullptr, WorldStateMapPath);
         Sources.TrampleMap = LoadObject<UTexture>(nullptr, TrampleMapPath);
+        Sources.WeatherCollection = LoadObject<UMaterialParameterCollection>(nullptr, WeatherCollectionPath);
         return Sources;
     }
 
@@ -365,6 +375,17 @@ bool FHerbalistMaterialFunctions_MissingCollectionParameterRefuses::RunTest(cons
 
     TestFalse(TEXT("Карта состояния без рамки -- отказ"), BuildSampleWorldState(NewTransientMaterialFunction(), Sources));
     TestFalse(TEXT("Тропы без рамки -- отказ"), BuildSampleTrample(NewTransientMaterialFunction(), Sources));
+    TestFalse(TEXT("Веса сезона без параметров времени -- отказ"), BuildSeasonWeights(NewTransientMaterialFunction(), Sources));
+    TestFalse(TEXT("Цветы без весов суток -- отказ"), BuildFlowerOpen(NewTransientMaterialFunction(), Sources));
+    TestFalse(TEXT("Подкраска без весов сезона -- отказ"), BuildSeasonColor(NewTransientMaterialFunction(), Sources));
+    TestFalse(TEXT("Листопад без LeafDrop01 -- отказ"), BuildLeafDrop(NewTransientMaterialFunction(), Sources));
+
+    // Сжатие травы без коллекции погоды -- отказ без узлов, а не граф с пустым снегом.
+    FSources NoWeather = LoadMaterialFunctionSources();
+    NoWeather.WeatherCollection = nullptr;
+    UMaterialFunction* SampleTrample = NewTransientMaterialFunction();
+    BuildSampleTrample(SampleTrample, NoWeather);
+    TestFalse(TEXT("Трава без коллекции погоды -- отказ"), BuildGrassSquash(NewTransientMaterialFunction(), NoWeather, SampleTrample));
     return true;
 }
 
@@ -379,7 +400,12 @@ bool FHerbalistMaterialFunctions_GeneratedAssetsExist::RunTest(const FString& Pa
     struct FExpected { const TCHAR* Name; const TCHAR* Output; };
     for (const FExpected& Expected : { FExpected{ SampleWorldStateName, TEXT("InsideWindow") },
                                        FExpected{ SampleTrampleName, TEXT("Trample") },
-                                       FExpected{ TrampleCompressName, TEXT("WPO") } })
+                                       FExpected{ TrampleCompressName, TEXT("WPO") },
+                                       FExpected{ SeasonWeightsName, TEXT("LeafDrop01") },
+                                       FExpected{ SeasonColorName, TEXT("Color") },
+                                       FExpected{ LeafDropName, TEXT("OpacityMask") },
+                                       FExpected{ GrassSquashName, TEXT("Squash") },
+                                       FExpected{ FlowerOpenName, TEXT("Open") } })
     {
         const FString Path = FString::Printf(TEXT("%s/%s"), FunctionsFolder, Expected.Name);
         UMaterialFunction* Function = LoadObject<UMaterialFunction>(nullptr, *Path);
@@ -388,6 +414,168 @@ bool FHerbalistMaterialFunctions_GeneratedAssetsExist::RunTest(const FString& Pa
             TestTrue(*FString::Printf(TEXT("%s: выход %s"), Expected.Name, Expected.Output), FunctionOutputNames(Function).Contains(FName(Expected.Output)));
         }
     }
+    return true;
+}
+
+namespace HerbalistMaterialFunctionsTest
+{
+    bool UsesCollectionParameter(UMaterialFunction* Function, const UMaterialParameterCollection* Collection, const TCHAR* Name)
+    {
+        for (UMaterialExpressionCollectionParameter* Parameter : FunctionNodesOfType<UMaterialExpressionCollectionParameter>(Function))
+        {
+            if (Parameter->Collection == Collection && Parameter->ParameterName == FName(Name)) return true;
+        }
+        return false;
+    }
+
+    void CheckNames(FAutomationTestBase& Test, UMaterialFunction* Function, std::initializer_list<const TCHAR*> Inputs, std::initializer_list<const TCHAR*> Outputs)
+    {
+        const TSet<FName> InputNames = FunctionInputNames(Function);
+        const TSet<FName> OutputNames = FunctionOutputNames(Function);
+        for (const TCHAR* Name : Inputs)
+        {
+            Test.TestTrue(*FString::Printf(TEXT("%s: вход %s"), *Function->GetName(), Name), InputNames.Contains(FName(Name)));
+        }
+        for (const TCHAR* Name : Outputs)
+        {
+            Test.TestTrue(*FString::Printf(TEXT("%s: выход %s"), *Function->GetName(), Name), OutputNames.Contains(FName(Name)));
+        }
+        Test.TestEqual(*FString::Printf(TEXT("%s: входов ровно столько"), *Function->GetName()), InputNames.Num(), static_cast<int32>(Inputs.size()));
+        Test.TestEqual(*FString::Printf(TEXT("%s: выходов ровно столько"), *Function->GetName()), OutputNames.Num(), static_cast<int32>(Outputs.size()));
+    }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistMaterialFunctions_SeasonLayerReadsTimeCollection,
+    "Herbalist.MaterialFunctions.SeasonLayerReadsTimeCollection",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistMaterialFunctions_SeasonLayerReadsTimeCollection::RunTest(const FString& Parameters)
+{
+    using namespace HerbalistMaterialFunctionsTest;
+    // Сезон, подкраска и листопад читают готовые значения MPC_WorldStateFields
+    // (этап 1б), а не часы: материал не считает календарь сам.
+    const FSources Sources = LoadMaterialFunctionSources();
+    if (!TestNotNull(TEXT("MPC_WorldStateFields"), Sources.Collection)) return false;
+
+    UMaterialFunction* Weights = NewTransientMaterialFunction();
+    if (TestTrue(TEXT("MF_SeasonWeights собрана"), BuildSeasonWeights(Weights, Sources)))
+    {
+        CheckNames(*this, Weights, {}, { TEXT("SeasonWeights"), TEXT("Spring"), TEXT("Summer"), TEXT("Autumn"), TEXT("Winter"), TEXT("SeasonUDW"), TEXT("LeafDrop01") });
+        CheckCommonMaterialFunctionWiring(*this, Weights, nullptr);
+        for (const TCHAR* Name : { TEXT("SeasonWeights"), TEXT("SeasonUDW"), TEXT("LeafDrop01") })
+        {
+            TestTrue(*FString::Printf(TEXT("Веса сезона читают %s"), Name), UsesCollectionParameter(Weights, Sources.Collection, Name));
+        }
+    }
+
+    UMaterialFunction* Color = NewTransientMaterialFunction();
+    if (TestTrue(TEXT("MF_SeasonColor собрана"), BuildSeasonColor(Color, Sources)))
+    {
+        CheckNames(*this, Color, { TEXT("Color"), TEXT("SpringTint"), TEXT("SummerTint"), TEXT("AutumnTint"), TEXT("WinterTint"), TEXT("Strength") }, { TEXT("Color"), TEXT("Tint") });
+        CheckCommonMaterialFunctionWiring(*this, Color, nullptr);
+        TestTrue(TEXT("Подкраска читает SeasonWeights"), UsesCollectionParameter(Color, Sources.Collection, TEXT("SeasonWeights")));
+        for (UMaterialExpressionFunctionInput* Input : FunctionNodesOfType<UMaterialExpressionFunctionInput>(Color))
+        {
+            TestTrue(*FString::Printf(TEXT("Вход %s со значением по умолчанию"), *Input->InputName.ToString()), Input->bUsePreviewValueAsDefault && Input->Preview.IsConnected());
+        }
+    }
+
+    UMaterialFunction* Leaves = NewTransientMaterialFunction();
+    if (TestTrue(TEXT("MF_LeafDrop собрана"), BuildLeafDrop(Leaves, Sources)))
+    {
+        CheckNames(*this, Leaves, { TEXT("OpacityMask"), TEXT("ClumpSize"), TEXT("Position") }, { TEXT("OpacityMask"), TEXT("Kept"), TEXT("LeafDrop01") });
+        CheckCommonMaterialFunctionWiring(*this, Leaves, nullptr);
+        // Kept = Step(Y = LeafDrop01, X = шум): листва остаётся, где шум не ниже доли опавшего.
+        const UMaterialExpressionFunctionOutput* Kept = FindFunctionOutput(Leaves, TEXT("Kept"));
+        const UMaterialExpressionStep* Step = Kept ? Cast<UMaterialExpressionStep>(Kept->A.Expression) : nullptr;
+        const UMaterialExpressionCollectionParameter* Threshold = Step ? Cast<UMaterialExpressionCollectionParameter>(Step->Y.Expression) : nullptr;
+        TestTrue(TEXT("Порог маски -- LeafDrop01"), Threshold && Threshold->ParameterName == FName(TEXT("LeafDrop01")));
+        TestTrue(TEXT("Шум подключён"), Step && Step->X.IsConnected());
+        TestEqual(TEXT("Сдвиг по экземпляру"), FunctionNodesOfType<UMaterialExpressionPerInstanceRandom>(Leaves).Num(), 1);
+
+        // Хэш: p = frac(cell x 0.1031); p + dot(p, p.yzx + 33.33); frac((x + y) x z).
+        const UMaterialExpressionDotProduct* Dot = nullptr;
+        for (UMaterialExpressionDotProduct* Found : FunctionNodesOfType<UMaterialExpressionDotProduct>(Leaves)) Dot = Found;
+        const UMaterialExpressionFrac* P = Dot ? Cast<UMaterialExpressionFrac>(Dot->A.Expression) : nullptr;
+        const UMaterialExpressionAdd* Shift = Dot ? Cast<UMaterialExpressionAdd>(Dot->B.Expression) : nullptr;
+        TestTrue(TEXT("Хэш: dot(p, p.yzx + 33.33)"), P && Shift && !Shift->B.IsConnected() && FMath::IsNearlyEqual(Shift->ConstB, 33.33f));
+        TestTrue(TEXT("Хэш: сдвиг берёт перестановку yzx, а не p"), Shift && Cast<UMaterialExpressionAppendVector>(Shift->A.Expression));
+        bool bMixUsesUnshiftedP = false;
+        for (UMaterialExpressionAdd* Add : FunctionNodesOfType<UMaterialExpressionAdd>(Leaves))
+        {
+            bMixUsesUnshiftedP |= Add->A.Expression == P && Add->B.Expression == Dot;
+        }
+        TestTrue(TEXT("Хэш: к dot прибавляется исходный p"), P && bMixUsesUnshiftedP);
+    }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistMaterialFunctions_GrassSquashTakesMaxOfTrampleWinterSnow,
+    "Herbalist.MaterialFunctions.GrassSquashTakesMaxOfTrampleWinterSnow",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistMaterialFunctions_GrassSquashTakesMaxOfTrampleWinterSnow::RunTest(const FString& Parameters)
+{
+    using namespace HerbalistMaterialFunctionsTest;
+    const FSources Sources = LoadMaterialFunctionSources();
+    if (!TestNotNull(TEXT("Коллекция Ultra Dynamic Weather"), Sources.WeatherCollection)) return false;
+    UMaterialFunction* SampleTrample = NewTransientMaterialFunction();
+    if (!TestTrue(TEXT("MF_SampleTrample собрана"), BuildSampleTrample(SampleTrample, Sources))) return false;
+
+    UMaterialFunction* Function = NewTransientMaterialFunction();
+    if (!TestTrue(TEXT("MF_GrassSquash собрана"), BuildGrassSquash(Function, Sources, SampleTrample))) return false;
+
+    CheckNames(*this, Function, { TEXT("WPO"), TEXT("WinterStrength"), TEXT("SnowStrength"), TEXT("Snow") }, { TEXT("WPO"), TEXT("Squash"), TEXT("Trample") });
+    CheckCommonMaterialFunctionWiring(*this, Function, nullptr);
+    TestTrue(TEXT("Снег по умолчанию -- Snowy из коллекции UDW"), UsesCollectionParameter(Function, Sources.WeatherCollection, WeatherSnowParameterName));
+    TestTrue(TEXT("Зима -- SeasonWeights"), UsesCollectionParameter(Function, Sources.Collection, TEXT("SeasonWeights")));
+
+    const TArray<UMaterialExpressionStaticSwitchParameter*> Switches = FunctionNodesOfType<UMaterialExpressionStaticSwitchParameter>(Function);
+    if (TestEqual(TEXT("Один переключатель тропы"), Switches.Num(), 1))
+    {
+        TestEqual(TEXT("Тот же Trampleable, что у инстансов"), Switches[0]->ParameterName, FName(TrampleableSwitchName));
+        TestFalse(TEXT("По умолчанию выключен"), static_cast<bool>(Switches[0]->DefaultValue));
+    }
+
+    // Squash = Saturate(Max(Max(тропа, зима), снег)); WPO -- из сжатия к основанию.
+    const UMaterialExpressionFunctionOutput* Squash = FindFunctionOutput(Function, TEXT("Squash"));
+    const UMaterialExpressionSaturate* Clamp = Squash ? Cast<UMaterialExpressionSaturate>(Squash->A.Expression) : nullptr;
+    const UMaterialExpressionMax* Outer = Clamp ? Cast<UMaterialExpressionMax>(Clamp->Input.Expression) : nullptr;
+    const UMaterialExpressionMax* Inner = Outer ? Cast<UMaterialExpressionMax>(Outer->A.Expression) : nullptr;
+    TestTrue(TEXT("Сжатие -- максимум трёх причин"), Inner && Cast<UMaterialExpressionStaticSwitchParameter>(Inner->A.Expression) && Inner->B.IsConnected() && Outer->B.IsConnected());
+    const UMaterialExpressionFunctionOutput* Wpo = FindFunctionOutput(Function, TEXT("WPO"));
+    const UMaterialExpressionSubtract* Result = Wpo ? Cast<UMaterialExpressionSubtract>(Wpo->A.Expression) : nullptr;
+    const UMaterialExpressionTransform* Toward = Result ? Cast<UMaterialExpressionTransform>(Result->B.Expression) : nullptr;
+    TestTrue(TEXT("WPO -- ветер минус сжатие в мир из Instance & Particle Space"), Toward && Toward->TransformSourceType == TRANSFORMSOURCE_Instance);
+    const TArray<UMaterialExpressionLocalPosition*> Locals = FunctionNodesOfType<UMaterialExpressionLocalPosition>(Function);
+    TestTrue(TEXT("Локальная позиция без смещений шейдера"), Locals.Num() == 1 && Locals[0]->IncludedOffsets == EPositionIncludedOffsets::ExcludeOffsets);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistMaterialFunctions_FlowerOpenFollowsDayPhaseWindow,
+    "Herbalist.MaterialFunctions.FlowerOpenFollowsDayPhaseWindow",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistMaterialFunctions_FlowerOpenFollowsDayPhaseWindow::RunTest(const FString& Parameters)
+{
+    using namespace HerbalistMaterialFunctionsTest;
+    const FSources Sources = LoadMaterialFunctionSources();
+    UMaterialFunction* Function = NewTransientMaterialFunction();
+    if (!TestTrue(TEXT("MF_FlowerOpen собрана"), BuildFlowerOpen(Function, Sources))) return false;
+
+    CheckNames(*this, Function, { TEXT("OpenPhase"), TEXT("WPO"), TEXT("PetalMask"), TEXT("CloseAmount") }, { TEXT("WPO"), TEXT("Open") });
+    CheckCommonMaterialFunctionWiring(*this, Function, nullptr);
+
+    // Open = SmoothStep(r x 0.25, r x 0.25 + 0.5, OpenPhase . DayPhaseWeights) -- окно вида против весов фаз суток.
+    const UMaterialExpressionFunctionOutput* Open = FindFunctionOutput(Function, TEXT("Open"));
+    const UMaterialExpressionSmoothStep* Smooth = Open ? Cast<UMaterialExpressionSmoothStep>(Open->A.Expression) : nullptr;
+    const UMaterialExpressionDotProduct* Dot = Smooth ? Cast<UMaterialExpressionDotProduct>(Smooth->Value.Expression) : nullptr;
+    TestTrue(TEXT("Раскрытость -- SmoothStep от скалярного произведения"), Dot != nullptr);
+    const UMaterialExpressionFunctionInput* Phase = Dot ? Cast<UMaterialExpressionFunctionInput>(Dot->A.Expression) : nullptr;
+    TestTrue(TEXT("Окно вида -- вход OpenPhase, Vector4"), Phase && Phase->InputName == FName(TEXT("OpenPhase")) && Phase->InputType == FunctionInput_Vector4);
+    TestTrue(TEXT("Против DayPhaseWeights"), UsesCollectionParameter(Function, Sources.Collection, TEXT("DayPhaseWeights")));
+    TestTrue(TEXT("Поляна раскрывается волной -- порог по экземпляру"), Smooth && Smooth->Min.IsConnected() && Smooth->Max.IsConnected()
+        && FunctionNodesOfType<UMaterialExpressionPerInstanceRandom>(Function).Num() == 1);
     return true;
 }
 

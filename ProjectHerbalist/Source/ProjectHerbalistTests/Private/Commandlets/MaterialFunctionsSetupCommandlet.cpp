@@ -81,6 +81,11 @@ namespace
         const TCHAR* Case, UTexture* Texture, bool bExpectTexture)
     {
         UMaterial* Material = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+        if (Property == MP_OpacityMask)
+        {
+            // Маска компилируется только у маскированного материала.
+            Material->BlendMode = BLEND_Masked;
+        }
         UMaterialExpressionMaterialFunctionCall* Call = Cast<UMaterialExpressionMaterialFunctionCall>(
             UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMaterialFunctionCall::StaticClass()));
         if (!Call || !Call->SetMaterialFunction(Function) || !UMaterialEditingLibrary::ConnectMaterialProperty(Call, OutputName, Property))
@@ -129,6 +134,7 @@ namespace
 
     // Переключатель по умолчанию выключен -- ветка сжатия без этого не
     // компилировалась бы вовсе. Значение меняется только в памяти, не сохраняется.
+    // Годится для любой функции с переключателем Trampleable (MF_TrampleCompressWPO, MF_GrassSquash).
     bool VerifyTrampleCompressBothBranches(UMaterialFunction* Function, UTexture* TrampleMap)
     {
         UMaterialExpressionStaticSwitchParameter* Switch = nullptr;
@@ -167,16 +173,27 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
     Sources.Collection = LoadObject<UMaterialParameterCollection>(nullptr, CollectionPath);
     Sources.WorldStateMap = LoadObject<UTexture>(nullptr, WorldStateMapPath);
     Sources.TrampleMap = LoadObject<UTexture>(nullptr, TrampleMapPath);
+    Sources.WeatherCollection = LoadObject<UMaterialParameterCollection>(nullptr, WeatherCollectionPath);
     if (!Sources.Collection || !Sources.WorldStateMap || !Sources.TrampleMap)
     {
         UE_LOG(LogTemp, Error, TEXT("Нет %s, %s или %s -- сначала -run=WorldStateMapSetup и -run=TrampleMapSetup"),
             CollectionPath, WorldStateMapPath, TrampleMapPath);
         return 1;
     }
+    if (!Sources.WeatherCollection)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Нет %s -- Ultra Dynamic Weather не в проекте (MF_GrassSquash берёт снег оттуда)"), WeatherCollectionPath);
+        return 1;
+    }
 
     UMaterialFunction* WorldState = nullptr;
     UMaterialFunction* Trample = nullptr;
     UMaterialFunction* Compress = nullptr;
+    UMaterialFunction* SeasonWeights = nullptr;
+    UMaterialFunction* SeasonColor = nullptr;
+    UMaterialFunction* LeafDrop = nullptr;
+    UMaterialFunction* GrassSquash = nullptr;
+    UMaterialFunction* FlowerOpen = nullptr;
     bool bTrampleBuilt = false;
 
     struct FStep
@@ -190,13 +207,20 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         { SampleTrampleName, &Trample, [&Sources](UMaterialFunction* F) { return BuildSampleTrample(F, Sources); } },
         // Зовёт MF_SampleTrample -- строится после неё.
         { TrampleCompressName, &Compress, [&Trample](UMaterialFunction* F) { return BuildTrampleCompressWPO(F, Trample); } },
+        // Слой сезона и суток (этап 3 DESIGN_Living_Vegetation_Research.md).
+        { SeasonWeightsName, &SeasonWeights, [&Sources](UMaterialFunction* F) { return BuildSeasonWeights(F, Sources); } },
+        { SeasonColorName, &SeasonColor, [&Sources](UMaterialFunction* F) { return BuildSeasonColor(F, Sources); } },
+        { LeafDropName, &LeafDrop, [&Sources](UMaterialFunction* F) { return BuildLeafDrop(F, Sources); } },
+        // Тоже зовёт MF_SampleTrample.
+        { GrassSquashName, &GrassSquash, [&Sources, &Trample](UMaterialFunction* F) { return BuildGrassSquash(F, Sources, Trample); } },
+        { FlowerOpenName, &FlowerOpen, [&Sources](UMaterialFunction* F) { return BuildFlowerOpen(F, Sources); } },
     };
 
     for (const FStep& Step : Steps)
     {
         // Вызов MF_SampleTrample внутри сжатия запоминает её входы и выходы --
         // перестроенная выборка тропы тянет за собой перестройку сжатия.
-        const bool bDependsOnRebuiltTrample = Step.Slot == &Compress && bTrampleBuilt;
+        const bool bDependsOnRebuiltTrample = (Step.Slot == &Compress || Step.Slot == &GrassSquash) && bTrampleBuilt;
 
         FFunctionPinIds PinIds;
         const EMaterialFunctionPrepareResult Prepared = PrepareMaterialFunction(Step.Name, bRebuild || bDependsOnRebuiltTrample, *Step.Slot, PinIds);
@@ -236,6 +260,15 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         bAllCompile &= VerifyMaterialFunctionCompiles(Trample, TEXT("Trample"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, true);
         bAllCompile &= VerifyMaterialFunctionCompiles(Trample, TEXT("Trample"), MP_WorldPositionOffset, TEXT("шейдер вершин"), Sources.TrampleMap, true);
         bAllCompile &= VerifyTrampleCompressBothBranches(Compress, Sources.TrampleMap);
+        // Слой сезона: текстур не читает, кроме тропы у MF_GrassSquash.
+        bAllCompile &= VerifyMaterialFunctionCompiles(SeasonWeights, TEXT("Winter"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
+        bAllCompile &= VerifyMaterialFunctionCompiles(SeasonWeights, TEXT("LeafDrop01"), MP_WorldPositionOffset, TEXT("шейдер вершин"), Sources.TrampleMap, false);
+        bAllCompile &= VerifyMaterialFunctionCompiles(SeasonColor, TEXT("Color"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
+        bAllCompile &= VerifyMaterialFunctionCompiles(LeafDrop, TEXT("OpacityMask"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
+        bAllCompile &= VerifyMaterialFunctionCompiles(LeafDrop, TEXT("OpacityMask"), MP_OpacityMask, TEXT("маска, маскированный материал"), Sources.TrampleMap, false);
+        bAllCompile &= VerifyTrampleCompressBothBranches(GrassSquash, Sources.TrampleMap);
+        bAllCompile &= VerifyMaterialFunctionCompiles(FlowerOpen, TEXT("WPO"), MP_WorldPositionOffset, TEXT("шейдер вершин"), Sources.TrampleMap, false);
+        bAllCompile &= VerifyMaterialFunctionCompiles(FlowerOpen, TEXT("Open"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
         if (!bAllCompile)
         {
             UE_LOG(LogTemp, Error, TEXT("[verify] есть ошибки"));
