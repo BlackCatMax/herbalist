@@ -6,6 +6,8 @@
 // записки по суткам.
 
 #include "Core/World/GridWorldManager.h"
+#include "Player/HerbalistPlayerController.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Community/OrderTypes.h"
 #include "Core/Community/OrderNoteActor.h"
 #include "Core/Data/IngredientTableRow.h"
@@ -393,6 +395,58 @@ bool FHerbalistOrders_DailyNotesFollowMolva::RunTest(const FString& Parameters)
     TestEqual(TEXT("Следующий номер -- как был"), Manager->IssueOrder(FName(TEXT("WAR_HUNT"))), NextNumber);
 
     DestroyOrderNotes(World);
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistOrders_ControllerDeliversOnlyPotions,
+    "Herbalist.Orders.ControllerDeliversOnlyPotions",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistOrders_ControllerDeliversOnlyPotions::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC) || !TestNotNull(TEXT("Inventory"), PC->InventoryComponent))
+    {
+        Manager->Destroy();
+        return false;
+    }
+
+    // Трава и зелье; ячейки ищем по ID -- котомка сама решает порядок.
+    FInventoryItem Herb;
+    Herb.IngredientID = FName(TEXT("broad_04"));
+    PC->InventoryComponent->AddItem(Herb, 1);
+    PC->InventoryComponent->AddItem(MakeOrderTestPotion(MakeOrderTestState(0.7f, 0.1f, 0.1f, 0.1f, 0.9f, 0.05f)), 1);
+    auto SlotOf = [PC](FName ID)
+    {
+        return PC->InventoryComponent->GetItems().IndexOfByPredicate([ID](const FInventoryItem& Item) { return Item.IngredientID == ID; });
+    };
+    const int32 Number = Manager->IssueOrder(FName(TEXT("VIL_HEAL")));
+
+    PC->DeliverOrder(Number, SlotOf(FName(TEXT("broad_04"))));
+    TestEqual(TEXT("Траву не отдать -- заказ открыт"), Manager->GetActiveOrders()[0].State, EOrderState::Open);
+    TestEqual(TEXT("Трава осталась в котомке"), CountItemsWithID(PC->InventoryComponent, FName(TEXT("broad_04"))), 1);
+
+    if (!TestTrue(TEXT("Зелье в котомке"), SlotOf(FName(TEXT("Potion"))) != INDEX_NONE))
+    {
+        PC->Destroy();
+        Manager->Destroy();
+        return false;
+    }
+    PC->DeliverOrder(Number, SlotOf(FName(TEXT("Potion"))));
+    TestEqual(TEXT("Зелье отдано"), Manager->GetActiveOrders()[0].State, EOrderState::Delivered);
+    TestEqual(TEXT("Зелья в котомке больше нет"), CountItemsWithID(PC->InventoryComponent, FName(TEXT("Potion"))), 0);
+
+    const int32 Refused = Manager->IssueOrder(FName(TEXT("OUT_SLEEP")));
+    PC->RefuseOrder(Refused);
+    TestEqual(TEXT("Отказ через команду"), Manager->GetActiveOrders().Num(), 1);
+
+    DestroyOrderNotes(World);
+    PC->Destroy();
     Manager->Destroy();
     return true;
 }
