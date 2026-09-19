@@ -961,6 +961,62 @@ void AHerbalistPlayerController::OfferToCommunity(FString IngredientList)
     }
 }
 
+void AHerbalistPlayerController::ListOrders()
+{
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+    const double DayLength = Grid->GetOrderDayLengthSeconds();
+    if (Grid->GetActiveOrders().Num() == 0)
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("[Orders] Заказов нет"));
+    }
+    for (const FActiveOrder& Order : Grid->GetActiveOrders())
+    {
+        const FOrderDefinition* Def = HerbalistOrders::FindOrderDefinition(Order.DefinitionID);
+        const double DaysLeft = (Order.DeadlineClock - Grid->GetGameClockSeconds()) / DayLength;
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("[Orders] %d: %s -- %s"), Order.Number,
+            Def ? *Def->NoteText.ToString() : *Order.DefinitionID.ToString(),
+            Order.State == EOrderState::Delivered ? TEXT("отдано, ждём утра")
+                : *FString::Printf(TEXT("осталось %.1f сут."), DaysLeft));
+    }
+}
+
+void AHerbalistPlayerController::DeliverOrder(int32 OrderNumber, int32 InventoryIndex)
+{
+    if (!InventoryComponent) return;
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+    const TArray<FInventoryItem> Items = InventoryComponent->GetItems();
+    if (!Items.IsValidIndex(InventoryIndex))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("DeliverOrder: в котомке нет ячейки %d"), InventoryIndex);
+        return;
+    }
+    if (!HerbalistOrders::IsDeliverable(Items[InventoryIndex]))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("DeliverOrder: в ячейке %d не зелье -- по заказу отдают только сваренное"), InventoryIndex);
+        return;
+    }
+    // Отдаётся то, что лежит, -- настоящее состояние, не то, что видит травник.
+    if (Grid->DeliverOrder(OrderNumber, Items[InventoryIndex]))
+    {
+        InventoryComponent->RemoveItem(InventoryIndex, 1);
+    }
+    else
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("DeliverOrder: открытого заказа %d нет"), OrderNumber);
+    }
+}
+
+void AHerbalistPlayerController::RefuseOrder(int32 OrderNumber)
+{
+    AGridWorldManager* Grid = FindWorldManager();
+    if (Grid && !Grid->RefuseOrder(OrderNumber))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("RefuseOrder: открытого заказа %d нет"), OrderNumber);
+    }
+}
+
 void AHerbalistPlayerController::TradeWithCommunity(FString OfferedIngredientID, FString WantedIngredientID)
 {
     if (!InventoryComponent) return;

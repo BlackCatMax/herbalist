@@ -84,6 +84,10 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->bBuyanReached = WorldManager->IsBuyanReached();
     Save->ChosenBuyanPath = WorldManager->GetChosenBuyanPath();
     Save->CollectedFragmentIDs = WorldManager->GetCollectedFragmentIDs().Array();
+    Save->ActiveOrders = WorldManager->GetActiveOrders();
+    Save->PendingOrderConsequences = WorldManager->GetPendingOrderConsequences();
+    Save->NextOrderNumber = WorldManager->GetNextOrderNumber();
+    Save->LastOrderDay = WorldManager->GetLastOrderDay();
     Save->HomeStorages = WorldManager->CaptureHomeStorages();
     Save->PlacedContainers = WorldManager->CapturePlacedContainers();
     Save->TieredWards = WorldManager->CaptureTieredWards();
@@ -384,6 +388,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     // Якорь -- из собранных фрагментов, не числом из сейва (вес мог
     // смениться, 23_Journey_Order §23.6).
     WorldManager->RecomputeClarityAnchorFromFragments();
+    WorldManager->SetOrdersState(Save->ActiveOrders, Save->PendingOrderConsequences, Save->NextOrderNumber, Save->LastOrderDay);
     WorldManager->ApplySaveCells(Save->Cells);
     WorldManager->RestoreHomeStorages(Save->HomeStorages);
     WorldManager->RestorePlacedContainers(Save->PlacedContainers);

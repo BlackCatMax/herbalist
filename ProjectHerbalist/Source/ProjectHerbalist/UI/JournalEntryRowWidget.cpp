@@ -10,6 +10,21 @@ void UJournalEntryRowWidget::InitializeRow(const FJournalEntry& InEntry, UIngred
     // хелпер, что и остальным трём виджетам (см. AUDIT_AND_REFACTORING_PLAN
     // §2.4: раньше Ash/BoiledWater/Water трижды переизобретались по месту),
     // собираем временный item только для имени, не для чего-то ещё.
+    // Текстовые записи -- воспоминание и Молва (записки, слухи) -- без имени
+    // предмета: сам текст.
+    if (InEntry.Type == EJournalEntryType::MemoryFragment || InEntry.Type == EJournalEntryType::CommunityNote)
+    {
+        if (NameText)
+        {
+            NameText->SetText(InEntry.FragmentText);
+        }
+        if (ContextText)
+        {
+            ContextText->SetText(FText::FromString(InEntry.Type == EJournalEntryType::CommunityNote ? TEXT("Молва") : TEXT("Воспоминание")));
+        }
+        return;
+    }
+
     FInventoryItem NameLookup;
     NameLookup.IngredientID = InEntry.IngredientID;
     NameLookup.State = InEntry.PerceivedState;

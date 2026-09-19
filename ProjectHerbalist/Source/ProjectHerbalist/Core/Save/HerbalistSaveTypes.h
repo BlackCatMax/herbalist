@@ -24,6 +24,7 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "Core/World/WorldLayout.h"
+#include "Core/Community/OrderTypes.h"
 #include "HerbalistSaveTypes.generated.h"
 
 USTRUCT()
@@ -395,6 +396,17 @@ public:
 
     UPROPERTY()
     TArray<FName> CollectedFragmentIDs;
+
+    // Заказы (02_GDD/24_Orders_And_Repute.md, 2026-09-19): открытые и
+    // исполненные, ещё не решённые, и отложенные последствия тёмных.
+    UPROPERTY()
+    TArray<FActiveOrder> ActiveOrders;
+    UPROPERTY()
+    TArray<FPendingOrderConsequence> PendingOrderConsequences;
+    UPROPERTY()
+    int32 NextOrderNumber = 1;
+    UPROPERTY()
+    int32 LastOrderDay = -1;
 
     // Предметы-спутники (21_Journey_And_Artifacts.md §21.2) — постоянный
     // дар, не должен теряться при перезагрузке (контроллерное состояние,

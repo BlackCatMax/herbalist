@@ -30,12 +30,14 @@
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/World/WorldLayout.h"
 #include "Core/World/ResourceSlots.h"
+#include "Core/Community/OrderTypes.h"
 #include "GridWorldManager.generated.h"
 
 class AHerbalistResourceActor;
 class AMemoryFragmentActor;
 class AHerbalistEntityActor;
 class AHerbalistPlayerController;
+class AOrderNoteActor;
 class ALandscape;
 class ABiomeRegionVolume;
 class AWaterRegionVolume;
@@ -1326,6 +1328,31 @@ public:
     // и у остальных Exec-путей этого класса.
     float OfferToCommunity(const TArray<FInventoryItem>& Items);
 
+    // ---- Заказы и слава травника (02_GDD/24_Orders_And_Repute.md) ----
+    // Раз в игровые сутки -- записки по долям Молвы; исход исполненных --
+    // наутро; последствия тёмных -- через одни-трое суток. Из Tick.
+    void UpdateOrders();
+    // Исходы и последствия, чьё время пришло (из UpdateOrders; публично для тестов).
+    void ResolveDueOrders();
+    // Новый открытый заказ; номер для игрока (0 -- нет такой карточки).
+    int32 IssueOrder(FName DefinitionID);
+    // Круг по Молве, заказ внутри круга -- равновероятно.
+    FName PickOrderDefinition(FRandomStream& Rng) const;
+    // Записку прочли: текст -- на экран и в Травник, задаток -- в котомку.
+    void ReadOrderNote(int32 Number, AHerbalistPlayerController* PC);
+    // Отдать зелье по заказу (сверка -- по его S_real, наутро). Вызывающая
+    // сторона списывает предмет сама. false -- нет такого открытого заказа.
+    bool DeliverOrder(int32 Number, const FInventoryItem& Potion);
+    // Отказ -- ничего не стоит и ничего не меняет.
+    bool RefuseOrder(int32 Number);
+    const TArray<FActiveOrder>& GetActiveOrders() const { return ActiveOrders; }
+    const TArray<FPendingOrderConsequence>& GetPendingOrderConsequences() const { return PendingOrderConsequences; }
+    int32 GetNextOrderNumber() const { return NextOrderNumber; }
+    int32 GetLastOrderDay() const { return LastOrderDay; }
+    void SetOrdersState(const TArray<FActiveOrder>& InOrders, const TArray<FPendingOrderConsequence>& InPending,
+        int32 InNextNumber, int32 InLastDay);
+    double GetOrderDayLengthSeconds() const;
+
     // Ценность предмета для общины (§1.2) — Magnitude, взвешенный Purity и
     // обратной редкостью (1/IngredientTableRow::RarityWeight — уже
     // существующее понятие, не новая метрика). Нулевая/неизвестная
@@ -2357,6 +2384,25 @@ protected:
     TMap<FIntPoint, float> TishinaLesaHoldSeconds;
     TMap<FIntPoint, float> OjidanieBuriHoldSeconds;
     TMap<FIntPoint, float> BrodHoldSeconds;   // BROD, Болото ночью (23_Journey_Order §23.4)
+
+    // ---- Заказы (24_Orders_And_Repute) -- сохраняются (SetOrdersState) ----
+    TArray<FActiveOrder> ActiveOrders;
+    TArray<FPendingOrderConsequence> PendingOrderConsequences;
+    int32 NextOrderNumber = 1;
+    int32 LastOrderDay = -1;
+    // Записки у порога -- не сохраняются, непрочитанные ставятся заново.
+    TMap<int32, TWeakObjectPtr<AOrderNoteActor>> OrderNoteActors;
+
+    FActiveOrder* FindActiveOrder(int32 Number);
+    void SpawnOrderNote(const FActiveOrder& Order);
+    void ChangeMolvaByOrder(float Delta);
+    void GiveOrderPayment(const FOrderPayment& Payment);
+    void PostCommunityNote(const FText& Text);
+    void ApplyOrderConsequence(const FPendingOrderConsequence& Pending);
+    void ApplyOrderRevenge();
+    void AddStateAroundHome(int32 RadiusCells, float CorruptionDelta, float DistortionDelta);
+    // Клетки у дома загружены -- последствию есть куда лечь.
+    bool IsHomeAreaLoaded() const;
 
     void SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoint& Cell, bool bIsFalse);
 

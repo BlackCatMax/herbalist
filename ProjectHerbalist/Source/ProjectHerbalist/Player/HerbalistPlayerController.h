@@ -248,6 +248,16 @@ public:
     UFUNCTION(Exec)
     void OfferToCommunity(FString IngredientList);
 
+    // Заказы (02_GDD/24_Orders_And_Repute.md): открытые заказы в лог --
+    // номер, текст записки, срок; отдать по заказу зелье из ячейки котомки
+    // InventoryIndex (0 -- первая); отказаться.
+    UFUNCTION(Exec)
+    void ListOrders();
+    UFUNCTION(Exec)
+    void DeliverOrder(int32 OrderNumber, int32 InventoryIndex);
+    UFUNCTION(Exec)
+    void RefuseOrder(int32 OrderNumber);
+
     // Торговля с общиной (§1.2) — WantedIngredientID должен существовать в
     // реестре (DT_IngredientClass), полученный предмет добавляется в
     // инвентарь тем же способом, что и любой другой (AddItem).

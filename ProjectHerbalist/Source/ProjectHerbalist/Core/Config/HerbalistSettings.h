@@ -1039,6 +1039,57 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Community", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float TradeMolvaRateBonus = 0.3f;
 
+    // --- Заказы и слава травника (02_GDD/24_Orders_And_Repute.md, 2026-09-19;
+    // все числа -- черновик главы, утверждённый пользователем как отправная
+    // точка, не баланс) ---
+    // Записок в игровые сутки (§24.2) и потолок открытых заказов.
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0"))
+    int32 OrdersPerDayMin = 1;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0"))
+    int32 OrdersPerDayMax = 2;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "1"))
+    int32 MaxOpenOrders = 3;
+    // Запас внутри области заказа, начиная с которого «точно», а не «сойдёт» (§24.5).
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float OrderEdgeMargin = 0.05f;
+    // Зелье слабее этого -- пустышка, ни в какой заказ не попадает (§24.7).
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float OrderMinMagnitude = 0.05f;
+    // ΔМолва (§24.6); масштаб -- MolvaOfferingGain 0.03, одно честное подношение.
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0"))
+    float OrderMolvaExactGain = 0.03f;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0"))
+    float OrderMolvaEdgeGain = 0.015f;
+    // Добрый заказ провален или просрочен -- Молва падает на это.
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0"))
+    float OrderMolvaFailPenalty = 0.02f;
+    // Тёмный заказ исполнен -- Молва падает на это.
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0"))
+    float OrderMolvaDarkPenalty = 0.04f;
+    // Последствие тёмного заказа -- через столько суток (§24.8).
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0"))
+    int32 OrderConsequenceDelayDaysMin = 1;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0"))
+    int32 OrderConsequenceDelayDaysMax = 3;
+    // Отрава и присушка -- клетки вокруг дома в этом радиусе.
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0"))
+    int32 OrderPoisonRadiusCells = 2;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float OrderPoisonCorruption = 0.3f;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float OrderCharmDistortion = 0.1f;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float OrderCurseCorruption = 0.4f;
+    // Порча на соседа -- одна клетка в этом радиусе от дома (не сам дом).
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "1"))
+    int32 OrderCurseRadiusCells = 3;
+    // Месть за вскрытый обман (§24.7): доля кражи из хранилища, иначе порча
+    // на пороге -- слабее «испорченного круга» §19.4a.
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float OrderRevengeTheftChance = 0.5f;
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float OrderRevengeDoorstepCorruption = 0.2f;
+
     // Горизонт полного угасания заброшенного капища — то же число, что уже
     // задаёт лунный цикл (§15.3), не новая величина.
     UPROPERTY(config, EditAnywhere, Category = "Shrines", meta = (ClampMin = "1.0"))

@@ -16,7 +16,10 @@ enum class EJournalEntryType : uint8
     // закрывает разрыв "игрок собирает фрагмент, видит только UE_LOG": текст
     // (FragmentText ниже) теперь читается тем же экраном, что харвест/варка,
     // не теряется после экранного попапа (UI/MemoryRevealWidget.h).
-    MemoryFragment
+    MemoryFragment,
+    // Записка с заказом, исход заказа, слух (02_GDD/24_Orders_And_Repute.md,
+    // 2026-09-19): текст -- в FragmentText, как у фрагмента памяти.
+    CommunityNote
 };
 
 // Одна запись Травника — 06_Progression.md: прогрессия как "сжатие ошибки

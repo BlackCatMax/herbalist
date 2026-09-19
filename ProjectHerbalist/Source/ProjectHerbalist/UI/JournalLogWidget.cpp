@@ -180,7 +180,8 @@ void UJournalLogWidget::RefreshDisplay()
     for (int32 i = 0; i < AllEntries.Num(); ++i)
     {
         if (SelectedIngredientFilter != NAME_None
-            && (AllEntries[i].Type == EJournalEntryType::MemoryFragment || AllEntries[i].IngredientID != SelectedIngredientFilter))
+            && (AllEntries[i].Type == EJournalEntryType::MemoryFragment || AllEntries[i].Type == EJournalEntryType::CommunityNote
+                || AllEntries[i].IngredientID != SelectedIngredientFilter))
         {
             continue;
         }
@@ -229,7 +230,7 @@ void UJournalLogWidget::RefreshFilterOptions(UIngredientRegistrySubsystem* Ingre
     TSet<FName> SeenIDs;
     for (const FJournalEntry& Entry : JournalComponent->GetEntries())
     {
-        if (Entry.Type == EJournalEntryType::MemoryFragment) continue;
+        if (Entry.Type == EJournalEntryType::MemoryFragment || Entry.Type == EJournalEntryType::CommunityNote) continue;
         if (SeenIDs.Contains(Entry.IngredientID)) continue;
         SeenIDs.Add(Entry.IngredientID);
 
@@ -288,6 +289,13 @@ FText UJournalLogWidget::FormatEntry(const FJournalEntry& Entry, UIngredientRegi
             TEXT("[%s] \"%s\"\n     %s, %s"),
             *TypeLabel, *Entry.FragmentText.ToString(), *HerbalistCore::CellToDisplayString(Entry.Cell),
             Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
+    }
+
+    // Записка, исход заказа, слух (24_Orders_And_Repute) -- просто текст.
+    if (Entry.Type == EJournalEntryType::CommunityNote)
+    {
+        return FText::FromString(FString::Printf(TEXT("[Молва] %s\n     %s"),
+            *Entry.FragmentText.ToString(), Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
     }
 
     FInventoryItem NameLookup;
