@@ -102,6 +102,13 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
     EIngredientClass Class = EIngredientClass::Unknown;
 
+    // Двойник (DECISIONS_LOG.md №2, PerceiveClass, 2026-09-19): за кого Морок
+    // выдаёт этот вид при высоком местном искажении -- фольклорная пара
+    // («поганку за сыроежку»). Пусто -- похожий подбирается сам: тот же класс,
+    // общий биом, ближайший по осям (UIngredientRegistrySubsystem::FindLookalike).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Perception")
+    FName LookalikeID = NAME_None;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
     bool bIsWater = false;
 

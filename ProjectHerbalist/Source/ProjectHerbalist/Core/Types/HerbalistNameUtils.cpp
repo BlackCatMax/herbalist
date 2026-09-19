@@ -432,6 +432,18 @@ FString GetItemDisplayName(const FInventoryItem& Item, UIngredientRegistrySubsys
     return Item.IngredientID.ToString();
 }
 
+FString GetPerceivedItemDisplayName(const FInventoryItem& RealItem, UIngredientRegistrySubsystem* Registry,
+    float LocalDistortion, float Clarity, EGrammaticalCase Case)
+{
+    if (!Registry)
+    {
+        return GetItemDisplayName(RealItem, Registry, Case);
+    }
+    FInventoryItem Shown = RealItem;
+    Shown.IngredientID = Registry->PerceiveIngredientID(RealItem, LocalDistortion, Clarity);
+    return GetItemDisplayName(Shown, Registry, Case);
+}
+
 // ============================================================================
 // Состояние процессов станций (2026-09-14) -- см. объявление в .h
 // ============================================================================

@@ -35,7 +35,8 @@ void UItemTooltipWidget::SetItem(const FInventoryItem& Item, const FString& Proc
     UIngredientRegistrySubsystem* IngSub = nullptr;
     if (PC && PC->GetGameInstance())
         IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
-    if (NameText) NameText->SetText(FText::FromString(GetItemDisplayName(Item, IngSub)));
+    // Глазами травника (PerceiveClass): при высоком искажении -- двойник.
+    if (NameText) NameText->SetText(FText::FromString(PC ? PC->GetPerceivedDisplayName(Item) : GetItemDisplayName(Item, IngSub)));
 
     // Морочники (16_Entity_Manifestation §16.5) — раньше PC->CurrentGlobalDistortion
     // считался честно, но не был виден игроку нигде (AUDIT §1.4/META_AUDIT §6).

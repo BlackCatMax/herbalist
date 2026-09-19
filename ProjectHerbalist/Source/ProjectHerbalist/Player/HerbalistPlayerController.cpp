@@ -6,6 +6,7 @@
 #include "Core/Interaction/Interactable.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Types/HerbalistNameUtils.h"
 #include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/GardenNicheUnlockTypes.h"
@@ -959,6 +960,13 @@ void AHerbalistPlayerController::OfferToCommunity(FString IngredientList)
     {
         InventoryComponent->RemoveItem(Index, 1);
     }
+}
+
+FString AHerbalistPlayerController::GetPerceivedDisplayName(const FInventoryItem& RealItem) const
+{
+    UIngredientRegistrySubsystem* Registry = GetGameInstance() ? GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const AGridWorldManager* Grid = FindWorldManager();
+    return GetPerceivedItemDisplayName(RealItem, Registry, CurrentGlobalDistortion, Grid ? Grid->GetGlobalPerceptionClarity() : 0.0f);
 }
 
 void AHerbalistPlayerController::ListOrders()

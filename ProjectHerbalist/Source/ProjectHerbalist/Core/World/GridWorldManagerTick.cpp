@@ -17,6 +17,7 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Engine/GameInstance.h"
 
 namespace
 {
@@ -332,6 +333,18 @@ void AGridWorldManager::RunSimulationStep()
             FJournalEntry Entry;
             Entry.Type = bIsHarvest ? EJournalEntryType::Harvest : EJournalEntryType::Brew;
             Entry.IngredientID = Produced.IngredientID;
+            // Травник пишет собранное таким, каким его увидел травник
+            // (PerceiveClass, DECISIONS_LOG.md №2): под сильным Мороком --
+            // именем двойника, как уже и числа.
+            if (bIsHarvest)
+            {
+                UGameInstance* GameInstance = GetGameInstance();
+                if (const UIngredientRegistrySubsystem* Registry = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr)
+                {
+                    Entry.IngredientID = Registry->PerceiveIngredientID(Produced,
+                        ComputePerceptionDistortion(Cmd.Harvest.TargetCell.X, Cmd.Harvest.TargetCell.Y), GlobalPerceptionClarity);
+                }
+            }
             Entry.Count = Produced.Count;
             // Искажённое состояние, замороженное сейчас — см. предупреждение
             // в JournalTypes.h. Найдено аудитом 2026-09-05 (сохранения/

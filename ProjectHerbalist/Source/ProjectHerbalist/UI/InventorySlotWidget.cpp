@@ -181,11 +181,12 @@ void UInventorySlotWidget::UpdateDisplay()
         // GetItemDisplayName сама разбирает Ash/BoiledWater/Water; раньше эта
         // ветка их не знала и показывала сырой IngredientID латиницей
         // (AUDIT_AND_REFACTORING_PLAN §2.4), пока AlchemySlotWidget их уже понимал.
+        // Глазами травника (PerceiveClass): при высоком искажении -- двойник.
         AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
         UIngredientRegistrySubsystem* IngSub = nullptr;
         if (PC && PC->GetGameInstance())
             IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
-        DisplayName = GetItemDisplayName(CachedItem, IngSub);
+        DisplayName = PC ? PC->GetPerceivedDisplayName(CachedItem) : GetItemDisplayName(CachedItem, IngSub);
     }
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));

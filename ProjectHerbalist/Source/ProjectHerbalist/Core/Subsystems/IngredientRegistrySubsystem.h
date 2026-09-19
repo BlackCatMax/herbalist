@@ -30,6 +30,17 @@ public:
     static constexpr const TCHAR* DefaultTablePath = TEXT("/Game/Herbalist/Data/DT_IngredientClass.DT_IngredientClass");
 
     const FIngredientTableRow* GetRow(FName IngredientID) const;
+
+    // PerceiveClass (DECISIONS_LOG.md №2): двойник вида -- LookalikeID карточки,
+    // а без него похожий: тот же класс (трава/гриб/минерал), общий биом,
+    // ближайший по осям BaseState. NAME_None -- похожего нет.
+    FName FindLookalike(FName IngredientID) const;
+
+    // Каким травник видит вид предмета при местном искажении и ясности:
+    // двойником -- с шансом из настроек (Perception), бросок устойчив для
+    // вида и биома сбора (не пучка: стопки сливаются); иначе -- настоящим. Зелья, вода, инструменты -- всегда
+    // настоящие.
+    FName PerceiveIngredientID(const FInventoryItem& Item, float LocalDistortion, float Clarity) const;
     EIngredientClass Classify(FName IngredientID) const;
     bool IsWater(FName IngredientID) const;
     bool IsKnown(FName IngredientID) const;
@@ -99,6 +110,7 @@ private:
     // GameInstance и новый объект подсистемы, поэтому «один раз за жизнь»
     // не мешает второму и третьему запуску загрузиться заново.
     mutable bool bLoadAttempted = false;
+    mutable TMap<FName, FName> LookalikeCache;
 
     TMap<EBiomeType, TArray<FName>> CachedResourcesByBiome;
     TMap<EBiomeType, TArray<int32>> CachedWeightsByBiome;

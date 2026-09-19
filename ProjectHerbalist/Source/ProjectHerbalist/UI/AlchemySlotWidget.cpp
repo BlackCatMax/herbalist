@@ -240,13 +240,14 @@ void UAlchemySlotWidget::UpdateDisplay()
     }
     else
     {
+        // Глазами травника (PerceiveClass): при высоком искажении -- двойник.
         UIngredientRegistrySubsystem* IngSub = nullptr;
-        if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer()))
+        AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwningPlayer());
+        if (PC && PC->GetGameInstance())
         {
-            if (PC->GetGameInstance())
-                IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
+            IngSub = PC->GetGameInstance()->GetSubsystem<UIngredientRegistrySubsystem>();
         }
-        DisplayName = GetItemDisplayName(StoredItem, IngSub);
+        DisplayName = PC ? PC->GetPerceivedDisplayName(StoredItem) : GetItemDisplayName(StoredItem, IngSub);
     }
 
     if (ItemNameText) ItemNameText->SetText(FText::FromString(DisplayName));

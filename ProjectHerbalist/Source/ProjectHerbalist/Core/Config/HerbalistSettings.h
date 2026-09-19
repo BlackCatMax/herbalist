@@ -753,6 +753,19 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
     float MorokDisplaySmoothingSeconds = 2.0f;
 
+    // PerceiveClass (DECISIONS_LOG.md решение №2, 2026-09-19): при высоком
+    // местном искажении травник видит вместо предмета его двойника -- имя в
+    // котомке, подсказке, котле и Травнике; сам предмет и варка настоящие.
+    // Шанс растёт от 0 на пороге до максимума при искажении 1 и гасится
+    // ясностью: шанс = доля превышения порога × максимум × (1 − Clarity).
+    // Бросок свой у вида и биома сбора и устойчивый -- имя не мигает, а вне
+    // искажённого места возвращается настоящее. Местное искажение -- клетка,
+    // где стоит игрок (CurrentGlobalDistortion, каждый кадр).
+    UPROPERTY(config, EditAnywhere, Category = "Perception", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float PerceiveClassDistortionThreshold = 0.5f;
+    UPROPERTY(config, EditAnywhere, Category = "Perception", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float PerceiveClassMaxChance = 0.5f;
+
     // ХЛЕБ-СОЛЬ / KHLEB_SOL (§17.6: "устойчиво высокая Молва") — короче
     // клеточных триггеров: Molva сама по себе не колеблется пассивно (растёт
     // только явным подношением, MolvaOfferingGain), риск случайного мгновенного

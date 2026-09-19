@@ -61,6 +61,7 @@ void UIngredientRegistrySubsystem::LoadFromDataTable(UDataTable* IngredientTable
 
 void UIngredientRegistrySubsystem::BuildCache()
 {
+    LookalikeCache.Empty();
     CachedResourcesByBiome.Empty();
     CachedWeightsByBiome.Empty();
     CachedAquaticResourcesByBiome.Empty();
@@ -407,6 +408,7 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
 void UIngredientRegistrySubsystem::Reset()
 {
     Rows.Empty();
+    LookalikeCache.Empty();
     CachedResourcesByBiome.Empty();
     CachedWeightsByBiome.Empty();
     CachedAquaticResourcesByBiome.Empty();
@@ -417,3 +419,95 @@ void UIngredientRegistrySubsystem::Reset()
     CachedWeightsByNiche.Empty();
     bInitialized = false;
 }
+
+namespace
+{
+    // Годится ли вид в двойники: настоящий собираемый вид, не вода, не
+    // инструмент, не оберег, не предмет без биома (артефакты).
+    bool IsLookalikeCandidate(const FIngredientTableRow& Row)
+    {
+        const bool bNaturalClass = Row.Class == EIngredientClass::Plant || Row.Class == EIngredientClass::Fungus
+            || Row.Class == EIngredientClass::Mineral;
+        return bNaturalClass && !Row.bIsWater && !Row.bIsWard && !Row.bIsGatheringTool && !Row.bIsSilverWard
+            && Row.GrantsContainerType == EStorageContainerType::None && Row.AllowedBiomes.Num() > 0;
+    }
+
+    float LookalikeDistance(const FRealState& A, const FRealState& B)
+    {
+        return FMath::Square(A.Direction.Body - B.Direction.Body) + FMath::Square(A.Direction.Mind - B.Direction.Mind)
+            + FMath::Square(A.Direction.Spirit - B.Direction.Spirit) + FMath::Square(A.Direction.Nature - B.Direction.Nature)
+            + FMath::Square(A.Meta.Purity - B.Meta.Purity) + FMath::Square(A.Meta.Corruption - B.Meta.Corruption);
+    }
+}
+
+FName UIngredientRegistrySubsystem::FindLookalike(FName IngredientID) const
+{
+    EnsureLoaded();
+    if (const FName* Cached = LookalikeCache.Find(IngredientID))
+    {
+        return *Cached;
+    }
+    FName Found = NAME_None;
+    const FIngredientTableRow* Real = Rows.Find(IngredientID);
+    if (Real && IsLookalikeCandidate(*Real))
+    {
+        // Двойник из карточки -- только если это тоже собираемый вид и не
+        // сам вид; иначе -- как без него.
+        const FIngredientTableRow* Twin = Real->LookalikeID.IsNone() ? nullptr : Rows.Find(Real->LookalikeID);
+        if (Twin && Real->LookalikeID != IngredientID && IsLookalikeCandidate(*Twin))
+        {
+            Found = Real->LookalikeID;
+        }
+        else
+        {
+            float Best = TNumericLimits<float>::Max();
+            for (const TPair<FName, FIngredientTableRow>& Pair : Rows)
+            {
+                const FIngredientTableRow& Other = Pair.Value;
+                if (Pair.Key == IngredientID || Other.Class != Real->Class || !IsLookalikeCandidate(Other))
+                {
+                    continue;
+                }
+                const bool bSharesBiome = Other.AllowedBiomes.ContainsByPredicate(
+                    [Real](EBiomeType Biome) { return Real->AllowedBiomes.Contains(Biome); });
+                if (!bSharesBiome)
+                {
+                    continue;
+                }
+                const float Distance = LookalikeDistance(Real->BaseState, Other.BaseState);
+                // Ничья -- по имени ряда: ответ не зависит от порядка TMap.
+                if (Distance < Best || (Distance == Best && Pair.Key.LexicalLess(Found)))
+                {
+                    Best = Distance;
+                    Found = Pair.Key;
+                }
+            }
+        }
+    }
+    LookalikeCache.Add(IngredientID, Found);
+    return Found;
+}
+
+FName UIngredientRegistrySubsystem::PerceiveIngredientID(const FInventoryItem& Item, float LocalDistortion, float Clarity) const
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Threshold = Settings ? Settings->PerceiveClassDistortionThreshold : 0.5f;
+    const float MaxChance = Settings ? Settings->PerceiveClassMaxChance : 0.5f;
+    if (LocalDistortion <= Threshold || Threshold >= 1.0f)
+    {
+        return Item.IngredientID;
+    }
+    const float Chance = FMath::Clamp((LocalDistortion - Threshold) / (1.0f - Threshold), 0.0f, 1.0f)
+        * MaxChance * (1.0f - FMath::Clamp(Clarity, 0.0f, 1.0f));
+    // Бросок -- по виду и биому сбора: не меняется при слиянии стопок (там
+    // время создания усредняется), котомка и Травник видят одно и то же.
+    // Под Мороком травник путает «эту болотную траву» вообще, не отдельный пучок.
+    const uint32 Seed = HashCombine(HashCombine(GetTypeHash(Item.IngredientID), GetTypeHash(static_cast<uint8>(Item.SourceBiome))), 0x9E3779B9u);
+    if (FRandomStream(static_cast<int32>(Seed)).FRand() >= Chance)
+    {
+        return Item.IngredientID;
+    }
+    const FName Lookalike = FindLookalike(Item.IngredientID);
+    return Lookalike.IsNone() ? Item.IngredientID : Lookalike;
+}
+

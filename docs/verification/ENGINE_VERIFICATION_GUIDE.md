@@ -63,7 +63,7 @@ taskkill //F //IM UnrealEditor-Cmd.exe
 L=G:/herbalist/ProjectHerbalist/Saved/Logs/ProjectHerbalist.log; echo "OK: $(grep -c 'Result={Success}' "$L")  Fail: $(grep -c 'Result={Fail}' "$L")"; grep "Result={Fail}" "$L" | sed 's/.*Path={/  /;s/}$//'
 ```
 
-Эталон на 2026-09-19: **693 / 0**.
+Эталон на 2026-09-19: **696 / 0**.
 
 Два прогона нужны не для перестраховки: тесты идут в одном персистентном
 editor-мире и делят глобальное состояние (CDO настроек, статическая таблица

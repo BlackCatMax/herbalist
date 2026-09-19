@@ -44,6 +44,12 @@ PROJECTHERBALIST_API FText GeneratePotionName(EAlchemyOutcome Outcome, const FRe
 PROJECTHERBALIST_API FString GetItemDisplayName(const FInventoryItem& Item, UIngredientRegistrySubsystem* Registry,
     EGrammaticalCase Case = EGrammaticalCase::Nominative);
 
+// Имя, каким его видит травник (DECISIONS_LOG.md №2, PerceiveClass): при
+// высоком местном искажении -- имя двойника. Только для показа: предмет,
+// перетаскивание, варка и подношения идут с настоящим IngredientID.
+PROJECTHERBALIST_API FString GetPerceivedItemDisplayName(const FInventoryItem& RealItem, UIngredientRegistrySubsystem* Registry,
+    float LocalDistortion, float Clarity, EGrammaticalCase Case = EGrammaticalCase::Nominative);
+
 // Состояние процессов станций на предмете для подсказки (2026-09-14): сушка,
 // отстой, выпаривание -- идёт, закончен или прерван, сколько осталось. Раньше
 // игрок никак не видел ни хода, ни итога. HostStation -- станция, в инвентаре

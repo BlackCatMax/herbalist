@@ -6,6 +6,7 @@
 // только чтение часов, запись в коллекцию и перемотка.
 
 #include "Core/World/GridWorldManager.h"
+#include "Player/HerbalistPlayerController.h"
 #include "Core/Types/HerbalistCalendar.h"
 #include "Core/Types/HerbalistTimeDisplay.h"
 #include "Core/Config/HerbalistSettings.h"
@@ -78,6 +79,13 @@ void AGridWorldManager::UpdateMorokDisplay(float DeltaSeconds)
     }
     const UHerbalistSettings* Settings = GetHerbalistSettings();
     const float Target = FMath::Clamp(ComputePerceptionDistortion(X, Y), 0.0f, 1.0f);
+    // Местное искажение для контроллера -- там, где игрок стоит, каждый кадр
+    // (раньше -- только при осмотре и сборе): по нему подсказка пишет
+    // «Морочники путают чувства» и PerceiveClass подменяет имена.
+    if (AHerbalistPlayerController* HerbalistPC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()))
+    {
+        HerbalistPC->CurrentGlobalDistortion = Target;
+    }
     MorokDisplay01 = HerbalistCore::TimeDisplay::SmoothToward(MorokDisplay01, Target, DeltaSeconds,
         Settings ? Settings->MorokDisplaySmoothingSeconds : 2.0f);
 }

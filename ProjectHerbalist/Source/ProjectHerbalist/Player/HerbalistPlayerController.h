@@ -53,6 +53,11 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Alchemy")
     float CurrentGlobalDistortion = 0.3f;
 
+    // Имя предмета глазами травника (DECISIONS_LOG.md №2, PerceiveClass):
+    // местное искажение -- CurrentGlobalDistortion, ясность -- мира. Только
+    // для показа в котомке, подсказке, котле.
+    FString GetPerceivedDisplayName(const FInventoryItem& RealItem) const;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Herbalist|Harvesting")
     float MaxHarvestDistance = 200.0f;
 
