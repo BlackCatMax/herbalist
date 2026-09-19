@@ -231,6 +231,12 @@ bool FHerbalistAmbientEntity_OmutnyeOgniOnlyOnMoonlessNightsNotEveryNight::RunTe
     NewMoonCell->Biome = EBiomeType::Floodplain;
     NewMoonCell->bIsWater = true;
     NewMoonCell->ManifestedEntityID = NAME_None;
+    // С 2026-09-19 редкое вытесняет частое: в новолуние Омутные огни
+    // вытеснили бы Русалок и в соседней WaxingCell, а разнесение не даёт
+    // двум Омутным огням стоять рядом. Соседа убираем из воды -- проверка
+    // здесь про фазу луны, не про соседство.
+    WaxingCell->bIsWater = false;
+    WaxingCell->ManifestedEntityID = NAME_None;
     const float DistortionBefore = NewMoonCell->TargetState.Meta.Distortion;
     Manager->SetGameClockSeconds(1700.0f);
     Manager->UpdateEntityManifestations(1.0f);

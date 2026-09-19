@@ -76,13 +76,51 @@ namespace
         return -1;
     }
 
+    // Редкость условия Низшего (решение пользователя 2026-09-19: «редкое
+    // вытесняет частое») -- грубая доля года, когда выполнено ВРЕМЕННОЕ
+    // условие карточки; осевой порог и граница биомов -- пространство, не
+    // время, их доля 1. Не баланс, только порядок: ночь и закат -- 6 из 32
+    // минут суток, сезон и фаза луны -- четверть, ветер ~36% и метель ~4%
+    // (замер Herbalist.AmbientEntity.EveryCardHasANonZeroTemporalWindow),
+    // Купальская ночь -- одна ночь в году.
+    float GetAmbientTemporalShare(const FAmbientEntityDefinition& Def)
+    {
+        float Share = 1.0f;
+        if (Def.bRequiresNight)       Share *= 6.0f / 32.0f;
+        if (Def.bRequiresDusk)        Share *= 6.0f / 32.0f;
+        if (Def.bRequiresSeason)      Share *= 0.25f;
+        if (Def.bRequiresLateSummer)  Share *= 0.25f;
+        if (Def.bRequiresMoonPhase)   Share *= 0.25f;
+        if (Def.bRequiresWeather)     Share *= Def.RequiredWeather == EWeatherCondition::Blizzard ? 0.04f : 0.36f;
+        if (Def.bRequiresKupalaNight) Share *= 1.0f / 365.0f;
+        return Share;
+    }
+
+    const FAmbientEntityDefinition* FindAmbientEntityDefinition(FName EntityID)
+    {
+        return GetAmbientEntityDefinitions().FindByPredicate([EntityID](const FAmbientEntityDefinition& Def) { return Def.EntityID == EntityID; });
+    }
+
     // Клетка свободна для CandidateID, если она либо не занята, либо уже занята
     // им же (переподтверждение), либо занята кем-то менее приоритетным (вытесняем).
+    // Среди Низших (ранг один) -- ещё и тем, чьё условие реже: метель
+    // перекрывает постоянный фон, пока держится, потом фон возвращается
+    // (решение пользователя 2026-09-19; раньше держал тот, кто пришёл первым).
     bool CanManifest(const FGridCell& Cell, FName CandidateID)
     {
-        return Cell.ManifestedEntityID.IsNone()
-            || Cell.ManifestedEntityID == CandidateID
-            || GetEntityManifestationPriority(CandidateID) > GetEntityManifestationPriority(Cell.ManifestedEntityID);
+        if (Cell.ManifestedEntityID.IsNone() || Cell.ManifestedEntityID == CandidateID)
+        {
+            return true;
+        }
+        const int32 CandidatePriority = GetEntityManifestationPriority(CandidateID);
+        const int32 OccupantPriority = GetEntityManifestationPriority(Cell.ManifestedEntityID);
+        if (CandidatePriority != OccupantPriority)
+        {
+            return CandidatePriority > OccupantPriority;
+        }
+        const FAmbientEntityDefinition* Candidate = FindAmbientEntityDefinition(CandidateID);
+        const FAmbientEntityDefinition* Occupant = FindAmbientEntityDefinition(Cell.ManifestedEntityID);
+        return Candidate && Occupant && GetAmbientTemporalShare(*Candidate) < GetAmbientTemporalShare(*Occupant);
     }
 
     // Согласованность триггер-оси Низшего с испорченным полюсом бистабильности

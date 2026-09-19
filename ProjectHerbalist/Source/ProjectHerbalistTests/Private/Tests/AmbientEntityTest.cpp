@@ -360,6 +360,68 @@ bool FHerbalistAmbientEntity_SukhoveykiAndStepnyeOgniShareSteppeCorrectly::RunTe
     return true;
 }
 
+// Редкое вытесняет частое (решение пользователя 2026-09-19): Трясинные духи
+// (Природа >= 0.4, круглый год) держат болотную клетку днём; ночью их
+// вытесняют Болотные огни (ночь + Искажение >= 0.5), к утру духи возвращаются.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_RarerConditionDisplacesConstantOne,
+    "Herbalist.AmbientEntity.RarerConditionDisplacesConstantOne",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_RarerConditionDisplacesConstantOne::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Bog;
+    Cell->bIsWater = false;
+    auto HoldBogState = [Cell]()
+    {
+        for (FRealState* State : { &Cell->State, &Cell->TargetState })
+        {
+            State->Direction.Body = 0.1f;
+            State->Direction.Mind = 0.1f;
+            State->Direction.Spirit = 0.1f;
+            State->Direction.Nature = 0.7f;
+            State->Meta.Distortion = 0.6f;
+            State->Meta.Stability = 0.5f;
+            State->Meta.Corruption = 0.1f;
+            State->Meta.Purity = 0.5f;
+        }
+        Cell->Memory.bDegrading = false;
+    };
+
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    const float SpringDay = HerbalistCore::Calendar::DayOfYearFromDate(4, 10) * DayLengthSeconds;
+    auto Settle = [Manager, &HoldBogState]()
+    {
+        for (int32 Tick = 0; Tick < 3; ++Tick)
+        {
+            HoldBogState();
+            Manager->UpdateEntityManifestations(1.0f);
+        }
+    };
+
+    Manager->SetGameClockSeconds(SpringDay + 10.0f * 60.0f);   // день
+    Settle();
+    TestEqual(TEXT("День -- Трясинные духи"), Cell->ManifestedEntityID, FName(TEXT("Трясинные духи")));
+
+    Manager->SetGameClockSeconds(SpringDay + 29.0f * 60.0f);   // ночь
+    TestTrue(TEXT("Sanity: ночь"), Manager->IsNight());
+    Settle();
+    TestEqual(TEXT("Ночь -- Болотные огни вытеснили постоянных духов"), Cell->ManifestedEntityID, FName(TEXT("Болотные огни")));
+
+    Manager->SetGameClockSeconds(SpringDay + DayLengthSeconds + 10.0f * 60.0f);   // снова день
+    Settle();
+    TestEqual(TEXT("Утро -- духи вернулись"), Cell->ManifestedEntityID, FName(TEXT("Трясинные духи")));
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_RusalkiOnlyHauntWaterAtNightNotLand,
     "Herbalist.AmbientEntity.RusalkiOnlyHauntWaterAtNightNotLand",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
