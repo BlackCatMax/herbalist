@@ -115,6 +115,19 @@ namespace HerbalistCore::TimeDisplay
 
     // Близость к полнолунию: 1 в середине фазы FullMoon (третья из четырёх,
     // доля цикла 0.625), 0 в середине Новолуния, плавный косинус между ними.
+    // Сглаживание показа (DECISIONS_LOG.md №6, 2026-09-19): экспонента с
+    // постоянной времени TauSeconds -- переход между клетками с разным
+    // Мороком не щёлкает цветом кадра. Tau <= 0 -- без сглаживания.
+    inline float SmoothToward(float Current, float Target, float DeltaSeconds, float TauSeconds)
+    {
+        if (TauSeconds <= 0.0f)
+        {
+            return Target;
+        }
+        const float Alpha = 1.0f - FMath::Exp(-FMath::Max(0.0f, DeltaSeconds) / TauSeconds);
+        return Current + (Target - Current) * Alpha;
+    }
+
     inline float MoonFull01(float MoonCycle01)
     {
         return 0.5f + 0.5f * FMath::Cos(2.0f * UE_PI * (MoonCycle01 - 0.625f));

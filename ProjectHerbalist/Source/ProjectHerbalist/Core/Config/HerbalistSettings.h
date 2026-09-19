@@ -746,6 +746,13 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
     float BrodSustainedSeconds = 60.0f;
 
+    // Морок в кадре (DECISIONS_LOG.md решение №6, 2026-09-19): параметр
+    // Morok01 в MPC_WorldStateFields -- воспринятое искажение в клетке игрока
+    // (ComputePerceptionDistortion), сглаженное с этой постоянной времени.
+    // Цветокоррекцию поста на него вешают в редакторе.
+    UPROPERTY(config, EditAnywhere, Category = "Zaryana", meta = (ClampMin = "0.0"))
+    float MorokDisplaySmoothingSeconds = 2.0f;
+
     // ХЛЕБ-СОЛЬ / KHLEB_SOL (§17.6: "устойчиво высокая Молва") — короче
     // клеточных триггеров: Molva сама по себе не колеблется пассивно (растёт
     // только явным подношением, MolvaOfferingGain), риск случайного мгновенного

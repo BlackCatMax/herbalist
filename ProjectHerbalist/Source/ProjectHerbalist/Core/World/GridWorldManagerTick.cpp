@@ -82,6 +82,7 @@ void AGridWorldManager::Tick(float DeltaTime)
 
     // Время в материалах -- каждый кадр: раскрытие цветка за 6-минутный
     // рассвет при записи раз в секунду шло бы видимыми ступеньками.
+    UpdateMorokDisplay(DeltaTime);
     WriteTimeDisplayParametersFromSettings();
 
     // ========================================================================

@@ -198,7 +198,7 @@ bool FHerbalistTimeDisplay_ParametersReachTheMaterialCollection::RunTest(const F
 
     // 15 октября, минута 22 (закат), середина лунного цикла.
     Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(10, 15) * TimeDisplayDaySecondsFromSettings() + 22.0 * 60.0);
-    TestTrue(TEXT("Все восемь параметров заведены в коллекции"), Manager->WriteTimeDisplayParameters(Collection));
+    TestTrue(TEXT("Все девять параметров заведены в коллекции"), Manager->WriteTimeDisplayParameters(Collection));
 
     UMaterialParameterCollectionInstance* Instance = World->GetParameterCollectionInstance(Collection);
     if (!TestNotNull(TEXT("Экземпляр коллекции в мире"), Instance)) { Manager->Destroy(); return false; }
@@ -223,6 +223,14 @@ bool FHerbalistTimeDisplay_ParametersReachTheMaterialCollection::RunTest(const F
     CheckScalar(TEXT("LeafLitter01"), Manager->GetLeafLitter01());
     TestTrue(TEXT("Sanity: 15 октября листья падают"), Manager->GetLeafFall01() > 0.1f);
     CheckScalar(TEXT("MoonFull01"), Manager->GetMoonFull01());
+    CheckScalar(TEXT("Morok01"), Manager->GetMorokDisplay01());
+
+    // Сглаживание Морока в кадре: за одну постоянную времени -- ~63% пути,
+    // без сглаживания -- сразу цель.
+    using HerbalistCore::TimeDisplay::SmoothToward;
+    TestTrue(TEXT("Morok01: за Tau -- 63% пути"), FMath::IsNearlyEqual(SmoothToward(0.0f, 1.0f, 2.0f, 2.0f), 1.0f - FMath::Exp(-1.0f), 1.0e-4f));
+    TestEqual(TEXT("Morok01: Tau 0 -- сразу цель"), SmoothToward(0.2f, 0.9f, 0.016f, 0.0f), 0.9f);
+    TestTrue(TEXT("Morok01: к цели и вниз"), SmoothToward(0.9f, 0.1f, 1.0f, 2.0f) < 0.9f);
     CheckVector(TEXT("DayPhaseWeights"), Manager->GetDayPhaseWeights());
     CheckVector(TEXT("SeasonWeights"), Manager->GetSeasonWeights());
     TestTrue(TEXT("Sanity: минута 22 -- закат"), Manager->GetDayPhaseWeights().B > 0.999f);

@@ -63,6 +63,23 @@ namespace
     const FName LeafFall01Name(TEXT("LeafFall01"));
     const FName LeafLitter01Name(TEXT("LeafLitter01"));
     const FName MoonFull01Name(TEXT("MoonFull01"));
+    const FName Morok01Name(TEXT("Morok01"));
+}
+
+void AGridWorldManager::UpdateMorokDisplay(float DeltaSeconds)
+{
+    const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+    const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+    int32 X = 0;
+    int32 Y = 0;
+    if (!Pawn || !WorldPositionToCell(Pawn->GetActorLocation(), X, Y))
+    {
+        return;
+    }
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float Target = FMath::Clamp(ComputePerceptionDistortion(X, Y), 0.0f, 1.0f);
+    MorokDisplay01 = HerbalistCore::TimeDisplay::SmoothToward(MorokDisplay01, Target, DeltaSeconds,
+        Settings ? Settings->MorokDisplaySmoothingSeconds : 2.0f);
 }
 
 void AGridWorldManager::WriteTimeDisplayParametersFromSettings()
@@ -107,6 +124,7 @@ bool AGridWorldManager::WriteTimeDisplayParameters(UMaterialParameterCollection*
     bAllFound &= Instance->SetScalarParameterValue(LeafFall01Name, GetLeafFall01());
     bAllFound &= Instance->SetScalarParameterValue(LeafLitter01Name, GetLeafLitter01());
     bAllFound &= Instance->SetScalarParameterValue(MoonFull01Name, GetMoonFull01());
+    bAllFound &= Instance->SetScalarParameterValue(Morok01Name, GetMorokDisplay01());
     return bAllFound;
 }
 

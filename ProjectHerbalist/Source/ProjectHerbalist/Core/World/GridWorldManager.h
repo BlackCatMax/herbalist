@@ -1114,6 +1114,11 @@ public:
     // -run=TimeDisplaySetup. true -- коллекция есть и все восемь нашлись.
     bool WriteTimeDisplayParameters(UMaterialParameterCollection* Collection);
 
+    // Морок в кадре (DECISIONS_LOG.md №6): сглаженное воспринятое искажение в
+    // клетке игрока, 0..1 -- параметр Morok01. Нет игрока -- держит прежнее.
+    void UpdateMorokDisplay(float DeltaSeconds);
+    float GetMorokDisplay01() const { return MorokDisplay01; }
+
     // То же в TimeDisplayCollection из Herbalist Settings; зовёт Tick().
     void WriteTimeDisplayParametersFromSettings();
 
@@ -2611,6 +2616,7 @@ private:
     // (WriteTimeDisplayParametersFromSettings).
     TWeakObjectPtr<UMaterialParameterCollection> TimeDisplayCollectionCached;
     bool bTimeDisplayCollectionResolved = false;
+    float MorokDisplay01 = 0.0f;
     void RunSimulationStep();
 
     // ---- Очередь команд нового пайплайна ----

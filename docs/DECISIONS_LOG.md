@@ -32,6 +32,9 @@ tags: [decisions, log]
 
 ## 3. Камень-оберег в ритуальной варке — критично, баг
 
+> ✅ Сделано 2026-09-19: `SpendBifurcationCharm()`, зовётся и из ритуала;
+> тест `Herbalist.Ritual.BifurcationCharmPurifiesRitualBrewAndIsSpent`.
+
 **Решение:** чинить. Списание заряда добавить в `TryAdvanceRitual` тем же
 путём, что уже работает в `ApplyAlchemy`. Не дизайн-развилка — бесконечная
 защита ломает саму идею риска в инвестиции
@@ -55,6 +58,12 @@ tags: [decisions, log]
 принцип «мир читается ногами, не уведомлениями», уже общий для игры.
 
 ## 6. Сенсорное искажение (визуал/звук) — желательно, но дёшево — делать
+
+> 🟡 C++ сделан 2026-09-19: скаляр `Morok01` в `MPC_WorldStateFields`
+> (`-run=TimeDisplaySetup`) — воспринятое искажение в клетке игрока
+> (`ComputePerceptionDistortion`, то же, что `CurrentGlobalDistortion`
+> контроллера), сглаженное (`MorokDisplaySmoothingSeconds`, 2 с). Осталось в
+> редакторе: материал поста, читающий `Morok01`. Звук — отдельно.
 
 **Решение:** привязать цветокоррекцию поста к `CurrentGlobalDistortion`
 через уже существующий `MPC_WorldStateFields` — почти бесплатно, немедленная

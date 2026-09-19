@@ -114,7 +114,7 @@
 Проверка: `SkipGameDays 92` от старта — лето, `SkipGameDays 92` ещё раз —
 осень; `MPC_WorldStateFields` в редакторе материалов показывает значения по
 умолчанию, живые — только у материала, читающего параметры
-(`SeasonWeights`, `DayPhaseWeights`, `LeafDrop01`, `MoonFull01`, `SeasonUDW`,
+(`SeasonWeights`, `DayPhaseWeights`, `LeafDrop01`, `MoonFull01`, `Morok01`, `SeasonUDW`,
 `TimeOfDay01`; порядок компонент — `TOOLS_REFERENCE.md`, `TimeDisplaySetup`).
 Параметры не заведены — `-run=TimeDisplaySetup`.
 
