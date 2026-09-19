@@ -130,9 +130,13 @@ bool FHerbalistLegendary_BenignPoleTriggersOnLowMorokOrShrine::RunTest(const FSt
     // испорчен сверх природы, -- но награды за него (честный артефакт и др.)
     // ещё закрыты: регион не очищен.
     Node->MorokField = 0.0f;
-    Manager->UpdateEntityManifestations(1.0f);
     FGridCell* Cell = Manager->GetCell(Anchor->X, Anchor->Y);
+    const float StabilityAtRest = Cell->TargetState.Meta.Stability;
+    Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("Resting forest -- Дуб-старец is there"), Cell->ManifestedEntityID, FName(TEXT("Дуб-старец")));
+    // Ревью 2026-09-20: эффект на якорь -- только в очищенном регионе, иначе
+    // в покое оси якоря (Body/Nature без клампа) росли бы без предела.
+    TestEqual(TEXT("Resting forest -- Дуб-старец does not nudge its anchor yet"), Cell->TargetState.Meta.Stability, StabilityAtRest);
     TestTrue(TEXT("Resting forest -- manifested"), Manager->IsLegendaryManifested(FName(TEXT("Дуб-старец"))));
     TestFalse(TEXT("Resting forest -- region not restored yet"), Manager->IsLegendaryRegionRestored(FName(TEXT("Дуб-старец"))));
 

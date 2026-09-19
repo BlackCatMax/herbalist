@@ -65,6 +65,7 @@ bool AGridWorldManager::UseCombOnCell(const FIntPoint& Cell)
     if (bHadEntity)
     {
         Target->ManifestedEntityID = NAME_None;
+        Target->DisplacedEntityID = NAME_None;   // снятое Гребнем не возвращает и вытесненного
         SyncManifestedEntityActor(*Target, nullptr, nullptr);
     }
 

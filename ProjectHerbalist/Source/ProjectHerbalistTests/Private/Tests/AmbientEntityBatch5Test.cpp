@@ -191,13 +191,11 @@ bool FHerbalistAmbientEntity_OmutnyeOgniOnlyOnMoonlessNightsNotEveryNight::RunTe
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
-    // Две отдельные клетки, не одна: если бы Русалки уже заняли клетку на
-    // предыдущем вызове, Омутные огни (тот же ранг 0) не смогли бы её
-    // отбить в СВОЙ черёд позже -- Русалки переподтвердили бы владение в
-    // СВОЙ черёд тем же тиком (тот же принцип "первый claim держит клетку,
-    // пока сам не станет неподходящим", что уже задокументирован для
-    // Легендарного ранга). Разные клетки убирают этот эффект хэндовера
-    // из теста -- каждая пробуется с чистого листа.
+    // Две отдельные клетки, не одна: тест -- про фазу луны, каждая клетка
+    // пробуется с чистого листа. Хэндовер между ними (с 2026-09-19 Омутные
+    // огни, как более редкие, вытесняют Русалок и на той же клетке) --
+    // отдельная проверка, Herbalist.AmbientEntity.RarerConditionDisplacesConstantOne
+    // и DisplacedEntityReturnsByStayThreshold.
     FGridCell* WaxingCell = Manager->GetCell(0, 0);
     WaxingCell->Biome = EBiomeType::Floodplain;
     WaxingCell->bIsWater = true;

@@ -1609,7 +1609,8 @@ public:
     bool IsLegendaryRegionRestored(FName EntityID) const;
 
     // Артефакты Легендарных (§21.3-21.4, GridWorldManagerArtifacts.cpp) —
-    // доступны только когда сущность уже проявлена; честный путь (высокий
+    // доступны только в очищенном регионе (IsLegendaryRegionRestored; для
+    // Злых -- проявление), обоими путями; честный путь (высокий
     // РЕАЛЬНЫЙ средний Purity подношения) или обманный (высокий только
     // ВОСПРИНЯТЫЙ, через PerceiveRealState на текущей Clarity — та же
     // логика, что уже отличает S_real/S_Perceived в тултипе). Ключ по

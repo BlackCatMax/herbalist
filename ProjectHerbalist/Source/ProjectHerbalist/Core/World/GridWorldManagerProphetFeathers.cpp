@@ -53,8 +53,8 @@ bool AGridWorldManager::TryAcquireProphetFeather(FName FeatherID)
     else if (FeatherID == Feather_Alkonost)
     {
         // "устойчиво чистый биом" — то же самое, что уже проверяет
-        // IsLegendaryManifested("Алконост") (Benign-полюс §16.4: низкий
-        // MorokField узла ИЛИ высокая Restoration капища рядом).
+        // IsLegendaryRegionRestored("Алконост") (Benign-полюс §16.4: Морок
+        // биома ниже порога карточки ИЛИ высокая Restoration капища рядом).
         if (!IsLegendaryRegionRestored(FName(TEXT("Алконост")))) return false;
     }
     else if (FeatherID == Feather_Sirin)

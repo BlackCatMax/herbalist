@@ -82,6 +82,7 @@ void AGridWorldManager::CopySavedCellFields(FGridCell& Cell, const FSavedCellSta
     Cell.HarvestStress = Saved.HarvestStress;
     Cell.Memory = Saved.Memory;
     Cell.ManifestedEntityID = Saved.ManifestedEntityID;
+    Cell.DisplacedEntityID = NAME_None;   // не сохраняется -- и не переживает загрузку в той же сессии
     Cell.bEternallyPure = Saved.bEternallyPure;
     Cell.PlantedSpeciesID = Saved.PlantedSpeciesID;
     Cell.PendingRegrowthCount = Saved.PendingRegrowthCount;

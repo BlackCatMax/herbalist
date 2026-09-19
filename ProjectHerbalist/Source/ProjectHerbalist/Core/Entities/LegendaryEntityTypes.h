@@ -85,7 +85,10 @@ struct PROJECTHERBALIST_API FLegendaryEntityDefinition : public FTableRowBase
     UPROPERTY() ELegendaryPole Pole = ELegendaryPole::Benign;
 
     // Malign: MorokField(узла) > MorokThreshold.
-    // Benign: MorokField(узла) < MorokThreshold (потолок, "устойчиво низкий").
+    // Benign (с 2026-09-19): НЕ гейт проявления -- проявлены, пока отклонение
+    // MorokField от природы биома ниже BenignLegendaryMorokTolerance; этот
+    // абсолютный порог -- «регион очищен» (IsLegendaryRegionRestored:
+    // награды и эффект на якорь).
     // Игнорируется, если bUsesCellHistoryPurity=true (см. поле ниже) —
     // якорный MorokField-путь для таких карточек не используется вовсе.
     UPROPERTY() float MorokThreshold = 0.3f;

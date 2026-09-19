@@ -895,7 +895,13 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             if (Def.bLandOnly && Cell.bIsWater) continue;
             if (Def.bWaterOnly && !Cell.bIsWater) continue;
 
-            const bool bWasActive = Cell.ManifestedEntityID == Def.EntityID;
+            // Вытесненный редким (ревью 2026-09-20) считается «бывшим
+            // активным» для гистерезиса порога: иначе, когда редкий
+            // уходит, он проходил бы порог входа, а не удержания, и при оси
+            // между ними не возвращался бы вовсе. Снимать клетку с
+            // вытеснителя он при этом не должен -- отдельный bHeld.
+            const bool bHeld = Cell.ManifestedEntityID == Def.EntityID;
+            const bool bWasActive = bHeld || Cell.DisplacedEntityID == Def.EntityID;
 
             bool bEligible = true;
             if (Def.TriggerAxis != EAmbientTriggerAxis::None)
@@ -1005,7 +1011,11 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             // пока клетка не прошла все дешёвые гейты (биом, ось, время,
             // погода).
             if (bEligible && CanManifest(Cell, Def.EntityID) &&
-                (bWasActive || (!IsInvisibilityCapActive(FIntPoint(Cell.X, Cell.Y))
+                // Обход подавления и разнесения -- только у реально держащего
+                // клетку; вытесненный получает лишь порог удержания выше и
+                // возвращается как новый вход (ревью 2026-09-20: иначе
+                // вставал бы рядом с таким же и проходил под Шапкой).
+                (bHeld || (!IsInvisibilityCapActive(FIntPoint(Cell.X, Cell.Y))
                     && !IsAlkonostSuppressionActiveForBiome(Cell.Biome)
                     && !IsWardConcealmentActive(FIntPoint(Cell.X, Cell.Y))
                     // Тиражный EntityConceal (награда ритуала перехода ярусов
@@ -1021,6 +1031,16 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                     && !IsSilverWardActive()
                     && !IsCrowdedBySameEntity(Cell, Def))))
             {
+                // Запоминаем вытесненного Низшего (тот же ранг), вернувшийся
+                // -- забывается.
+                if (!bHeld && !Cell.ManifestedEntityID.IsNone() && FindAmbientEntityDefinition(Cell.ManifestedEntityID))
+                {
+                    Cell.DisplacedEntityID = Cell.ManifestedEntityID;
+                }
+                else if (Cell.DisplacedEntityID == Def.EntityID)
+                {
+                    Cell.DisplacedEntityID = NAME_None;
+                }
                 Cell.ManifestedEntityID = Def.EntityID;
                 ManifestingAmbientDef = &Def;
                 // Самоусиливающийся эффект — тянем TargetState дальше, чем
@@ -1063,11 +1083,17 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 if (Def.NatureRate      != 0.0f) { NewTarget.Direction.Nature = FMath::Max(0.0f, NewTarget.Direction.Nature + Def.NatureRate * DeltaTime); bAnyRateFired = true; }
                 bChanged = bChanged || bAnyRateFired;
             }
-            else if (bWasActive)
+            else if (bHeld)
             {
                 // Порог больше не пройден (с учётом гистерезиса) или клетку
                 // отобрал более приоритетный хозяин — проекция прекращается.
                 Cell.ManifestedEntityID = NAME_None;
+            }
+            else if (!bEligible && Cell.DisplacedEntityID == Def.EntityID)
+            {
+                // Вытесненный сам перестал подходить (порог удержания, его
+                // время) -- возвращаться ему некуда, память о нём гасим.
+                Cell.DisplacedEntityID = NAME_None;
             }
         }
         SyncManifestedEntityActor(Cell, ManifestingAmbientDef ? ManifestingAmbientDef->ActorClass : nullptr, AAmbientEntityActor::StaticClass());
@@ -1443,10 +1469,19 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                     // всю сетку, без геометрии, см. довод у Низшего ранга выше.
                     && !IsSilverWardActive())))
             {
-                ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
-                ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);
                 Cell->ManifestedEntityID = Def.EntityID;
-                bChanged = true;
+                // Благие есть и в покое, но действуют на якорь только в
+                // очищенном регионе (ревью 2026-09-20): их оси -- Body/Nature
+                // без верхнего клампа, Potency/Resonance без утечки -- в покое
+                // раскачивали бы клетку-якорь без предела и навсегда. До
+                // 2026-09-19 эффект и так шёл только при очищении (проявление
+                // было им же), это его прежний объём. Злые -- как раньше.
+                if (Def.Pole != ELegendaryPole::Benign || IsLegendaryRegionRestored(Def.EntityID))
+                {
+                    ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis,  Def.EffectRate  * DeltaTime);
+                    ApplyLandmarkAxisNudge(NewTarget, Def.EffectAxis2, Def.EffectRate2 * DeltaTime);
+                    bChanged = true;
+                }
             }
             else if (bWasActive)
             {

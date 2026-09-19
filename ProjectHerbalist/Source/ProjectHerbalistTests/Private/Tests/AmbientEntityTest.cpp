@@ -422,6 +422,88 @@ bool FHerbalistAmbientEntity_RarerConditionDisplacesConstantOne::RunTest(const F
     return true;
 }
 
+// Ревью 2026-09-20: вытесненный возвращается по порогу УДЕРЖАНИЯ, не входа.
+// Природа 0.42 -- между удержанием (0.35) и входом (0.45) Трясинных духов:
+// без памяти о вытеснении они после ночи Болотных огней не вернулись бы.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_DisplacedEntityReturnsByStayThreshold,
+    "Herbalist.AmbientEntity.DisplacedEntityReturnsByStayThreshold",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistAmbientEntity_DisplacedEntityReturnsByStayThreshold::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    FGridCell* Cell = Manager->GetCell(0, 0);
+    if (!TestNotNull(TEXT("Cell (0,0) exists"), Cell)) { Manager->Destroy(); return false; }
+    Cell->Biome = EBiomeType::Bog;
+    Cell->bIsWater = false;
+    float Nature = 0.7f;
+    auto HoldBogState = [Cell, &Nature]()
+    {
+        for (FRealState* State : { &Cell->State, &Cell->TargetState })
+        {
+            State->Direction.Body = 0.1f;
+            State->Direction.Mind = 0.1f;
+            State->Direction.Spirit = 0.1f;
+            State->Direction.Nature = Nature;
+            State->Meta.Distortion = 0.6f;
+            State->Meta.Stability = 0.5f;
+            State->Meta.Corruption = 0.1f;
+            State->Meta.Purity = 0.5f;
+        }
+        Cell->Memory.bDegrading = false;
+    };
+    auto Settle = [Manager, &HoldBogState]()
+    {
+        for (int32 Tick = 0; Tick < 3; ++Tick)
+        {
+            HoldBogState();
+            Manager->UpdateEntityManifestations(1.0f);
+        }
+    };
+
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    const float SpringDay = HerbalistCore::Calendar::DayOfYearFromDate(4, 10) * DayLengthSeconds;
+    const FName Tryasinnye(TEXT("Трясинные духи"));
+
+    Manager->SetGameClockSeconds(SpringDay + 10.0f * 60.0f);
+    Settle();
+    TestEqual(TEXT("День -- Трясинные духи вошли"), Cell->ManifestedEntityID, Tryasinnye);
+
+    Nature = 0.42f;   // держатся (удержание 0.35), но заново не вошли бы (вход 0.45)
+    Settle();
+    TestEqual(TEXT("Природа 0.42 -- удержание"), Cell->ManifestedEntityID, Tryasinnye);
+
+    Manager->SetGameClockSeconds(SpringDay + 29.0f * 60.0f);
+    Settle();
+    TestEqual(TEXT("Ночь -- вытеснены Болотными огнями"), Cell->ManifestedEntityID, FName(TEXT("Болотные огни")));
+    TestEqual(TEXT("Клетка помнит вытесненного"), Cell->DisplacedEntityID, Tryasinnye);
+
+    Manager->SetGameClockSeconds(SpringDay + DayLengthSeconds + 10.0f * 60.0f);
+    Settle();
+    TestEqual(TEXT("Утро -- вернулись по порогу удержания"), Cell->ManifestedEntityID, Tryasinnye);
+    TestTrue(TEXT("Вернувшийся забыт"), Cell->DisplacedEntityID.IsNone());
+
+    // Вытесненный, переставший подходить сам, забывается и не возвращается.
+    Manager->SetGameClockSeconds(SpringDay + 2.0f * DayLengthSeconds + 29.0f * 60.0f);
+    Settle();
+    Nature = 0.2f;
+    Settle();
+    TestTrue(TEXT("Природа 0.2 -- память о вытесненном погашена"), Cell->DisplacedEntityID.IsNone());
+    // Та же Природа 0.42, что вернула их в первый раз, -- без памяти это уже
+    // новый вход (порог 0.45): не возвращаются.
+    Nature = 0.42f;
+    Manager->SetGameClockSeconds(SpringDay + 3.0f * DayLengthSeconds + 10.0f * 60.0f);
+    Settle();
+    TestNotEqual(TEXT("Утро при Природе 0.42 без памяти -- не вернулись"), Cell->ManifestedEntityID, Tryasinnye);
+
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistAmbientEntity_RusalkiOnlyHauntWaterAtNightNotLand,
     "Herbalist.AmbientEntity.RusalkiOnlyHauntWaterAtNightNotLand",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
