@@ -1429,6 +1429,12 @@ public:
     const TSet<FName>& GetCollectedFragmentIDs() const { return CollectedFragmentIDs; }
     void SetCollectedFragmentIDs(const TSet<FName>& InIDs) { CollectedFragmentIDs = InIDs; }
 
+    // Якорь Clarity = сумма ClarityGain собранных подлинных фрагментов
+    // (23_Journey_Order §23.6). Зовётся после загрузки сейва: сейв хранит
+    // якорь числом, и сейв до смены веса (0.05 -> 0.1, 2026-09-19) иначе
+    // навсегда остался бы с половинным якорем.
+    void RecomputeClarityAnchorFromFragments();
+
     // NAME_None, если фрагмент сейчас не заспавнен — публично только для
     // тестируемости TrySpawnStateBasedFragment/SpawnMemoryFragmentAt, тем же
     // принципом, что остальные Get*-геттеры внепайплайнового состояния выше.
@@ -1442,6 +1448,7 @@ public:
     // молча до конца сессии.
     int32 GetTishinaLesaHoldMapNum() const { return TishinaLesaHoldSeconds.Num(); }
     int32 GetOjidanieBuriHoldMapNum() const { return OjidanieBuriHoldSeconds.Num(); }
+    int32 GetBrodHoldMapNum() const { return BrodHoldSeconds.Num(); }
 
     // Публично только для теста на дрейф (аудит 2026-09-05): подтвердить,
     // что порог опроса UpdateMemoryFragments вычитает CheckInterval, а не
@@ -2349,6 +2356,7 @@ protected:
     float KhlebSolSustainedMolvaSeconds = 0.0f;
     TMap<FIntPoint, float> TishinaLesaHoldSeconds;
     TMap<FIntPoint, float> OjidanieBuriHoldSeconds;
+    TMap<FIntPoint, float> BrodHoldSeconds;   // BROD, Болото ночью (23_Journey_Order §23.4)
 
     void SpawnMemoryFragmentAt(FName DefinitionID, const FIntPoint& Cell, bool bIsFalse);
 

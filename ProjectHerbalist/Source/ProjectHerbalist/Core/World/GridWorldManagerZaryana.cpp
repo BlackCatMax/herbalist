@@ -178,7 +178,9 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     // ShrineRestored — проверяем следующим, капищ мало, дёшево.
     // NEUDOBNAYA_PRAVDA (§17.7, Широколиственный лес) — тот же триггер,
     // скопирован на биом капища; проверяется в том же проходе по Shrines,
-    // не отдельным циклом.
+    // не отдельным циклом. PODNOSHENIE — с 2026-09-19 только капище Речной
+    // поймы (23_Journey_Order §23.2): раньше хватало любого, и фрагмент
+    // Поймы выпадал у первого же восстановленного капища где угодно.
     {
         const FMemoryFragmentDefinition* PodnoshenieDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("PODNOSHENIE")));
         const FMemoryFragmentDefinition* PravdaDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("NEUDOBNAYA_PRAVDA")));
@@ -186,13 +188,14 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
         {
             if (S.Restoration < ShrineThreshold) continue;
 
-            if (PodnoshenieDef && !CollectedFragmentIDs.Contains(PodnoshenieDef->ID))
+            const FGridCell* ShrineCell = GetCellConst(S.Cell.X, S.Cell.Y);
+            if (PodnoshenieDef && ShrineCell && ShrineCell->Biome == EBiomeType::Floodplain
+                && !CollectedFragmentIDs.Contains(PodnoshenieDef->ID))
             {
                 SpawnMemoryFragmentAt(PodnoshenieDef->ID, S.Cell, /*bIsFalse=*/false);
                 return;
             }
 
-            const FGridCell* ShrineCell = GetCellConst(S.Cell.X, S.Cell.Y);
             if (PravdaDef && ShrineCell && ShrineCell->Biome == EBiomeType::BroadleafForest
                 && !CollectedFragmentIDs.Contains(PravdaDef->ID))
             {
@@ -202,8 +205,8 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
         }
     }
 
-    // LowLocalDistortion — линейный обход клеток; сетка небольшая (сейчас
-    // 20x20), раз в MemoryFragmentStateCheckInterval секунд — не проблема.
+    // LowLocalDistortion — линейный обход клеток, раз в
+    // MemoryFragmentStateCheckInterval секунд.
     // Собираем ВСЕ подходящие клетки и берём случайную (WorldRNG), не первую
     // встречную — иначе фрагмент почти всегда рождался бы в одном и том же
     // "первом по обходу" углу сетки (найдено при аудите 2026-08-24).
@@ -213,11 +216,15 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     const FMemoryFragmentDefinition* QuietDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("TIKHOE_MESTO")));
     const FMemoryFragmentDefinition* TishinaDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("TISHINA_LESA")));
     const FMemoryFragmentDefinition* BuriDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("OJIDANIE_BURI")));
+    const FMemoryFragmentDefinition* BrodDef = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("BROD")));
     const float StabilityThreshold = Settings ? Settings->MemoryFragmentHighStabilityThreshold : 0.7f;
     const float TishinaLesaSustained = Settings ? Settings->TishinaLesaSustainedSeconds : 60.0f;
     const float OjidanieBuriSustained = Settings ? Settings->OjidanieBuriSustainedSeconds : 120.0f;
+    const float BrodSustained = Settings ? Settings->BrodSustainedSeconds : 60.0f;
     const bool bNeedTishina = TishinaDef && !CollectedFragmentIDs.Contains(TishinaDef->ID);
     const bool bNeedBuri = BuriDef && !CollectedFragmentIDs.Contains(BuriDef->ID);
+    const bool bNeedBrod = BrodDef && !CollectedFragmentIDs.Contains(BrodDef->ID);
+    const bool bNight = IsNight();
 
     // Утечка по аудиту 2026-09-05: пока bNeedTishina/bNeedBuri истинны, эти
     // per-клеточные карты пополняются FindOrAdd на каждую подходящую по биому
@@ -233,13 +240,21 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     {
         OjidanieBuriHoldSeconds.Empty();
     }
+    // Днём -- тоже: рассвет обнуляет накопление БРОДА у всех клеток, включая
+    // выгруженные (их обход ниже пропускает, и без этого незавершённая ночь
+    // досчиталась бы в другую, через день).
+    if ((!bNeedBrod || !bNight) && BrodHoldSeconds.Num() > 0)
+    {
+        BrodHoldSeconds.Empty();
+    }
 
     const bool bNeedQuiet = QuietDef && !CollectedFragmentIDs.Contains(QuietDef->ID);
-    if (bNeedQuiet || bNeedTishina || bNeedBuri)
+    if (bNeedQuiet || bNeedTishina || bNeedBuri || bNeedBrod)
     {
         TArray<FIntPoint> EligibleCellsQuiet;
         TArray<FIntPoint> EligibleCellsTishina;
         TArray<FIntPoint> EligibleCellsBuri;
+        TArray<FIntPoint> EligibleCellsBrod;
         for (const FGridCell& Cell : GetCellsInGridOrder())
         {
             if (Cell.bIsWater) continue;
@@ -254,8 +269,10 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
             // TIKHOE_MESTO остаётся мгновенным порогом намеренно — её
             // собственный текст (§21.1) не требует длительности, только
             // TISHINA_LESA (ниже) делит с ней тот же State-порог, но со
-            // своим требованием "выдержано".
-            if (bNeedQuiet && bLowDistortion)
+            // своим требованием "выдержано". С 2026-09-19 — только Лесостепь,
+            // где деревня (23_Journey_Order §23.2): раньше годилась любая
+            // тихая клетка мира.
+            if (bNeedQuiet && bLowDistortion && Cell.Biome == EBiomeType::ForestSteppe)
             {
                 EligibleCellsQuiet.Add(CellCoord);
             }
@@ -284,6 +301,19 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
                     EligibleCellsBuri.Add(CellCoord);
                 }
             }
+
+            // BROD (23_Journey_Order §23.4: ночью, клетка Болота, долго
+            // удерживаемая с низким искажением) — тот же аккумулятор; рассвет
+            // срывает условие и обнуляет накопление, как любой провал.
+            // Днём клетки не заводятся вовсе -- карта пуста, рассвет её очистил.
+            if (bNeedBrod && bNight && Cell.Biome == EBiomeType::Bog)
+            {
+                float& Hold = BrodHoldSeconds.FindOrAdd(CellCoord);
+                if (HerbalistCore::Math::TickSustainedCondition(Hold, bLowDistortion, CheckInterval, BrodSustained))
+                {
+                    EligibleCellsBrod.Add(CellCoord);
+                }
+            }
         }
         if (bNeedTishina && EligibleCellsTishina.Num() > 0)
         {
@@ -297,6 +327,12 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
             SpawnMemoryFragmentAt(BuriDef->ID, Chosen, /*bIsFalse=*/false);
             return;
         }
+        if (bNeedBrod && EligibleCellsBrod.Num() > 0)
+        {
+            const FIntPoint Chosen = EligibleCellsBrod[WorldRNG.RandRange(0, EligibleCellsBrod.Num() - 1)];
+            SpawnMemoryFragmentAt(BrodDef->ID, Chosen, /*bIsFalse=*/false);
+            return;
+        }
         if (bNeedQuiet && EligibleCellsQuiet.Num() > 0)
         {
             const FIntPoint Chosen = EligibleCellsQuiet[WorldRNG.RandRange(0, EligibleCellsQuiet.Num() - 1)];
@@ -304,6 +340,20 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
             return;
         }
     }
+}
+
+void AGridWorldManager::RecomputeClarityAnchorFromFragments()
+{
+    float Anchor = 0.0f;
+    for (const FName& ID : CollectedFragmentIDs)
+    {
+        if (const FMemoryFragmentDefinition* Def = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(ID))
+        {
+            Anchor += Def->ClarityGain;
+        }
+    }
+    ClarityAnchor = FMath::Clamp(Anchor, 0.0f, 1.0f);
+    RecomputeGlobalPerceptionClarity();
 }
 
 void AGridWorldManager::TryTriggerCoherentBrewFragment(const FIntPoint& Cell, float Coherence, float Distortion, float Purity)
@@ -317,6 +367,11 @@ void AGridWorldManager::TryTriggerCoherentBrewFragment(const FIntPoint& Cell, fl
 
     const FMemoryFragmentDefinition* Def = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("PERVAYA_VARKA")));
     if (!Def || CollectedFragmentIDs.Contains(Def->ID)) return;
+
+    // Первая варка — в Лесостепи (23_Journey_Order §23.2, 2026-09-19): раньше
+    // годилась удачная варка в любом биоме.
+    const FGridCell* BrewCell = GetCellConst(Cell.X, Cell.Y);
+    if (!BrewCell || BrewCell->Biome != EBiomeType::ForestSteppe) return;
 
     SpawnMemoryFragmentAt(Def->ID, Cell, /*bIsFalse=*/false);
 }

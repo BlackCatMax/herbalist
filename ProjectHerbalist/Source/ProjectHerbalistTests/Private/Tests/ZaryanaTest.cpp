@@ -1004,6 +1004,11 @@ bool FHerbalistZaryana_DirectDeliveryKeepsWorldFragmentActive::RunTest(const FSt
     DestroyWorldFragments();
 
     // Порог связности тот же, что у CellSentinelTest: 1.0 / 0.0 / 1.0.
+    // Первая варка -- только в Лесостепи (23_Journey_Order §23.2).
+    if (FGridCell* BrewCell = Manager->GetCell(5, 5))
+    {
+        BrewCell->Biome = EBiomeType::ForestSteppe;
+    }
     Manager->TryTriggerCoherentBrewFragment(FIntPoint(5, 5), 1.0f, 0.0f, 1.0f);
     if (!TestEqual(TEXT("Sanity: фрагмент первой варки лежит в мире"), Manager->GetActiveFragmentDefinitionID(), WorldFragmentID))
     {

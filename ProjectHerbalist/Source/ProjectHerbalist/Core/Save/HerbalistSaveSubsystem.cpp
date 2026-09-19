@@ -381,6 +381,9 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->SetBuyanReached(Save->bBuyanReached);
     WorldManager->SetChosenBuyanPath(Save->ChosenBuyanPath);
     WorldManager->SetCollectedFragmentIDs(TSet<FName>(Save->CollectedFragmentIDs));
+    // Якорь -- из собранных фрагментов, не числом из сейва (вес мог
+    // смениться, 23_Journey_Order §23.6).
+    WorldManager->RecomputeClarityAnchorFromFragments();
     WorldManager->ApplySaveCells(Save->Cells);
     WorldManager->RestoreHomeStorages(Save->HomeStorages);
     WorldManager->RestorePlacedContainers(Save->PlacedContainers);

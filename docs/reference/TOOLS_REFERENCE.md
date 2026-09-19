@@ -110,7 +110,7 @@ ini можно дополнить или заменить, но не очист�
 | `-run=LegendaryEntitiesCreate` | `DT_LegendaryEntities` — 17 Легендарных, включая Берегиню | 2026-09-02 |
 | `-run=ArtifactsCreate` | `DT_Artifacts` — 8 артефактов | 2026-09-02 |
 | `-run=DialogueCreate` | `DT_Dialogue` — дерево Домового | 2026-09-02 |
-| `-run=MemoryFragmentsCreate` | `DT_MemoryFragments` — 12 фрагментов памяти | 2026-09-02 |
+| `-run=MemoryFragmentsCreate [-sync]` | `DT_MemoryFragments` — 13 фрагментов памяти. Ассет есть — без `-sync` ничего не делает; с `-sync` выравнивает вес в якоре (`ClarityGain`) и дописывает недостающие ряды, тексты и класс актора не трогает | 2026-09-02, `-sync` 2026-09-19 |
 
 ### Добавление рядов (`*Append`: ряд уже есть — пропускает)
 

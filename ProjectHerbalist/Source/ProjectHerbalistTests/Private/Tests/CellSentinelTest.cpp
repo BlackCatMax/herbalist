@@ -160,6 +160,11 @@ bool FHerbalistCellSentinel_BrewFragmentNeedsARealCell::RunTest(const FString& P
 
     // Контроль: та же варка в настоящей клетке фрагмент даёт -- значит, отказ
     // выше дала клетка, а не пороги.
+    // Первая варка -- только в Лесостепи (23_Journey_Order §23.2).
+    if (FGridCell* BrewCell = Manager->GetCell(5, 5))
+    {
+        BrewCell->Biome = EBiomeType::ForestSteppe;
+    }
     Manager->TryTriggerCoherentBrewFragment(FIntPoint(5, 5), 1.0f, 0.0f, 1.0f);
     TestEqual(TEXT("Та же варка в клетке (5,5) -- фрагмент появился"), Manager->GetActiveFragmentDefinitionID(), FName(TEXT("PERVAYA_VARKA")));
 

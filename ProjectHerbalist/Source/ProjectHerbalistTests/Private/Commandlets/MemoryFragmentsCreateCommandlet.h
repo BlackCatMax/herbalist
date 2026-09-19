@@ -8,8 +8,11 @@
 // LegendaryEntitiesCreateCommandlet.cpp и др.
 //
 // Идемпотентен: если ассет уже существует, ничего не делает, успех.
+// -sync (2026-09-19, 23_Journey_Order §23.6-23.7): в существующем ассете
+// выравнивает ClarityGain по рядам ниже и дописывает недостающие ряды
+// (BROD); тексты и класс актора не трогает.
 //
-// Запуск: UnrealEditor-Cmd.exe <uproject> -run=MemoryFragmentsCreate
+// Запуск: UnrealEditor-Cmd.exe <uproject> -run=MemoryFragmentsCreate [-sync]
 #pragma once
 
 #include "CoreMinimal.h"
@@ -23,4 +26,8 @@ class UMemoryFragmentsCreateCommandlet : public UCommandlet
 
 public:
     virtual int32 Main(const FString& Params) override;
+
+    // Выравнивает вес в якоре и дописывает недостающие ряды. Число
+    // изменённых рядов (тест -- на копии таблицы).
+    static int32 SyncExistingTable(class UDataTable* Table);
 };

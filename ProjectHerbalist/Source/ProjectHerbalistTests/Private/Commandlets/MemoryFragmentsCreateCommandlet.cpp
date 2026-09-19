@@ -28,7 +28,7 @@ namespace
         TikhoeMesto.FalseText = FText::FromString(TEXT(
             "Здесь было так же тихо, как на болоте у брода... только Аграфена стояла рядом и молчала — "
             "а она умерла задолго до того, как я впервые пришла на болото."));
-        TikhoeMesto.ClarityGain = 0.05f;
+        TikhoeMesto.ClarityGain = 0.1f;
         Out.Add(TikhoeMesto);
 
         FMemoryFragmentDefinition PervayaVarka;
@@ -42,7 +42,7 @@ namespace
         PervayaVarka.FalseText = FText::FromString(TEXT(
             "Руки помнят лучше головы. Аграфена стояла за спиной и хвалила каждое движение, ни разу не поправив — "
             "а ведь она никогда никого не хвалила, пока варево само не докажет себя."));
-        PervayaVarka.ClarityGain = 0.05f;
+        PervayaVarka.ClarityGain = 0.1f;
         Out.Add(PervayaVarka);
 
         FMemoryFragmentDefinition Podnoshenie;
@@ -55,7 +55,7 @@ namespace
             "Теперь понимаю: капище помнит не то, что ты дал, а то, чего тебе будет не хватать."));
         Podnoshenie.FalseText = FText::FromString(TEXT(
             "Мать оставляла у капища еду — свежий хлеб, каждое полнолуние, без пропуска ни разу за всю жизнь."));
-        Podnoshenie.ClarityGain = 0.05f;
+        Podnoshenie.ClarityGain = 0.1f;
         Out.Add(Podnoshenie);
 
         FMemoryFragmentDefinition KhlebSol;
@@ -71,7 +71,7 @@ namespace
             "Первый раз мне оставили не крапиву и не медяк -- каравай, ещё тёплый, у порога. Хозяйка сама "
             "дождалась, пока я выйду, и сказала у порога вслух: \"Спасибо тебе, дай Бог здоровья\" -- и я "
             "запомнила её лицо, полное благодарности."));
-        KhlebSol.ClarityGain = 0.05f;
+        KhlebSol.ClarityGain = 0.0f;   // сайдовый, без веса в якоре (23_Journey_Order §23.6)
         Out.Add(KhlebSol);
 
         FMemoryFragmentDefinition BuyanGuardian;
@@ -84,7 +84,7 @@ namespace
             "кто-то есть -- тихий, не злой, только имени у него нет. Люди при мне о нём молчат или пугаются, "
             "как пугались бы любого другого хозяина места. Может, так теперь будет всегда: то, что меня "
             "спасло, останется без лица -- жертва, о которой я никогда не узнаю и не смогу отблагодарить."));
-        BuyanGuardian.ClarityGain = 0.05f;
+        BuyanGuardian.ClarityGain = 0.1f;
         Out.Add(BuyanGuardian);
 
         FMemoryFragmentDefinition BuyanTradePlaces;
@@ -98,7 +98,7 @@ namespace
             "теперь застрял наполовину: не так глубоко, как была я, но и не в Яви целиком. Ни один из нас не "
             "получил чистого разрешения. Просто цена, которую раньше платила бы я одна, теперь поделена на "
             "двоих -- не легче, только иначе тяжело."));
-        BuyanTradePlaces.ClarityGain = 0.05f;
+        BuyanTradePlaces.ClarityGain = 0.1f;
         Out.Add(BuyanTradePlaces);
 
         FMemoryFragmentDefinition BuyanAcceptReality;
@@ -112,7 +112,7 @@ namespace
             "цена искупается, не каждая потеря становится смыслом. Пусть эта останется просто горем, без "
             "утешительного слоя магии, -- и пусть тот, кто стоит там, живёт с этим дальше, не притворяясь, "
             "что нашёл ответ."));
-        BuyanAcceptReality.ClarityGain = 0.05f;
+        BuyanAcceptReality.ClarityGain = 0.1f;
         Out.Add(BuyanAcceptReality);
 
         FMemoryFragmentDefinition TishinaLesa;
@@ -128,7 +128,7 @@ namespace
         TishinaLesa.FalseText = FText::FromString(TEXT(
             "Аграфена долго не давала мне резать кору. Взяла нож сама, показала, где резать -- три быстрых "
             "движения, готово. \"Вот так. Запоминай\". Я запомнила с первого раза."));
-        TishinaLesa.ClarityGain = 0.05f;
+        TishinaLesa.ClarityGain = 0.1f;
         Out.Add(TishinaLesa);
 
         FMemoryFragmentDefinition OjidanieBuri;
@@ -143,7 +143,7 @@ namespace
         OjidanieBuri.FalseText = FText::FromString(TEXT(
             "Пурга шла на нас два дня, и Аграфена сразу увела нас глубже в землянку, укрыла заранее -- она "
             "всегда знала наперёд, что будет с погодой, и мы ничего не боялись."));
-        OjidanieBuri.ClarityGain = 0.05f;
+        OjidanieBuri.ClarityGain = 0.1f;
         Out.Add(OjidanieBuri);
 
         FMemoryFragmentDefinition NePokhvalila;
@@ -159,7 +159,7 @@ namespace
         NePokhvalila.FalseText = FText::FromString(TEXT(
             "Я в первый раз сама, без неё, прошла мимо места, где чуяла что-то нехорошее. Вернулась, и "
             "Аграфена обняла меня, сказала, что гордится, что я справилась не хуже неё самой."));
-        NePokhvalila.ClarityGain = 0.05f;
+        NePokhvalila.ClarityGain = 0.1f;
         Out.Add(NePokhvalila);
 
         FMemoryFragmentDefinition NeudobnayaPravda;
@@ -174,7 +174,7 @@ namespace
         NeudobnayaPravda.FalseText = FText::FromString(TEXT(
             "Я принесла ей отвар, которым гордилась. Она попробовала, сказала, что неплохо для первого раза, "
             "и что дальше будет только лучше -- не хотела меня расстраивать перед сложным годом."));
-        NeudobnayaPravda.ClarityGain = 0.05f;
+        NeudobnayaPravda.ClarityGain = 0.1f;
         Out.Add(NeudobnayaPravda);
 
         FMemoryFragmentDefinition NitMateri;
@@ -190,11 +190,59 @@ namespace
             "В степи всё тянется до горизонта одинаково, и я боялась заблудиться. Мать дала мне клубок "
             "цветной пряжи -- привязывала конец к колышку у дома, и я разматывала его, идя вперёд, чтобы "
             "найти дорогу назад по нитке."));
-        NitMateri.ClarityGain = 0.05f;
+        NitMateri.ClarityGain = 0.1f;
         Out.Add(NitMateri);
+
+        // Болото (23_Journey_Order §23.4, 2026-09-19): последнее воспоминание
+        // Заряны перед Мороком. Триггер — ночью, клетка Болота, долго
+        // удерживаемая с низким искажением (TrySpawnStateBasedFragment).
+        FMemoryFragmentDefinition Brod;
+        Brod.ID = FName(TEXT("BROD"));
+        Brod.SortOrder = Order++;
+        Brod.Trigger = EMemoryFragmentTrigger::LowLocalDistortion;
+        Brod.TrueText = FText::FromString(TEXT(
+            "На болото я пошла одна, уже без Аграфены. К вечеру над кочками зажглись огоньки -- ровные, тёплые, "
+            "как окна в деревне. Мать учила держать глазами одну далёкую точку и идти на неё, не глядя под ноги. "
+            "У брода я впервые её не послушалась: смотрела под ноги, щупала слегой каждый шаг, а на огни не "
+            "смотрела вовсе. Перешла. Оглянулась -- огней не было. Никто больше не скажет мне, где правило "
+            "кончается. Придётся знать самой."));
+        Brod.FalseText = FText::FromString(TEXT(
+            "На болото я пошла одна, уже без Аграфены. К вечеру над кочками зажглись огоньки. Я держала глазами "
+            "самый ясный из них, как учила мать, и он вывел меня прямо к броду -- ровно, сухо, я ни разу не "
+            "оступилась."));
+        Brod.ClarityGain = 0.1f;
+        Out.Add(Brod);
 
         return Out;
     }
+}
+
+int32 UMemoryFragmentsCreateCommandlet::SyncExistingTable(UDataTable* Table)
+{
+    if (!Table)
+    {
+        return 0;
+    }
+    // Тексты и класс актора в ассете не трогаем -- их могли править в
+    // редакторе; синхронизируются только вес в якоре и недостающие ряды.
+    int32 Changed = 0;
+    for (const FMemoryFragmentDefinition& Row : BuildMemoryFragmentRows())
+    {
+        if (FMemoryFragmentDefinition* Existing = Table->FindRow<FMemoryFragmentDefinition>(Row.ID, TEXT("MemoryFragmentsSync"), /*bWarnIfRowMissing=*/false))
+        {
+            if (!FMath::IsNearlyEqual(Existing->ClarityGain, Row.ClarityGain))
+            {
+                Existing->ClarityGain = Row.ClarityGain;
+                ++Changed;
+            }
+        }
+        else
+        {
+            Table->AddRow(Row.ID, Row);
+            ++Changed;
+        }
+    }
+    return Changed;
 }
 
 int32 UMemoryFragmentsCreateCommandlet::Main(const FString& Params)
@@ -203,8 +251,30 @@ int32 UMemoryFragmentsCreateCommandlet::Main(const FString& Params)
 
     if (UDataTable* Existing = LoadObject<UDataTable>(nullptr, AssetPath))
     {
-        UE_LOG(LogTemp, Display, TEXT("MemoryFragmentsCreate: %s уже существует (%d рядов), ничего не делаю"),
-            AssetPath, Existing->GetRowMap().Num());
+        if (!FParse::Param(*Params, TEXT("sync")))
+        {
+            UE_LOG(LogTemp, Display, TEXT("MemoryFragmentsCreate: %s уже существует (%d рядов), ничего не делаю (-sync -- дописать)"),
+                AssetPath, Existing->GetRowMap().Num());
+            return 0;
+        }
+        const int32 Changed = UMemoryFragmentsCreateCommandlet::SyncExistingTable(Existing);
+        if (Changed == 0)
+        {
+            UE_LOG(LogTemp, Display, TEXT("MemoryFragmentsCreate -sync: %s уже совпадает"), AssetPath);
+            return 0;
+        }
+        UPackage* ExistingPackage = Existing->GetOutermost();
+        ExistingPackage->MarkPackageDirty();
+        FSavePackageArgs SyncArgs;
+        SyncArgs.TopLevelFlags = RF_Public | RF_Standalone;
+        SyncArgs.SaveFlags = SAVE_NoError;
+        const FString SyncFileName = FPackageName::LongPackageNameToFilename(ExistingPackage->GetName(), FPackageName::GetAssetPackageExtension());
+        if (!UPackage::SavePackage(ExistingPackage, Existing, *SyncFileName, SyncArgs))
+        {
+            UE_LOG(LogTemp, Error, TEXT("MemoryFragmentsCreate -sync: не удалось сохранить %s"), *SyncFileName);
+            return 1;
+        }
+        UE_LOG(LogTemp, Display, TEXT("MemoryFragmentsCreate -sync: %s -- изменено рядов: %d"), AssetPath, Changed);
         return 0;
     }
 
