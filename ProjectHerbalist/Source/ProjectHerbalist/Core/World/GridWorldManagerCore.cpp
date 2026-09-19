@@ -1,5 +1,6 @@
 // Core/World/GridWorldManagerCore.cpp
 #include "Core/World/GridWorldManager.h"
+#include "Misc/PackageName.h"
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionRuntimeCell.h"
 #include "WorldPartition/WorldPartitionRuntimeHash.h"
@@ -319,6 +320,133 @@ bool AGridWorldManager::IsSpawnPointBlocked(const FVector& Point) const
         return true;
     }
     return false;
+}
+
+void AGridWorldManager::SetResourceSlots(UHerbalistResourceSlots* InSlots)
+{
+    ResourceSlotsAsset = InSlots;
+    ResourceSlotsByCell.Reset();
+    bResourceSlotsIndexed = false;
+}
+
+const TArray<FHerbalistResourceSlot>* AGridWorldManager::FindCellResourceSlots(int32 X, int32 Y) const
+{
+    if (!ResourceSlotsAsset)
+    {
+        return nullptr;
+    }
+    if (!bResourceSlotsIndexed)
+    {
+        bResourceSlotsIndexed = true;
+        ResourceSlotsByCell.Reset();
+        for (const FHerbalistResourceSlotSet& Set : ResourceSlotsAsset->Sets)
+        {
+            for (const FHerbalistResourceSlot& Slot : Set.Slots)
+            {
+                int32 CellX = 0;
+                int32 CellY = 0;
+                if (WorldPositionToCell(Slot.Location, CellX, CellY))
+                {
+                    ResourceSlotsByCell.FindOrAdd(FIntPoint(CellX, CellY)).Add(Slot);
+                }
+            }
+        }
+    }
+    return ResourceSlotsByCell.Find(FIntPoint(X, Y));
+}
+
+bool AGridWorldManager::HasResourceSlots(int32 X, int32 Y) const
+{
+    const TArray<FHerbalistResourceSlot>* Slots = FindCellResourceSlots(X, Y);
+    return Slots && Slots->Num() > 0;
+}
+
+bool AGridWorldManager::GetAssignedResourceSlot(int32 X, int32 Y, int32 PlacementSlot, FHerbalistResourceSlot& OutSlot) const
+{
+    const TArray<FHerbalistResourceSlot>* Slots = FindCellResourceSlots(X, Y);
+    if (!Slots || Slots->Num() == 0 || PlacementSlot < 0)
+    {
+        return false;
+    }
+    OutSlot = (*Slots)[MakeResourceSlotOrder(X, Y, Slots->Num())[PlacementSlot % Slots->Num()]];
+    return true;
+}
+
+TArray<int32> AGridWorldManager::MakeResourceSlotOrder(int32 X, int32 Y, int32 NumSlots) const
+{
+    TArray<int32> Order;
+    Order.Reserve(NumSlots);
+    for (int32 Index = 0; Index < NumSlots; ++Index)
+    {
+        Order.Add(Index);
+    }
+    FRandomStream OrderRng = MakeCellRandomStream(X, Y, FWorldLayoutSolver::ECellRandomPurpose::ResourceSlotOrder);
+    for (int32 Index = Order.Num() - 1; Index > 0; --Index)
+    {
+        Order.Swap(Index, OrderRng.RandRange(0, Index));
+    }
+    return Order;
+}
+
+bool AGridWorldManager::FindResourceSlotPosition(int32 X, int32 Y, int32 PlacementSlot, bool bAquaticSpecies, FVector& OutPosition) const
+{
+    const TArray<FHerbalistResourceSlot>* Slots = FindCellResourceSlots(X, Y);
+    if (!Slots || Slots->Num() == 0 || PlacementSlot < 0)
+    {
+        return false;
+    }
+
+    // Слот под живым ресурсом клетки занят: IsSpawnPointBlocked свои игровые
+    // акторы не считает. Места до числа слотов и так получают разные слоты;
+    // проверка нужна по кругу (мест больше, чем слотов) и после перезапекания.
+    const FGridCell* Cell = GetCellConst(X, Y);
+    auto IsTakenByResource = [Cell](const FVector& Location)
+    {
+        if (!Cell)
+        {
+            return false;
+        }
+        for (const TWeakObjectPtr<AHerbalistResourceActor>& Resource : Cell->ResourceActors)
+        {
+            if (Resource.IsValid() && FVector::DistSquared2D(Resource->GetActorLocation(), Location) < 1.0f)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const TArray<int32> Order = MakeResourceSlotOrder(X, Y, Slots->Num());
+    for (int32 Step = 0; Step < Order.Num(); ++Step)
+    {
+        const FHerbalistResourceSlot& Slot = (*Slots)[Order[(PlacementSlot + Step) % Order.Num()]];
+        if (HerbalistResourceSlots::SlotSuitsSpecies(Slot.Kind, bAquaticSpecies)
+            && !IsTakenByResource(Slot.Location) && !IsSpawnPointBlocked(Slot.Location))
+        {
+            OutPosition = Slot.Location;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AGridWorldManager::FindResourcePosition(int32 X, int32 Y, int32 PlacementSlot, bool bAquaticSpecies, FRandomStream& PlacementRng,
+    FVector& OutPosition, bool& bOutFromSlot) const
+{
+    bOutFromSlot = false;
+    if (HasResourceSlots(X, Y))
+    {
+        if (FindResourceSlotPosition(X, Y, PlacementSlot, bAquaticSpecies, OutPosition))
+        {
+            bOutFromSlot = true;
+            return true;
+        }
+        if (bAquaticSpecies)
+        {
+            return false;
+        }
+    }
+    return FindFreeSpawnPositionInCell(X, Y, GetResourceJitterRadius(), PlacementRng, OutPosition);
 }
 
 bool AGridWorldManager::FindFreeSpawnPositionInCell(int32 X, int32 Y, float JitterRadius, FRandomStream& Rng, FVector& OutPosition) const
@@ -1851,6 +1979,20 @@ void AGridWorldManager::BeginPlay()
     // Разметка мира -- до клеток: она задаёт их размер, число и начало.
     InitializeWorldLayoutForPlay();
 
+    // Слоты ресурсов карты (этап 5б) -- до заселения клеток. Только в игровом
+    // мире: автотесты в редакторном мире ставят свои через SetResourceSlots и
+    // не должны подхватывать настоящие слоты открытой карты.
+    if (GetWorld() && GetWorld()->IsGameWorld() && !ResourceSlotsAsset)
+    {
+        const FString SlotsPackage = HerbalistResourceSlots::AssetPackagePathForMap(GetWorld()->GetOutermost()->GetName());
+        const FString SlotsObject = SlotsPackage + TEXT(".") + FPackageName::GetShortName(SlotsPackage);
+        if (UHerbalistResourceSlots* Loaded = LoadObject<UHerbalistResourceSlots>(nullptr, *SlotsObject, nullptr, LOAD_NoWarn | LOAD_Quiet))
+        {
+            SetResourceSlots(Loaded);
+            UE_LOG(LogHerbalistWorld, Log, TEXT("[Slots] Слоты ресурсов %s: %d"), *SlotsPackage, Loaded->CountSlots());
+        }
+    }
+
     if (!HasCellPages())
     {
         InitializeCells();
@@ -2783,6 +2925,20 @@ bool AGridWorldManager::SpawnOneResourceInCell(FGridCell& Cell, const FHarvestCo
     // StartRegeneration (оба вызывают именно эту функцию на той же Cell) не
     // сбрасывают Cell.PlantedSpeciesID -- посадка переживает отрастание после
     // сбора, не разовый эффект.
+    // Слоты ресурсов (этап 5б): слот места выбирается раньше вида и не
+    // зависит от состояния клетки (GetAssignedResourceSlot). Вода и кромка
+    // берут водный пул, суша -- земной без водных видов. Земной вид вместо
+    // водного -- когда водный пул пуст или водному в проснувшейся клетке
+    // нет свободного слота (свой занят, отрастание дало индекс по кругу):
+    // иначе клетка у воды навсегда теряла бы ресурс. Исключение -- вода в
+    // водной клетке: земному там места нет, как и до слотов. Пристройка сада
+    // (PlotNiche) и посадка -- как до слотов, раньше слота.
+    FHerbalistResourceSlot AssignedSlot;
+    const bool bHasSlot = GetAssignedResourceSlot(Cell.X, Cell.Y, PlacementSlot, AssignedSlot);
+    const bool bAquaticSpot = bHasSlot ? AssignedSlot.Kind != EResourceSlotKind::Land : Cell.bIsWater;
+    const bool bWaterSurface = bHasSlot ? AssignedSlot.Kind == EResourceSlotKind::Water : Cell.bIsWater;
+    const bool bHasPlotNiche = PlotNiche && *PlotNiche != EGardenNiche::None;
+
     if (!Cell.bIsWater && !Cell.PlantedSpeciesID.IsNone())
     {
         IngredientID = Cell.PlantedSpeciesID;
@@ -2795,14 +2951,34 @@ bool AGridWorldManager::SpawnOneResourceInCell(FGridCell& Cell, const FHarvestCo
         // отдельный, не смешанный с земляным пул (bGrowsOnWater),
         // тот же принцип отбора по Cell.BiomeWeights земляного биома
         // под водой, что и обычный GetRandomResourceForBiome.
-        if (Cell.bIsWater)
+        if (!Cell.bIsWater && bHasPlotNiche)
+        {
+            IngredientID = IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, SpeciesRng);
+        }
+        else if (bAquaticSpot)
         {
             IngredientID = IngredientSubsystem->GetRandomResourceForAquaticBiome(Cell, Context, SpeciesRng);
+            FVector FreeAquaticSlot;
+            if (!IngredientID.IsNone() && bHasSlot && IsCellMaterialized(Cell)
+                && !FindResourceSlotPosition(Cell.X, Cell.Y, PlacementSlot, /*bAquaticSpecies=*/true, FreeAquaticSlot))
+            {
+                IngredientID = NAME_None;
+            }
+            if (IngredientID.IsNone() && !(bWaterSurface && Cell.bIsWater))
+            {
+                IngredientID = bHasSlot
+                    ? IngredientSubsystem->GetRandomResourceForLandBiome(Cell, Context, SpeciesRng)
+                    : IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, SpeciesRng);
+            }
+        }
+        else if (bHasPlotNiche)
+        {
+            IngredientID = IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, SpeciesRng);
         }
         else
         {
-            IngredientID = (PlotNiche && *PlotNiche != EGardenNiche::None)
-                ? IngredientSubsystem->GetRandomResourceForNiche(Cell, *PlotNiche, Context, SpeciesRng)
+            IngredientID = bHasSlot
+                ? IngredientSubsystem->GetRandomResourceForLandBiome(Cell, Context, SpeciesRng)
                 : IngredientSubsystem->GetRandomResourceForBiome(Cell, Context, SpeciesRng);
         }
     }
@@ -2821,9 +2997,16 @@ bool AGridWorldManager::SpawnOneResourceInCell(FGridCell& Cell, const FHarvestCo
     // отбраковка занятых точек (2026-09-03). Свободного места нет --
     // клетка остаётся пустой: лучше так, чем трава внутри валуна.
     // Поток мест -- свой у каждого слота (этап 4 разметки мира).
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
+    if (!Row)
+    {
+        return false;
+    }
+
     FRandomStream PlacementRng = MakeCellRandomStream(Cell.X, Cell.Y, FWorldLayoutSolver::ECellRandomPurpose::ResourcePlacement, PlacementSlot);
     FVector SpawnPos;
-    if (!FindFreeSpawnPositionInCell(Cell.X, Cell.Y, GetResourceJitterRadius(), PlacementRng, SpawnPos))
+    bool bFromSlot = false;
+    if (!FindResourcePosition(Cell.X, Cell.Y, PlacementSlot, Row->bGrowsOnWater, PlacementRng, SpawnPos, bFromSlot))
     {
         UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnOneResourceInCell: клетка (%d,%d) занята, ресурс пропущен"), Cell.X, Cell.Y);
         return false;
@@ -2839,10 +3022,12 @@ bool AGridWorldManager::SpawnOneResourceInCell(FGridCell& Cell, const FHarvestCo
     const FRandomPlacementTransform PlacementXform = ClaimingRegion
         ? ClaimingRegion->RollPlacementTransform(SpawnPos, PlacementRng)
         : FRandomPlacementTransform();
-    SpawnPos += PlacementXform.PositionOffset;
-
-    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(IngredientID) : nullptr;
-    if (!Row) return false;
+    // Слот -- точное место, найденное графом (на воде, у кромки): сдвиг
+    // региона увёл бы растение с него.
+    if (!bFromSlot)
+    {
+        SpawnPos += PlacementXform.PositionOffset;
+    }
 
     // Класс из строки (2026-09-03) -- пусто = базовый, см.
     // FIngredientTableRow::ResourceActorClass.
@@ -2995,14 +3180,14 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
 
     // Слот выдаётся до проверки материализации: спящий ресурс хранит его, и
     // при пробуждении встаёт туда же, куда встал бы сейчас.
-    const int32 Slot = PlacementSlot != INDEX_NONE ? PlacementSlot : AllocatePlacementSlot(*Cell);
+    const int32 PlacementSlotIndex = PlacementSlot != INDEX_NONE ? PlacementSlot : AllocatePlacementSlot(*Cell);
 
     // Спящая клетка (2026-09-12): загрузка сейва и прочие вызовы не ставят
     // актор туда, где под ним может не быть земли, -- ресурс запоминается и
     // появится при материализации чанка.
     if (!IsCellMaterialized(*Cell))
     {
-        AddDormantResource(*Cell, IngredientID, Slot);
+        AddDormantResource(*Cell, IngredientID, PlacementSlotIndex);
         return;
     }
 
@@ -3032,8 +3217,9 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
         // оказаться внутри камня, поставленного там, где оно раньше росло.
         // Место -- из потока клетки с солью слота (этап 4 разметки мира), того
         // же, что при первичном заселении.
-        FRandomStream PlacementRng = MakeCellRandomStream(X, Y, FWorldLayoutSolver::ECellRandomPurpose::ResourcePlacement, Slot);
-        if (!FindFreeSpawnPositionInCell(X, Y, GetResourceJitterRadius(), PlacementRng, SpawnPos))
+        FRandomStream PlacementRng = MakeCellRandomStream(X, Y, FWorldLayoutSolver::ECellRandomPurpose::ResourcePlacement, PlacementSlotIndex);
+        bool bFromSlot = false;
+        if (!FindResourcePosition(X, Y, PlacementSlotIndex, Row->bGrowsOnWater, PlacementRng, SpawnPos, bFromSlot))
         {
             UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: клетка (%d,%d) занята, %s не поставлен"), X, Y, *IngredientID.ToString());
             return;
@@ -3043,7 +3229,10 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
         if (ABiomeRegionVolume* ClaimingRegion = GetClaimingRegion(*Cell))
         {
             PlacementXform = ClaimingRegion->RollPlacementTransform(SpawnPos, PlacementRng);
-            SpawnPos += PlacementXform.PositionOffset;
+            if (!bFromSlot)
+            {
+                SpawnPos += PlacementXform.PositionOffset;
+            }
         }
     }
     else
@@ -3062,7 +3251,7 @@ void AGridWorldManager::SpawnResourceActor(FName IngredientID, int32 X, int32 Y,
         NewActor->SetActorScale3D(FVector(PlacementXform.UniformScale));
         // Регистрация в Cell.ResourceActors теперь делает сам Init() (2026-09-02).
         NewActor->Init(IngredientID, Row->DisplayName, Row->ResourceMesh, Row->BaseState, SpawnPos, this, X, Y, Row->Resilience, Row->bIronAverse, Row->bDelicate);
-        NewActor->SetPlacementSlot(Slot);
+        NewActor->SetPlacementSlot(PlacementSlotIndex);
         UE_LOG(LogHerbalistWorld, Verbose, TEXT("SpawnResourceActor: %s at cell (%d,%d) Z=%.1f"), *IngredientID.ToString(), X, Y, SpawnPos.Z);
     }
 }

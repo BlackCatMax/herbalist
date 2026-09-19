@@ -46,9 +46,15 @@ public:
     // Водные растения (2026-09-02, прямой запрос пользователя) — тот же
     // поиск по Cell.BiomeWeights, что и GetRandomResourceForBiome выше, но
     // кандидаты берутся из отдельного кэша (только строки с bGrowsOnWater),
-    // не смешиваются с обычным земляным пулом. Вызывается только для
-    // Cell.bIsWater == true (см. AGridWorldManager::SpawnResourcesInCell).
+    // не смешиваются с обычным земляным пулом. Вызывается для
+    // Cell.bIsWater == true и для слотов воды и кромки (этап 5б, см.
+    // AGridWorldManager::SpawnOneResourceInCell).
     FName GetRandomResourceForAquaticBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
+
+    // Земной слот (этап 5б, 2026-09-19): тот же поиск, но без водных видов.
+    // Общий пул GetRandomResourceForBiome их содержит -- на земном слоте
+    // водный вид встал бы на сушу.
+    FName GetRandomResourceForLandBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const;
 
     // Пристройка сада (DESIGN_Community_And_Homestead.md §2.4, 2026-08-31) —
     // тот же вопрос "сколько шансов у кого" (близость State/сезон/окна), но
@@ -102,6 +108,8 @@ private:
     // для клеток, которые сейчас вода.
     TMap<EBiomeType, TArray<FName>> CachedAquaticResourcesByBiome;
     TMap<EBiomeType, TArray<int32>> CachedAquaticWeightsByBiome;
+    TMap<EBiomeType, TArray<FName>> CachedLandResourcesByBiome;
+    TMap<EBiomeType, TArray<int32>> CachedLandWeightsByBiome;
 
     TMap<EGardenNiche, TArray<FName>> CachedResourcesByNiche;
     TMap<EGardenNiche, TArray<int32>> CachedWeightsByNiche;

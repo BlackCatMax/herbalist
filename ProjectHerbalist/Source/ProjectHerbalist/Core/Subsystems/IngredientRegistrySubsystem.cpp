@@ -65,6 +65,8 @@ void UIngredientRegistrySubsystem::BuildCache()
     CachedWeightsByBiome.Empty();
     CachedAquaticResourcesByBiome.Empty();
     CachedAquaticWeightsByBiome.Empty();
+    CachedLandResourcesByBiome.Empty();
+    CachedLandWeightsByBiome.Empty();
     CachedResourcesByNiche.Empty();
     CachedWeightsByNiche.Empty();
 
@@ -81,6 +83,11 @@ void UIngredientRegistrySubsystem::BuildCache()
             {
                 CachedAquaticResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
                 CachedAquaticWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
+            }
+            else
+            {
+                CachedLandResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
+                CachedLandWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
             }
         }
 
@@ -167,6 +174,12 @@ FName UIngredientRegistrySubsystem::GetRandomResourceForAquaticBiome(const FGrid
 {
     EnsureLoaded();
     return PickFromBiomeWeightedCache(CachedAquaticResourcesByBiome, CachedAquaticWeightsByBiome, Cell, Context, Rng);
+}
+
+FName UIngredientRegistrySubsystem::GetRandomResourceForLandBiome(const FGridCell& Cell, const FHarvestContext& Context, FRandomStream& Rng) const
+{
+    EnsureLoaded();
+    return PickFromBiomeWeightedCache(CachedLandResourcesByBiome, CachedLandWeightsByBiome, Cell, Context, Rng);
 }
 
 FName UIngredientRegistrySubsystem::PickFromBiomeWeightedCache(const TMap<EBiomeType, TArray<FName>>& ResourceCache,
@@ -398,6 +411,8 @@ void UIngredientRegistrySubsystem::Reset()
     CachedWeightsByBiome.Empty();
     CachedAquaticResourcesByBiome.Empty();
     CachedAquaticWeightsByBiome.Empty();
+    CachedLandResourcesByBiome.Empty();
+    CachedLandWeightsByBiome.Empty();
     CachedResourcesByNiche.Empty();
     CachedWeightsByNiche.Empty();
     bInitialized = false;

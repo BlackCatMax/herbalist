@@ -29,6 +29,7 @@
 // зависимости нет — HerbalistSaveTypes.h ничего не включает из этого файла.
 #include "Core/Save/HerbalistSaveTypes.h"
 #include "Core/World/WorldLayout.h"
+#include "Core/World/ResourceSlots.h"
 #include "GridWorldManager.generated.h"
 
 class AHerbalistResourceActor;
@@ -668,6 +669,34 @@ public:
     // не спавнит, и это правильный исход: лучше пустая клетка, чем трава
     // внутри валуна.
     bool FindFreeSpawnPositionInCell(int32 X, int32 Y, float JitterRadius, FRandomStream& Rng, FVector& OutPosition) const;
+
+    // ---- Слоты ресурсов (2026-09-19, этап 5б, Core/World/ResourceSlots.h) ----
+    // Слот места PlacementSlot: слоты клетки перемешаны потоком клетки один
+    // раз, место i берёт i-й слот (по кругу). Выбор не зависит от состояния
+    // клетки -- спящая и проснувшаяся клетка, первичное заселение и загрузка
+    // сейва видят для места один и тот же слот, а места до числа слотов
+    // клетки -- разные слоты. Вид места слота решает пул видов.
+    bool GetAssignedResourceSlot(int32 X, int32 Y, int32 PlacementSlot, FHerbalistResourceSlot& OutSlot) const;
+
+    // Точка слота для вида: свой слот, если годится виду
+    // (HerbalistResourceSlots::SlotSuitsSpecies), не занят статикой и живым
+    // ресурсом клетки; иначе -- следующий такой же по тому же порядку. Нет --
+    // false.
+    bool FindResourceSlotPosition(int32 X, int32 Y, int32 PlacementSlot, bool bAquaticSpecies, FVector& OutPosition) const;
+
+    // Место ресурса. Клетка со слотами -- точка слота (bOutFromSlot, случайный
+    // сдвиг региона к ней не применяется); подходящего свободного слота нет --
+    // земному виду прежний поиск, водному -- false: разбросом водная трава
+    // встала бы на дно или на сушу. Клетка без слотов -- прежний поиск.
+    bool FindResourcePosition(int32 X, int32 Y, int32 PlacementSlot, bool bAquaticSpecies, FRandomStream& PlacementRng,
+        FVector& OutPosition, bool& bOutFromSlot) const;
+
+    bool HasResourceSlots(int32 X, int32 Y) const;
+
+    // Слоты карты: BeginPlay грузит ассет /Game/Data/ResourceSlots/RS_<карта>
+    // (нет -- слотов нет). Тестовый шов: подставить свои.
+    void SetResourceSlots(UHerbalistResourceSlots* InSlots);
+    UHerbalistResourceSlots* GetResourceSlots() const { return ResourceSlotsAsset; }
 
     // Занята ли точка статической геометрией (ландшафт не в счёт).
     bool IsSpawnPointBlocked(const FVector& Point) const;
@@ -2509,6 +2538,16 @@ private:
     // до ухода игрока, никогда бы не восстановилась: при первой встрече
     // догонять было бы «нечего», и дальний мир стоял бы замороженным.
     float GridInitGameClock = 0.0f;
+
+    // Слоты ресурсов карты и их раскладка по клеткам (строится при первом
+    // обращении: раскладке нужна разметка сетки).
+    UPROPERTY(Transient)
+    TObjectPtr<UHerbalistResourceSlots> ResourceSlotsAsset;
+    mutable TMap<FIntPoint, TArray<FHerbalistResourceSlot>> ResourceSlotsByCell;
+    mutable bool bResourceSlotsIndexed = false;
+    const TArray<FHerbalistResourceSlot>* FindCellResourceSlots(int32 X, int32 Y) const;
+    // Порядок слотов клетки: перестановка 0..NumSlots-1 потоком клетки.
+    TArray<int32> MakeResourceSlotOrder(int32 X, int32 Y, int32 NumSlots) const;
 
     // Коллекция времени для материалов, разрешённая из настроек один раз
     // (WriteTimeDisplayParametersFromSettings).

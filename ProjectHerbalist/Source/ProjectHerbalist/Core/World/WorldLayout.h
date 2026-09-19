@@ -248,6 +248,7 @@ struct PROJECTHERBALIST_API FWorldLayoutSolver
         ResourceCount = 2,
         ResourceSpecies = 3,
         ResourcePlacement = 4,
+        ResourceSlotOrder = 5,   // порядок слотов ресурсов клетки (этап 5б)
     };
 
     // Сид клетки из сида мира, глобальной координаты клетки, назначения и
