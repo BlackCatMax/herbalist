@@ -1361,7 +1361,14 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // знака, что уже применяет §16.2 для bTriggerAbove=false
                 // (AmbientEntityTypes.h): сравниваем отрицания, не пишем
                 // отдельную "ниже порога" версию PassesHysteresisThreshold.
-                const bool bMorokEligible = PassesHysteresisThreshold(bWasActive, -Graph->GetAmbientMorok(BiomeID), -Def.MorokThreshold, HysteresisMargin);
+                // Благие есть всегда, пока биом не испорчен сверх своей
+                // природы (решение пользователя 2026-09-19): сравнивается
+                // отклонение MorokField от природы биома, не абсолютный
+                // уровень -- в покое оно ~0. Прежний абсолютный порог карточки
+                // (MorokThreshold, ниже природы) теперь -- «регион очищен»,
+                // гейт наград (IsLegendaryRegionRestored).
+                const float Tolerance = Settings ? Settings->BenignLegendaryMorokTolerance : 0.1f;
+                const bool bMorokEligible = PassesHysteresisThreshold(bWasActive, -Node->MorokField, -Tolerance, HysteresisMargin);
                 bool bShrineEligible = false;
                 if (Def.bHasShrinePath)
                 {

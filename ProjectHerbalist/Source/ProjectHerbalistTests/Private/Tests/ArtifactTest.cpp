@@ -8,6 +8,7 @@
 // использует для "Болотный царь").
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Entities/ArtifactTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Misc/AutomationTest.h"
@@ -149,6 +150,50 @@ bool FHerbalistArtifact_HonestOfferingAcquiresArtifact::RunTest(const FString& P
     TestFalse(TEXT("Cannot acquire the same artifact twice"),
         Manager->TryAcquireArtifact(ArtifactID, Offered, bViaDeception));
 
+    Manager->Destroy();
+    return true;
+}
+
+// Благие есть и в покое (решение пользователя 2026-09-19), а честный путь к
+// артефакту -- только после очищения региона: на настоящем графе биомов.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistArtifact_HonestPathNeedsARestoredRegion,
+    "Herbalist.Artifact.HonestPathNeedsARestoredRegion",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistArtifact_HonestPathNeedsARestoredRegion::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    UBiomeGraphSubsystem* Graph = InitGraph(World);
+    const FIntPoint* Anchor = Manager->GetLegendaryAnchors().Find(FName(TEXT("Индрик-зверь")));
+    FBiomeGraphNode* Node = Graph ? Graph->GetMutableNode(FBiomeDefaults::BiomeTypeToName(EBiomeType::Taiga)) : nullptr;
+    if (!TestNotNull(TEXT("Graph"), Graph) || !TestNotNull(TEXT("Anchor"), Anchor) || !TestNotNull(TEXT("Taiga node"), Node))
+    {
+        if (Graph) Graph->Deinitialize();
+        Manager->Destroy();
+        return false;
+    }
+    Manager->SetGameClockSeconds(10.0f * 60.0f);   // день
+
+    // Тайга в покое: Индрик есть.
+    Node->MorokField = 0.0f;
+    Manager->UpdateEntityManifestations(1.0f);
+    TestTrue(TEXT("Resting taiga -- Индрик-зверь is there"), Manager->IsLegendaryManifested(FName(TEXT("Индрик-зверь"))));
+
+    TArray<FInventoryItem> Offered = { MakeOfferedItem(0.9f, 0.0f) };
+    bool bViaDeception = true;
+    TestFalse(TEXT("Resting taiga -- honest offering is not enough yet"),
+        Manager->TryAcquireArtifact(FName(TEXT("Рог")), Offered, bViaDeception));
+
+    // Тайгу увели ниже её природы (0.25 -> 0.10) -- регион очищен.
+    Node->MorokField = -0.15f;
+    Manager->UpdateEntityManifestations(1.0f);
+    TestTrue(TEXT("Restored taiga -- honest offering acquires Рог"),
+        Manager->TryAcquireArtifact(FName(TEXT("Рог")), Offered, bViaDeception));
+
+    Graph->Deinitialize();
     Manager->Destroy();
     return true;
 }

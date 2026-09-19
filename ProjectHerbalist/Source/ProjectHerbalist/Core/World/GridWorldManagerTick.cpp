@@ -506,7 +506,7 @@ void AGridWorldManager::RunSimulationStep()
                 const FArtifactDefinition* Def = FindArtifactDefinition(Artifact.ArtifactID);
                 if (!Def || Def->bWarmsFromGlobalClarity || Def->Biome != BrewCell->Biome) continue;
 
-                if (!IsLegendaryManifested(Def->LegendaryEntityID)) continue;
+                if (!IsLegendaryRegionRestored(Def->LegendaryEntityID)) continue;
 
                 bool bTypeMatches = false;
                 if (Artifact.ArtifactID == FName(TEXT("Клубочек")))

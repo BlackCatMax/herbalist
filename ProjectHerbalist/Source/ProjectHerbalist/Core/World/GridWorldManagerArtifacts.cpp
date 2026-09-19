@@ -13,6 +13,8 @@
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Simulation/Private/PerceptionService.h"
 #include "Core/Entities/LegendaryEntityActor.h"
+#include "Core/Entities/LegendaryEntityTypes.h"
+#include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Player/HerbalistPlayerController.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
@@ -40,6 +42,43 @@ bool AGridWorldManager::IsArtifactWarmed(FName ArtifactID) const
         {
             return Artifact.Warmth >= WarmthThreshold;
         }
+    }
+    return false;
+}
+
+bool AGridWorldManager::IsLegendaryRegionRestored(FName EntityID) const
+{
+    if (!IsLegendaryManifested(EntityID))
+    {
+        return false;
+    }
+    const FLegendaryEntityDefinition* Def = GetLegendaryEntityDefinitions().FindByPredicate(
+        [EntityID](const FLegendaryEntityDefinition& Candidate) { return Candidate.EntityID == EntityID; });
+    // Злые и per-клеточные (Берегиня: проявление уже держится на накопленной
+    // чистоте клеток) -- очищение и есть проявление.
+    if (!Def || Def->Pole != ELegendaryPole::Benign || Def->bUsesCellHistoryPurity)
+    {
+        return true;
+    }
+    const FIntPoint* Anchor = LegendaryAnchors.Find(EntityID);
+    const FGridCell* Cell = Anchor ? GetCellConst(Anchor->X, Anchor->Y) : nullptr;
+    const UBiomeGraphSubsystem* Graph = GetWorld() ? GetWorld()->GetSubsystem<UBiomeGraphSubsystem>() : nullptr;
+    if (!Cell || !Graph || Cell->Memory.bDegrading)
+    {
+        return false;
+    }
+    // Прежний гейт проявления Благих (до 2026-09-19): Морок биома ниже
+    // абсолютного порога карточки (ниже природы -- реальное очищение) или
+    // восстановленное капище рядом.
+    if (Graph->GetAmbientMorok(FBiomeDefaults::BiomeTypeToName(Def->Biome)) < Def->MorokThreshold)
+    {
+        return true;
+    }
+    if (Def->bHasShrinePath)
+    {
+        const UHerbalistSettings* Settings = GetHerbalistSettings();
+        const int32 Radius = GetCellRadius(Settings ? Settings->ShrineInfluenceRadiusMeters : 30.0f);
+        return HerbalistCore::Shrine::GetInfluenceAt(*Anchor, Shrines, Radius) >= Def->ShrineThreshold;
     }
     return false;
 }
@@ -96,7 +135,9 @@ bool AGridWorldManager::TryAcquireArtifact(FName ArtifactID, const TArray<FInven
     // (Берегиня не в LegendaryEntityTypes.h) -- теперь она обычная строка
     // реестра, IsLegendaryManifested сама умеет её (fallback-скан без
     // якоря), развилка не нужна.
-    if (!IsLegendaryManifested(Def->LegendaryEntityID)) return false;
+    // Честный путь -- только после очищения региона (решение пользователя
+    // 2026-09-19): сама сущность теперь есть и в покое.
+    if (!IsLegendaryRegionRestored(Def->LegendaryEntityID)) return false;
 
     // Честный/обманный путь — то же различие S_real/S_Perceived, что уже
     // отличает тултип (AlchemySlotWidget.cpp) от настоящего Cell.State.

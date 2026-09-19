@@ -126,17 +126,25 @@ bool FHerbalistLegendary_BenignPoleTriggersOnLowMorokOrShrine::RunTest(const FSt
         return false;
     }
 
-    // Высокий MorokField, нет капища рядом -- НЕ должен проявиться.
-    Node->MorokField = 0.8f;
+    // Покой (решение пользователя 2026-09-19): Благой есть, пока биом не
+    // испорчен сверх природы, -- но награды за него (честный артефакт и др.)
+    // ещё закрыты: регион не очищен.
+    Node->MorokField = 0.0f;
     Manager->UpdateEntityManifestations(1.0f);
     FGridCell* Cell = Manager->GetCell(Anchor->X, Anchor->Y);
+    TestEqual(TEXT("Resting forest -- Дуб-старец is there"), Cell->ManifestedEntityID, FName(TEXT("Дуб-старец")));
+    TestTrue(TEXT("Resting forest -- manifested"), Manager->IsLegendaryManifested(FName(TEXT("Дуб-старец"))));
+    TestFalse(TEXT("Resting forest -- region not restored yet"), Manager->IsLegendaryRegionRestored(FName(TEXT("Дуб-старец"))));
+
+    // Высокий MorokField, нет капища рядом -- порча прячет Благого.
+    Node->MorokField = 0.8f;
+    Manager->UpdateEntityManifestations(1.0f);
     TestNotEqual(TEXT("High MorokField, no shrine -- Дуб-старец does not manifest"),
         Cell->ManifestedEntityID, FName(TEXT("Дуб-старец")));
 
-    // Первый путь: ambient-Морок падает достаточно низко. Дефолт
-    // Широколиственного леса 0.30, потолок Дуба-старца 0.20 -- то есть
-    // Благой ранг требует, чтобы лес увели НИЖЕ его собственной природы
-    // (см. довод про знаковое отклонение у Болотного царя выше).
+    // Очищение: ambient-Морок ниже порога карточки. Дефолт Широколиственного
+    // леса 0.30, порог Дуба-старца 0.20 -- лес увели НИЖЕ его собственной
+    // природы; с 2026-09-19 это гейт наград, не проявления.
     Node->MorokField = -0.2f;   // ambient 0.10 -- ниже потолка 0.20
     const float StabilityBefore = Cell->TargetState.Meta.Stability;
     Manager->UpdateEntityManifestations(1.0f);
@@ -144,6 +152,7 @@ bool FHerbalistLegendary_BenignPoleTriggersOnLowMorokOrShrine::RunTest(const FSt
         Cell->ManifestedEntityID, FName(TEXT("Дуб-старец")));
     TestTrue(TEXT("Дуб-старец nudges Stability up"),
         Cell->TargetState.Meta.Stability > StabilityBefore);
+    TestTrue(TEXT("Forest led below its nature -- region restored"), Manager->IsLegendaryRegionRestored(FName(TEXT("Дуб-старец"))));
 
     Graph->Deinitialize();
     Manager->Destroy();

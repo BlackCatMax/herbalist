@@ -529,6 +529,14 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float NightHorrorDistortionRate = 0.003f;
 
+    // Благие Легендарные «всегда есть» (решение пользователя 2026-09-19):
+    // проявлены, пока Морок их биома не поднялся выше природы биома больше
+    // чем на это отклонение, -- в покоящемся мире есть, порча региона прячет.
+    // Награды (честный артефакт, перья, прогрев, НЕ ПОХВАЛИЛА) по-прежнему --
+    // за очищение: IsLegendaryRegionRestored, прежние пороги карточки.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Legendary", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float BenignLegendaryMorokTolerance = 0.1f;
+
     UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float NightHorrorCorruptionRate = 0.002f;
 

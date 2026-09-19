@@ -48,14 +48,14 @@ bool AGridWorldManager::TryAcquireProphetFeather(FName FeatherID)
         const bool bHasMirror = AcquiredArtifacts.ContainsByPredicate(
             [](const FAcquiredArtifact& A) { return A.ArtifactID == MirrorID; });
         if (!bHasMirror || !IsArtifactWarmed(MirrorID)) return false;
-        if (!IsLegendaryManifested(FName(TEXT("Гамаюн")))) return false;
+        if (!IsLegendaryRegionRestored(FName(TEXT("Гамаюн")))) return false;
     }
     else if (FeatherID == Feather_Alkonost)
     {
         // "устойчиво чистый биом" — то же самое, что уже проверяет
         // IsLegendaryManifested("Алконост") (Benign-полюс §16.4: низкий
         // MorokField узла ИЛИ высокая Restoration капища рядом).
-        if (!IsLegendaryManifested(FName(TEXT("Алконост")))) return false;
+        if (!IsLegendaryRegionRestored(FName(TEXT("Алконост")))) return false;
     }
     else if (FeatherID == Feather_Sirin)
     {
@@ -69,7 +69,7 @@ bool AGridWorldManager::TryAcquireProphetFeather(FName FeatherID)
         // EntityID в реестре — "жар-птица" (нижний регистр, см.
         // LegendaryEntityTypes.h), не "Жар-птица" — сохраняем как есть,
         // не переименовываю чужой существующий реестр ради косметики.
-        if (!IsLegendaryManifested(FName(TEXT("жар-птица")))) return false;
+        if (!IsLegendaryRegionRestored(FName(TEXT("жар-птица")))) return false;
     }
     else
     {

@@ -164,7 +164,7 @@ void AGridWorldManager::TrySpawnStateBasedFragment()
     // — приближение открытого вопроса главы, не точная спецификация.
     {
         const FMemoryFragmentDefinition* Def = HerbalistCore::Zaryana::FindMemoryFragmentDefinition(FName(TEXT("NE_POKHVALILA")));
-        if (Def && !CollectedFragmentIDs.Contains(Def->ID) && IsLegendaryManifested(FName(TEXT("Баба-Яга"))))
+        if (Def && !CollectedFragmentIDs.Contains(Def->ID) && IsLegendaryRegionRestored(FName(TEXT("Баба-Яга"))))
         {
             const FIntPoint* Anchor = LegendaryAnchors.Find(FName(TEXT("Баба-Яга")));
             if (Anchor)
