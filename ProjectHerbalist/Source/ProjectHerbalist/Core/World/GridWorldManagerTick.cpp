@@ -458,16 +458,9 @@ void AGridWorldManager::RunSimulationStep()
     // время варки).
     for (const FCommandEntry& Cmd : CommandsCopy)
     {
-        if (Cmd.Primitive != ECommandPrimitive::Apply || !Cmd.Apply.bBifurcationCharmActive) continue;
-
-        for (FAcquiredArtifact& Artifact : AcquiredArtifacts)
+        if (Cmd.Primitive == ECommandPrimitive::Apply && Cmd.Apply.bBifurcationCharmActive)
         {
-            if (Artifact.ArtifactID == FName(TEXT("Камень-оберег")) && !Artifact.bBifurcationChargeSpent)
-            {
-                Artifact.bBifurcationChargeSpent = true;
-                UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Камень-оберег charge spent"));
-                break;
-            }
+            SpendBifurcationCharm();
         }
     }
 

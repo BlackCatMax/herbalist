@@ -158,6 +158,14 @@ ERitualStepResult AGridWorldManager::TryAdvanceRitual(const FIntPoint& CauldronC
             Entry.Apply.bBifurcationCharmActive = HasUnspentBifurcationCharm();
             Batch.AddCommand(Entry);
             FStateDelta Delta = Simulation::ExecutePipeline(EmptyWorldSnap, EmptyInvSnap, EmptyBiomeSnap, Batch, Rng);
+            // Заряд тратится самим фактом варки с ним (§21.3), как в обычной
+            // варке, -- ритуал идёт мимо очереди команд, где это делает
+            // RunSimulationStep, поэтому списываем здесь (закрыт разрыв,
+            // известный с 2026-09-02).
+            if (Entry.Apply.bBifurcationCharmActive)
+            {
+                SpendBifurcationCharm();
+            }
 
             ActiveRituals.Remove(CauldronCell);
 

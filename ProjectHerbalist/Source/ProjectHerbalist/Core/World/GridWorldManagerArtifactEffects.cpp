@@ -129,6 +129,19 @@ bool AGridWorldManager::IsInvisibilityCapActive(const FIntPoint& Cell) const
     return Dist <= Radius;
 }
 
+void AGridWorldManager::SpendBifurcationCharm()
+{
+    for (FAcquiredArtifact& Artifact : AcquiredArtifacts)
+    {
+        if (Artifact.ArtifactID == FName(TEXT("Камень-оберег")) && !Artifact.bBifurcationChargeSpent)
+        {
+            Artifact.bBifurcationChargeSpent = true;
+            UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Камень-оберег charge spent"));
+            return;
+        }
+    }
+}
+
 bool AGridWorldManager::HasUnspentBifurcationCharm() const
 {
     return AcquiredArtifacts.ContainsByPredicate(

@@ -76,11 +76,10 @@ struct FApplyCommand
     // вызывающая сторона (AGridWorldManager::ResolveBrewModifiers/
     // HasUnspentBifurcationCharm -- для котла и ApplyAlchemyResult) проверяет
     // AcquiredArtifacts перед постановкой команды в очередь, Pipeline не
-    // лезет в мировое состояние сам. НЕ прошито для завершения ритуала
-    // (GridWorldManagerRitual.cpp) -- тот путь идёт мимо обычной очереди
-    // команд/RunSimulationStep, куда привязан пост-обработка списания
-    // заряда, и ритуалы и так уже обходят градации риска Bifurcation
-    // (RiskyCount=0 при bIsRitual) -- отдельная, более редкая задача.
+    // лезет в мировое состояние сам. Завершение ритуала
+    // (GridWorldManagerRitual.cpp) ставит флаг само и само списывает заряд
+    // (SpendBifurcationCharm) -- тот путь идёт мимо очереди команд и
+    // RunSimulationStep (с 2026-09-19; раньше заряд там спасал, не тратясь).
     bool bBifurcationCharmActive = false;
 
     // Лунный цикл (15_Cycles_And_Shrines.md §15.3, 2026-09-02, Tier 1 п.1.2) --

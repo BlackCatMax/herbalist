@@ -278,18 +278,14 @@ bool FHerbalistRitual_BypassesIngredientCountRisk::RunTest(const FString& Parame
 // Rng.FRand() < 0.0*PurifyOddsMultiplier гарантированно ложно при любом
 // сиде, без оберега это надёжный Catastrophe, не вероятностный.
 //
-// Известный, принятый разрыв (см. комментарий у FApplyCommand::
-// bBifurcationCharmActive и Tier 2 п.2.4 curried-noodling-cherny.md):
-// списание заряда (GridWorldManagerTick.cpp, "Камень-оберег списывается")
-// читает CommandsCopy внутри RunSimulationStep -- ритуал идёт мимо него,
-// поэтому заряд спасает варку, но не тратится. Тест фиксирует это явно,
-// не прячет.
+// Заряд тратится и ритуалом (2026-09-19): раньше списание жило только в
+// RunSimulationStep, ритуал шёл мимо, и заряд спасал варку, не тратясь.
 // ---------------------------------------------------------------------------
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent,
-    "Herbalist.Ritual.BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_BifurcationCharmPurifiesRitualBrewAndIsSpent,
+    "Herbalist.Ritual.BifurcationCharmPurifiesRitualBrewAndIsSpent",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent::RunTest(const FString& Parameters)
+bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewAndIsSpent::RunTest(const FString& Parameters)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!TestNotNull(TEXT("Editor world available"), World)) return false;
@@ -332,9 +328,9 @@ bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewButChargeStaysUnspent::R
     TestEqual(TEXT("Unspent Камень-оберег turns the same critical ritual brew into Purified"),
         PotionWithCharm.BrewOutcome, EAlchemyOutcome::Purified);
 
-    // --- Известный разрыв: заряд НЕ списывается ритуальным путём ---
-    TestFalse(TEXT("Known gap (Tier 2 п.2.4): charge is not marked spent -- TryAdvanceRitual bypasses RunSimulationStep's spend logic"),
-        Manager->GetAcquiredArtifacts()[0].bBifurcationChargeSpent);
+    // --- Заряд потрачен ритуалом -- второй ритуал уже без него ---
+    TestTrue(TEXT("Ritual spends the charge"), Manager->GetAcquiredArtifacts()[0].bBifurcationChargeSpent);
+    TestFalse(TEXT("No unspent charge left"), Manager->HasUnspentBifurcationCharm());
 
     Manager->Destroy();
     return true;
