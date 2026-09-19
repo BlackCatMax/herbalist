@@ -302,6 +302,117 @@ bool FHerbalistResourceSlots_WaterSlotGrowsAquaticSpeciesOnIt::RunTest(const FSt
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistResourceSlots_RestoreAndRegrowthKeepSlots,
+    "Herbalist.ResourceSlots.RestoreAndRegrowthKeepSlots",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistResourceSlots_RestoreAndRegrowthKeepSlots::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    UIngredientRegistrySubsystem* Registry = MakeSlotsTestRegistry();
+
+    FGridCell* Cell = Manager->GetCell(5, 5);
+    if (!TestNotNull(TEXT("Cell (5,5)"), Cell) || !Manager->IsCellMaterialized(*Cell))
+    {
+        AddError(TEXT("Клетка (5,5) не материализована -- проверка не прошла"));
+        Manager->Destroy();
+        return false;
+    }
+    Cell->Biome = EBiomeType::Bog;
+    Cell->bIsWater = false;
+    Cell->BiomeWeights.Reset();
+    const FVector Corner = Manager->GetCellWorldPositionFlat(5, 5) + FVector(0.0f, 0.0f, 100000.0f);
+    const float Quarter = Manager->CellSize * 0.25f;
+    const TArray<FVector> Points = { Corner + FVector(Quarter, Quarter, 0.0f), Corner + FVector(3.0f * Quarter, Quarter, 0.0f),
+        Corner + FVector(Quarter, 3.0f * Quarter, 0.0f) };
+    Manager->SetResourceSlots(MakeSlotsForTest({ MakeSlotForTest(Points[0], EResourceSlotKind::Water),
+        MakeSlotForTest(Points[1], EResourceSlotKind::Shore), MakeSlotForTest(Points[2], EResourceSlotKind::Land) }));
+
+    auto ClearCell = [Cell]()
+    {
+        for (const TWeakObjectPtr<AHerbalistResourceActor>& Spawned : Cell->ResourceActors)
+        {
+            if (Spawned.IsValid())
+            {
+                Spawned->Destroy();
+            }
+        }
+        Cell->ResourceActors.Reset();
+    };
+    auto FindAtPlace = [Cell](int32 Place) -> AHerbalistResourceActor*
+    {
+        for (const TWeakObjectPtr<AHerbalistResourceActor>& Spawned : Cell->ResourceActors)
+        {
+            if (Spawned.IsValid() && Spawned->GetPlacementSlot() == Place)
+            {
+                return Spawned.Get();
+            }
+        }
+        return nullptr;
+    };
+
+    // Первичное заселение: три места -- три слота.
+    TArray<FName> Species;
+    TArray<FVector> Locations;
+    for (int32 Place = 0; Place < 3; ++Place)
+    {
+        FRandomStream SpeciesRng(20 + Place);
+        TestTrue(*FString::Printf(TEXT("Место %d заселено"), Place),
+            Manager->SpawnOneResourceInCell(*Cell, FHarvestContext(), nullptr, nullptr, Registry, SpeciesRng, Place));
+        const AHerbalistResourceActor* Grown = FindAtPlace(Place);
+        if (!TestNotNull(*FString::Printf(TEXT("Актор места %d"), Place), Grown))
+        {
+            ClearCell();
+            Manager->Destroy();
+            return false;
+        }
+        Species.Add(Grown->GetIngredientID());
+        Locations.Add(Grown->GetActorLocation());
+    }
+
+    // Сейв и пробуждение спящей клетки (SpawnResourceActor) в обратном порядке
+    // -- другое состояние клетки, те же места.
+    ClearCell();
+    for (int32 Place = 2; Place >= 0; --Place)
+    {
+        Manager->SpawnResourceActor(Species[Place], 5, 5, FVector::ZeroVector, Registry, Place);
+        const AHerbalistResourceActor* Restored = FindAtPlace(Place);
+        if (TestNotNull(*FString::Printf(TEXT("Место %d восстановлено"), Place), Restored))
+        {
+            TestTrue(*FString::Printf(TEXT("Место %d -- на прежней точке"), Place),
+                FVector::Dist2D(Restored->GetActorLocation(), Locations[Place]) < 1.0f);
+        }
+    }
+
+    // Сбор места 1 и отрастание: новый индекс места по кругу попадает на
+    // занятый слот -- ресурс всё равно вырастает, и не в занятую точку.
+    if (AHerbalistResourceActor* Harvested = FindAtPlace(1))
+    {
+        Cell->ResourceActors.Remove(Harvested);
+        Harvested->Destroy();
+    }
+    FRandomStream RegrowthRng(40);
+    TestTrue(TEXT("Отрастание поставило ресурс"), Manager->SpawnOneResourceInCell(*Cell, FHarvestContext(), nullptr, nullptr, Registry,
+        RegrowthRng, AGridWorldManager::AllocatePlacementSlot(*Cell)));
+    TestEqual(TEXT("В клетке снова три ресурса"), Cell->ResourceActors.Num(), 3);
+    for (const FVector& Point : Points)
+    {
+        int32 OnPoint = 0;
+        for (const TWeakObjectPtr<AHerbalistResourceActor>& Spawned : Cell->ResourceActors)
+        {
+            OnPoint += Spawned.IsValid() && FVector::Dist2D(Spawned->GetActorLocation(), Point) < 1.0f ? 1 : 0;
+        }
+        TestTrue(TEXT("На слоте не больше одного ресурса"), OnPoint <= 1);
+    }
+
+    ClearCell();
+    Manager->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistResourceSlots_SlotsGraphAndWaterVolume,
     "Herbalist.ResourceSlots.SlotsGraphAndWaterVolume",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
