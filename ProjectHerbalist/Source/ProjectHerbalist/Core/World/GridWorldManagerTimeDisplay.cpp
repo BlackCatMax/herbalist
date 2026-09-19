@@ -144,4 +144,15 @@ void AGridWorldManager::JumpGameClock(double NewClockSeconds)
         GameClockSeconds, GetCalendarDay(), GetCalendarMonth(),
         *UEnum::GetValueAsString(GetSeason()), *UEnum::GetValueAsString(GetLoreSeason()),
         GetTimeOfDay01(), *UEnum::GetValueAsString(GetMoonPhase()));
+
+    // То же, что уходит в материалы (MPC_WorldStateFields), и погода, которую
+    // видит симуляция: проверка в PIE без открытия материала
+    // (docs/verification/pie/04_World_State.md, «Живая растительность»).
+    const FLinearColor Phases = GetDayPhaseWeights();
+    const FLinearColor Seasons = GetSeasonWeights();
+    UE_LOG(LogHerbalistWorld, Display,
+        TEXT("[Time] Показ: сутки р/д/з/н %.2f/%.2f/%.2f/%.2f, сезоны в/л/о/з %.2f/%.2f/%.2f/%.2f, SeasonUDW %.3f, листва опала %.2f, листопад %.2f, подстилка %.2f, полнолуние %.2f; погода (%s) дождь %.2f снег %.2f ветер %.2f"),
+        Phases.R, Phases.G, Phases.B, Phases.A, Seasons.R, Seasons.G, Seasons.B, Seasons.A,
+        GetSeasonUDW(), GetLeafDrop01(), GetLeafFall01(), GetLeafLitter01(), GetMoonFull01(),
+        bWeatherBridgeActive ? TEXT("UDW") : TEXT("шум"), GetRainIntensity(), GetSnowIntensity(), GetWindIntensity());
 }
