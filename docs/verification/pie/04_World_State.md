@@ -58,11 +58,20 @@
 Атрибуты точек: `Distortion`, `Corruption`, `Purity`, `Stability`,
 `HarvestStress`, `ShrineRestoration`, `Biome`, `bIsWater`, `ManifestedEntity`.
 
+Трава на `L_TestDev` генерируется в рантайме (с 2026-09-19): у PCG-компонентов
+`BP_BiomeVolume` — `Generate at Runtime` с разбиением на ячейки. Проверка:
+при старте PIE травы вокруг игрока нет, пока ячейки не сгенерируются, затем
+она появляется ячейками по 64 м в радиусе 128 м; в логе графа не должно быть
+ошибки о недоступном кэше ландшафта (у PCG World Actor — `SerializeOnlyAtCook`,
+иначе данных ландшафта в PIE нет и травы не будет вовсе); на покраске слоя `Ground` (вес ≥ 0.8) травы нет, по мягким
+краям мазка — есть. Следить за рывком при подходе к объёму (`stat unit`) — на
+объём порядка миллиона точек.
+
 Сезон травы (`PCG_Grass`, узел **Sample Herbalist Cell**): точкам пишутся
 `SeasonKey` (Spring/Summer/Autumn/Winter на момент генерации) и
 `SeasonMeshKey` (`Healthy_Winter`), трава прореживается по доле сезона
-(`WinterDensity` 0.4). Работает только при **Generate at Runtime**: при
-`GenerateOnLoad` граф запекается в редакторе без сетки, в логе графа
+(`WinterDensity` 0.4). Работает только при **Generate at Runtime** (включено):
+при `GenerateOnLoad` граф запекался бы в редакторе без сетки, в логе графа
 предупреждение «Сетка недоступна», сезона нет. Проверка: `SkipGameDays 275`
 (зима), уйти от места дальше радиуса генерации и вернуться — травы заметно
 меньше; в логе `LogHerbalistWorld Verbose` — `прорежено сезоном Winter: N`.

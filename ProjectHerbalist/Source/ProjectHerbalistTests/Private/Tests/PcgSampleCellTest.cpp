@@ -25,6 +25,12 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Commandlets/PcgGrassSeasonSetupCommandlet.h"
+#include "Commandlets/PcgGrassRuntimeBuilder.h"
+#include "PCGComponent.h"
+#include "Engine/Blueprint.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#include "UObject/UnrealType.h"
 #include "PCGGraph.h"
 #include "PCGNode.h"
 #include "PCGEdge.h"
@@ -258,13 +264,14 @@ bool FHerbalistPcgSampleCell_GrassGraphSamplesCellBeforeNoise::RunTest(const FSt
     UPCGGraph* Asset = LoadObject<UPCGGraph>(nullptr, TEXT("/Game/PCG/PCG_Grass.PCG_Grass"));
     if (!TestNotNull(TEXT("PCG_Grass загружается"), Asset)) return false;
 
-    // Ассет: узел вставлен -run=PcgGrassSeasonSetup между World Raycast и Attribute Noise.
+    // Ассет: узел вставлен -run=PcgGrassSeasonSetup перед Attribute Noise; с
+    // 2026-09-19 перед ним фильтр покраски Ground (проекция ландшафта -> фильтр).
     const UPCGNode* InAsset = FindSampler(Asset);
     if (TestNotNull(TEXT("Sample Herbalist Cell стоит в PCG_Grass"), InAsset))
     {
         FString From, To;
         SamplerWiring(InAsset, From, To);
-        TestEqual(TEXT("Вход -- из World Raycast"), From, FString(TEXT("PCGWorldRaycastElementSettings")));
+        TestEqual(TEXT("Вход -- из фильтра покраски Ground"), From, FString(TEXT("PCGAttributeFilteringSettings")));
         TestEqual(TEXT("Выход -- в Attribute Noise"), To, FString(TEXT("PCGAttributeNoiseSettings")));
     }
 
@@ -297,10 +304,135 @@ bool FHerbalistPcgSampleCell_GrassGraphSamplesCellBeforeNoise::RunTest(const FSt
         {
             FString From, To;
             SamplerWiring(Inserted, From, To);
-            TestEqual(TEXT("Вставленный: вход из World Raycast"), From, FString(TEXT("PCGWorldRaycastElementSettings")));
+            TestEqual(TEXT("Вставленный: вход -- тот же узел, что был перед ним"), From, FString(TEXT("PCGAttributeFilteringSettings")));
             TestEqual(TEXT("Вставленный: выход в Attribute Noise"), To, FString(TEXT("PCGAttributeNoiseSettings")));
         }
     }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPcgSampleCell_GrassSkipsGroundPaintByLayerWeight,
+    "Herbalist.PcgSampleCell.GrassSkipsGroundPaintByLayerWeight",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPcgSampleCell_GrassSkipsGroundPaintByLayerWeight::RunTest(const FString& Parameters)
+{
+    // Трава росла на исключённой покраске Ground (2026-09-19): фильтр сравнивал
+    // Ground с @Last вместо порога, а точки-вычитатели были редкими. Теперь
+    // точкам травы проецируется ландшафт, фильтр с постоянным порогом
+    // «Ground < порога» -- до Sample Herbalist Cell.
+    UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, TEXT("/Game/PCG/PCG_Grass.PCG_Grass"));
+    if (!TestNotNull(TEXT("PCG_Grass загружается"), Graph)) return false;
+
+    auto ClassOf = [](const UPCGNode* Node) { return Node && Node->GetSettings() ? Node->GetSettings()->GetClass()->GetName() : FString(); };
+    auto Downstream = [&ClassOf](const UPCGNode* From, const TCHAR* ClassName, FName* OutFromLabel = nullptr) -> const UPCGNode*
+    {
+        for (const UPCGPin* Pin : From->GetOutputPins())
+            for (const UPCGEdge* Edge : Pin->Edges)
+                if (Edge && Edge->OutputPin && ClassOf(Edge->OutputPin->Node) == ClassName)
+                {
+                    if (OutFromLabel) *OutFromLabel = Pin->Properties.Label;
+                    return Edge->OutputPin->Node;
+                }
+        return nullptr;
+    };
+    const UPCGNode* Raycast = nullptr;
+    const UPCGNode* Landscape = nullptr;
+    int32 SurfaceSamplers = 0;
+    for (const UPCGNode* Node : Graph->GetNodes())
+    {
+        if (ClassOf(Node) == TEXT("PCGWorldRaycastElementSettings")) Raycast = Node;
+        if (ClassOf(Node) == TEXT("PCGGetLandscapeSettings")) Landscape = Node;
+        if (ClassOf(Node) == TEXT("PCGSurfaceSamplerSettings")) ++SurfaceSamplers;
+    }
+    if (!TestNotNull(TEXT("World Raycast"), Raycast) || !TestNotNull(TEXT("Get Landscape Data"), Landscape)) return false;
+    TestEqual(TEXT("Старой ветки точек-вычитателей нет"), SurfaceSamplers, 0);
+
+    const UPCGNode* Projection = Downstream(Raycast, TEXT("PCGProjectionSettings"));
+    TestTrue(TEXT("Трава после World Raycast проецируется на ландшафт"), Projection != nullptr);
+    TestTrue(TEXT("Цель проекции -- данные ландшафта"), Downstream(Landscape, TEXT("PCGProjectionSettings")) == Projection);
+    const UPCGNode* Filter = Projection ? Downstream(Projection, TEXT("PCGAttributeFilteringSettings")) : nullptr;
+    if (!TestNotNull(TEXT("После проекции -- фильтр атрибутов"), Filter)) return false;
+
+    FName FilterOut;
+    TestTrue(TEXT("Фильтр кормит Sample Herbalist Cell"), Downstream(Filter, TEXT("PCGHerbalistSampleCellSettings"), &FilterOut) != nullptr);
+    TestEqual(TEXT("...выходом InsideFilter"), FilterOut, FName(TEXT("InsideFilter")));
+
+    auto Export = [](const UPCGSettings* Settings, const TCHAR* Name)
+    {
+        FString Value;
+        if (const FProperty* Property = Settings->GetClass()->FindPropertyByName(Name))
+        {
+            Property->ExportTextItem_InContainer(Value, Settings, nullptr, nullptr, PPF_None);
+        }
+        return Value;
+    };
+    const UPCGSettings* FilterSettings = Filter->GetSettings();
+    TestEqual(TEXT("Постоянный порог включён"), Export(FilterSettings, TEXT("bUseConstantThreshold")), FString(TEXT("True")));
+    TestEqual(TEXT("Оператор -- меньше"), Export(FilterSettings, TEXT("Operator")), FString(TEXT("Lesser")));
+    TestTrue(TEXT("Сравнивается слой Ground"), Export(FilterSettings, TEXT("TargetAttribute")).Contains(TEXT("Ground")));
+    // Тип константы -- Float: по умолчанию Double, и тогда сравнение шло бы с
+    // DoubleValue (0) -- «Ground < 0» убрал бы всю траву.
+    // Выгрузка опускает поля со значением по умолчанию: Type читается напрямую.
+    FString ConstantType;
+    float ConstantValue = -1.0f;
+    if (const FStructProperty* Constant = CastField<FStructProperty>(FilterSettings->GetClass()->FindPropertyByName(TEXT("AttributeTypes"))))
+    {
+        const void* Value = Constant->ContainerPtrToValuePtr<void>(FilterSettings);
+        if (const FProperty* Type = Constant->Struct->FindPropertyByName(TEXT("Type")))
+            Type->ExportTextItem_InContainer(ConstantType, Value, nullptr, nullptr, PPF_None);
+        if (const FFloatProperty* Float = CastField<FFloatProperty>(Constant->Struct->FindPropertyByName(TEXT("FloatValue"))))
+            ConstantValue = Float->GetPropertyValue_InContainer(Value);
+    }
+    TestEqual(TEXT("Тип константы порога -- Float"), ConstantType, FString(TEXT("Float")));
+    TestTrue(*FString::Printf(TEXT("Порог пользователя 0.8 (%.3f)"), ConstantValue), FMath::IsNearlyEqual(ConstantValue, 0.8f, 1.0e-4f));
+
+    UPCGGraph* Copy = DuplicateObject<UPCGGraph>(Graph, GetTransientPackage());
+    TestEqual(TEXT("Повторное исправление -- ничего"), UPcgGrassSeasonSetupCommandlet::FixGroundExclusion(Copy), 0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistPcgSampleCell_GrassGeneratesAtRuntime,
+    "Herbalist.PcgSampleCell.GrassGeneratesAtRuntime",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistPcgSampleCell_GrassGeneratesAtRuntime::RunTest(const FString& Parameters)
+{
+    // Вариант А этапа 5: трава строится в рантайме, по ячейкам вокруг игрока,
+    // иначе граф запекается в редакторе без сетки и сезона нет.
+    auto IsPartitioned = [](const UPCGComponent* Component)
+    {
+        const FBoolProperty* Property = FindFProperty<FBoolProperty>(UPCGComponent::StaticClass(), TEXT("bIsComponentPartitioned"));
+        return Property && Property->GetPropertyValue_InContainer(Component);
+    };
+
+    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, TEXT("/Game/Blueprints/BP_BiomeVolume.BP_BiomeVolume"));
+    if (!TestTrue(TEXT("BP_BiomeVolume со скриптом конструирования"), Blueprint && Blueprint->SimpleConstructionScript)) return false;
+    int32 GrassTemplates = 0;
+    for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
+    {
+        const UPCGComponent* Template = Node ? Cast<UPCGComponent>(Node->ComponentTemplate) : nullptr;
+        if (!Template) continue;
+        ++GrassTemplates;
+        TestEqual(TEXT("Шаблон: генерация в рантайме"), Template->GenerationTrigger, EPCGComponentGenerationTrigger::GenerateAtRuntime);
+        TestTrue(TEXT("Шаблон: разбиение на ячейки"), IsPartitioned(Template));
+    }
+    TestEqual(TEXT("PCG-компонент в BP_BiomeVolume один"), GrassTemplates, 1);
+
+    // Граф травы: иерархическая генерация, сетка 64 м -- объём строится
+    // ячейками по мере подхода.
+    UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, TEXT("/Game/PCG/PCG_Grass.PCG_Grass"));
+    if (TestNotNull(TEXT("PCG_Grass"), Graph))
+    {
+        TestTrue(TEXT("Иерархическая генерация включена"), Graph->IsHierarchicalGenerationEnabled());
+        TestEqual(TEXT("Сетка 64 м"), Graph->GetDefaultGrid(), EPCGHiGenGrid::Grid64);
+    }
+
+    UPCGComponent* Transient = NewObject<UPCGComponent>(GetTransientPackage());
+    TestTrue(TEXT("Перевод в рантайм что-то меняет"), UPcgGrassRuntimeBuilder::ApplyRuntimeGeneration(Transient));
+    TestEqual(TEXT("...режим"), Transient->GenerationTrigger, EPCGComponentGenerationTrigger::GenerateAtRuntime);
+    TestTrue(TEXT("...разбиение"), IsPartitioned(Transient));
+    TestFalse(TEXT("Повторный перевод -- ничего"), UPcgGrassRuntimeBuilder::ApplyRuntimeGeneration(Transient));
     return true;
 }
 
