@@ -1,0 +1,14 @@
+[
+    {"Name": "Гнильники", "bRequiresSeason": true, "RequiredSeason": "Summer"},
+    {"Name": "Ржавые духи", "bRequiresSeason": true, "RequiredSeason": "Autumn"},
+    {"Name": "Курганники", "bRequiresNight": true},
+    {"Name": "Водяные бесы", "bRequiresSeason": true, "RequiredSeason": "Spring"},
+    {"Name": "Плескуны", "bRequiresSeason": true, "RequiredSeason": "Summer"},
+    {"Name": "Лесавки", "bRequiresSeason": true, "RequiredSeason": "Autumn"},
+    {"Name": "Пеньковые", "bRequiresSeason": true, "RequiredSeason": "Autumn"},
+    {"Name": "Чащобные духи", "bRequiresDusk": true},
+    {"Name": "Шептуны", "bRequiresWeather": true, "RequiredWeather": "Wind"},
+    {"Name": "Злыдни", "bRequiresSeason": true, "RequiredSeason": "Winter"},
+    {"Name": "Стукачи", "bRequiresDusk": true},
+    {"Name": "Подпольники", "bRequiresNight": true}
+]

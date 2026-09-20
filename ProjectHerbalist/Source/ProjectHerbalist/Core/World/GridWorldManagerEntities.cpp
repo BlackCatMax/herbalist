@@ -899,6 +899,14 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float NightHorrorSpiritRate     = Settings ? Settings->NightHorrorSpiritRate      : 0.003f;
     const float WinterPurityRate = Settings ? Settings->WinterPurityRate                    : 0.002f;
     const bool bAmbientSpawnersOwnLowRank = Settings && Settings->bUseAmbientSpawners;
+    // Пять ликов Ночной нечисти (§16.5, решение пользователя 2026-09-20):
+    // условия одинаковы для всей сетки за этот такт, читаются один раз.
+    const float LihomankiBodyRate     = Settings ? Settings->LihomankiBodyRate     : 0.003f;
+    const float OborotniStabilityRate = Settings ? Settings->OborotniStabilityRate : 0.003f;
+    const bool bNightNow  = IsNight();
+    const bool bNewMoon   = GetMoonPhase() == EMoonPhase::NewMoon;
+    const bool bFullMoon  = GetMoonPhase() == EMoonPhase::FullMoon;
+    const bool bAutumnNow = IsAutumn();
     const bool bIsWinter = GetSeason() == ESeason::Winter;   // одинаково для всей сетки за этот тик
     const float DawnPurityRate      = Settings ? Settings->DawnPurityRate      : 0.004f;
     const float DawnStabilityRate   = Settings ? Settings->DawnStabilityRate   : 0.004f;
@@ -1190,15 +1198,73 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // не KINDA_SMALL_NUMBER (2026-09-14, ревью): толчок за такт мельче 1e-4 --
         // начало заката, такт проявлений 0 (каждый кадр) -- иначе не писался бы
         // вовсе. Насыщенная ось (зажата в 0 или 1) не пишется и так.
-        if (IsNight())
+        if (bNightNow)
         {
-            const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + NightHorrorDistortionRate * DeltaTime, 0.0f, 1.0f);
-            const float NewCorruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
-            if (NewDistortion != NewTarget.Meta.Distortion || NewCorruption != NewTarget.Meta.Corruption)
+            // Пять ликов, а не один общий нудж (решение пользователя
+            // 2026-09-20, вариант Б). Раньше §16.5 давил одинаково по всей
+            // сетке каждую ночь: ночь была всюду одинаковой. Теперь у
+            // каждого лика своё условие и своя ось, а обычная ночь без
+            // совпадений -- тихая.
+            const bool bSteppeLands = Cell.Biome == EBiomeType::Steppe || Cell.Biome == EBiomeType::ForestSteppe;
+            const bool bDampBiome = Cell.Biome == EBiomeType::Bog || Cell.Biome == EBiomeType::Floodplain;
+            const bool bForest = Cell.Biome == EBiomeType::Taiga || Cell.Biome == EBiomeType::MixedForest
+                || Cell.Biome == EBiomeType::BroadleafForest;
+
+            // Вурдалаки -- мертвецы из могил: ночь у курганов (Степь и
+            // Лесостепь) на уже искажённой земле.
+            if (bSteppeLands && Cell.State.Meta.Distortion >= 0.5f)
             {
-                NewTarget.Meta.Distortion = NewDistortion;
-                NewTarget.Meta.Corruption = NewCorruption;
-                bChanged = true;
+                const float NewCorruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
+                if (NewCorruption != NewTarget.Meta.Corruption)
+                {
+                    NewTarget.Meta.Corruption = NewCorruption;
+                    bChanged = true;
+                }
+            }
+
+            // Лихоманки -- двенадцать сестёр-болезней: осенние ночи в сырых
+            // биомах, Тело вниз (лихорадка).
+            if (bAutumnNow && bDampBiome)
+            {
+                const float NewBody = FMath::Max(0.0f, NewTarget.Direction.Body - LihomankiBodyRate * DeltaTime);
+                if (NewBody != NewTarget.Direction.Body)
+                {
+                    NewTarget.Direction.Body = NewBody;
+                    bChanged = true;
+                }
+            }
+
+            // Навьи -- духи мёртвых: безлунная ночь, по всей сетке, Морок.
+            if (bNewMoon)
+            {
+                const float NewDistortion = FMath::Clamp(NewTarget.Meta.Distortion + NightHorrorDistortionRate * DeltaTime, 0.0f, 1.0f);
+                if (NewDistortion != NewTarget.Meta.Distortion)
+                {
+                    NewTarget.Meta.Distortion = NewDistortion;
+                    bChanged = true;
+                }
+            }
+
+            // Оборотни -- полнолуние в лесах: Стабильность вниз (гон зверя).
+            if (bFullMoon && bForest)
+            {
+                const float NewStability = FMath::Clamp(NewTarget.Meta.Stability - OborotniStabilityRate * DeltaTime, 0.0f, 1.0f);
+                if (NewStability != NewTarget.Meta.Stability)
+                {
+                    NewTarget.Meta.Stability = NewStability;
+                    bChanged = true;
+                }
+            }
+
+            // Черти -- любят болота и омуты: ночь на воде Болота и Поймы.
+            if (bDampBiome && Cell.bIsWater)
+            {
+                const float NewCorruption = FMath::Clamp(NewTarget.Meta.Corruption + NightHorrorCorruptionRate * DeltaTime, 0.0f, 1.0f);
+                if (NewCorruption != NewTarget.Meta.Corruption)
+                {
+                    NewTarget.Meta.Corruption = NewCorruption;
+                    bChanged = true;
+                }
             }
 
             // §15.2, третья часть той же строки таблицы ("усиление оси Spirit

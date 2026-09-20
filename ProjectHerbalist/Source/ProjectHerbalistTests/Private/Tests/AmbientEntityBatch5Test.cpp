@@ -9,6 +9,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -117,7 +118,12 @@ bool FHerbalistAmbientEntity_ProxyStubEntitiesManifestOnTheirConditions::RunTest
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
 
-    Manager->SetGameClockSeconds(10.0f * 60.0f);   // День
+    // С 2026-09-20 у всех четверых своё время (решение пользователя): Шептуны
+    // -- ветер (голоса разносит), Подпольники -- ночь, Стукачи -- сумерки,
+    // Пеньковые -- осень (грибная пора). Поэтому четыре отдельных прохода.
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    const float AutumnDayStart = HerbalistCore::Calendar::DayOfYearFromDate(10, 10) * DayLengthSeconds;
+    Manager->SetGameClockSeconds(AutumnDayStart + 10.0f * 60.0f);   // осенний день
 
     FGridCell* WhisperCell = Manager->GetCell(0, 0);
     WhisperCell->Biome = EBiomeType::Tundra;
@@ -159,16 +165,36 @@ bool FHerbalistAmbientEntity_ProxyStubEntitiesManifestOnTheirConditions::RunTest
     const FRealState SpyBefore = SpyCell->TargetState;
     const FRealState StumpBefore = StumpCell->TargetState;
 
+    // Осенний день: Пеньковые (грибная пора) -- и никакого ветра, чтобы
+    // Шептуны не перехватили тундру раньше своего прохода.
+    Manager->SetWeatherBridgeIntensities(/*Rain=*/0.0f, /*Snow=*/0.0f, /*Wind=*/0.0f);
     Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Пеньковые manifest on untouched (low HarvestStress) Taiga in autumn"), StumpCell->ManifestedEntityID, FName(TEXT("Пеньковые")));
 
-    TestEqual(TEXT("Шептуны manifest in Tundra"), WhisperCell->ManifestedEntityID, FName(TEXT("Шептуны")));
-    TestEqual(TEXT("Подпольники manifest in the HarvestStress warning window"), CellarCell->ManifestedEntityID, FName(TEXT("Подпольники")));
-    TestEqual(TEXT("Стукачи manifest on high Distortion"), SpyCell->ManifestedEntityID, FName(TEXT("Стукачи")));
-    TestEqual(TEXT("Пеньковые manifest on untouched (low HarvestStress) Taiga"), StumpCell->ManifestedEntityID, FName(TEXT("Пеньковые")));
+    // Ветер -- Шептуны.
+    Manager->SetWeatherBridgeIntensities(/*Rain=*/0.0f, /*Snow=*/0.0f, /*Wind=*/1.0f);
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Шептуны manifest in Tundra when the wind carries voices"), WhisperCell->ManifestedEntityID, FName(TEXT("Шептуны")));
+    Manager->SetWeatherBridgeIntensities(/*Rain=*/0.0f, /*Snow=*/0.0f, /*Wind=*/0.0f);
 
-    TestEqual(TEXT("Шептуны cell TargetState unchanged"), WhisperCell->TargetState.Meta.Stability, WhisperBefore.Meta.Stability);
-    TestEqual(TEXT("Подпольники cell TargetState unchanged"), CellarCell->TargetState.Meta.Corruption, CellarBefore.Meta.Corruption);
-    TestEqual(TEXT("Стукачи cell TargetState unchanged"), SpyCell->TargetState.Meta.Distortion, SpyBefore.Meta.Distortion);
+    // Сумерки -- Стукачи.
+    Manager->SetGameClockSeconds(AutumnDayStart + 21.0f * 60.0f);
+    TestTrue(TEXT("Sanity: сумерки"), Manager->IsDusk());
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Стукачи manifest on high Distortion at dusk"), SpyCell->ManifestedEntityID, FName(TEXT("Стукачи")));
+
+    // Ночь -- Подпольники. Стукачи к этому времени уже отпустили свою клетку.
+    Manager->SetGameClockSeconds(AutumnDayStart + 29.0f * 60.0f);
+    TestTrue(TEXT("Sanity: ночь"), Manager->IsNight());
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Подпольники manifest in the HarvestStress warning window at night"), CellarCell->ManifestedEntityID, FName(TEXT("Подпольники")));
+
+    // Своего эффекта у всех четверых нет. Сверяем оси, которых не касаются
+    // разлитые по сетке нуджи фаз суток (ночь двигает Искажение и Порчу,
+    // сумерки -- Искажение, рассвет -- Чистоту и Стабильность).
+    TestEqual(TEXT("Шептуны cell TargetState unchanged"), WhisperCell->TargetState.Meta.Potency, WhisperBefore.Meta.Potency);
+    TestEqual(TEXT("Подпольники cell TargetState unchanged"), CellarCell->TargetState.Meta.Potency, CellarBefore.Meta.Potency);
+    TestEqual(TEXT("Стукачи cell TargetState unchanged"), SpyCell->TargetState.Meta.Potency, SpyBefore.Meta.Potency);
     TestEqual(TEXT("Пеньковые cell TargetState unchanged"), StumpCell->TargetState.Meta.Purity, StumpBefore.Meta.Purity);
 
     Manager->Destroy();

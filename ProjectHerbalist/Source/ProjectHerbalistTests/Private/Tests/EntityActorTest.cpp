@@ -27,6 +27,7 @@
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/BiomeGraph/BiomeGraphAsset.h"
 #include "Core/Types/BiomeTypes.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -53,7 +54,9 @@ bool FHerbalistEntityActor_AmbientManifestationSpawnsAndDespawnsActor::RunTest(c
     Cell->bIsWater = false;
     Cell->State.Meta.Corruption = 0.8f;   // выше порога Гнильников (0.6)
     Cell->TargetState.Meta.Purity = 0.5f;
-    Manager->SetGameClockSeconds(10.0f * 60.0f);   // День, не Рассвет/Ночь
+    // Гнильники с 2026-09-20 -- летние (тление в тепле): без явной даты тест
+    // шёл бы в январе (час 0 = 1 января), и карточка молчала бы.
+    Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(7, 15) * 32.0f * 60.0f + 10.0f * 60.0f);   // летний день
 
     Manager->UpdateEntityManifestations(1.0f);
     TestEqual(TEXT("Гнильники manifest"), Cell->ManifestedEntityID, FName(TEXT("Гнильники")));

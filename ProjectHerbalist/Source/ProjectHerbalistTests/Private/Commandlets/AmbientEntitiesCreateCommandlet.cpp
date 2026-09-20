@@ -24,6 +24,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Гнильники"));
+            D.bRequiresSeason = true; D.RequiredSeason = ESeason::Summer;   // тление в тепле (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::Bog;
             D.bLandOnly = true;
@@ -160,6 +161,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Ржавые духи"));
+            D.bRequiresSeason = true; D.RequiredSeason = ESeason::Autumn;   // сырость и ржа (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::Bog;
             D.bLandOnly = true;
@@ -172,6 +174,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Водяные бесы"));
+            D.bRequiresSeason = true; D.RequiredSeason = ESeason::Spring;   // половодье, сети (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::Floodplain;
             D.bWaterOnly = true;
@@ -184,6 +187,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Злыдни"));
+            D.bRequiresSeason = true; D.RequiredSeason = ESeason::Winter;   // долгие вечера (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::BroadleafForest;
             D.bLandOnly = true;
@@ -276,6 +280,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Чащобные духи"));
+            D.bRequiresDusk = true;   // чаща глохнет в сумерках (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::Taiga;
             D.bLandOnly = true;
@@ -315,6 +320,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Плескуны"));
+            D.bRequiresSeason = true; D.RequiredSeason = ESeason::Summer;   // купальная пора (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::Floodplain;
             D.bWaterOnly = true;
@@ -338,6 +344,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Шептуны"));
+            D.bRequiresWeather = true; D.RequiredWeather = EWeatherCondition::Wind;   // голоса разносит ветром (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::Tundra;
             D.bLandOnly = true;
@@ -350,6 +357,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Подпольники"));
+            D.bRequiresNight = true;   // пугают по ночам (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::BroadleafForest;
             D.bLandOnly = true;
@@ -362,6 +370,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Стукачи"));
+            D.bRequiresDusk = true;   // стук в сумерках (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::BroadleafForest;
             D.bLandOnly = true;
@@ -374,6 +383,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Пеньковые"));
+            D.bRequiresSeason = true; D.RequiredSeason = ESeason::Autumn;   // грибная пора (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::Taiga;
             D.bLandOnly = true;
@@ -428,6 +438,7 @@ namespace
         {
             FAmbientEntityDefinition D;
             D.EntityID = FName(TEXT("Курганники"));
+            D.bRequiresNight = true;   // захоронения тревожатся ночью (2026-09-20)
             D.SortOrder = Order++;
             D.Biome = EBiomeType::ForestSteppe;
             D.bLandOnly = true;

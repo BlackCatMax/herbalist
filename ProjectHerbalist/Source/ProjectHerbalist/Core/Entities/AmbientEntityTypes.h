@@ -188,6 +188,12 @@ struct PROJECTHERBALIST_API FAmbientEntityDefinition : public FTableRowBase
     // 2026-09-16 bRequiresLateSummer -- вся осень (сентябрь–ноябрь, Листовики),
     // bRequiresKupalaNight -- ночь на 24 июня. Имя поля прежнее: оно хранится в
     // DT_AmbientEntities.
+    // ВНИМАНИЕ (ревью 2026-09-20): это легаси-имя, предикат у него ровно
+    // IsAutumn() -- тот же, что у bRequiresSeason + ESeason::Autumn, и та же
+    // доля редкости 0.25. Живёт он только у Листовиков (заведены до
+    // календаря 2026-09-16). НОВЫЕ осенние карточки ставят bRequiresSeason,
+    // а не этот флаг: выставленные оба разом дали бы редкость 0.0625 вместо
+    // 0.25 и молча сделали бы карточку вчетверо реже задуманного.
     UPROPERTY() bool bRequiresLateSummer = false;
     UPROPERTY() bool bRequiresKupalaNight = false;
 

@@ -16,6 +16,7 @@
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Entities/ArtifactTypes.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -51,6 +52,13 @@ namespace
     void MakeWholeGridBog(AGridWorldManager* Manager)
     {
         Manager->ForEachCell([](FGridCell& Cell) { MakeBogCell(Cell); });
+    }
+
+    // Гнильники с 2026-09-20 летние (тление в тепле): в январе, куда попадают
+    // часы по умолчанию, карточка молчит.
+    float SummerDay()
+    {
+        return HerbalistCore::Calendar::DayOfYearFromDate(7, 15) * 32.0f * 60.0f + 10.0f * 60.0f;
     }
 
     int32 CountIndividuals(const AGridWorldManager* Manager)
@@ -166,7 +174,7 @@ bool FHerbalistSpawner_ManualSpawnerOverridesAutoAndPicksItsOwnSpecies::RunTest(
     Settings->bUseAmbientSpawners = true;
 
     MakeWholeGridBog(Manager);
-    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    Manager->SetGameClockSeconds(SummerDay());
 
     // Ручной спавнер на клетке (10,10), радиус заведомо больше шага квадратов
     // -- ни один автоматический кандидат рядом не выживет.
@@ -258,7 +266,8 @@ bool FHerbalistSpawner_CellPathStaysSilentWhileSpawnersOwnLowRank::RunTest(const
 namespace
 {
     // Ручной спавнер Гнильников с одной особью в известной клетке: весь мир
-    // -- болото с высокой Порчей, чтобы карточка подходила.
+    // -- болото с высокой Порчей, чтобы карточка подходила. Часы ставит
+    // вызывающий: с 2026-09-20 Гнильники летние.
     AAmbientEntitySpawner* MakeManualGnilnikiSpawner(AGridWorldManager* Manager, UWorld* World, const FIntPoint& Cell)
     {
         Manager->ForEachCell([](FGridCell& C)
@@ -310,7 +319,7 @@ bool FHerbalistSpawner_IndividualEffectFallsOffWithDistance::RunTest(const FStri
         Manager->Destroy();
         return false;
     }
-    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    Manager->SetGameClockSeconds(SummerDay());
 
     const FGridCell* Near = Manager->GetCellConst(10, 10);
     const FGridCell* Mid = Manager->GetCellConst(13, 10);
@@ -361,7 +370,7 @@ bool FHerbalistSpawner_CombDispelsIndividualAndHoldsRespawn::RunTest(const FStri
         Manager->Destroy();
         return false;
     }
-    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    Manager->SetGameClockSeconds(SummerDay());
     RunSpawners(Manager, 3);
 
     const FAmbientSpawnerRuntime* Runtime = Manager->GetAmbientSpawners().Find(FIntPoint(10, 10));
@@ -428,7 +437,7 @@ bool FHerbalistSpawner_SilverWardBlocksNewIndividuals::RunTest(const FString& Pa
         Manager->Destroy();
         return false;
     }
-    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    Manager->SetGameClockSeconds(SummerDay());
 
     // Серебряный оберег -- общий на всю сетку: новых особей не выпускает
     // никто, хотя вид спавнер держит.
@@ -476,7 +485,7 @@ bool FHerbalistSpawner_LocalSuppressionOnlyBlocksItsOwnSpot::RunTest(const FStri
         return false;
     }
     Manual->RadiusMeters = 4.0f;   // зона в несколько клеток: есть куда отойти
-    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    Manager->SetGameClockSeconds(SummerDay());
 
     // Закрываем пером Жар-птицы почти всю зону, кроме центра и угла: это
     // местное подавление точки появления, как оберег или Шапка, только его

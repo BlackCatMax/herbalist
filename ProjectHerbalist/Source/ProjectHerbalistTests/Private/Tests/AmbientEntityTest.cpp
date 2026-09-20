@@ -57,7 +57,9 @@ bool FHerbalistAmbientEntity_GnilnikiStillManifestsAfterRefactor::RunTest(const 
     // (§15.2, DayCycleTest.cpp), который сам поднимает Purity и почти
     // отменял бы нудж Гнильников вниз чистым совпадением чисел. Явно ставим
     // середину Дня, чтобы тест проверял ровно Гнильников, не их гонку с Рассветом.
-    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    // Летний день: с 2026-09-20 Гнильники сезонные (тление в тепле), а часы
+    // по умолчанию стоят на 1 января.
+    Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(7, 15) * 32.0f * 60.0f + 10.0f * 60.0f);
     const float PurityBefore = Cell->TargetState.Meta.Purity;
     const float CorruptionBefore = Cell->TargetState.Meta.Corruption;
 
@@ -101,7 +103,9 @@ bool FHerbalistAmbientEntity_GnilnikiRespectsGlobalHysteresisSetting::RunTest(co
     // Stability, тот же приём, что уже применяют другие тесты этого файла
     // для смежных Ambient-определений одного биома.
     Cell->State.Meta.Stability = 1.0f;
-    Manager->SetGameClockSeconds(10.0f * 60.0f);   // середина Дня, та же изоляция от Рассвета, что и выше
+    // Гнильники с 2026-09-20 -- летние (тление в тепле): без явной даты тест
+    // шёл бы в январе (час 0 = 1 января), и карточка молчала бы.
+    Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(7, 15) * 32.0f * 60.0f + 10.0f * 60.0f);   // летний день
 
     UHerbalistSettings* Settings = GetMutableDefault<UHerbalistSettings>();
     const float SavedMargin = Settings->EntityManifestationHysteresis;
@@ -232,20 +236,48 @@ bool FHerbalistAmbientEntity_NightHorrorAffectsEveryBiomeWithoutClaimingTheCell:
     TestEqual(TEXT("No change during the day on a biome with no other definition"),
         Cell->TargetState.Meta.Distortion, DistortionBeforeDay);
 
-    Manager->SetGameClockSeconds(31.0f * 60.0f);   // ночь
+    // Ночь не новолунная: с 2026-09-20 у Ночной нечисти пять ликов, и Навьи
+    // (Морок по всей сетке) выходят только в новолуние. Ищем такую ночь.
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    float NightSeconds = 31.0f * 60.0f;
+    for (int32 Offset = 0; Offset < 28; ++Offset)
+    {
+        Manager->SetGameClockSeconds(NightSeconds);
+        if (Manager->GetMoonPhase() != EMoonPhase::NewMoon && Manager->IsNight()) break;
+        NightSeconds += DayLengthSeconds;
+    }
+    TestTrue(TEXT("Sanity: ночь не в новолуние"),
+        Manager->IsNight() && Manager->GetMoonPhase() != EMoonPhase::NewMoon);
+
     const float DistortionBeforeNight = Cell->TargetState.Meta.Distortion;
     const float CorruptionBeforeNight = Cell->TargetState.Meta.Corruption;
     const float SpiritBeforeNight = Cell->TargetState.Direction.Spirit;
     Manager->UpdateEntityManifestations(1.0f);
 
-    TestTrue(TEXT("TargetState.Distortion nudged up at night"), Cell->TargetState.Meta.Distortion > DistortionBeforeNight);
-    TestTrue(TEXT("TargetState.Corruption nudged up at night"), Cell->TargetState.Meta.Corruption > CorruptionBeforeNight);
+    // Тихая ночь: лесостепная клетка без искажения не встречает ни одного из
+    // пяти ликов (Вурдалакам нужно Искажение >= 0.5, Навьям -- новолуние,
+    // Оборотням -- полнолуние в лесу, Лихоманкам -- осень в сыром биоме,
+    // Чертям -- вода). Раньше здесь безусловно росли Искажение и Порча.
+    TestEqual(TEXT("Тихая ночь не двигает Искажение"), Cell->TargetState.Meta.Distortion, DistortionBeforeNight);
+    TestEqual(TEXT("Тихая ночь не двигает Порчу"), Cell->TargetState.Meta.Corruption, CorruptionBeforeNight);
     // §15.2, третья часть строки Ночи ("усиление оси Spirit в Direction",
-    // Tier 1 п.1.1, 2026-09-02) -- та же клетка, тот же нудж-блок IsNight(),
-    // раньше проверялись только Meta-поля.
+    // Tier 1 п.1.1, 2026-09-02) -- свойство самой ночи, а не нечисти: оно
+    // осталось безусловным.
     TestTrue(TEXT("TargetState.Direction.Spirit nudged up at night"), Cell->TargetState.Direction.Spirit > SpiritBeforeNight);
+
     TestEqual(TEXT("Night horror does not claim ManifestedEntityID -- it's atmosphere, not a 'owner'"),
         Cell->ManifestedEntityID, FName(NAME_None));
+
+    // Та же ночь, но земля уже искажена -- выходят Вурдалаки. Клетку при
+    // этом занимают Курганники (Лесостепь, Искажение >= 0.5, с 2026-09-20
+    // ночные) -- это Низший ранг, он и должен её занимать; нечисть
+    // по-прежнему не занимает ничего, это проверено выше на тихой ночи.
+    Cell->State.Meta.Distortion = 0.7f;
+    Cell->TargetState.Meta.Distortion = 0.7f;
+    const float CorruptionBeforeVurdalaki = Cell->TargetState.Meta.Corruption;
+    Manager->UpdateEntityManifestations(1.0f);
+    TestTrue(TEXT("Вурдалаки поднимают Порчу на искажённой лесостепной земле"),
+        Cell->TargetState.Meta.Corruption > CorruptionBeforeVurdalaki);
 
     Manager->Destroy();
     return true;
@@ -585,7 +617,14 @@ bool FHerbalistAmbientEntity_ItemCorruptingEntitiesManifestWithoutDirtyingTheCel
     // сама разливает Purity/Stability-нудж по ВСЕЙ сетке и грязнила бы все
     // 400 клеток независимо от трёх тестовых -- та же ловушка, что уже
     // чинилась для GnilnikiStillManifestsAfterRefactor. Явно ставим середину Дня.
-    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    // С 2026-09-20 у всех троих есть сезон (решение пользователя «у 17 из 33
+    // Низших нет ни суток, ни сезона»): Ржавые духи -- осень (сырость и ржа),
+    // Водяные бесы -- весна (половодье), Злыдни -- зима (долгие вечера).
+    // Поэтому три отдельных прохода, а не один общий день.
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    const float AutumnDay = HerbalistCore::Calendar::DayOfYearFromDate(10, 10) * DayLengthSeconds + 10.0f * 60.0f;
+    const float SpringDay = HerbalistCore::Calendar::DayOfYearFromDate(4, 10) * DayLengthSeconds + 10.0f * 60.0f;
+    const float WinterDay = HerbalistCore::Calendar::DayOfYearFromDate(1, 15) * DayLengthSeconds + 10.0f * 60.0f;
 
     // Ржавые духи: Болото, земля, Stability < 0.3.
     FGridCell* RustCell = Manager->GetCell(0, 0);
@@ -609,11 +648,17 @@ bool FHerbalistAmbientEntity_ItemCorruptingEntitiesManifestWithoutDirtyingTheCel
     const FRealState MurkyTargetBefore = MurkyCell->TargetState;
     const FRealState NeglectedTargetBefore = NeglectedCell->TargetState;
 
+    Manager->SetGameClockSeconds(AutumnDay);
     Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Ржавые духи manifest on low-Stability Bog in autumn"), RustCell->ManifestedEntityID, FName(TEXT("Ржавые духи")));
 
-    TestEqual(TEXT("Ржавые духи manifest on low-Stability Bog"), RustCell->ManifestedEntityID, FName(TEXT("Ржавые духи")));
-    TestEqual(TEXT("Водяные бесы manifest on high-Distortion water"), MurkyCell->ManifestedEntityID, FName(TEXT("Водяные бесы")));
-    TestEqual(TEXT("Злыдни manifest on high-HarvestStress cell"), NeglectedCell->ManifestedEntityID, FName(TEXT("Злыдни")));
+    Manager->SetGameClockSeconds(SpringDay);
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Водяные бесы manifest on high-Distortion water in spring"), MurkyCell->ManifestedEntityID, FName(TEXT("Водяные бесы")));
+
+    Manager->SetGameClockSeconds(WinterDay);
+    Manager->UpdateEntityManifestations(1.0f);
+    TestEqual(TEXT("Злыдни manifest on high-HarvestStress cell in winter"), NeglectedCell->ManifestedEntityID, FName(TEXT("Злыдни")));
 
     // Раньше проверялось глобально (CaptureSaveCells().Num()==0) -- перестало
     // быть верно 2026-08-29 с добавлением Межевых (Лесостепь, реальный

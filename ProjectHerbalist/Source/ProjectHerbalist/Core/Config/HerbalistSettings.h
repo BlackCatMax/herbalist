@@ -587,6 +587,17 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float NightHorrorSpiritRate = 0.003f;
 
+    // Пять ликов Ночной нечисти (решение пользователя 2026-09-20, вариант Б:
+    // «пять ликов вместо одного»). Величины -- того же порядка, что уже
+    // откалиброванные ставки выше, не новый баланс: менялось КТО и ГДЕ, а не
+    // насколько сильно. Лихоманки тянут Тело вниз (лихорадка), Оборотни --
+    // Стабильность (гон зверя).
+    UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float LihomankiBodyRate = 0.003f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
+    float OborotniStabilityRate = 0.003f;
+
     // Рассвет/Закат/Полудница (§15.2, 2026-08-29) — таблица суток раньше
     // была закрыта только на Ночь (AUDIT_AND_REFACTORING_PLAN.md §7.2).
     // Рассвет: "мир на короткое время выдыхает" — единственная улучшающая

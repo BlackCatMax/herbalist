@@ -95,6 +95,17 @@ int32 UBestiaryStubsAppendCommandlet::Main(const FString& Params)
         Row.bTriggerAbove = true;
         Row.TriggerThreshold = Stub.MorokAffinity;
 
+        // Время по фольклору карточки (решение пользователя 2026-09-20):
+        // Лесавки шуршат листвой -- осень; Степные духи шелестят ковылём
+        // круглый год и остаются фоном Степи. Живой ассет правит
+        // -run=AmbientTimeGatesPatch, здесь -- чтобы создание с нуля давало
+        // то же самое.
+        if (Id == FName(TEXT("Лесавки")))
+        {
+            Row.bRequiresSeason = true;
+            Row.RequiredSeason = ESeason::Autumn;
+        }
+
         // Ставки НУЛЕВЫЕ -- проявляется, мир не меняет. См. шапку заголовка.
 
         AmbientTable->AddRow(Id, Row);

@@ -12,6 +12,7 @@
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Core/Save/HerbalistSaveTypes.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -122,7 +123,10 @@ bool FHerbalistAmbientEntity_DecorativeEntitiesManifestWithoutEffect::RunTest(co
     AGridWorldManager* Manager = SpawnAndBeginPlay(World);
     if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
 
-    Manager->SetGameClockSeconds(29.0f * 60.0f);   // ночь
+    // Летняя ночь: Плескуны с 2026-09-20 летние (купальная пора), остальные
+    // трое -- ночные без сезона.
+    const float SummerNight = HerbalistCore::Calendar::DayOfYearFromDate(7, 15) * 32.0f * 60.0f + 29.0f * 60.0f;
+    Manager->SetGameClockSeconds(SummerNight);
 
     FGridCell* TreeCell = Manager->GetCell(0, 0);
     TreeCell->Biome = EBiomeType::MixedForest;
@@ -174,7 +178,7 @@ bool FHerbalistAmbientEntity_DecorativeEntitiesManifestWithoutEffect::RunTest(co
     // клетке (Речная пойма, вода) Русалки (зарегистрированы раньше в
     // реестре, безусловный ночной триггер) забрали бы ManifestedEntityID
     // первыми, тест проверял бы коллизию приоритетов, не Плескунов.
-    Manager->SetGameClockSeconds(10.0f * 60.0f);   // день
+    Manager->SetGameClockSeconds(SummerNight - 19.0f * 60.0f);   // тот же летний день, полдень
     FGridCell* SplashCell = Manager->GetCell(2, 0);
     SplashCell->Biome = EBiomeType::Floodplain;
     SplashCell->bIsWater = true;

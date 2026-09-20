@@ -17,6 +17,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/World/KurganActor.h"
 #include "Player/HerbalistPlayerController.h"
+#include "Core/Types/HerbalistCalendar.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -134,7 +135,9 @@ bool FHerbalistKurgan_SilverWardSuppressesAmbientManifestation::RunTest(const FS
     Cell->State.Meta.Corruption = 0.8f;
     Cell->State.Meta.Purity = 0.5f;
     Cell->TargetState.Meta.Purity = 0.5f;
-    Manager->SetGameClockSeconds(10.0f * 60.0f);   // середина Дня, изоляция от Рассвета
+    // Гнильники с 2026-09-20 -- летние (тление в тепле): без явной даты тест
+    // шёл бы в январе (час 0 = 1 января), и карточка молчала бы.
+    Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(7, 15) * 32.0f * 60.0f + 10.0f * 60.0f);   // летний день
 
     TestFalse(TEXT("Sanity: silver ward starts inactive"), Manager->IsSilverWardActive());
     Manager->SetSilverWardActive(true);
