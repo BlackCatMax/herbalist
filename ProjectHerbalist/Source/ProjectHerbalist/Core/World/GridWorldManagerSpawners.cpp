@@ -11,6 +11,7 @@
 #include "Core/Entities/AmbientEntityActor.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Simulation/Public/DeltaTypes.h"
 #include "Engine/World.h"
 #include "Templates/TypeHash.h"
 
@@ -128,7 +129,8 @@ void AGridWorldManager::UpdateSpawnerIndividuals(FAmbientSpawnerRuntime& Spawner
     // Своя случайность, не WorldRNG: где именно встала особь -- презентация,
     // она не должна сдвигать исходы симуляции (тот же довод, что у джиттера
     // актора в SyncManifestedEntityActor).
-    FRandomStream Rng(20260920 + GetTypeHash(Spawner.CenterCell) + GetTypeHash(Spawner.ActiveEntityID) + Spawner.Individuals.Num());
+    FRandomStream Rng(20260920 + GetTypeHash(Spawner.CenterCell) + GetTypeHash(Spawner.ActiveEntityID)
+        + Spawner.Individuals.Num() + Spawner.RejectedSpawnAttempts * 7919);
     const FVector Center = GetCellWorldPosition(Spawner.CenterCell.X, Spawner.CenterCell.Y);
     const float Angle = Rng.FRandRange(0.0f, 2.0f * PI);
     const float Distance = Spawner.RadiusCm * FMath::Sqrt(Rng.FRand());
@@ -139,6 +141,29 @@ void AGridWorldManager::UpdateSpawnerIndividuals(FAmbientSpawnerRuntime& Spawner
     {
         ClassToSpawn = Def->ActorClass;
     }
+    // Обереги и Шапка-невидимка подавляют ПОЯВЛЕНИЕ новой особи, а не гонят
+    // уже бродящих (DESIGN_Entity_Spawners.md, этап 2): точка появления
+    // читается так же, как раньше читалась клетка проявления.
+    int32 SpawnX = 0, SpawnY = 0;
+    if (WorldPositionToCell(SpawnPos, SpawnX, SpawnY))
+    {
+        const FIntPoint SpawnCell(SpawnX, SpawnY);
+        const FGridCell* TargetCell = GetCellConst(SpawnX, SpawnY);
+        if (!TargetCell || TargetCell->bEternallyPure
+            || IsInvisibilityCapActive(SpawnCell)
+            || IsWardConcealmentActive(SpawnCell)
+            || IsTieredConcealmentActive(SpawnCell)
+            || IsSilverWardActive()
+            || IsAlkonostSuppressionActiveForBiome(TargetCell->Biome))
+        {
+            // Следующая попытка -- в другой точке зоны (ревью 2026-09-20):
+            // оберег закрывает место, а не спавнер целиком.
+            ++Spawner.RejectedSpawnAttempts;
+            return;
+        }
+    }
+    Spawner.RejectedSpawnAttempts = 0;
+
     AAmbientEntityActor* Actor = World->SpawnActor<AAmbientEntityActor>(ClassToSpawn, SpawnPos, FRotator::ZeroRotator);
     if (!Actor) return;
 
@@ -249,4 +274,105 @@ void AGridWorldManager::UpdateAmbientSpawners(float DeltaTime)
         }
         UpdateSpawnerIndividuals(Runtime, DeltaTime);
     }
+
+    ApplyAmbientSpawnerEffects(DeltaTime);
+}
+
+// Эффект особей на клетки вокруг них (DESIGN_Entity_Spawners.md, этап 2,
+// 2026-09-20). В точке особи -- ставка карточки целиком, к краю
+// AmbientEffectRadiusMeters она линейно спадает до нуля. Клетка больше не
+// "принадлежит" Низшему: сетка остаётся носителем состояния мира, но толкает
+// её бродящая особь, а не пометка на клетке.
+void AGridWorldManager::ApplyAmbientSpawnerEffects(float DeltaTime)
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float EffectRadiusMeters = FMath::Max(1.0f, Settings ? Settings->AmbientEffectRadiusMeters : 15.0f);
+    const float EffectRadiusCm = EffectRadiusMeters * 100.0f;
+    const int32 RadiusCells = FMath::Max(1, GetCellRadius(EffectRadiusMeters));
+    const float GnilnikiNudgeRate = Settings ? Settings->GnilnikiNudgeRate : 0.01f;
+    static const FName EntityID_Gnilniki(TEXT("Гнильники"));
+
+    FStateDelta Delta;
+    for (const auto& Pair : AmbientSpawners)
+    {
+        const FAmbientSpawnerRuntime& Spawner = Pair.Value;
+        if (Spawner.ActiveEntityID.IsNone() || Spawner.Individuals.Num() == 0) continue;
+
+        const FAmbientEntityDefinition* Def = FindAmbientEntityDefinition(Spawner.ActiveEntityID);
+        if (!Def) continue;
+
+        // У Гнильников ставки приходят из настроек и ПЕРЕОПРЕДЕЛЯЮТ числа
+        // карточки целиком (не умножаются на них) -- как и на клеточном пути.
+        const bool bIsGnilniki = Def->EntityID == EntityID_Gnilniki;
+        const float CorruptionRate = bIsGnilniki ? GnilnikiNudgeRate         : Def->CorruptionRate;
+        const float PurityRate     = bIsGnilniki ? -GnilnikiNudgeRate * 0.5f : Def->PurityRate;
+
+        for (const TWeakObjectPtr<AAmbientEntityActor>& Entry : Spawner.Individuals)
+        {
+            const AAmbientEntityActor* Individual = Entry.Get();
+            if (!Individual) continue;
+
+            const FVector Location = Individual->GetActorLocation();
+            int32 CenterX = 0, CenterY = 0;
+            if (!WorldPositionToCell(Location, CenterX, CenterY)) continue;
+
+            for (int32 OffsetY = -RadiusCells; OffsetY <= RadiusCells; ++OffsetY)
+            {
+                for (int32 OffsetX = -RadiusCells; OffsetX <= RadiusCells; ++OffsetX)
+                {
+                    FGridCell* Cell = GetCell(CenterX + OffsetX, CenterY + OffsetY);
+                    // Перо Жар-птицы: навечно чистая клетка закрыта для любого
+                    // проявления -- значит, и для эффекта проходящей особи.
+                    if (!Cell || Cell->bEternallyPure) continue;
+
+                    const FVector CellPos = GetCellWorldPositionFlat(Cell->X, Cell->Y);
+                    const float Distance = FVector2D(CellPos - Location).Size();
+                    if (Distance >= EffectRadiusCm) continue;
+
+                    const float Falloff = 1.0f - Distance / EffectRadiusCm;
+                    const FIntPoint Key(Cell->X, Cell->Y);
+                    FRealState NewTarget = Delta.TargetStateNudges.FindRef(Key, Cell->TargetState);
+                    if (ApplyAmbientEntityRates(NewTarget, *Def, CorruptionRate, PurityRate, DeltaTime * Falloff))
+                    {
+                        Delta.TargetStateNudges.Add(Key, NewTarget);
+                    }
+                }
+            }
+        }
+    }
+
+    if (Delta.TargetStateNudges.Num() > 0)
+    {
+        ApplyStateDelta(Delta);
+    }
+}
+
+// Гребень (§21.3) гасит бродящих особей в клетке применения и заставляет их
+// спавнер помолчать AmbientRespawnSeconds -- иначе на следующем же такте на
+// то же место вышла бы новая особь, и расходуемый предмет не значил бы
+// ничего (DESIGN_Entity_Spawners.md, этап 2).
+bool AGridWorldManager::DispelAmbientIndividualsInCell(const FIntPoint& Cell)
+{
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float RespawnSeconds = Settings ? Settings->AmbientRespawnSeconds : 60.0f;
+
+    bool bDispelledAny = false;
+    for (auto& Pair : AmbientSpawners)
+    {
+        FAmbientSpawnerRuntime& Spawner = Pair.Value;
+        for (int32 Index = Spawner.Individuals.Num() - 1; Index >= 0; --Index)
+        {
+            AAmbientEntityActor* Individual = Spawner.Individuals[Index].Get();
+            int32 CellX = 0, CellY = 0;
+            if (!Individual || !WorldPositionToCell(Individual->GetActorLocation(), CellX, CellY)) continue;
+            if (FIntPoint(CellX, CellY) != Cell) continue;
+
+            Individual->Destroy();
+            Spawner.Individuals.RemoveAt(Index);
+            Spawner.SpawnCooldownSeconds = FMath::Max(Spawner.SpawnCooldownSeconds, RespawnSeconds);
+            Spawner.RejectedSpawnAttempts = 0;
+            bDispelledAny = true;
+        }
+    }
+    return bDispelledAny;
 }

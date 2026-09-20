@@ -1087,21 +1087,10 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // единого реального изменения — тот же класс бага, что уже
                 // чинили в ApplyBiomeInfluences/ночном нудже
                 // (AUDIT_AND_REFACTORING_PLAN.md §7.1).
-                bool bAnyRateFired = false;
-                if (CorruptionRate      != 0.0f) { NewTarget.Meta.Corruption = FMath::Clamp(NewTarget.Meta.Corruption + CorruptionRate      * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
-                if (PurityRate          != 0.0f) { NewTarget.Meta.Purity     = FMath::Clamp(NewTarget.Meta.Purity     + PurityRate          * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
-                if (Def.DistortionRate  != 0.0f) { NewTarget.Meta.Distortion = FMath::Clamp(NewTarget.Meta.Distortion + Def.DistortionRate  * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
-                if (Def.StabilityRate   != 0.0f) { NewTarget.Meta.Stability  = FMath::Clamp(NewTarget.Meta.Stability  + Def.StabilityRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
-                if (Def.PotencyRate     != 0.0f) { NewTarget.Meta.Potency    = FMath::Clamp(NewTarget.Meta.Potency    + Def.PotencyRate     * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
-                if (Def.ResonanceRate   != 0.0f) { NewTarget.Meta.Resonance  = FMath::Clamp(NewTarget.Meta.Resonance  + Def.ResonanceRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
-                if (Def.MagnitudeRate   != 0.0f) { NewTarget.Magnitude       = FMath::Clamp(NewTarget.Magnitude       + Def.MagnitudeRate   * DeltaTime, 0.0f, 1.0f); bAnyRateFired = true; }
-                // Direction, не Meta -- Max(0, ...), не Clamp(0,1): тот же
-                // принцип, что уже применяет ApplyLandmarkAxisNudge
-                // (LandmarkTypes.h) к Direction-осям, не клампится в 1.0
-                // сверху (NormalizeSum пересчитывает сумму отдельно при
-                // релаксации, не здесь).
-                if (Def.NatureRate      != 0.0f) { NewTarget.Direction.Nature = FMath::Max(0.0f, NewTarget.Direction.Nature + Def.NatureRate * DeltaTime); bAnyRateFired = true; }
-                bChanged = bChanged || bAnyRateFired;
+                // Тот же разбор ставок, что применяет к своим клеткам особь
+                // спавнера (ApplyAmbientEntityRates, AmbientEntityTypes.h,
+                // 2026-09-20) -- один эффект карточки на оба пути.
+                bChanged = ApplyAmbientEntityRates(NewTarget, Def, CorruptionRate, PurityRate, DeltaTime) || bChanged;
             }
             else if (bHeld)
             {

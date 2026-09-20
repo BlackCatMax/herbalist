@@ -15,6 +15,7 @@
 #include "Core/Entities/AmbientEntityActor.h"
 #include "Core/Entities/AmbientEntityTypes.h"
 #include "Core/Config/HerbalistSettings.h"
+#include "Core/Entities/ArtifactTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -247,6 +248,285 @@ bool FHerbalistSpawner_CellPathStaysSilentWhileSpawnersOwnLowRank::RunTest(const
     Manager->UpdateEntityManifestations(1.0f);
     TestTrue(TEXT("И не заводит заново"), Cell->ManifestedEntityID.IsNone());
 
+    Settings->bUseAmbientSpawners = bSaved;
+    Manager->Destroy();
+    return true;
+}
+
+// ---- Этап 2: эффект особи в радиусе, Гребень, подавление появления ----
+
+namespace
+{
+    // Ручной спавнер Гнильников с одной особью в известной клетке: весь мир
+    // -- болото с высокой Порчей, чтобы карточка подходила.
+    AAmbientEntitySpawner* MakeManualGnilnikiSpawner(AGridWorldManager* Manager, UWorld* World, const FIntPoint& Cell)
+    {
+        Manager->ForEachCell([](FGridCell& C)
+        {
+            MakeBogCell(C);
+            C.State.Meta.Corruption = 0.9f;
+            C.TargetState.Meta.Corruption = 0.9f;
+        });
+        AAmbientEntitySpawner* Manual = World->SpawnActor<AAmbientEntitySpawner>(
+            AAmbientEntitySpawner::StaticClass(), Manager->GetCellWorldPosition(Cell.X, Cell.Y), FRotator::ZeroRotator);
+        if (!Manual) return nullptr;
+        Manual->RadiusMeters = 1.0f;   // особь стоит почти в своей клетке
+        Manual->bOverridesAuto = true;
+        Manual->AllowedEntityIDs = { FName(TEXT("Гнильники")) };
+        Manual->MaxIndividuals = 1;
+        Manager->RegisterAmbientSpawner(Manual);
+        return Manual;
+    }
+
+    int32 IndividualCountAt(const AGridWorldManager* Manager, const FIntPoint& Key)
+    {
+        const FAmbientSpawnerRuntime* Runtime = Manager->GetAmbientSpawners().Find(Key);
+        return Runtime ? Runtime->Individuals.Num() : -1;
+    }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawner_IndividualEffectFallsOffWithDistance,
+    "Herbalist.Spawner.IndividualEffectFallsOffWithDistance",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSpawner_IndividualEffectFallsOffWithDistance::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UHerbalistSettings* Settings = GetMutableDefault<UHerbalistSettings>();
+    const bool bSaved = Settings->bUseAmbientSpawners;
+    const float SavedEffect = Settings->AmbientEffectRadiusMeters;
+    Settings->bUseAmbientSpawners = true;
+    Settings->AmbientEffectRadiusMeters = 5.0f;   // тестовый мир -- метровые клетки
+
+    AAmbientEntitySpawner* Manual = MakeManualGnilnikiSpawner(Manager, World, FIntPoint(10, 10));
+    if (!TestNotNull(TEXT("Ручной спавнер создан"), Manual))
+    {
+        Settings->bUseAmbientSpawners = bSaved;
+        Settings->AmbientEffectRadiusMeters = SavedEffect;
+        Manager->Destroy();
+        return false;
+    }
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+    const FGridCell* Near = Manager->GetCellConst(10, 10);
+    const FGridCell* Mid = Manager->GetCellConst(13, 10);
+    const FGridCell* Far = Manager->GetCellConst(17, 10);
+    const float PurityNearBefore = Near->TargetState.Meta.Purity;
+    const float PurityMidBefore = Mid->TargetState.Meta.Purity;
+    const float PurityFarBefore = Far->TargetState.Meta.Purity;
+
+    RunSpawners(Manager, 3);
+
+    // Гнильники: Порча вверх, Чистота вниз. Клетка под особью должна просесть
+    // сильнее средней, дальняя (вне радиуса) -- не тронута вовсе.
+    const float NearDrop = PurityNearBefore - Near->TargetState.Meta.Purity;
+    const float MidDrop = PurityMidBefore - Mid->TargetState.Meta.Purity;
+    const float FarDrop = PurityFarBefore - Far->TargetState.Meta.Purity;
+
+    TestTrue(FString::Printf(TEXT("Клетка под особью просела (%.5f)"), NearDrop), NearDrop > 0.0f);
+    TestTrue(FString::Printf(TEXT("Дальше эффект слабее (%.5f < %.5f)"), MidDrop, NearDrop), MidDrop < NearDrop);
+    TestTrue(FString::Printf(TEXT("За радиусом эффекта нет (%.5f)"), FarDrop), FMath::IsNearlyZero(FarDrop));
+
+    Manager->UnregisterAmbientSpawner(Manual);
+    Manual->Destroy();
+    Settings->bUseAmbientSpawners = bSaved;
+    Settings->AmbientEffectRadiusMeters = SavedEffect;
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawner_CombDispelsIndividualAndHoldsRespawn,
+    "Herbalist.Spawner.CombDispelsIndividualAndHoldsRespawn",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSpawner_CombDispelsIndividualAndHoldsRespawn::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UHerbalistSettings* Settings = GetMutableDefault<UHerbalistSettings>();
+    const bool bSaved = Settings->bUseAmbientSpawners;
+    Settings->bUseAmbientSpawners = true;
+
+    AAmbientEntitySpawner* Manual = MakeManualGnilnikiSpawner(Manager, World, FIntPoint(10, 10));
+    if (!TestNotNull(TEXT("Ручной спавнер создан"), Manual))
+    {
+        Settings->bUseAmbientSpawners = bSaved;
+        Manager->Destroy();
+        return false;
+    }
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
+    RunSpawners(Manager, 3);
+
+    const FAmbientSpawnerRuntime* Runtime = Manager->GetAmbientSpawners().Find(FIntPoint(10, 10));
+    if (!TestNotNull(TEXT("Спавнер на своей клетке"), Runtime)
+        || !TestTrue(TEXT("Особь вышла"), Runtime->Individuals.Num() > 0)
+        || !TestTrue(TEXT("Особь жива"), Runtime->Individuals[0].IsValid()))
+    {
+        Manager->UnregisterAmbientSpawner(Manual);
+        Manual->Destroy();
+        Settings->bUseAmbientSpawners = bSaved;
+        Manager->Destroy();
+        return false;
+    }
+
+    // Клетка, где реально стоит особь: зона метровая, но особь могла сойти
+    // и на соседнюю.
+    int32 IndividualX = 0, IndividualY = 0;
+    Manager->WorldPositionToCell(Runtime->Individuals[0]->GetActorLocation(), IndividualX, IndividualY);
+
+    TArray<FAcquiredArtifact> Artifacts = Manager->GetAcquiredArtifacts();
+    FAcquiredArtifact Comb;
+    Comb.ArtifactID = FName(TEXT("Гребень"));
+    Artifacts.Add(Comb);
+    Manager->SetAcquiredArtifacts(Artifacts);
+
+    TestTrue(TEXT("Гребень сработал"), Manager->UseCombOnCell(FIntPoint(IndividualX, IndividualY)));
+    TestEqual(TEXT("Особь погасла"), IndividualCountAt(Manager, FIntPoint(10, 10)), 0);
+
+    // Пауза AmbientRespawnSeconds (60 с по умолчанию): за три такта по 5 с
+    // новая особь не выходит.
+    RunSpawners(Manager, 3);
+    TestEqual(TEXT("Спавнер молчит после Гребня"), IndividualCountAt(Manager, FIntPoint(10, 10)), 0);
+
+    // Когда пауза вышла -- выпускает снова.
+    RunSpawners(Manager, 4, 30.0f);
+    TestTrue(TEXT("После паузы особь вернулась"), IndividualCountAt(Manager, FIntPoint(10, 10)) > 0);
+
+    Manager->UnregisterAmbientSpawner(Manual);
+    Manual->Destroy();
+    Settings->bUseAmbientSpawners = bSaved;
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawner_SilverWardBlocksNewIndividuals,
+    "Herbalist.Spawner.SilverWardBlocksNewIndividuals",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSpawner_SilverWardBlocksNewIndividuals::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UHerbalistSettings* Settings = GetMutableDefault<UHerbalistSettings>();
+    const bool bSaved = Settings->bUseAmbientSpawners;
+    Settings->bUseAmbientSpawners = true;
+
+    AAmbientEntitySpawner* Manual = MakeManualGnilnikiSpawner(Manager, World, FIntPoint(10, 10));
+    if (!TestNotNull(TEXT("Ручной спавнер создан"), Manual))
+    {
+        Settings->bUseAmbientSpawners = bSaved;
+        Manager->Destroy();
+        return false;
+    }
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+    // Серебряный оберег -- общий на всю сетку: новых особей не выпускает
+    // никто, хотя вид спавнер держит.
+    Manager->SetSilverWardActive(true);
+    RunSpawners(Manager, 3);
+    const FAmbientSpawnerRuntime* Runtime = Manager->GetAmbientSpawners().Find(FIntPoint(10, 10));
+    if (TestNotNull(TEXT("Спавнер на своей клетке"), Runtime))
+    {
+        TestEqual(TEXT("Под оберегом вид выбран"), Runtime->ActiveEntityID, FName(TEXT("Гнильники")));
+        TestEqual(TEXT("Под оберегом особей нет"), Runtime->Individuals.Num(), 0);
+    }
+
+    // Оберег сняли -- особь выходит.
+    Manager->SetSilverWardActive(false);
+    RunSpawners(Manager, 3);
+    TestTrue(TEXT("Без оберега особь вышла"), IndividualCountAt(Manager, FIntPoint(10, 10)) > 0);
+
+    Manager->UnregisterAmbientSpawner(Manual);
+    Manual->Destroy();
+    Settings->bUseAmbientSpawners = bSaved;
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawner_LocalSuppressionOnlyBlocksItsOwnSpot,
+    "Herbalist.Spawner.LocalSuppressionOnlyBlocksItsOwnSpot",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSpawner_LocalSuppressionOnlyBlocksItsOwnSpot::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    UHerbalistSettings* Settings = GetMutableDefault<UHerbalistSettings>();
+    const bool bSaved = Settings->bUseAmbientSpawners;
+    Settings->bUseAmbientSpawners = true;
+
+    AAmbientEntitySpawner* Manual = MakeManualGnilnikiSpawner(Manager, World, FIntPoint(10, 10));
+    if (!TestNotNull(TEXT("Ручной спавнер создан"), Manual))
+    {
+        Settings->bUseAmbientSpawners = bSaved;
+        Manager->Destroy();
+        return false;
+    }
+    Manual->RadiusMeters = 4.0f;   // зона в несколько клеток: есть куда отойти
+    Manager->SetGameClockSeconds(10.0f * 60.0f);
+
+    // Закрываем пером Жар-птицы почти всю зону, кроме центра и угла: это
+    // местное подавление точки появления, как оберег или Шапка, только его
+    // легко поставить в тесте. Спавнер обязан найти свободное место, а не
+    // упереться в одну и ту же отклонённую точку (ревью 2026-09-20).
+    for (int32 Y = 6; Y <= 14; ++Y)
+    {
+        for (int32 X = 6; X <= 14; ++X)
+        {
+            if (FGridCell* Cell = Manager->GetCell(X, Y))
+            {
+                // Клетка центра свободна всегда: по ней спавнер читает
+                // условия карточки, и вечно чистый центр просто выключил бы
+                // его целиком, ничего не проверив.
+                const bool bFree = (X >= 11 && X <= 13 && Y >= 11 && Y <= 13) || (X == 10 && Y == 10);
+                Cell->bEternallyPure = !bFree;
+            }
+        }
+    }
+
+    // Свободен только угол зоны -- случайная точка попадает в него не сразу,
+    // и это ровно то, что проверяется: спавнер должен пробовать НОВЫЕ точки.
+    RunSpawners(Manager, 60);
+
+    const FAmbientSpawnerRuntime* Runtime = Manager->GetAmbientSpawners().Find(FIntPoint(10, 10));
+    if (TestNotNull(TEXT("Спавнер на своей клетке"), Runtime))
+    {
+        TestTrue(FString::Printf(TEXT("Особь нашла свободное место за %d попыток"), Runtime->RejectedSpawnAttempts),
+            Runtime->Individuals.Num() > 0);
+        if (Runtime->Individuals.Num() > 0 && Runtime->Individuals[0].IsValid())
+        {
+            int32 CellX = 0, CellY = 0;
+            Manager->WorldPositionToCell(Runtime->Individuals[0]->GetActorLocation(), CellX, CellY);
+            const bool bOnFreeCell = (CellX >= 11 && CellX <= 13 && CellY >= 11 && CellY <= 13) || (CellX == 10 && CellY == 10);
+            TestTrue(FString::Printf(TEXT("И встала на свободной клетке, а не под пером (%d,%d)"), CellX, CellY), bOnFreeCell);
+        }
+    }
+
+    for (int32 Y = 6; Y <= 14; ++Y)
+    {
+        for (int32 X = 6; X <= 14; ++X)
+        {
+            if (FGridCell* Cell = Manager->GetCell(X, Y))
+            {
+                Cell->bEternallyPure = false;
+            }
+        }
+    }
+    Manager->UnregisterAmbientSpawner(Manual);
+    Manual->Destroy();
     Settings->bUseAmbientSpawners = bSaved;
     Manager->Destroy();
     return true;

@@ -573,6 +573,10 @@ public:
     void UpdateAmbientSpawners(float DeltaTime);
     // Снять всех особей всех спавнеров (конец игры, выключение флага).
     void DespawnAllAmbientSpawners();
+    // Эффект особей на клетки вокруг них со спадом к краю радиуса (этап 2).
+    void ApplyAmbientSpawnerEffects(float DeltaTime);
+    // Гребень: погасить особей в клетке и придержать их спавнер.
+    bool DispelAmbientIndividualsInCell(const FIntPoint& Cell);
     const TMap<FIntPoint, FAmbientSpawnerRuntime>& GetAmbientSpawners() const { return AmbientSpawners; }
 
     // Обратное к GetCellWorldPosition — было продублировано в

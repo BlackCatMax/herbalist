@@ -544,6 +544,17 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "1.0", ClampMax = "200.0"))
     float AmbientSpawnerRadiusMeters = 25.0f;
 
+    // Радиус эффекта особи: в её точке ставка карточки полная, к краю радиуса
+    // спадает до нуля. Раньше существо давило на одну клетку (9 м на
+    // L_TestDev), зато клеток было занято во много раз больше -- число
+    // черновое, крутить после долгого прогона (решение пользователя).
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "1.0", ClampMax = "200.0"))
+    float AmbientEffectRadiusMeters = 15.0f;
+
+    // Сколько спавнер молчит после того, как особь погасили Гребнем.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "0.0", ClampMax = "3600.0"))
+    float AmbientRespawnSeconds = 60.0f;
+
     // Пауза между выпусками особей -- стайка собирается постепенно, не
     // возникает разом.
     UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "0.0", ClampMax = "120.0"))

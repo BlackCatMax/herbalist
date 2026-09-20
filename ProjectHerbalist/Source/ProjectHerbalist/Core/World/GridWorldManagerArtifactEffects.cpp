@@ -61,13 +61,17 @@ bool AGridWorldManager::UseCombOnCell(const FIntPoint& Cell)
     // проявленную сущность немедленно, реального препятствия не строит
     // (согласовано с пользователем, не заводим новую систему коллизии
     // ради одного расходуемого предмета).
-    const bool bHadEntity = !Target->ManifestedEntityID.IsNone();
+    bool bHadEntity = !Target->ManifestedEntityID.IsNone();
     if (bHadEntity)
     {
         Target->ManifestedEntityID = NAME_None;
         Target->DisplacedEntityID = NAME_None;   // снятое Гребнем не возвращает и вытесненного
         SyncManifestedEntityActor(*Target, nullptr, nullptr);
     }
+    // Со спавнерами Низший -- бродящая особь, а не пометка на клетке
+    // (DESIGN_Entity_Spawners.md, этап 2): Гребень гасит тех, кто стоит в
+    // этой клетке, и придерживает их спавнер.
+    bHadEntity = DispelAmbientIndividualsInCell(Cell) || bHadEntity;
 
     AcquiredArtifacts.RemoveAt(CombIndex);
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Artifact] Гребень spent at (%d,%d), entity cleared: %s"),

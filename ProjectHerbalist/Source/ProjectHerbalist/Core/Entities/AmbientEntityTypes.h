@@ -341,6 +341,31 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
     return Definitions;
 }
 
+// Эффект карточки Низшего на целевое состояние клетки. Ставки -- "в
+// секунду", поэтому наружу отдаётся уже умноженное время: клеточный путь
+// передаёт DeltaTime, спавнер -- DeltaTime со спадом по расстоянию от особи
+// (DESIGN_Entity_Spawners.md, 2026-09-20). Порча и Чистота приходят
+// отдельными аргументами: у Гнильников их переопределяет UHerbalistSettings.
+// Возвращает true, если хоть одна ставка реально ненулевая: существо без
+// эффекта вовсе (Ржавые духи, Водяные бесы, Злыдни) иначе метило бы клетку
+// грязной каждый такт без единого изменения.
+inline bool ApplyAmbientEntityRates(FRealState& Target, const FAmbientEntityDefinition& Def,
+    float CorruptionRate, float PurityRate, float ScaledSeconds)
+{
+    bool bAnyRateFired = false;
+    if (CorruptionRate     != 0.0f) { Target.Meta.Corruption = FMath::Clamp(Target.Meta.Corruption + CorruptionRate     * ScaledSeconds, 0.0f, 1.0f); bAnyRateFired = true; }
+    if (PurityRate         != 0.0f) { Target.Meta.Purity     = FMath::Clamp(Target.Meta.Purity     + PurityRate         * ScaledSeconds, 0.0f, 1.0f); bAnyRateFired = true; }
+    if (Def.DistortionRate != 0.0f) { Target.Meta.Distortion = FMath::Clamp(Target.Meta.Distortion + Def.DistortionRate * ScaledSeconds, 0.0f, 1.0f); bAnyRateFired = true; }
+    if (Def.StabilityRate  != 0.0f) { Target.Meta.Stability  = FMath::Clamp(Target.Meta.Stability  + Def.StabilityRate  * ScaledSeconds, 0.0f, 1.0f); bAnyRateFired = true; }
+    if (Def.PotencyRate    != 0.0f) { Target.Meta.Potency    = FMath::Clamp(Target.Meta.Potency    + Def.PotencyRate    * ScaledSeconds, 0.0f, 1.0f); bAnyRateFired = true; }
+    if (Def.ResonanceRate  != 0.0f) { Target.Meta.Resonance  = FMath::Clamp(Target.Meta.Resonance  + Def.ResonanceRate  * ScaledSeconds, 0.0f, 1.0f); bAnyRateFired = true; }
+    if (Def.MagnitudeRate  != 0.0f) { Target.Magnitude       = FMath::Clamp(Target.Magnitude       + Def.MagnitudeRate  * ScaledSeconds, 0.0f, 1.0f); bAnyRateFired = true; }
+    // Direction, не Meta -- Max(0, ...), не Clamp(0,1): NormalizeSum считает
+    // сумму отдельно при релаксации (тот же принцип, что у ApplyLandmarkAxisNudge).
+    if (Def.NatureRate     != 0.0f) { Target.Direction.Nature = FMath::Max(0.0f, Target.Direction.Nature + Def.NatureRate * ScaledSeconds); bAnyRateFired = true; }
+    return bAnyRateFired;
+}
+
 inline const FAmbientEntityDefinition* FindAmbientEntityDefinition(FName EntityID)
 {
     return GetAmbientEntityDefinitions().FindByPredicate([EntityID](const FAmbientEntityDefinition& Def) { return Def.EntityID == EntityID; });
