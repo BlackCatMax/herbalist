@@ -1214,6 +1214,13 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Spawning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float IngredientWindowMismatchMultiplier = 0.15f;
 
+    // Хозяин травы (решение пользователя 2026-09-20): шанс травы вырасти
+    // множится на 1 + вес × Respect её хозяина (Respect в [-1, 1]) -- при
+    // 0.3 от ×0.7 до ×1.3. Сбор Respect не меняет: читаем, не пишем.
+    // Черновое число, крутить после PIE.
+    UPROPERTY(config, EditAnywhere, Category = "Spawning", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float HostRespectSuitabilityWeight = 0.3f;
+
     // ---- Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3), 2026-08-31.
     // Применяются к Magnitude/Potency/Resonance собранного предмета в
     // GenerateHarvestResult (PipelineV2.cpp) — ГДЕ множитель <1 гасит их,

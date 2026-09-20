@@ -190,6 +190,13 @@ struct PROJECTHERBALIST_API FIngredientTableRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
     bool bRequiresDryWeather = false;
 
+    // «Хозяин» травы (решение пользователя 2026-09-20) -- Основной её биома,
+    // EntityID из DT_Landmarks: чей Respect множит шанс травы вырасти
+    // (FHarvestContext::HostRespect, HostRespectSuitabilityWeight). Пусто --
+    // хозяина нет. Источник -- herbalist_docs/CSV_tabs/ingredient_hosts.json.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvest Window")
+    FName HostEntityID = NAME_None;
+
     // ---- Инструмент сбора (DESIGN_Community_And_Homestead.md §2.3, флаги
     // найдены проходом по компендиуму 2026-08-31 — bIronAverse подтверждён
     // текстом карточек Плакун-травы/Чистотела, bDelicate — Медуницы.
@@ -376,4 +383,9 @@ struct FHarvestContext
     // FIngredientTableRow::bUseAltitudeRange).
     float AltitudeCentimeters = 0.0f;
     bool bAltitudeKnown = false;
+
+    // Respect ближайшего экземпляра каждого хозяина биомов клетки
+    // (EntityID -> [-1, 1], 2026-09-20). Хозяина нет в карте -- его трава
+    // растёт без множителя. Заполняет AGridWorldManager::BuildHarvestContextForCell.
+    TMap<FName, float> HostRespect;
 };

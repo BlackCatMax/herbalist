@@ -14,6 +14,7 @@
 #include "Core/World/KurganActor.h"
 #include "Core/World/POIActors.h"
 #include "Core/Entities/LegendaryAnchorMarkerActor.h"
+#include "Core/Entities/LandmarkTypes.h"
 #include "EngineUtils.h"
 #include "Core/BiomeGraph/BiomeGraphSubsystem.h"
 #include "Core/Subsystems/WaterTypeRegistrySubsystem.h"
@@ -2897,6 +2898,27 @@ FHarvestContext AGridWorldManager::BuildHarvestContextForCell(const FGridCell& C
     // раз меньше настоящей высоты и никогда не совпадал.
     Context.bAltitudeKnown = CachedLandscape != nullptr && bCellHeightsCached;
     Context.AltitudeCentimeters = Context.bAltitudeKnown ? GetCellHeight(Cell.X, Cell.Y) : 0.0f;
+
+    // Хозяева трав (решение пользователя 2026-09-20): Respect ближайшего
+    // экземпляра каждого Основного биомов клетки. Хозяин чужого биома траву
+    // этой клетки не множит; Домовой (ручная регистрация) -- не хозяин трав.
+    TMap<FName, int32> NearestDistSq;
+    for (const FEntityLandmark& Landmark : EntityLandmarks)
+    {
+        const FLandmarkDefinition* Def = FindLandmarkDefinition(Landmark.EntityID);
+        if (!Def || Def->bManualRegistrationOnly) continue;
+        const bool bCellBiome = Cell.BiomeWeights.Num() == 0
+            ? Def->Biome == Cell.Biome
+            : Cell.BiomeWeights.ContainsByPredicate([Def](const FBiomeWeightEntry& Entry) { return Entry.Biome == Def->Biome; });
+        if (!bCellBiome) continue;
+        const int32 DistSq = FMath::Square(Landmark.Cell.X - Cell.X) + FMath::Square(Landmark.Cell.Y - Cell.Y);
+        const int32* Best = NearestDistSq.Find(Landmark.EntityID);
+        if (!Best || DistSq < *Best)
+        {
+            NearestDistSq.Add(Landmark.EntityID, DistSq);
+            Context.HostRespect.Add(Landmark.EntityID, Landmark.Respect);
+        }
+    }
 
     return Context;
 }

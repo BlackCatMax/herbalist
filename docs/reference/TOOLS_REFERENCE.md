@@ -136,6 +136,7 @@ ini можно дополнить или заменить, но не очист�
 | `-run=IngredientGatheringAndGardenPatch` | `bIronAverse`, `bDelicate`, `GardenNiche` из `ingredient_gathering_and_garden_flags.json` | 2026-08-31 |
 | `-run=DryingStatePatch` | `DriedStateDelta` из `ingredient_drying_state_patch.json` | 2026-09-05 |
 | `-run=IngredientDryingDurationPatch` | `DryingDurationSeconds` всем растениям и грибам из `ingredient_drying_duration_patch.json` | 2026-09-05 |
+| `-run=IngredientHostPatch` | Хозяин травы (`HostEntityID`, Основной биома) из `ingredient_hosts.json` | 2026-09-20 |
 | `-run=DomovoiMilkOfferingPatch` | Символическое подношение в ветке Домового «блюдце молока» | 2026-09-06 |
 | `-run=KalinovMostDealPatch` | Флаг сделки в ветке Змея «Откупиться подношением» | 2026-09-06 |
 

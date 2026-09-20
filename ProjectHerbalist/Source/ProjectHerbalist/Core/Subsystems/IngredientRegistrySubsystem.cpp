@@ -292,6 +292,7 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
     // кандидата. Истощение действует на число растений -- шансом вернуться в
     // AGridWorldManager::CompleteRegrowth -- и на время отрастания.
     const float WindowMismatch = Settings ? Settings->IngredientWindowMismatchMultiplier : 0.15f;
+    const float HostWeight = Settings ? Settings->HostRespectSuitabilityWeight : 0.3f;
 
     TArray<float> EffectiveWeights;
     EffectiveWeights.Reserve(Candidates.Num());
@@ -380,8 +381,12 @@ FName UIngredientRegistrySubsystem::PickWeightedResource(const TArray<FName>& Ca
         }
         if (AltitudeFactor > 0.0f) bAnyCandidateAltitudeEligible = true;
 
+        // Хозяин травы (2026-09-20): его Respect -- мягкий множитель, как окна.
+        const float* HostRespect = Row->HostEntityID.IsNone() ? nullptr : Context.HostRespect.Find(Row->HostEntityID);
+        const float HostFactor = HostRespect ? FMath::Max(0.0f, 1.0f + HostWeight * FMath::Clamp(*HostRespect, -1.0f, 1.0f)) : 1.0f;
+
         const float Weight = BaseWeights[i] * Suitability
-            * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow * AltitudeFactor;
+            * SeasonWindow * TimeWindow * MoonWindow * WeatherWindow * AltitudeFactor * HostFactor;
         EffectiveWeights.Add(Weight);
         TotalWeight += Weight;
     }
