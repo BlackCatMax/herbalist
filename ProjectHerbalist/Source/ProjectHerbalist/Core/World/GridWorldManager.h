@@ -7,6 +7,7 @@
 #include "TimerManager.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Entities/AmbientSpawnerTypes.h"
 #include "Core/Types/BiomeTypes.h"
 #include "Math/RandomStream.h"
 #include "Core/Simulation/Public/TraceTypes.h"
@@ -558,6 +559,22 @@ public:
     // можно.
     bool IsCrowdedBySameEntity(const FGridCell& Cell, const struct FAmbientEntityDefinition& Def) const;
 
+    // Условия карточки Низшего на клетке (биом, ось, время, погода, полюс,
+    // вечная чистота) -- без подавления и разнесения. Один и тот же разбор
+    // для клеточного пути и для спавнера (DESIGN_Entity_Spawners.md).
+    bool IsAmbientCardEligible(const FGridCell& Cell, const struct FAmbientEntityDefinition& Def, bool bWasActive) const;
+
+    // ---- Спавнеры Низших (DESIGN_Entity_Spawners.md, 2026-09-20), этап 1.
+    // Ручной спавнер регистрируется сам из своего BeginPlay; автоматические
+    // считаются по сетке квадратов в UpdateAmbientSpawners и нигде не
+    // хранятся. Работает, только пока включён bUseAmbientSpawners.
+    void RegisterAmbientSpawner(class AAmbientEntitySpawner* Spawner);
+    void UnregisterAmbientSpawner(class AAmbientEntitySpawner* Spawner);
+    void UpdateAmbientSpawners(float DeltaTime);
+    // Снять всех особей всех спавнеров (конец игры, выключение флага).
+    void DespawnAllAmbientSpawners();
+    const TMap<FIntPoint, FAmbientSpawnerRuntime>& GetAmbientSpawners() const { return AmbientSpawners; }
+
     // Обратное к GetCellWorldPosition — было продублировано в
     // AHerbalistPlayerController::GetCellFromHit, теперь общий метод (тем же
     // используется AAlchemyTableActor::BeginPlay для привязки капища к клетке).
@@ -1003,6 +1020,10 @@ public:
     // вызывается из Tick() каждый кадр, трогает State только через
     // Delta.TargetStateNudges -> ApplyStateDelta (Single Writer соблюдён).
     void UpdateEntityManifestations(float DeltaTime);
+
+    FName ChooseAmbientSpeciesForSpawner(const FAmbientSpawnerRuntime& Spawner) const;
+    void UpdateSpawnerIndividuals(FAmbientSpawnerRuntime& Spawner, float DeltaTime);
+    void DespawnSpawnerIndividuals(FAmbientSpawnerRuntime& Spawner);
 
     // ---- Суточный цикл (02_GDD/15_Cycles_And_Shrines.md §15.2) ----
     // Минимальная реализация: только фаза суток для Морочников, без луны/сезона.
@@ -2239,6 +2260,12 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Entities")
     TArray<FEntityLandmark> EntityLandmarks;
 
+    // Живые спавнеры Низших по клетке центра: ручные (зарегистрированные
+    // актором) и автоматические (пересчитываются каждый такт по активной
+    // области). В сейв не идут -- производная от условий и сида.
+    TMap<FIntPoint, FAmbientSpawnerRuntime> AmbientSpawners;
+    TArray<TWeakObjectPtr<class AAmbientEntitySpawner>> ManualAmbientSpawners;
+
     void SeedTestLandmarks();
 
     // Одна клетка-якорь на Легендарное существо (см. GetLegendaryAnchors
@@ -2552,6 +2579,10 @@ private:
     // UpdateEntityManifestations передаётся именно накопленное время, не
     // время кадра — ставки эффектов (rate/сек) остаются точными.
     float EntityManifestationAccumulator = 0.0f;
+    // Расстановка спавнеров -- такт, как и проявления: это такой же обход
+    // активной сетки (ревью 2026-09-20). Брожение особей от него не зависит:
+    // особи тикают сами.
+    float AmbientSpawnerAccumulator = 0.0f;
 
     // Накопитель шага восстановления клеток (см. CellRegenerationStepSeconds).
     float CellRegenerationAccumulator = 0.0f;

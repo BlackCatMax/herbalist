@@ -2031,6 +2031,10 @@ void AGridWorldManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     GetWorldTimerManager().ClearTimer(GridCorruptionReportTimerHandle);
     GetWorldTimerManager().ClearTimer(WorldStateMapTimerHandle);
+    // Особи спавнеров живут в мире, а не в клетке: без этого они остались бы
+    // бродить и тикать после менеджера (ревью 2026-09-20 -- в общем
+    // editor-мире автотестов они пережили бы и сам тест).
+    DespawnAllAmbientSpawners();
     Super::EndPlay(EndPlayReason);
 }
 

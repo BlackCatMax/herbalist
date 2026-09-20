@@ -1,0 +1,9 @@
+[
+    {"Name": "Болотные огни", "PackSize": 3},
+    {"Name": "Степные огни", "PackSize": 3},
+    {"Name": "Древесные огни", "PackSize": 3},
+    {"Name": "Снежные огни", "PackSize": 3},
+    {"Name": "Курганные огни", "PackSize": 3},
+    {"Name": "Омутные огни", "PackSize": 3},
+    {"Name": "Купальские", "PackSize": 3}
+]

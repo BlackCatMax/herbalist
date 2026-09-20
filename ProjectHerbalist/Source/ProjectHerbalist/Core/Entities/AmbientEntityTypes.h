@@ -217,12 +217,38 @@ struct PROJECTHERBALIST_API FAmbientEntityDefinition : public FTableRowBase
     // Конкретный Blueprint-наследник на существо (меш/партиклы) — контент,
     // добавляется позже, не блокирует спавн/деспавн.
     UPROPERTY() TSubclassOf<class AHerbalistEntityActor> ActorClass;
+
+    // Сколько особей выпускает один спавнер (DESIGN_Entity_Spawners.md,
+    // решение пользователя 2026-09-20: огни и Купальские ходят стайкой по
+    // три, остальные поодиночке). Клеточного пути Низших не касается.
+    UPROPERTY() int32 PackSize = 1;
 };
 
 // Обратная операция к GetAmbientTriggerAxisValue ниже -- нужна тестам,
 // которым нужно программно завести клетку в состояние "подходит под этот
 // Axis/Threshold", не только читать уже готовую (SystemInteractionTest.cpp,
 // 2026-08-30, "проверим сочетания всех биомов").
+// Редкость условия Низшего (решение пользователя 2026-09-19: «редкое
+// вытесняет частое») -- грубая доля года, когда выполнено ВРЕМЕННОЕ условие
+// карточки; осевой порог и граница биомов -- пространство, не время, их доля
+// 1. Не баланс, только порядок: ночь и закат -- 6 из 32 минут суток, сезон и
+// фаза луны -- четверть, ветер ~36% и метель ~4% (замер
+// Herbalist.AmbientEntity.EveryCardHasANonZeroTemporalWindow), Купальская
+// ночь -- одна ночь в году. Переехало из GridWorldManagerEntities.cpp
+// 2026-09-20: тем же порядком выбирает вид спавнер (§DESIGN_Entity_Spawners).
+inline float GetAmbientTemporalShare(const FAmbientEntityDefinition& Def)
+{
+    float Share = 1.0f;
+    if (Def.bRequiresNight)       Share *= 6.0f / 32.0f;
+    if (Def.bRequiresDusk)        Share *= 6.0f / 32.0f;
+    if (Def.bRequiresSeason)      Share *= 0.25f;
+    if (Def.bRequiresLateSummer)  Share *= 0.25f;
+    if (Def.bRequiresMoonPhase)   Share *= 0.25f;
+    if (Def.bRequiresWeather)     Share *= Def.RequiredWeather == EWeatherCondition::Blizzard ? 0.04f : 0.36f;
+    if (Def.bRequiresKupalaNight) Share *= 1.0f / 365.0f;
+    return Share;
+}
+
 inline void SetAmbientTriggerAxisValue(FGridCell& Cell, EAmbientTriggerAxis Axis, float Value)
 {
     switch (Axis)
@@ -313,4 +339,9 @@ inline const TArray<FAmbientEntityDefinition>& GetAmbientEntityDefinitions()
         return Defs;
     }();
     return Definitions;
+}
+
+inline const FAmbientEntityDefinition* FindAmbientEntityDefinition(FName EntityID)
+{
+    return GetAmbientEntityDefinitions().FindByPredicate([EntityID](const FAmbientEntityDefinition& Def) { return Def.EntityID == EntityID; });
 }

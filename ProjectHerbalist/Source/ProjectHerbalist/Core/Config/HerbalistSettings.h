@@ -526,6 +526,36 @@ public:
     // привязки к биому). Применяется ко ВСЕЙ сетке разом, пока держится
     // ночь (AGridWorldManager::IsNight), поэтому заведомо мельче ставок
     // одиночных Низших (AmbientEntityTypes.h) — иначе затопил бы их сигнал.
+    // ---- Спавнеры Низших (DESIGN_Entity_Spawners.md, решения пользователя
+    // 2026-09-20). Этап 1: спавнер выбирает вид и выпускает особей, эффекта
+    // на клетки у них пока нет -- его делает прежний клеточный путь, пока
+    // bUseAmbientSpawners выключен.
+
+    // Пока выключено: оба пути разом заселяли бы мир вдвое.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners")
+    bool bUseAmbientSpawners = false;
+
+    // Сторона квадрата, на который приходится один автоматический спавнер --
+    // примерно один на активный радиус игрока (63 м на L_TestDev).
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "5.0", ClampMax = "500.0"))
+    float AmbientSpawnerSpacingMeters = 60.0f;
+
+    // Радиус зоны спавнера: где появляются и бродят его особи.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "1.0", ClampMax = "200.0"))
+    float AmbientSpawnerRadiusMeters = 25.0f;
+
+    // Пауза между выпусками особей -- стайка собирается постепенно, не
+    // возникает разом.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "0.0", ClampMax = "120.0"))
+    float AmbientSpawnIntervalSeconds = 4.0f;
+
+    // Брожение особи: скорость и пауза на точке.
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "1.0", ClampMax = "1000.0"))
+    float AmbientWanderSpeedCmPerSecond = 60.0f;
+
+    UPROPERTY(config, EditAnywhere, Category = "Entities|Spawners", meta = (ClampMin = "0.0", ClampMax = "120.0"))
+    float AmbientWanderPauseSeconds = 3.0f;
+
     UPROPERTY(config, EditAnywhere, Category = "Entities|NightHorror", meta = (ClampMin = "0.0", ClampMax = "0.1"))
     float NightHorrorDistortionRate = 0.003f;
 

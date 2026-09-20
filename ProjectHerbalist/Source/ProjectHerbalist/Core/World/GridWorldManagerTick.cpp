@@ -183,6 +183,29 @@ void AGridWorldManager::Tick(float DeltaTime)
         }
     }
 
+    // Спавнеры Низших (DESIGN_Entity_Spawners.md, 2026-09-20) -- тем же
+    // тактом, что и проявления: расстановка автоматических идёт по активной
+    // сетке, это такой же дорогой обход (ревью 2026-09-20). Брожение особей
+    // тактом не ограничено -- особи тикают сами, каждым кадром. Пока
+    // выключено настройкой -- ранний выход.
+    {
+        const UHerbalistSettings* SpawnerSettings = GetHerbalistSettings();
+        const float SpawnerInterval = SpawnerSettings ? SpawnerSettings->EntityManifestationIntervalSeconds : 0.1f;
+        if (SpawnerInterval <= 0.0f)
+        {
+            UpdateAmbientSpawners(DeltaTime);
+        }
+        else
+        {
+            AmbientSpawnerAccumulator += DeltaTime;
+            if (AmbientSpawnerAccumulator >= SpawnerInterval)
+            {
+                UpdateAmbientSpawners(AmbientSpawnerAccumulator);
+                AmbientSpawnerAccumulator = 0.0f;
+            }
+        }
+    }
+
     // ========================================================================
     // КАПИЩА (15_Cycles_And_Shrines §15.5) — спад Restoration при небрежении.
     // Рост — в RunSimulationStep ниже, там же, где Травник сопоставляет

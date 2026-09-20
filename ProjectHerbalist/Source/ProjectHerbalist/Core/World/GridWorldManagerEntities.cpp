@@ -76,31 +76,6 @@ namespace
         return -1;
     }
 
-    // Редкость условия Низшего (решение пользователя 2026-09-19: «редкое
-    // вытесняет частое») -- грубая доля года, когда выполнено ВРЕМЕННОЕ
-    // условие карточки; осевой порог и граница биомов -- пространство, не
-    // время, их доля 1. Не баланс, только порядок: ночь и закат -- 6 из 32
-    // минут суток, сезон и фаза луны -- четверть, ветер ~36% и метель ~4%
-    // (замер Herbalist.AmbientEntity.EveryCardHasANonZeroTemporalWindow),
-    // Купальская ночь -- одна ночь в году.
-    float GetAmbientTemporalShare(const FAmbientEntityDefinition& Def)
-    {
-        float Share = 1.0f;
-        if (Def.bRequiresNight)       Share *= 6.0f / 32.0f;
-        if (Def.bRequiresDusk)        Share *= 6.0f / 32.0f;
-        if (Def.bRequiresSeason)      Share *= 0.25f;
-        if (Def.bRequiresLateSummer)  Share *= 0.25f;
-        if (Def.bRequiresMoonPhase)   Share *= 0.25f;
-        if (Def.bRequiresWeather)     Share *= Def.RequiredWeather == EWeatherCondition::Blizzard ? 0.04f : 0.36f;
-        if (Def.bRequiresKupalaNight) Share *= 1.0f / 365.0f;
-        return Share;
-    }
-
-    const FAmbientEntityDefinition* FindAmbientEntityDefinition(FName EntityID)
-    {
-        return GetAmbientEntityDefinitions().FindByPredicate([EntityID](const FAmbientEntityDefinition& Def) { return Def.EntityID == EntityID; });
-    }
-
     // Клетка свободна для CandidateID, если она либо не занята, либо уже занята
     // им же (переподтверждение), либо занята кем-то менее приоритетным (вытесняем).
     // Среди Низших (ранг один) -- ещё и тем, чьё условие реже: метель
@@ -704,6 +679,124 @@ void AGridWorldManager::SeedLegendaryAnchors()
 // EntityID актора с EntityID клетки, а не просто "актор есть/нет" — если
 // клетку тем же тиком отобрал другой EntityID того же ранга (CanManifest
 // пропускает более приоритетного), старый актор должен уступить место новому.
+// Условия карточки Низшего на клетке -- биом, суша/вода, осевой порог с
+// гистерезисом, время, погода, согласованность с испорченным полюсом,
+// вечная чистота. Подавление (Шапка, обереги) и разнесение сюда НЕ входят:
+// они про место и предметы игрока, а не про карточку. Вынесено из
+// UpdateEntityManifestations 2026-09-20 (DESIGN_Entity_Spawners.md): те же
+// условия читает спавнер по клетке своего центра.
+bool AGridWorldManager::IsAmbientCardEligible(const FGridCell& Cell, const FAmbientEntityDefinition& Def, bool bWasActive) const
+{
+    // Клетка вне всех ABiomeRegionVolume биом получает блочным фолбэком, а не
+    // авторской разметкой -- проявлять там нечего (ревью 2026-09-20: гейт
+    // остался у клеточного пути, а спавнер его не знал и заводил Низших в
+    // пробелах между регионами). На уровнях вовсе без регионов -- true.
+    if (!IsCellClaimedByBiomeRegion(Cell)) return false;
+    if (Cell.Biome != Def.Biome) return false;
+    if (Def.bLandOnly && Cell.bIsWater) return false;
+    if (Def.bWaterOnly && !Cell.bIsWater) return false;
+
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float GnilnikiThreshold = Settings ? Settings->GnilnikiCorruptionThreshold : 0.6f;
+    const float HysteresisMargin = Settings ? Settings->EntityManifestationHysteresis : 0.05f;
+
+    bool bEligible = true;
+    if (Def.TriggerAxis != EAmbientTriggerAxis::None)
+    {
+        // Гнильники читают порог/скорость из UHerbalistSettings (уже
+        // настраивался балансировщиком раньше этой сессии, см. §2.1
+        // AUDIT_AND_REFACTORING_PLAN.md) — остальные пока только из
+        // своего определения; отдельная настройка на каждое существо
+        // в Project Settings — задел на потом, не сегодняшняя задача.
+        const bool bIsGnilniki = Def.EntityID == EntityID_Gnilniki;
+        const float Threshold = bIsGnilniki ? GnilnikiThreshold : Def.TriggerThreshold;
+        const float AxisValue = GetAmbientTriggerAxisValue(Cell, Def.TriggerAxis);
+        const float SignedValue     = Def.bTriggerAbove ?  AxisValue  : -AxisValue;
+        const float SignedThreshold = Def.bTriggerAbove ?  Threshold : -Threshold;
+        // Общий запас гистерезиса (аудит 2026-09-05): раньше здесь
+        // читался Def.HysteresisMargin -- отдельное, per-определению
+        // поле FAmbientEntityDefinition, не EntityManifestationHysteresis,
+        // хотя комментарий у самой настройки прямо называет "Corruption
+        // у Гнильников" в числе потребителей. Каждый другой ранг
+        // (Берегиня/Основной/Легендарный, см. остальные вызовы
+        // PassesHysteresisThreshold в этом файле) уже читает общий
+        // HysteresisMargin ниже -- Низший был единственным исключением.
+        // Оба дефолта совпадают (0.05f), поэтому баг был не виден,
+        // пока настройку не поменяли бы в Project Settings.
+        bEligible = PassesHysteresisThreshold(bWasActive, SignedValue, SignedThreshold, HysteresisMargin);
+    }
+    if (Def.bRequiresNight)
+    {
+        bEligible = bEligible && IsNight();
+    }
+    if (Def.bRequiresSeason)
+    {
+        bEligible = bEligible && (GetSeason() == Def.RequiredSeason);
+    }
+    if (Def.bRequiresDusk)
+    {
+        bEligible = bEligible && IsDusk();
+    }
+    if (Def.bRequiresMoonPhase)
+    {
+        bEligible = bEligible && (GetMoonPhase() == Def.RequiredMoonPhase);
+    }
+    if (Def.bRequiresBiomeBorder)
+    {
+        // Реальная проверка соседей, не прокси -- тот же приём, что
+        // уже применён к Пограничному капищу (BiomeGraphSubsystem.cpp,
+        // CollectBorderShrineDamping). Только 4 ортогональных соседа
+        // (Chebyshev через угол не считается "границей биома" здесь,
+        // тот же выбор, что у капища).
+        bool bOnBorder = false;
+        static const FIntPoint Offsets[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
+        for (const FIntPoint& Offset : Offsets)
+        {
+            const FGridCell* Neighbor = GetCellConst(Cell.X + Offset.X, Cell.Y + Offset.Y);
+            if (Neighbor && Neighbor->Biome != Cell.Biome)
+            {
+                bOnBorder = true;
+                break;
+            }
+        }
+        bEligible = bEligible && bOnBorder;
+    }
+    if (Def.bRequiresWeather)
+    {
+        bEligible = bEligible && (Def.RequiredWeather == EWeatherCondition::Blizzard ? IsBlizzard() : IsWindy());
+    }
+    if (Def.bRequiresLateSummer)
+    {
+        bEligible = bEligible && IsAutumn();
+    }
+    if (Def.bRequiresKupalaNight)
+    {
+        bEligible = bEligible && IsKupalaNight();
+    }
+
+    // Находка сессии 2026-08-30 (SystemInteractionTest — обход всего
+    // бестиария): большинство проверенных Низших существ манифестируют
+    // на клетке, которую бистабильность независимо зафиксировала на
+    // испорченном полюсе (bDegrading), потому что их триггер-ось
+    // ортогональна полюсу по дизайну и не спадает вместе с ней.
+    // Существа, чья ось И направление согласованы с полюсом (Гнильники
+    // и по итогам финального аудита — Водяные бесы/Болотные огни/
+    // Стукачи по высокому Distortion, Ржавые духи по низкой Stability),
+    // не гейтим — см. IsAxisConsistentWithCorruptPole выше.
+    if (!IsAxisConsistentWithCorruptPole(Def.TriggerAxis, Def.bTriggerAbove))
+    {
+        bEligible = bEligible && !Cell.Memory.bDegrading;
+    }
+
+    // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
+    // клетка, помеченная навечно чистой, исключена из ЛЮБых
+    // проявлений навсегда, тот же принцип, что !Cell.Memory.bDegrading
+    // выше, но безусловный (не только для тематически несогласованных осей).
+    bEligible = bEligible && !Cell.bEternallyPure;
+
+    return bEligible;
+}
+
 bool AGridWorldManager::IsCrowdedBySameEntity(const FGridCell& Cell, const FAmbientEntityDefinition& Def) const
 {
     if (Def.MinSpacingMeters <= 0.0f) return false;   // выключено для этого вида
@@ -805,6 +898,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
     const float NightHorrorCorruptionRate = Settings ? Settings->NightHorrorCorruptionRate  : 0.002f;
     const float NightHorrorSpiritRate     = Settings ? Settings->NightHorrorSpiritRate      : 0.003f;
     const float WinterPurityRate = Settings ? Settings->WinterPurityRate                    : 0.002f;
+    const bool bAmbientSpawnersOwnLowRank = Settings && Settings->bUseAmbientSpawners;
     const bool bIsWinter = GetSeason() == ESeason::Winter;   // одинаково для всей сетки за этот тик
     const float DawnPurityRate      = Settings ? Settings->DawnPurityRate      : 0.004f;
     const float DawnStabilityRate   = Settings ? Settings->DawnStabilityRate   : 0.004f;
@@ -887,7 +981,25 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
         // Запоминаем, чьим ActorClass спавнить актора после цикла (2026-08-30)
         // — не более одного Def реально "выигрывает" клетку за тик (см.
         // комментарий выше про CanManifest), так что одного указателя хватает.
+        // Со спавнерами (DESIGN_Entity_Spawners.md, этап 1) Низших ставит
+        // UpdateAmbientSpawners, а не клетка: два пути разом заселили бы мир
+        // вдвое. Уже проявленного Низшего клетка при этом отпускает сама --
+        // иначе он остался бы висеть на ней навсегда (цикл, который его
+        // снимал, больше не идёт). Остальные ранги идут как шли.
         const FAmbientEntityDefinition* ManifestingAmbientDef = nullptr;
+        if (bAmbientSpawnersOwnLowRank)
+        {
+            if (!Cell.ManifestedEntityID.IsNone() && FindAmbientEntityDefinition(Cell.ManifestedEntityID))
+            {
+                Cell.ManifestedEntityID = NAME_None;
+            }
+            // Память о вытеснении гасим в любом случае (ревью 2026-09-20):
+            // иначе после обратного выключения флага вид стартовал бы с
+            // порога удержания, хотя его тут давно нет.
+            Cell.DisplacedEntityID = NAME_None;
+        }
+        else
+        {
         for (const FAmbientEntityDefinition& Def : GetAmbientEntityDefinitions())
         {
             if (!bBiomeContentAllowed) continue;
@@ -903,99 +1015,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
             const bool bHeld = Cell.ManifestedEntityID == Def.EntityID;
             const bool bWasActive = bHeld || Cell.DisplacedEntityID == Def.EntityID;
 
-            bool bEligible = true;
-            if (Def.TriggerAxis != EAmbientTriggerAxis::None)
-            {
-                // Гнильники читают порог/скорость из UHerbalistSettings (уже
-                // настраивался балансировщиком раньше этой сессии, см. §2.1
-                // AUDIT_AND_REFACTORING_PLAN.md) — остальные пока только из
-                // своего определения; отдельная настройка на каждое существо
-                // в Project Settings — задел на потом, не сегодняшняя задача.
-                const bool bIsGnilniki = Def.EntityID == EntityID_Gnilniki;
-                const float Threshold = bIsGnilniki ? GnilnikiThreshold : Def.TriggerThreshold;
-                const float AxisValue = GetAmbientTriggerAxisValue(Cell, Def.TriggerAxis);
-                const float SignedValue     = Def.bTriggerAbove ?  AxisValue  : -AxisValue;
-                const float SignedThreshold = Def.bTriggerAbove ?  Threshold : -Threshold;
-                // Общий запас гистерезиса (аудит 2026-09-05): раньше здесь
-                // читался Def.HysteresisMargin -- отдельное, per-определению
-                // поле FAmbientEntityDefinition, не EntityManifestationHysteresis,
-                // хотя комментарий у самой настройки прямо называет "Corruption
-                // у Гнильников" в числе потребителей. Каждый другой ранг
-                // (Берегиня/Основной/Легендарный, см. остальные вызовы
-                // PassesHysteresisThreshold в этом файле) уже читает общий
-                // HysteresisMargin ниже -- Низший был единственным исключением.
-                // Оба дефолта совпадают (0.05f), поэтому баг был не виден,
-                // пока настройку не поменяли бы в Project Settings.
-                bEligible = PassesHysteresisThreshold(bWasActive, SignedValue, SignedThreshold, HysteresisMargin);
-            }
-            if (Def.bRequiresNight)
-            {
-                bEligible = bEligible && IsNight();
-            }
-            if (Def.bRequiresSeason)
-            {
-                bEligible = bEligible && (GetSeason() == Def.RequiredSeason);
-            }
-            if (Def.bRequiresDusk)
-            {
-                bEligible = bEligible && IsDusk();
-            }
-            if (Def.bRequiresMoonPhase)
-            {
-                bEligible = bEligible && (GetMoonPhase() == Def.RequiredMoonPhase);
-            }
-            if (Def.bRequiresBiomeBorder)
-            {
-                // Реальная проверка соседей, не прокси -- тот же приём, что
-                // уже применён к Пограничному капищу (BiomeGraphSubsystem.cpp,
-                // CollectBorderShrineDamping). Только 4 ортогональных соседа
-                // (Chebyshev через угол не считается "границей биома" здесь,
-                // тот же выбор, что у капища).
-                bool bOnBorder = false;
-                static const FIntPoint Offsets[4] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
-                for (const FIntPoint& Offset : Offsets)
-                {
-                    const FGridCell* Neighbor = GetCellConst(Cell.X + Offset.X, Cell.Y + Offset.Y);
-                    if (Neighbor && Neighbor->Biome != Cell.Biome)
-                    {
-                        bOnBorder = true;
-                        break;
-                    }
-                }
-                bEligible = bEligible && bOnBorder;
-            }
-            if (Def.bRequiresWeather)
-            {
-                bEligible = bEligible && (Def.RequiredWeather == EWeatherCondition::Blizzard ? IsBlizzard() : IsWindy());
-            }
-            if (Def.bRequiresLateSummer)
-            {
-                bEligible = bEligible && IsAutumn();
-            }
-            if (Def.bRequiresKupalaNight)
-            {
-                bEligible = bEligible && IsKupalaNight();
-            }
-
-            // Находка сессии 2026-08-30 (SystemInteractionTest — обход всего
-            // бестиария): большинство проверенных Низших существ манифестируют
-            // на клетке, которую бистабильность независимо зафиксировала на
-            // испорченном полюсе (bDegrading), потому что их триггер-ось
-            // ортогональна полюсу по дизайну и не спадает вместе с ней.
-            // Существа, чья ось И направление согласованы с полюсом (Гнильники
-            // и по итогам финального аудита — Водяные бесы/Болотные огни/
-            // Стукачи по высокому Distortion, Ржавые духи по низкой Stability),
-            // не гейтим — см. IsAxisConsistentWithCorruptPole выше.
-            if (!IsAxisConsistentWithCorruptPole(Def.TriggerAxis, Def.bTriggerAbove))
-            {
-                bEligible = bEligible && !Cell.Memory.bDegrading;
-            }
-
-            // Перо Жар-птицы (16_Entity_Manifestation.md §16.4, 2026-09-02) —
-            // клетка, помеченная навечно чистой, исключена из ЛЮБых
-            // проявлений навсегда, тот же принцип, что !Cell.Memory.bDegrading
-            // выше, но безусловный (не только для тематически несогласованных осей).
-            bEligible = bEligible && !Cell.bEternallyPure;
+            const bool bEligible = IsAmbientCardEligible(Cell, Def, bWasActive);
 
             // Шапка-невидимка (21_Journey_And_Artifacts.md §21.3, 2026-09-01)
             // — подавляет только НОВЫЕ проявления, не уже активные (Гребень
@@ -1095,6 +1115,7 @@ void AGridWorldManager::UpdateEntityManifestations(float DeltaTime)
                 // время) -- возвращаться ему некуда, память о нём гасим.
                 Cell.DisplacedEntityID = NAME_None;
             }
+        }
         }
         SyncManifestedEntityActor(Cell, ManifestingAmbientDef ? ManifestingAmbientDef->ActorClass : nullptr, AAmbientEntityActor::StaticClass());
 
