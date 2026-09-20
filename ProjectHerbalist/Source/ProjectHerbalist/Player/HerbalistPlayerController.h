@@ -169,6 +169,16 @@ public:
     UFUNCTION(Exec)
     void TestNewApply(int32 X, int32 Y, FString IngredientList);
 
+    // Шаг ритуальной варки (2026-09-21): единственный игровой вход в
+    // AGridWorldManager::TryAdvanceRitual -- до этой команды вся ритуальная
+    // варка существовала только под автотестами и была недостижима в игре
+    // (найдено ревью составов). Имена через запятую, как у TestNewApply;
+    // вода называется своим IngredientID (BogWater, SteppeWater...).
+    // Принятые шагом предметы списываются из котомки, награда кладётся в
+    // неё; при NoMatch не тратится ничего.
+    UFUNCTION(Exec)
+    void RitualStep(int32 X, int32 Y, FString IngredientList);
+
     // Сохранения v1 (Core/Save/HerbalistSaveSubsystem.h) — тонкие обёртки над
     // подсистемой, тем же паттерном, что HarvestTest/ApplyTest над пайплайном.
     UFUNCTION(Exec)

@@ -42,6 +42,21 @@ namespace
     // НЕ-водных предметов, добавленных именно на этом шаге, обязан быть
     // конкретным ключ-ингредиентом яруса, не любой травой. Пусто =
     // "любые N" (как у "ЗаревойВоды"), тот же смысл, что и раньше.
+    // Все названные травы разом -- настоящий рецепт (2026-09-20), в отличие
+    // от «хотя бы одной» у гейтов между ярусами биомов.
+    bool HasAllRequiredIngredients(const TArray<FInventoryItem>& Items, const TArray<FName>& RequiredIngredientIDs)
+    {
+        for (const FName& RequiredID : RequiredIngredientIDs)
+        {
+            const bool bFound = Items.ContainsByPredicate([&RequiredID](const FInventoryItem& Item)
+            {
+                return !Item.bIsWater && Item.IngredientID == RequiredID;
+            });
+            if (!bFound) return false;
+        }
+        return true;
+    }
+
     bool HasRequiredIngredient(const TArray<FInventoryItem>& Items, const TArray<FName>& RequiredIngredientIDs)
     {
         if (RequiredIngredientIDs.Num() == 0) return true;
@@ -84,8 +99,11 @@ ERitualStepResult AGridWorldManager::TryAdvanceRitual(const FIntPoint& CauldronC
         if (Step.bRequiresDawn && !IsDawn()) continue;
         if (Step.bRequiresDusk && !IsDusk()) continue;
         if (Step.bRequiresNight && !IsNight()) continue;
+        if (Step.bRequiresKupalaNight && !IsKupalaNight()) continue;
         if (!HasRequiredWater(NewIngredients, Step.RequiredWaterTypeID)) continue;
-        if (!HasRequiredIngredient(NewIngredients, Step.RequiredIngredientIDs)) continue;
+        if (Step.bRequiresAllListedIngredients
+            ? !HasAllRequiredIngredients(NewIngredients, Step.RequiredIngredientIDs)
+            : !HasRequiredIngredient(NewIngredients, Step.RequiredIngredientIDs)) continue;
 
         // Условия шага выполнены -- продвигаем.
         FActiveRitualState NewState = Active ? *Active : FActiveRitualState();

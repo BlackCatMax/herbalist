@@ -9,6 +9,8 @@
 #include "Core/Types/HerbalistNameUtils.h"
 #include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/World/GridWorldManager.h"
+#include "Core/Alchemy/RitualTypes.h"
+#include "Templates/TypeHash.h"
 #include "Core/World/GardenNicheUnlockTypes.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "DrawDebugHelpers.h"
@@ -2155,6 +2157,72 @@ void AHerbalistPlayerController::TestNewTransfer(FName IngredientID, int32 Amoun
     Cmd.Transfer.IngredientID         = IngredientID;
     Cmd.Transfer.Amount               = Amount;
     Grid->QueueCommand(Cmd);
+}
+
+void AHerbalistPlayerController::RitualStep(int32 X, int32 Y, FString IngredientList)
+{
+    if (!InventoryComponent) return;
+
+    AGridWorldManager* Grid = FindWorldManager();
+    if (!Grid) return;
+
+    // Собираем предметы и ЗАПОМИНАЕМ индексы: списывать их можно только
+    // после того, как шаг реально принят (иначе неудачная попытка съедала бы
+    // травы -- тот же принцип, что у DeliverOrder).
+    TArray<FInventoryItem> Items;
+    TArray<int32> Indices;
+    TArray<FString> Names;
+    IngredientList.ParseIntoArray(Names, TEXT(","), true);
+    const TArray<FInventoryItem>& Owned = InventoryComponent->GetItems();
+    for (const FString& Name : Names)
+    {
+        const FName IngID(*Name.TrimStartAndEnd());
+        for (int32 Index = 0; Index < Owned.Num(); ++Index)
+        {
+            if (Owned[Index].IngredientID == IngID && !Indices.Contains(Index))
+            {
+                Items.Add(Owned[Index]);
+                Indices.Add(Index);
+                break;
+            }
+        }
+    }
+
+    if (Items.Num() != Names.Num())
+    {
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("[Ritual] Нет в котомке: запрошено %d, найдено %d"), Names.Num(), Items.Num());
+        return;
+    }
+
+    // Сид от часов и клетки котла, не от WorldRNG (тот же приём «сиды от
+    // клетки», что у ресурсов): повторный шаг в тот же игровой миг на той же
+    // клетке даёт тот же бросок, но общий счётчик мира не сдвигается.
+    FRandomStream Rng(static_cast<int32>(Grid->GetGameClockSeconds()) + GetTypeHash(FIntPoint(X, Y)));
+    FInventoryItem Result;
+    const ERitualStepResult StepResult = Grid->TryAdvanceRitual(FIntPoint(X, Y), Items, Rng, Result);
+
+    if (StepResult == ERitualStepResult::NoMatch)
+    {
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("[Ritual] Шаг не подошёл ни под один рецепт -- ничего не потрачено"));
+        return;
+    }
+
+    // Индексы по убыванию -- RemoveItem(Index) не должен сдвинуть ещё не
+    // снятые (тот же приём, что у подношения общине).
+    Indices.Sort([](int32 A, int32 B) { return A > B; });
+    for (int32 Index : Indices)
+    {
+        InventoryComponent->RemoveItem(Index, 1);
+    }
+
+    if (StepResult == ERitualStepResult::Progressed)
+    {
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("[Ritual] Шаг принят, ритуал продолжается"));
+        return;
+    }
+
+    InventoryComponent->AddItem(Result, 1);
+    UE_LOG(LogHerbalistAlchemy, Log, TEXT("[Ritual] Ритуал завершён: получено '%s'"), *Result.IngredientID.ToString());
 }
 
 void AHerbalistPlayerController::TestNewApply(int32 X, int32 Y, FString IngredientList)

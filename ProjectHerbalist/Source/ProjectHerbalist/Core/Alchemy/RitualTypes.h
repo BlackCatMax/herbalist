@@ -65,6 +65,18 @@ struct FRitualStepDefinition
     // IngredientID из этого списка (не ЛЮБЫЕ N штук, а конкретное
     // растение/гриб этого яруса биомов, см. TryAdvanceRitual).
     UPROPERTY(EditAnywhere) TArray<FName> RequiredIngredientIDs;
+
+    // Список выше требует ХОТЯ БЫ ОДИН названный предмет (гейт ярусов: важна
+    // находка, а не точный состав). Этот флаг делает его требованием ВСЕХ
+    // названных разом -- настоящий рецепт, где важна пара трав, а не одна из
+    // (составы ритуалов, решение пользователя 2026-09-20). Пустой список
+    // флаг не трогает.
+    UPROPERTY(EditAnywhere) bool bRequiresAllListedIngredients = false;
+
+    // Купальская ночь -- IsKupalaNight(), тот же сигнал, что уже читает
+    // карточка Купальских (§16.2). Одна ночь в году: единственное условие
+    // ритуала, которое нельзя переждать до завтра.
+    UPROPERTY(EditAnywhere) bool bRequiresKupalaNight = false;
 };
 
 USTRUCT(BlueprintType)
@@ -120,15 +132,25 @@ inline TArray<FRitualRecipeDefinition> GetRitualRecipeDefinitions()
         FRitualRecipeDefinition Def;
         Def.RecipeID = FName(TEXT("ZarevayaVoda"));
 
+        // Состав (решение пользователя 2026-09-20; до этого шаги принимали
+        // любые травы, и выбор ничего не значил): на закате в болотной воде
+        // -- Багульник (bol_01, дурман болота) и Сон-трава (les_06,
+        // «простреливает меж мирами», по карточке); на рассвете --
+        // Кувшинка (riv_06), одолень-трава, которую «берут на заре, с
+        // поклоном реке».
         FRitualStepDefinition Step1;
         Step1.IngredientCount = 2;
         Step1.bRequiresDusk = true;
         Step1.RequiredWaterTypeID = FName(TEXT("BogWater"));
+        Step1.RequiredIngredientIDs = { FName(TEXT("bol_01")), FName(TEXT("les_06")) };
+        Step1.bRequiresAllListedIngredients = true;
         Def.Steps.Add(Step1);
 
         FRitualStepDefinition Step2;
         Step2.IngredientCount = 1;
         Step2.bRequiresDawn = true;
+        Step2.RequiredIngredientIDs = { FName(TEXT("riv_06")) };
+        Step2.bRequiresAllListedIngredients = true;
         Def.Steps.Add(Step2);
 
         Defs.Add(Def);
@@ -204,6 +226,72 @@ inline TArray<FRitualRecipeDefinition> GetRitualRecipeDefinitions()
         Def.Steps.Add(Step);
 
         Def.GrantsIngredientID = FName(TEXT("Гагат"));
+        Defs.Add(Def);
+    }
+
+    // ---- Три рецепта с настоящими составами (решение пользователя
+    // 2026-09-20, «нужны реальные составы»). В отличие от гейтов ярусов
+    // выше, здесь важна ПАРА трав (bRequiresAllListedIngredients), а не одна
+    // находка; каждая пара и каждый час взяты из текста карточек, не
+    // выдуманы. Награды дописывает -run=RitualRewardAppend.
+
+    // Полынный пояс: «кто опояшется полынным поясом, того ни одна русалка не
+    // защекочет» (карточка Полыни). Закат -- час, когда пояс вьют перед
+    // ночью; степная вода -- вода той же земли, что и сама полынь.
+    {
+        FRitualRecipeDefinition Def;
+        Def.RecipeID = FName(TEXT("PolynnyPoyas"));
+
+        FRitualStepDefinition Step;
+        Step.IngredientCount = 2;
+        Step.bRequiresDusk = true;
+        Step.RequiredWaterTypeID = FName(TEXT("SteppeWater"));
+        Step.RequiredIngredientIDs = { FName(TEXT("ste_04")), FName(TEXT("broad_04")) };   // Полынь + Крапива
+        Step.bRequiresAllListedIngredients = true;
+        Def.Steps.Add(Step);
+
+        Def.GrantsIngredientID = FName(TEXT("Полынный пояс"));
+        Defs.Add(Def);
+    }
+
+    // Одолень в дорогу: «её корень в путь с собой берут -- одолеет все
+    // напасти дорожные... потому и берут её на заре, с молитвой да с
+    // поклоном реке» (карточка Кувшинки). Рассвет и пойменная вода -- прямо
+    // оттуда же; Ирный корень -- второй речной корень, которым сушат.
+    {
+        FRitualRecipeDefinition Def;
+        Def.RecipeID = FName(TEXT("OdolenVDorogu"));
+
+        FRitualStepDefinition Step;
+        Step.IngredientCount = 2;
+        Step.bRequiresDawn = true;
+        Step.RequiredWaterTypeID = FName(TEXT("FloodplainWater"));
+        Step.RequiredIngredientIDs = { FName(TEXT("riv_06")), FName(TEXT("riv_03")) };   // Кувшинка + Ирный корень
+        Step.bRequiresAllListedIngredients = true;
+        Def.Steps.Add(Step);
+
+        Def.GrantsIngredientID = FName(TEXT("Одолень-корень"));
+        Defs.Add(Def);
+    }
+
+    // Перунов цвет: «кто его в ночь на Купалу найдёт, тому все тайны
+    // откроются, да не всяк выдержит» (карточка Папоротника). Единственный
+    // ритуал с окном в одну ночь в году -- и единственный, к которому нельзя
+    // подготовиться «завтра». Плакун-трава рядом не случайно: тот же
+    // купальский круг, и она держит нечисть, пока цвет берут.
+    {
+        FRitualRecipeDefinition Def;
+        Def.RecipeID = FName(TEXT("PerunovTsvet"));
+
+        FRitualStepDefinition Step;
+        Step.IngredientCount = 2;
+        Step.bRequiresKupalaNight = true;
+        Step.RequiredWaterTypeID = FName(TEXT("MixedForestWater"));
+        Step.RequiredIngredientIDs = { FName(TEXT("mix_08")), FName(TEXT("riv_11")) };   // Папоротник + Плакун-трава
+        Step.bRequiresAllListedIngredients = true;
+        Def.Steps.Add(Step);
+
+        Def.GrantsIngredientID = FName(TEXT("Перунов цвет"));
         Defs.Add(Def);
     }
 

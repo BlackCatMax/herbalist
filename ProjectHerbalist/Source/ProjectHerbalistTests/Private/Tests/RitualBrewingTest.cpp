@@ -13,6 +13,9 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Alchemy/RitualTypes.h"
 #include "Core/Types/HerbalistCoreTypes.h"
+#include "Core/Types/HerbalistCalendar.h"
+#include "Player/HerbalistPlayerController.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Simulation/Public/SnapshotTypes.h"
 #include "Core/Simulation/Public/DeltaTypes.h"
 #include "Core/Simulation/Public/CommandTypes.h"
@@ -61,6 +64,14 @@ namespace
         return Item;
     }
 
+    // Состав "Заревой воды" с 2026-09-20 настоящий (решение пользователя
+    // «нужны реальные составы»): закатный шаг -- Багульник (bol_01) и
+    // Сон-трава (les_06), рассветный -- Кувшинка (riv_06). До этого шаги
+    // принимали любые травы, и тесты гоняли безымянные "A"/"B".
+    const TCHAR* Bagulnik = TEXT("bol_01");
+    const TCHAR* SonTrava = TEXT("les_06");
+    const TCHAR* Kuvshinka = TEXT("riv_06");
+
     // Дневное время -- НЕ рассвет/закат/ночь (для теста "не в тот час").
     const float DayMoment = 700.0f;   // ~11.7 мин -- внутри "Дня" (после Рассвета, до Заката)
     const float DuskMoment = 1300.0f; // внутри "Заката" ([1200,1560) сек при 32-мин сутках)
@@ -79,7 +90,7 @@ bool FHerbalistRitual_WrongWaterTypeDoesNotAdvance::RunTest(const FString& Param
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
     Manager->SetGameClockSeconds(DuskMoment);
 
-    TArray<FInventoryItem> Ingredients = { MakeRitualIngredient(TEXT("A")), MakeRitualIngredient(TEXT("B")), MakePlainWater() };
+    TArray<FInventoryItem> Ingredients = { MakeRitualIngredient(Bagulnik), MakeRitualIngredient(SonTrava), MakePlainWater() };
     FRandomStream Rng(1);
     FInventoryItem Potion;
     const ERitualStepResult Result = Manager->TryAdvanceRitual(FIntPoint(5, 5), Ingredients, Rng, Potion);
@@ -104,7 +115,7 @@ bool FHerbalistRitual_WrongTimeDoesNotAdvance::RunTest(const FString& Parameters
     if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
     Manager->SetGameClockSeconds(DayMoment);   // не Закат
 
-    TArray<FInventoryItem> Ingredients = { MakeRitualIngredient(TEXT("A")), MakeRitualIngredient(TEXT("B")), MakeBogWater() };
+    TArray<FInventoryItem> Ingredients = { MakeRitualIngredient(Bagulnik), MakeRitualIngredient(SonTrava), MakeBogWater() };
     FRandomStream Rng(1);
     FInventoryItem Potion;
     const ERitualStepResult Result = Manager->TryAdvanceRitual(FIntPoint(5, 5), Ingredients, Rng, Potion);
@@ -130,8 +141,8 @@ bool FHerbalistRitual_WrongIngredientCountDoesNotAdvance::RunTest(const FString&
 
     // Первый шаг рецепта "ZarevayaVoda" требует ровно 2 НЕ-водных -- пробуем
     // 1 и 3 (вода в счёт не идёт, см. IngredientCount в RitualTypes.h).
-    TArray<FInventoryItem> OneIngredient = { MakeRitualIngredient(TEXT("A")), MakeBogWater() };
-    TArray<FInventoryItem> ThreeIngredients = { MakeRitualIngredient(TEXT("A")), MakeRitualIngredient(TEXT("B")), MakeRitualIngredient(TEXT("C")), MakeBogWater() };
+    TArray<FInventoryItem> OneIngredient = { MakeRitualIngredient(Bagulnik), MakeBogWater() };
+    TArray<FInventoryItem> ThreeIngredients = { MakeRitualIngredient(Bagulnik), MakeRitualIngredient(SonTrava), MakeRitualIngredient(Kuvshinka), MakeBogWater() };
 
     FRandomStream Rng1(1);
     FInventoryItem Potion1;
@@ -166,7 +177,7 @@ bool FHerbalistRitual_CompletesAcrossTwoStepsWithRealTimeBetween::RunTest(const 
 
     // --- Шаг 1: закат, 2 не-водных ингредиента + болотная вода ---
     Manager->SetGameClockSeconds(DuskMoment);
-    TArray<FInventoryItem> Step1 = { MakeRitualIngredient(TEXT("A")), MakeRitualIngredient(TEXT("B")), MakeBogWater() };
+    TArray<FInventoryItem> Step1 = { MakeRitualIngredient(Bagulnik), MakeRitualIngredient(SonTrava), MakeBogWater() };
     FRandomStream Rng1(1);
     FInventoryItem PotionAfterStep1;
     const ERitualStepResult Result1 = Manager->TryAdvanceRitual(Cauldron, Step1, Rng1, PotionAfterStep1);
@@ -183,7 +194,7 @@ bool FHerbalistRitual_CompletesAcrossTwoStepsWithRealTimeBetween::RunTest(const 
 
     // --- Реальное игровое время проходит: закат -> рассвет следующих суток ---
     Manager->SetGameClockSeconds(DawnMoment);
-    TArray<FInventoryItem> Step2 = { MakeRitualIngredient(TEXT("C")) };
+    TArray<FInventoryItem> Step2 = { MakeRitualIngredient(Kuvshinka) };
     FRandomStream Rng2(2);
     FInventoryItem FinalPotion;
     const ERitualStepResult Result2 = Manager->TryAdvanceRitual(Cauldron, Step2, Rng2, FinalPotion);
@@ -222,13 +233,13 @@ bool FHerbalistRitual_BypassesIngredientCountRisk::RunTest(const FString& Parame
     // PurifyOddsMultiplier=1-0.3*1=0.7 -- уже не гарантия, при части сидов
     // Catastrophe.
     Manager->SetGameClockSeconds(DuskMoment);
-    TArray<FInventoryItem> Step1 = { MakeRitualIngredient(TEXT("A"), 0.95f, 1.0f), MakeRitualIngredient(TEXT("B"), 0.95f, 1.0f), MakeBogWater() };
+    TArray<FInventoryItem> Step1 = { MakeRitualIngredient(Bagulnik, 0.95f, 1.0f), MakeRitualIngredient(SonTrava, 0.95f, 1.0f), MakeBogWater() };
     FRandomStream RngStep1(1);
     FInventoryItem Dummy1;
     Manager->TryAdvanceRitual(Cauldron, Step1, RngStep1, Dummy1);
 
     Manager->SetGameClockSeconds(DawnMoment);
-    TArray<FInventoryItem> Step2 = { MakeRitualIngredient(TEXT("C"), 0.95f, 1.0f) };
+    TArray<FInventoryItem> Step2 = { MakeRitualIngredient(Kuvshinka, 0.95f, 1.0f) };
     FRandomStream RngStep2(1);
     FInventoryItem RitualPotion;
     const ERitualStepResult Result = Manager->TryAdvanceRitual(Cauldron, Step2, RngStep2, RitualPotion);
@@ -249,7 +260,7 @@ bool FHerbalistRitual_BypassesIngredientCountRisk::RunTest(const FString& Parame
     FCommandBatch Batch;
     FCommandEntry Entry;
     Entry.Primitive = ECommandPrimitive::Apply;
-    Entry.Apply.Ingredients = { MakeRitualIngredient(TEXT("A"), 0.95f, 1.0f), MakeRitualIngredient(TEXT("B"), 0.95f, 1.0f), MakeRitualIngredient(TEXT("C"), 0.95f, 1.0f), MakeBogWater() };
+    Entry.Apply.Ingredients = { MakeRitualIngredient(Bagulnik, 0.95f, 1.0f), MakeRitualIngredient(SonTrava, 0.95f, 1.0f), MakeRitualIngredient(Kuvshinka, 0.95f, 1.0f), MakeBogWater() };
     Entry.Apply.bIsCrafting = true;
     Entry.Apply.bIsRitual = false;
     Batch.AddCommand(Entry);
@@ -295,13 +306,13 @@ bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewAndIsSpent::RunTest(cons
     // --- Без оберега: тот же критический состав (Distortion=0.95,
     // Stability=0.0) должен надёжно сорваться в Catastrophe ---
     Manager->SetGameClockSeconds(DuskMoment);
-    TArray<FInventoryItem> Step1NoCharm = { MakeRitualIngredient(TEXT("A"), 0.95f, 0.0f), MakeRitualIngredient(TEXT("B"), 0.95f, 0.0f), MakeBogWater() };
+    TArray<FInventoryItem> Step1NoCharm = { MakeRitualIngredient(Bagulnik, 0.95f, 0.0f), MakeRitualIngredient(SonTrava, 0.95f, 0.0f), MakeBogWater() };
     FRandomStream RngNoCharm1(1);
     FInventoryItem Dummy;
     Manager->TryAdvanceRitual(FIntPoint(1, 1), Step1NoCharm, RngNoCharm1, Dummy);
 
     Manager->SetGameClockSeconds(DawnMoment);
-    TArray<FInventoryItem> Step2NoCharm = { MakeRitualIngredient(TEXT("C"), 0.95f, 0.0f) };
+    TArray<FInventoryItem> Step2NoCharm = { MakeRitualIngredient(Kuvshinka, 0.95f, 0.0f) };
     FRandomStream RngNoCharm2(1);
     FInventoryItem PotionNoCharm;
     const ERitualStepResult ResultNoCharm = Manager->TryAdvanceRitual(FIntPoint(1, 1), Step2NoCharm, RngNoCharm2, PotionNoCharm);
@@ -315,12 +326,12 @@ bool FHerbalistRitual_BifurcationCharmPurifiesRitualBrewAndIsSpent::RunTest(cons
     Manager->SetAcquiredArtifacts({ Stone });
 
     Manager->SetGameClockSeconds(DuskMoment);
-    TArray<FInventoryItem> Step1WithCharm = { MakeRitualIngredient(TEXT("A"), 0.95f, 0.0f), MakeRitualIngredient(TEXT("B"), 0.95f, 0.0f), MakeBogWater() };
+    TArray<FInventoryItem> Step1WithCharm = { MakeRitualIngredient(Bagulnik, 0.95f, 0.0f), MakeRitualIngredient(SonTrava, 0.95f, 0.0f), MakeBogWater() };
     FRandomStream RngWithCharm1(1);
     Manager->TryAdvanceRitual(FIntPoint(2, 2), Step1WithCharm, RngWithCharm1, Dummy);
 
     Manager->SetGameClockSeconds(DawnMoment);
-    TArray<FInventoryItem> Step2WithCharm = { MakeRitualIngredient(TEXT("C"), 0.95f, 0.0f) };
+    TArray<FInventoryItem> Step2WithCharm = { MakeRitualIngredient(Kuvshinka, 0.95f, 0.0f) };
     FRandomStream RngWithCharm2(1);
     FInventoryItem PotionWithCharm;
     const ERitualStepResult ResultWithCharm = Manager->TryAdvanceRitual(FIntPoint(2, 2), Step2WithCharm, RngWithCharm2, PotionWithCharm);
@@ -404,6 +415,226 @@ bool FHerbalistRitual_PorogRassvetaDoesNotAdvanceWithWrongIngredient::RunTest(co
     TestTrue(TEXT("Right count and time, wrong key ingredient -- does not advance"), Result == ERitualStepResult::NoMatch);
     TestEqual(TEXT("No partial ritual state left behind"), Manager->ActiveRituals.Num(), 0);
     TestTrue(TEXT("No reward granted"), Potion.IngredientID.IsNone());
+
+    Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Рецепты с настоящими составами (решение пользователя 2026-09-20). До этого
+// шаги принимали ЛЮБЫЕ травы нужного числа, и выбор травы ничего не значил.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    FInventoryItem MakeNamedWater(const TCHAR* ID)
+    {
+        FInventoryItem Item = MakeBogWater();
+        Item.IngredientID = FName(ID);
+        return Item;
+    }
+
+    // Купальская ночь -- ночь на 24 июня (HerbalistCalendar). Ищем момент,
+    // когда IsKupalaNight() действительно истинно, а не считаем его руками.
+    float FindKupalaNight(AGridWorldManager* Manager, bool& bOutFound)
+    {
+        const float DayLengthSeconds = 32.0f * 60.0f;
+        const float KupalaDayStart = HerbalistCore::Calendar::KupalaEveDayOfYear() * DayLengthSeconds;
+        for (int32 Minute = 0; Minute < 32; ++Minute)
+        {
+            const float Seconds = KupalaDayStart + Minute * 60.0f;
+            Manager->SetGameClockSeconds(Seconds);
+            if (Manager->IsKupalaNight())
+            {
+                bOutFound = true;
+                return Seconds;
+            }
+        }
+        bOutFound = false;
+        return KupalaDayStart;
+    }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_ZarevayaVodaNeedsItsOwnHerbsNotAnyTwo,
+    "Herbalist.Ritual.ZarevayaVodaNeedsItsOwnHerbsNotAnyTwo",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_ZarevayaVodaNeedsItsOwnHerbsNotAnyTwo::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    Manager->SetGameClockSeconds(DuskMoment);
+
+    // Две любые травы в болотной воде на закате -- раньше этого хватало.
+    TArray<FInventoryItem> WrongPair = { MakeRitualIngredient(TEXT("tai_05")), MakeRitualIngredient(TEXT("ste_04")), MakeBogWater() };
+    FRandomStream Rng1(1);
+    FInventoryItem Potion1;
+    TestTrue(TEXT("Чужая пара трав ритуал не начинает"),
+        Manager->TryAdvanceRitual(FIntPoint(5, 5), WrongPair, Rng1, Potion1) == ERitualStepResult::NoMatch);
+
+    // Одна своя, вторая чужая -- тоже нет: нужны обе названные.
+    TArray<FInventoryItem> HalfPair = { MakeRitualIngredient(Bagulnik), MakeRitualIngredient(TEXT("ste_04")), MakeBogWater() };
+    FRandomStream Rng2(1);
+    FInventoryItem Potion2;
+    TestTrue(TEXT("Половина состава -- тоже не начинает"),
+        Manager->TryAdvanceRitual(FIntPoint(5, 5), HalfPair, Rng2, Potion2) == ERitualStepResult::NoMatch);
+
+    // Багульник с Сон-травой -- шаг принят.
+    TArray<FInventoryItem> RightPair = { MakeRitualIngredient(Bagulnik), MakeRitualIngredient(SonTrava), MakeBogWater() };
+    FRandomStream Rng3(1);
+    FInventoryItem Potion3;
+    TestTrue(TEXT("Багульник с Сон-травой на закате -- шаг принят"),
+        Manager->TryAdvanceRitual(FIntPoint(5, 5), RightPair, Rng3, Potion3) == ERitualStepResult::Progressed);
+
+    Manager->ActiveRituals.Empty();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_PolynnyPoyasGrantsItsWard,
+    "Herbalist.Ritual.PolynnyPoyasGrantsItsWard",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_PolynnyPoyasGrantsItsWard::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    Manager->SetGameClockSeconds(DuskMoment);
+
+    // Полынь с крапивой в степной воде на закате -- один шаг, сразу награда.
+    TArray<FInventoryItem> Items = {
+        MakeRitualIngredient(TEXT("ste_04")),    // Полынь
+        MakeRitualIngredient(TEXT("broad_04")),  // Крапива
+        MakeNamedWater(TEXT("SteppeWater")) };
+    FRandomStream Rng(1);
+    FInventoryItem Granted;
+    const ERitualStepResult Result = Manager->TryAdvanceRitual(FIntPoint(6, 6), Items, Rng, Granted);
+
+    TestTrue(TEXT("Ритуал завершён одним шагом"), Result == ERitualStepResult::Completed);
+    TestEqual(TEXT("Выдан именно Полынный пояс"), Granted.IngredientID, FName(TEXT("Полынный пояс")));
+
+    // В болотной воде тот же состав не идёт: вода -- часть рецепта.
+    TArray<FInventoryItem> WrongWater = {
+        MakeRitualIngredient(TEXT("ste_04")),
+        MakeRitualIngredient(TEXT("broad_04")),
+        MakeBogWater() };
+    FRandomStream Rng2(1);
+    FInventoryItem Potion2;
+    TestTrue(TEXT("Не та вода -- ритуал не идёт"),
+        Manager->TryAdvanceRitual(FIntPoint(7, 7), WrongWater, Rng2, Potion2) == ERitualStepResult::NoMatch);
+
+    Manager->ActiveRituals.Empty();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_PerunovTsvetOnlyOnKupalaNight,
+    "Herbalist.Ritual.PerunovTsvetOnlyOnKupalaNight",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_PerunovTsvetOnlyOnKupalaNight::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+
+    TArray<FInventoryItem> Items = {
+        MakeRitualIngredient(TEXT("mix_08")),   // Папоротник
+        MakeRitualIngredient(TEXT("riv_11")),   // Плакун-трава
+        MakeNamedWater(TEXT("MixedForestWater")) };
+
+    // Обычная ночь -- Перунова цвета нет: окно одно в году.
+    const float DayLengthSeconds = 32.0f * 60.0f;
+    Manager->SetGameClockSeconds(HerbalistCore::Calendar::DayOfYearFromDate(8, 10) * DayLengthSeconds + 29.0f * 60.0f);
+    TestTrue(TEXT("Sanity: ночь, но не Купальская"), Manager->IsNight() && !Manager->IsKupalaNight());
+    FRandomStream Rng1(1);
+    FInventoryItem Potion1;
+    TestTrue(TEXT("В обычную ночь ритуал не идёт"),
+        Manager->TryAdvanceRitual(FIntPoint(8, 8), Items, Rng1, Potion1) == ERitualStepResult::NoMatch);
+
+    // Купальская ночь -- идёт и сразу выдаёт находку.
+    bool bFound = false;
+    const float KupalaNight = FindKupalaNight(Manager, bFound);
+    if (!TestTrue(TEXT("Нашли Купальскую ночь"), bFound)) { Manager->Destroy(); return false; }
+    Manager->SetGameClockSeconds(KupalaNight);
+    FRandomStream Rng2(1);
+    FInventoryItem Granted;
+    const ERitualStepResult Result = Manager->TryAdvanceRitual(FIntPoint(8, 8), Items, Rng2, Granted);
+    TestTrue(TEXT("В Купальскую ночь ритуал завершён"), Result == ERitualStepResult::Completed);
+    TestEqual(TEXT("Выдан Перунов цвет"), Granted.IngredientID, FName(TEXT("Перунов цвет")));
+
+    Manager->ActiveRituals.Empty();
+    Manager->Destroy();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Игровой вход (2026-09-21, найдено ревью составов): до команды RitualStep
+// вся ритуальная варка существовала только под автотестами -- TryAdvanceRitual
+// не вызывался из игры НИОТКУДА.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_RitualStepCommandSpendsHerbsAndGivesReward,
+    "Herbalist.Ritual.RitualStepCommandSpendsHerbsAndGivesReward",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_RitualStepCommandSpendsHerbsAndGivesReward::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+    if (!TestNotNull(TEXT("Есть котомка"), PC->InventoryComponent)) { Manager->Destroy(); PC->Destroy(); return false; }
+
+    Manager->SetGameClockSeconds(DuskMoment);
+    PC->InventoryComponent->AddItem(MakeRitualIngredient(TEXT("ste_04")));    // Полынь
+    PC->InventoryComponent->AddItem(MakeRitualIngredient(TEXT("broad_04")));  // Крапива
+    PC->InventoryComponent->AddItem(MakeNamedWater(TEXT("SteppeWater")));
+
+    // Чужой состав -- ничего не потрачено: неудачная попытка не должна
+    // съедать травы.
+    const int32 CountBefore = PC->InventoryComponent->GetItems().Num();
+    PC->RitualStep(6, 6, TEXT("ste_04,SteppeWater"));
+    TestEqual(TEXT("Неподошедший шаг ничего не списал"), PC->InventoryComponent->GetItems().Num(), CountBefore);
+
+    // Верный состав -- травы и вода ушли, оберег пришёл.
+    PC->RitualStep(6, 6, TEXT("ste_04,broad_04,SteppeWater"));
+    TestEqual(TEXT("Полынь списана"), CountItemsWithID(PC->InventoryComponent, FName(TEXT("ste_04"))), 0);
+    TestEqual(TEXT("Крапива списана"), CountItemsWithID(PC->InventoryComponent, FName(TEXT("broad_04"))), 0);
+    TestEqual(TEXT("Полынный пояс в котомке"), CountItemsWithID(PC->InventoryComponent, FName(TEXT("Полынный пояс"))), 1);
+
+    Manager->ActiveRituals.Empty();
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistRitual_TwoCopiesOfOneHerbAreNotAPair,
+    "Herbalist.Ritual.TwoCopiesOfOneHerbAreNotAPair",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistRitual_TwoCopiesOfOneHerbAreNotAPair::RunTest(const FString& Parameters)
+{
+    // Ревью 2026-09-21: рецепт требует ДВЕ РАЗНЫЕ названные травы, и две
+    // копии одной не должны его подменять.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    Manager->SetGameClockSeconds(DuskMoment);
+
+    TArray<FInventoryItem> TwoBagulniks = { MakeRitualIngredient(Bagulnik), MakeRitualIngredient(Bagulnik), MakeBogWater() };
+    FRandomStream Rng(1);
+    FInventoryItem Potion;
+    TestTrue(TEXT("Два Багульника вместо пары -- ритуал не начинается"),
+        Manager->TryAdvanceRitual(FIntPoint(5, 5), TwoBagulniks, Rng, Potion) == ERitualStepResult::NoMatch);
+    TestEqual(TEXT("Следа на клетке не осталось"), Manager->ActiveRituals.Num(), 0);
 
     Manager->Destroy();
     return true;
