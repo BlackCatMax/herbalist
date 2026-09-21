@@ -12,7 +12,10 @@ void UJournalEntryRowWidget::InitializeRow(const FJournalEntry& InEntry, UIngred
     // собираем временный item только для имени, не для чего-то ещё.
     // Текстовые записи -- воспоминание и Молва (записки, слухи) -- без имени
     // предмета: сам текст.
-    if (InEntry.Type == EJournalEntryType::MemoryFragment || InEntry.Type == EJournalEntryType::CommunityNote)
+    // Знак мира и осмотр (2026-09-21) -- тоже текст: у знака нет предмета
+    // вовсе, у осмотра главное -- строка ощущения, а не «сварено ×N».
+    if (InEntry.Type == EJournalEntryType::MemoryFragment || InEntry.Type == EJournalEntryType::CommunityNote
+        || InEntry.Type == EJournalEntryType::WorldSign || InEntry.Type == EJournalEntryType::Inspection)
     {
         if (NameText)
         {
@@ -20,7 +23,11 @@ void UJournalEntryRowWidget::InitializeRow(const FJournalEntry& InEntry, UIngred
         }
         if (ContextText)
         {
-            ContextText->SetText(FText::FromString(InEntry.Type == EJournalEntryType::CommunityNote ? TEXT("Молва") : TEXT("Воспоминание")));
+            const TCHAR* Label = InEntry.Type == EJournalEntryType::CommunityNote ? TEXT("Молва")
+                : InEntry.Type == EJournalEntryType::WorldSign ? TEXT("Знак")
+                : InEntry.Type == EJournalEntryType::Inspection ? TEXT("Осмотр")
+                : TEXT("Воспоминание");
+            ContextText->SetText(FText::FromString(Label));
         }
         return;
     }

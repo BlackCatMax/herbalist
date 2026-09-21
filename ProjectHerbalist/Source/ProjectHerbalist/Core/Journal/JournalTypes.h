@@ -19,7 +19,14 @@ enum class EJournalEntryType : uint8
     MemoryFragment,
     // Записка с заказом, исход заказа, слух (02_GDD/24_Orders_And_Repute.md,
     // 2026-09-19): текст -- в FragmentText, как у фрагмента памяти.
-    CommunityNote
+    CommunityNote,
+    // Осмотр предмета в руке (DESIGN_Diegetic_Interface.md, 2026-09-21):
+    // строка ощущения -- в FragmentText, предмет -- IngredientID.
+    Inspection,
+    // Знак мира, который раньше жил только всплывающим текстом (Морок стих
+    // -- путь к Буяну; решение пользователя 2026-09-21: память и знаки
+    // Заряны остаются на экране, но пишутся и в Травник).
+    WorldSign
 };
 
 // Одна запись Травника — 06_Progression.md: прогрессия как "сжатие ошибки

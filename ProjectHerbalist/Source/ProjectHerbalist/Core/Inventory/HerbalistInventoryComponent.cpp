@@ -759,3 +759,31 @@ void UHerbalistInventoryComponent::ApplyStateDelta(const FStateDelta& Delta)
     if (bChanged)
         OnInventoryChanged.Broadcast();
 }
+
+int32 UHerbalistInventoryComponent::FindItemIndex(const FInventoryItem& Snapshot, int32 HintIndex) const
+{
+    // Имя не сверяется на подсказанной ячейке: гниение меняет его на месте.
+    if (Items.IsValidIndex(HintIndex)
+        && FMath::IsNearlyEqual(Items[HintIndex].CreationTime, Snapshot.CreationTime, 0.01f))
+    {
+        return HintIndex;
+    }
+    for (int32 Index = 0; Index < Items.Num(); ++Index)
+    {
+        if (Items[Index].IngredientID == Snapshot.IngredientID
+            && FMath::IsNearlyEqual(Items[Index].CreationTime, Snapshot.CreationTime, 0.01f))
+        {
+            return Index;
+        }
+    }
+    for (int32 Index = 0; Index < Items.Num(); ++Index)
+    {
+        if (Items[Index].IngredientID == Snapshot.IngredientID
+            && HerbalistCore::Math::AreStatesSimilar(Items[Index].State, Snapshot.State))
+        {
+            return Index;
+        }
+    }
+    return INDEX_NONE;
+}
+

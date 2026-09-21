@@ -11,6 +11,8 @@
 #include "Core/World/GridWorldManager.h"
 #include "Core/Alchemy/RitualTypes.h"
 #include "UI/OrdersWindowWidget.h"
+#include "Player/HeldItemComponent.h"
+#include "Player/LookHighlightComponent.h"
 #include "Templates/TypeHash.h"
 #include "Core/World/GardenNicheUnlockTypes.h"
 #include "Core/Config/HerbalistSettings.h"
@@ -37,6 +39,8 @@ AHerbalistPlayerController::AHerbalistPlayerController()
 {
     InventoryComponent = CreateDefaultSubobject<UHerbalistInventoryComponent>(TEXT("InventoryComponent"));
     JournalComponent = CreateDefaultSubobject<UHerbalistJournalComponent>(TEXT("JournalComponent"));
+    HeldItemComponent = CreateDefaultSubobject<UHeldItemComponent>(TEXT("HeldItemComponent"));
+    LookHighlightComponent = CreateDefaultSubobject<ULookHighlightComponent>(TEXT("LookHighlightComponent"));
 }
 
 void AHerbalistPlayerController::BeginPlay()
@@ -2221,6 +2225,36 @@ void AHerbalistPlayerController::TestNewTransfer(FName IngredientID, int32 Amoun
     Cmd.Transfer.IngredientID         = IngredientID;
     Cmd.Transfer.Amount               = Amount;
     Grid->QueueCommand(Cmd);
+}
+
+void AHerbalistPlayerController::HoldItem(int32 InventoryIndex)
+{
+    if (!HeldItemComponent || !HeldItemComponent->TakeFromInventory(InventoryIndex))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("HoldItem: в котомке нет ячейки %d"), InventoryIndex);
+    }
+}
+
+void AHerbalistPlayerController::InspectHeld()
+{
+    if (!HeldItemComponent || !HeldItemComponent->IsHolding())
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("InspectHeld: в руке ничего нет"));
+        return;
+    }
+    HeldItemComponent->ToggleInspect();
+    if (HeldItemComponent->IsInspecting())
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("[Осмотр] %s"), *HeldItemComponent->GetSensationLine());
+    }
+}
+
+void AHerbalistPlayerController::PutAwayHeld()
+{
+    if (HeldItemComponent)
+    {
+        HeldItemComponent->PutAway();
+    }
 }
 
 void AHerbalistPlayerController::RitualStep(int32 X, int32 Y, FString IngredientList)

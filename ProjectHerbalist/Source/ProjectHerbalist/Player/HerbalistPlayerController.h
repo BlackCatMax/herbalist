@@ -38,6 +38,14 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Journal")
     UHerbalistJournalComponent* JournalComponent;
 
+    // Рука и подсветка взгляда -- диегетический интерфейс, этап 1
+    // (DESIGN_Diegetic_Interface.md, 2026-09-21).
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diegetic")
+    class UHeldItemComponent* HeldItemComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diegetic")
+    class ULookHighlightComponent* LookHighlightComponent;
+
     UPROPERTY(BlueprintReadOnly, Category = "UI")
     bool bIsAnyWidgetOpen = false;
 
@@ -178,6 +186,16 @@ public:
     // неё; при NoMatch не тратится ничего.
     UFUNCTION(Exec)
     void RitualStep(int32 X, int32 Y, FString IngredientList);
+
+    // Рука, этап 1 диегетического интерфейса. Пока пестеря нет (этап 2),
+    // взять предмет можно только командой по номеру ячейки; осмотреть и
+    // убрать -- тоже. Клавиши появятся вместе с пестерем.
+    UFUNCTION(Exec)
+    void HoldItem(int32 InventoryIndex);
+    UFUNCTION(Exec)
+    void InspectHeld();
+    UFUNCTION(Exec)
+    void PutAwayHeld();
 
     // Сохранения v1 (Core/Save/HerbalistSaveSubsystem.h) — тонкие обёртки над
     // подсистемой, тем же паттерном, что HarvestTest/ApplyTest над пайплайном.

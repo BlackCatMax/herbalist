@@ -547,9 +547,23 @@ void AGridWorldManager::CheckBuyanCondition()
     // GridWorldManagerDebug.cpp/GridWorldManagerTick.cpp.
     if (AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetWorld()->GetFirstPlayerController()))
     {
-        PC->ShowMemoryRevealText(FText::FromString(TEXT(
+        const FText SignText = FText::FromString(TEXT(
             "Морок стих. Впервые за долгий срок мир вокруг ровен, как гладь непотревоженной воды -- "
-            "будто где-то там, за пределами видимого, лежит Буян.")));
+            "будто где-то там, за пределами видимого, лежит Буян."));
+        PC->ShowMemoryRevealText(SignText);
+
+        // И в Травник (решение пользователя 2026-09-21: знаки Заряны остаются
+        // на экране, но пишутся и в книгу) -- раньше текст исчезал с экрана
+        // бесследно.
+        if (PC->JournalComponent)
+        {
+            FJournalEntry Entry;
+            Entry.Type = EJournalEntryType::WorldSign;
+            Entry.FragmentText = SignText;
+            Entry.bWasNight = IsNight();
+            Entry.GameTimeSeconds = GameClockSeconds;
+            PC->JournalComponent->AddEntry(Entry);
+        }
     }
 }
 

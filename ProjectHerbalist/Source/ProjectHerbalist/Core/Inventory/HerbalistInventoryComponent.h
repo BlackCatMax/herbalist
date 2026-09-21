@@ -122,6 +122,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool RemoveItem(int32 Index, int32 Amount = 1);
 
+    // Где сейчас лежит предмет, который кто-то запомнил (рука, окно заказов).
+    // Тот же порядок, что у UInventorySlotWidget::FindRealIndex (аудит
+    // 2026-09-05, ревью 2026-09-14/21): сначала подсказанная ячейка, если в
+    // ней тот же предмет по времени создания; потом имя + время создания;
+    // потом имя + близкое состояние (время сдвигается при слиянии стопок).
+    // Точное сравнение состояния не годится: распад двигает его каждую
+    // секунду. INDEX_NONE -- такого больше нет.
+    int32 FindItemIndex(const FInventoryItem& Snapshot, int32 HintIndex = INDEX_NONE) const;
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool TransferOneItem(int32 SourceIndex, int32 TargetIndex);
 

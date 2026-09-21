@@ -25,21 +25,6 @@ namespace
     const FLinearColor SelectedColor(0.35f, 0.3f, 0.18f, 1.0f);
     const FLinearColor RowColor(0.12f, 0.11f, 0.09f, 1.0f);
 
-    // Тот же предмет, что был выбран: по времени создания и состоянию. Все
-    // зелья зовутся одинаково ("Potion"), различает их только это.
-    bool IsSameInventoryItem(const FInventoryItem& A, const FInventoryItem& B)
-    {
-        return A.IngredientID == B.IngredientID
-            && A.CreationTime == B.CreationTime
-            && FMath::IsNearlyEqual(A.State.Magnitude, B.State.Magnitude)
-            && FMath::IsNearlyEqual(A.State.Direction.Body, B.State.Direction.Body)
-            && FMath::IsNearlyEqual(A.State.Direction.Mind, B.State.Direction.Mind)
-            && FMath::IsNearlyEqual(A.State.Direction.Spirit, B.State.Direction.Spirit)
-            && FMath::IsNearlyEqual(A.State.Direction.Nature, B.State.Direction.Nature)
-            && FMath::IsNearlyEqual(A.State.Meta.Purity, B.State.Meta.Purity)
-            && FMath::IsNearlyEqual(A.State.Meta.Corruption, B.State.Meta.Corruption);
-    }
-
     FString DescribePayment(const FOrderPayment& Payment)
     {
         if (Payment.ItemID.IsNone()) return TEXT("--");
@@ -98,10 +83,9 @@ void UOrdersWindowWidget::OnInventoryChanged()
 int32 UOrdersWindowWidget::ResolveSelectedPotionIndex() const
 {
     if (!bHasSelectedPotion || !Controller || !Controller->InventoryComponent) return INDEX_NONE;
-    return Controller->InventoryComponent->GetItems().IndexOfByPredicate([this](const FInventoryItem& Item)
-    {
-        return IsSameInventoryItem(Item, SelectedPotionItem);
-    });
+    // Общий поиск котомки, не точное сравнение: зелье тоже стареет, и выбор
+    // слетал бы через секунду (ревью 2026-09-21, найдено на руке).
+    return Controller->InventoryComponent->FindItemIndex(SelectedPotionItem);
 }
 
 void UOrdersWindowWidget::NativeConstruct()

@@ -181,6 +181,7 @@ void UJournalLogWidget::RefreshDisplay()
     {
         if (SelectedIngredientFilter != NAME_None
             && (AllEntries[i].Type == EJournalEntryType::MemoryFragment || AllEntries[i].Type == EJournalEntryType::CommunityNote
+                || AllEntries[i].Type == EJournalEntryType::WorldSign
                 || AllEntries[i].IngredientID != SelectedIngredientFilter))
         {
             continue;
@@ -230,7 +231,8 @@ void UJournalLogWidget::RefreshFilterOptions(UIngredientRegistrySubsystem* Ingre
     TSet<FName> SeenIDs;
     for (const FJournalEntry& Entry : JournalComponent->GetEntries())
     {
-        if (Entry.Type == EJournalEntryType::MemoryFragment || Entry.Type == EJournalEntryType::CommunityNote) continue;
+        if (Entry.Type == EJournalEntryType::MemoryFragment || Entry.Type == EJournalEntryType::CommunityNote
+            || Entry.Type == EJournalEntryType::WorldSign) continue;
         if (SeenIDs.Contains(Entry.IngredientID)) continue;
         SeenIDs.Add(Entry.IngredientID);
 
@@ -298,11 +300,26 @@ FText UJournalLogWidget::FormatEntry(const FJournalEntry& Entry, UIngredientRegi
             *Entry.FragmentText.ToString(), Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
     }
 
+    // Знак мира -- просто текст.
+    if (Entry.Type == EJournalEntryType::WorldSign)
+    {
+        return FText::FromString(FString::Printf(TEXT("[Знак] %s\n     %s"),
+            *Entry.FragmentText.ToString(), Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
+    }
+
     FInventoryItem NameLookup;
     NameLookup.IngredientID = Entry.IngredientID;
     NameLookup.State = Entry.PerceivedState;
     NameLookup.BrewOutcome = Entry.BrewOutcome;
     const FString DisplayName = GetItemDisplayName(NameLookup, IngredientRegistry);
+    // Осмотр (2026-09-21) -- имя и строка ощущения, без стат-блока: это
+    // запись того, что травник почувствовал, а не сбор и не варка.
+    if (Entry.Type == EJournalEntryType::Inspection)
+    {
+        return FText::FromString(FString::Printf(TEXT("[Осмотр] %s -- %s\n     %s"),
+            *DisplayName, *Entry.FragmentText.ToString(), Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
+    }
+
     const FString TypeLabel = Entry.Type == EJournalEntryType::Harvest ? TEXT("Собрано") : TEXT("Сварено");
     const FString BiomeLabel = FBiomeDefaults::BiomeTypeToName(Entry.Biome).ToString();
     const FRealState& S = Entry.PerceivedState;
