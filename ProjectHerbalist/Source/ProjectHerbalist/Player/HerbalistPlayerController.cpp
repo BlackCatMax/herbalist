@@ -16,6 +16,8 @@
 #include "Player/LookHighlightComponent.h"
 #include "Player/PesterComponent.h"
 #include "Player/PesterItemActor.h"
+#include "Player/BeltComponent.h"
+#include "Player/BeltItemActor.h"
 #include "Templates/TypeHash.h"
 #include "Core/World/GardenNicheUnlockTypes.h"
 #include "Core/Config/HerbalistSettings.h"
@@ -45,6 +47,7 @@ AHerbalistPlayerController::AHerbalistPlayerController()
     HeldItemComponent = CreateDefaultSubobject<UHeldItemComponent>(TEXT("HeldItemComponent"));
     LookHighlightComponent = CreateDefaultSubobject<ULookHighlightComponent>(TEXT("LookHighlightComponent"));
     PesterComponent = CreateDefaultSubobject<UPesterComponent>(TEXT("PesterComponent"));
+    BeltComponent = CreateDefaultSubobject<UBeltComponent>(TEXT("BeltComponent"));
 }
 
 void AHerbalistPlayerController::BeginPlay()
@@ -89,6 +92,10 @@ void AHerbalistPlayerController::BeginPlay()
         StartingBasket.bSubjectToDecay = false;
         InventoryComponent->AddItem(StartingBasket);
         InventoryComponent->ContainerType = EStorageContainerType::Basket;
+        if (BeltComponent)
+        {
+            BeltComponent->SetContainerItem(StartingBasket.IngredientID);
+        }
 
         // Стартовый Железный серп (DESIGN_Community_And_Homestead.md §2.3,
         // "ремесло/стартовый инвентарь", физический предмет 2026-09-06) —
@@ -622,6 +629,29 @@ void AHerbalistPlayerController::Interact()
         }
     }
 
+    // Взгляд вниз -- пояс (этап 4). С предметом в руке -- надеть, если это
+    // вещь для пояса; нет -- жест идёт дальше (зелье под ноги польётся, как
+    // обычно). Пустой рукой -- то, что на поясе под взглядом.
+    if (BeltComponent && BeltComponent->IsInView())
+    {
+        FVector ViewLocation;
+        FRotator ViewRotation;
+        GetPlayerViewPoint(ViewLocation, ViewRotation);
+        if (HeldItemComponent && HeldItemComponent->IsHolding())
+        {
+            const int32 HeldIndex = HeldItemComponent->ResolveHeldIndex();
+            if (HeldIndex != INDEX_NONE && BeltComponent->PutOn(HeldIndex))
+            {
+                return;
+            }
+        }
+        else if (ABeltItemActor* Item = BeltComponent->FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f))
+        {
+            IInteractable::Execute_OnInteract(Item, this);
+            return;
+        }
+    }
+
     FHitResult Hit;
     if (!GetHitResultFromCamera(Hit)) return;
 
@@ -736,6 +766,48 @@ void AHerbalistPlayerController::SkipGameDays(float Days)
     WorldManager->JumpGameClock(WorldManager->GetGameClockSeconds() + Days * DaySeconds);
 }
 
+namespace
+{
+    struct FGatheringToolItem
+    {
+        const TCHAR* ItemID;
+        EGatheringTool Tool;
+    };
+    // Железный серп -- стартовый, Медный -- общинной торговлей, Костяной
+    // нож -- из кургана (DESIGN_Community_And_Homestead.md §2.3).
+    const FGatheringToolItem GatheringToolItems[] =
+    {
+        { TEXT("Железный серп"), EGatheringTool::IronBlade },
+        { TEXT("Медный серп"),   EGatheringTool::CopperBlade },
+        { TEXT("Костяной нож"),  EGatheringTool::BoneKnife },
+    };
+}
+
+bool AHerbalistPlayerController::GatheringToolForItem(FName ItemID, EGatheringTool& OutTool)
+{
+    for (const FGatheringToolItem& Entry : GatheringToolItems)
+    {
+        if (ItemID == FName(Entry.ItemID))
+        {
+            OutTool = Entry.Tool;
+            return true;
+        }
+    }
+    return false;
+}
+
+FName AHerbalistPlayerController::ItemForGatheringTool(EGatheringTool Tool)
+{
+    for (const FGatheringToolItem& Entry : GatheringToolItems)
+    {
+        if (Entry.Tool == Tool)
+        {
+            return FName(Entry.ItemID);
+        }
+    }
+    return NAME_None;
+}
+
 void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
 {
     ToolName.ToLowerInline();
@@ -749,15 +821,16 @@ void AHerbalistPlayerController::SetGatheringTool(FString ToolName)
     }
 
     FName RequiredIngredientID;
-    EGatheringTool RequestedTool;
-    if (ToolName == TEXT("iron"))        { RequiredIngredientID = FName(TEXT("Железный серп")); RequestedTool = EGatheringTool::IronBlade; }
-    else if (ToolName == TEXT("copper")) { RequiredIngredientID = FName(TEXT("Медный серп"));   RequestedTool = EGatheringTool::CopperBlade; }
-    else if (ToolName == TEXT("bone"))   { RequiredIngredientID = FName(TEXT("Костяной нож"));  RequestedTool = EGatheringTool::BoneKnife; }
+    EGatheringTool RequestedTool = EGatheringTool::BareHands;
+    if (ToolName == TEXT("iron"))        { RequestedTool = EGatheringTool::IronBlade; }
+    else if (ToolName == TEXT("copper")) { RequestedTool = EGatheringTool::CopperBlade; }
+    else if (ToolName == TEXT("bone"))   { RequestedTool = EGatheringTool::BoneKnife; }
     else
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("SetGatheringTool: unknown tool '%s' (ожидались hands/iron/copper/bone)"), *ToolName);
         return;
     }
+    RequiredIngredientID = ItemForGatheringTool(RequestedTool);
 
     // Владение — тот же поиск по имени, что уже ActivateWard, без списания:
     // инструмент не расходуется переключением (§2.3, "как активировал/надел,
@@ -1442,23 +1515,27 @@ bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, con
 
 void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
 {
+    ActivateWardFromItem(FName(*CrystalIngredientID));
+}
+
+bool AHerbalistPlayerController::ActivateWardFromItem(FName CrystalID)
+{
     if (!InventoryComponent)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no inventory component"));
-        return;
+        return false;
     }
     AGridWorldManager* Manager = FindWorldManager();
     if (!Manager)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: world manager not found"));
-        return;
+        return false;
     }
 
     // Владение — тот же поиск по имени, что уже OfferToCommunity, но БЕЗ
     // списания: оберег не расходуется активацией (см. комментарий у
     // объявления). Достаточно хотя бы одной единицы в инвентаре в момент
     // активации.
-    const FName CrystalID(*CrystalIngredientID);
     bool bHasCrystal = false;
     for (const FInventoryItem& Item : InventoryComponent->GetItems())
     {
@@ -1470,8 +1547,8 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
     }
     if (!bHasCrystal)
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no '%s' in inventory"), *CrystalIngredientID);
-        return;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no '%s' in inventory"), *CrystalID.ToString());
+        return false;
     }
 
     // Резолв WardEffectType — через IngredientRegistrySubsystem, тот же
@@ -1486,8 +1563,8 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
     const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(CrystalID) : nullptr;
     if (!Row || !Row->bIsWard || Row->WardEffectType == EWardEffectType::None)
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: '%s' is not a ward"), *CrystalIngredientID);
-        return;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: '%s' is not a ward"), *CrystalID.ToString());
+        return false;
     }
 
     // Тиражные обереги (награда ритуалов перехода ярусов биомов, 2026-09-04,
@@ -1498,7 +1575,7 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
     if (Row->bIsTieredWard)
     {
         Manager->ActivateTieredWard(Row->WardEffectType, Row->WardHomeBiomes);
-        return;
+        return true;
     }
 
     switch (Row->WardEffectType)
@@ -1515,7 +1592,7 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
         if (!ControlledPawn || !Manager->WorldPositionToCell(ControlledPawn->GetActorLocation(), X, Y))
         {
             UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no pawn, or pawn is outside the grid"));
-            return;
+            return false;
         }
         Manager->ActivateWardConcealment(FIntPoint(X, Y));
         break;
@@ -1529,7 +1606,7 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
         if (!ControlledPawn || !Manager->WorldPositionToCell(ControlledPawn->GetActorLocation(), X, Y))
         {
             UE_LOG(LogHerbalistPlayer, Warning, TEXT("ActivateWard: no pawn, or pawn is outside the grid"));
-            return;
+            return false;
         }
         Manager->ActivateWardMorokReduction(FIntPoint(X, Y));
         break;
@@ -1537,6 +1614,7 @@ void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)
     default:
         break;
     }
+    return true;
 }
 
 void AHerbalistPlayerController::EquipSilverWard()
@@ -1577,33 +1655,38 @@ void AHerbalistPlayerController::EquipSilverWard()
 
 void AHerbalistPlayerController::EquipContainer(FString ContainerIngredientID)
 {
+    EquipContainerFromItem(FName(*ContainerIngredientID));
+}
+
+bool AHerbalistPlayerController::EquipContainerFromItem(FName ContainerID)
+{
     if (!InventoryComponent)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: no inventory component"));
-        return;
+        return false;
     }
 
     // Резолв GrantsContainerType — тот же приём, что уже ActivateWard/
     // PlantSeed. НЕ покрыто автотестом на этом уровне (GameInstanceSubsystem
     // недоступен в Editor-мире автотестов, см. довод у объявления в .h) —
     // сам эффект (TryEquipContainer) протестирован напрямую, минуя резолв.
-    const FName ContainerID(*ContainerIngredientID);
     UGameInstance* GameInstance = GetGameInstance();
     UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
     const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(ContainerID) : nullptr;
     if (!Row || Row->GrantsContainerType == EStorageContainerType::None)
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: '%s' is not a container"), *ContainerIngredientID);
-        return;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: '%s' is not a container"), *ContainerID.ToString());
+        return false;
     }
 
     if (!InventoryComponent->TryEquipContainer(ContainerID, Row->GrantsContainerType))
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: no '%s' in inventory"), *ContainerIngredientID);
-        return;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("EquipContainer: no '%s' in inventory"), *ContainerID.ToString());
+        return false;
     }
 
-    UE_LOG(LogHerbalistPlayer, Log, TEXT("EquipContainer: equipped '%s' (ContainerType=%d)"), *ContainerIngredientID, static_cast<int32>(Row->GrantsContainerType));
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("EquipContainer: equipped '%s' (ContainerType=%d)"), *ContainerID.ToString(), static_cast<int32>(Row->GrantsContainerType));
+    return true;
 }
 
 void AHerbalistPlayerController::FoundBase(int32 X, int32 Y)

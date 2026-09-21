@@ -30,6 +30,10 @@ public:
     // Цвет заглушки -- открыт для тестов: он и есть «вид» предмета до арта.
     static FLinearColor ColorForState(const FRealState& Perceived);
 
+    // Ярче или тусклее последнего цвета: оберег на поясе светится, пока
+    // действует (этап 4), и гаснет после.
+    void SetBrightness(float Brightness);
+
 protected:
     UPROPERTY(VisibleAnywhere, Category = "Components")
     TObjectPtr<UStaticMeshComponent> MeshComponent;
@@ -37,6 +41,8 @@ protected:
 private:
     UPROPERTY()
     TObjectPtr<UMaterialInstanceDynamic> TintMaterial = nullptr;
+
+    FLinearColor ShownColor = FLinearColor::White;
 
     // Заглушки держатся жёсткими ссылками с CDO (ревью 2026-09-21): LoadObject
     // по пути в упакованной игре вернул бы nullptr, если кукер не взял

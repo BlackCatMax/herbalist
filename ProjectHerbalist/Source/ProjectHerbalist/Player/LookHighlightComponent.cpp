@@ -7,6 +7,8 @@
 #include "Player/HerbalistPlayerController.h"
 #include "Player/PesterComponent.h"
 #include "Player/PesterItemActor.h"
+#include "Player/BeltComponent.h"
+#include "Player/BeltItemActor.h"
 #include "Engine/World.h"
 
 ULookHighlightComponent::ULookHighlightComponent()
@@ -86,6 +88,15 @@ void ULookHighlightComponent::TickComponent(float DeltaTime, ELevelTick TickType
         if (HPC->PesterComponent)
         {
             if (APesterItemActor* Item = HPC->PesterComponent->FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f))
+            {
+                SetFocusedActor(Item);
+                return;
+            }
+        }
+        // Пояс -- так же: мир его заглушки не видит.
+        if (HPC->BeltComponent)
+        {
+            if (ABeltItemActor* Item = HPC->BeltComponent->FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f))
             {
                 SetFocusedActor(Item);
                 return;

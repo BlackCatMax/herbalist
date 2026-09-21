@@ -50,6 +50,10 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diegetic")
     class UPesterComponent* PesterComponent;
 
+    // Пояс -- инструмент, контейнер, оберег, семенной мешочек, этап 4.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diegetic")
+    class UBeltComponent* BeltComponent;
+
     UPROPERTY(BlueprintReadOnly, Category = "UI")
     bool bIsAnyWidgetOpen = false;
 
@@ -271,6 +275,10 @@ public:
     // приём, что уже ActivateWard, отказывает и логирует при отсутствии.
     UFUNCTION(Exec)
     void SetGatheringTool(FString ToolName);
+    // Какой предмет -- какой инструмент сбора (серпы, нож). Одна таблица на
+    // команду и пояс. false / NAME_None -- не инструмент (или голые руки).
+    static bool GatheringToolForItem(FName ItemID, EGatheringTool& OutTool);
+    static FName ItemForGatheringTool(EGatheringTool Tool);
 
     // Оберег-при-сборе (Ось Б §2.3, серебро, 2026-09-06) — экипировать
     // "Серебряный оберег" из инвентаря (резолв по имени, тот же приём, что
@@ -410,6 +418,9 @@ public:
     // GridWorldManager", что уже держат OfferToCommunity/RegisterGardenPlot.
     UFUNCTION(Exec)
     void ActivateWard(FString CrystalIngredientID);
+    // Тот же путь без строки из консоли -- для пояса (этап 4). false -- не
+    // оберег, нет в котомке или некуда (вне сетки).
+    bool ActivateWardFromItem(FName CrystalID);
 
     // Надеть переносной контейнер (Корзина/Мешок/Туёс, 2026-09-04, "разберём
     // тщательно" систему хранения, прямой запрос пользователя) — тот же
@@ -426,6 +437,8 @@ public:
     // TryEquipContainer) протестирован напрямую, минуя этот резолв.
     UFUNCTION(Exec)
     void EquipContainer(FString ContainerIngredientID);
+    // Тот же путь для пояса (этап 4). false -- не контейнер или нет в котомке.
+    bool EquipContainerFromItem(FName ContainerID);
 
     // Основать базу (21_Journey_And_Artifacts.md §21.2, 2026-09-01) — v1
     // тот же приём, что SetGardenPlot: консоль вместо физической

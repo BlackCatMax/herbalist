@@ -59,8 +59,19 @@ void AHeldItemActor::ShowItem(const FInventoryItem& Item, bool bIsMineral, bool 
         TintMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
         MeshComponent->SetMaterial(0, TintMaterial);
     }
+    ShownColor = ColorForState(Item.State);
     if (TintMaterial)
     {
-        TintMaterial->SetVectorParameterValue(TEXT("Color"), ColorForState(Item.State));
+        TintMaterial->SetVectorParameterValue(TEXT("Color"), ShownColor);
+    }
+}
+
+void AHeldItemActor::SetBrightness(float Brightness)
+{
+    if (TintMaterial)
+    {
+        FLinearColor Color = ShownColor * Brightness;
+        Color.A = 1.0f;
+        TintMaterial->SetVectorParameterValue(TEXT("Color"), Color);
     }
 }

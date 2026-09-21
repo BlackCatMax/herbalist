@@ -46,6 +46,10 @@
 
 ## Обереги
 
+В игре оберег вешают на пояс (раздел 2, «Пояс»): кристалл — включён на срок
+тем же путём, что `ActivateWard`, серебряный — действует, пока висит. Команды
+ниже — для отладки.
+
 | Команда | Что ждать |
 |---|---|
 | `ActivateWard <кристалл>` (точное имя ряда, например `Плакун-камень`) | `[Ward] BrewBoost active until T`, `[Ward] Concealment active at (x,y) until T` или `[Ward] MorokReduction active at (x,y) until T`; тиражный — `[Ward] Tiered ward activated (Type=N, K home biomes), no expiry`. Отказы: `ActivateWard: no '<id>' in inventory`, `ActivateWard: '<id>' is not a ward` |
