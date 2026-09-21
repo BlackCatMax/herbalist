@@ -13,6 +13,7 @@
 // фрагментов, броски -- из общего WorldRNG (одноразовые события рантайма).
 
 #include "Core/World/GridWorldManager.h"
+#include "Core/Community/OrderCacheActor.h"
 #include "Core/Community/OrderNoteActor.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Data/IngredientTableRow.h"
@@ -565,3 +566,50 @@ void AGridWorldManager::SetOrdersState(const TArray<FActiveOrder>& InOrders, con
     NextOrderNumber = FMath::Max(1, InNextNumber);
     LastOrderDay = InLastDay;
 }
+
+// ============================================================================
+// Тайники (AOrderCacheActor, решение пользователя 2026-09-21)
+// ============================================================================
+
+void AGridWorldManager::RegisterOrderCache(AOrderCacheActor* Cache)
+{
+    if (Cache)
+    {
+        OrderCaches.AddUnique(Cache);
+    }
+}
+
+void AGridWorldManager::UnregisterOrderCache(AOrderCacheActor* Cache)
+{
+    OrderCaches.RemoveAll([Cache](const TWeakObjectPtr<AOrderCacheActor>& Entry)
+    {
+        return !Entry.IsValid() || Entry.Get() == Cache;
+    });
+}
+
+bool AGridWorldManager::HasAnyOrderCache() const
+{
+    return OrderCaches.ContainsByPredicate([](const TWeakObjectPtr<AOrderCacheActor>& Entry) { return Entry.IsValid(); });
+}
+
+bool AGridWorldManager::IsDeliveryAllowedAt(const FVector& Location) const
+{
+    // Тайников ещё не расставили -- правило не действует.
+    if (!HasAnyOrderCache())
+    {
+        return true;
+    }
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const float ReachCm = (Settings ? Settings->OrderCacheReachMeters : 3.0f) * 100.0f;
+    // Какой тайник -- неважно: подходит любой (решение пользователя).
+    for (const TWeakObjectPtr<AOrderCacheActor>& Entry : OrderCaches)
+    {
+        const AOrderCacheActor* Cache = Entry.Get();
+        if (Cache && FVector::DistSquared(Cache->GetActorLocation(), Location) <= FMath::Square(ReachCm))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+

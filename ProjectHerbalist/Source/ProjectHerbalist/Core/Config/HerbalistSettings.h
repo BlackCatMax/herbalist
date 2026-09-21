@@ -1129,6 +1129,11 @@ public:
     int32 OrdersPerDayMax = 2;
     UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "1"))
     int32 MaxOpenOrders = 3;
+    // Тайник (AOrderCacheActor, 2026-09-21): отдать зелье по заказу можно,
+    // стоя не дальше этого от любого тайника. Пока тайников на уровне нет,
+    // правило не действует -- отдать можно где угодно, как раньше.
+    UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.5", ClampMax = "50.0"))
+    float OrderCacheReachMeters = 3.0f;
     // Запас внутри области заказа, начиная с которого «точно», а не «сойдёт» (§24.5).
     UPROPERTY(config, EditAnywhere, Category = "Orders", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float OrderEdgeMargin = 0.05f;

@@ -10,6 +10,7 @@
 #include "Core/Save/HerbalistSaveSubsystem.h"
 #include "Core/World/GridWorldManager.h"
 #include "Core/Alchemy/RitualTypes.h"
+#include "UI/OrdersWindowWidget.h"
 #include "Templates/TypeHash.h"
 #include "Core/World/GardenNicheUnlockTypes.h"
 #include "Core/Config/HerbalistSettings.h"
@@ -643,6 +644,12 @@ void AHerbalistPlayerController::CloseAnyWidget()
         JournalWidgetInstance = nullptr;
     }
 
+    if (OrdersWidgetInstance && OrdersWidgetInstance->IsInViewport())
+    {
+        OrdersWidgetInstance->RemoveFromParent();
+        OrdersWidgetInstance = nullptr;
+    }
+
     if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
     {
         CurrentAlchemyWidget->RemoveFromParent();
@@ -993,29 +1000,49 @@ void AHerbalistPlayerController::ListOrders()
 
 void AHerbalistPlayerController::DeliverOrder(int32 OrderNumber, int32 InventoryIndex)
 {
-    if (!InventoryComponent) return;
+    FText Reason;
+    if (!TryDeliverOrder(OrderNumber, InventoryIndex, Reason))
+    {
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("DeliverOrder: %s"), *Reason.ToString());
+    }
+}
+
+bool AHerbalistPlayerController::TryDeliverOrder(int32 OrderNumber, int32 InventoryIndex, FText& OutReason)
+{
     AGridWorldManager* Grid = FindWorldManager();
-    if (!Grid) return;
+    if (!InventoryComponent || !Grid)
+    {
+        OutReason = FText::FromString(TEXT("мир не готов"));
+        return false;
+    }
     const TArray<FInventoryItem> Items = InventoryComponent->GetItems();
     if (!Items.IsValidIndex(InventoryIndex))
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("DeliverOrder: в котомке нет ячейки %d"), InventoryIndex);
-        return;
+        OutReason = FText::FromString(FString::Printf(TEXT("в котомке нет ячейки %d"), InventoryIndex));
+        return false;
     }
     if (!HerbalistOrders::IsDeliverable(Items[InventoryIndex]))
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("DeliverOrder: в ячейке %d не зелье -- по заказу отдают только сваренное"), InventoryIndex);
-        return;
+        OutReason = FText::FromString(TEXT("по заказу отдают только сваренное зелье"));
+        return false;
+    }
+    // Тайник (2026-09-21): зелье кладут в тайник, а не отдают у порога. Без
+    // пешки (стоять негде) при расставленных тайниках отдать нельзя.
+    const APawn* PlayerPawn = GetPawn();
+    const bool bAtCache = PlayerPawn ? Grid->IsDeliveryAllowedAt(PlayerPawn->GetActorLocation()) : !Grid->HasAnyOrderCache();
+    if (!bAtCache)
+    {
+        OutReason = FText::FromString(TEXT("зелье по заказу кладут в тайник -- подойдите к нему"));
+        return false;
     }
     // Отдаётся то, что лежит, -- настоящее состояние, не то, что видит травник.
-    if (Grid->DeliverOrder(OrderNumber, Items[InventoryIndex]))
+    if (!Grid->DeliverOrder(OrderNumber, Items[InventoryIndex]))
     {
-        InventoryComponent->RemoveItem(InventoryIndex, 1);
+        OutReason = FText::FromString(FString::Printf(TEXT("открытого заказа %d нет"), OrderNumber));
+        return false;
     }
-    else
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("DeliverOrder: открытого заказа %d нет"), OrderNumber);
-    }
+    InventoryComponent->RemoveItem(InventoryIndex, 1);
+    return true;
 }
 
 void AHerbalistPlayerController::RefuseOrder(int32 OrderNumber)
@@ -2104,6 +2131,43 @@ void AHerbalistPlayerController::ShowMemoryRevealText(const FText& Text)
 void AHerbalistPlayerController::ToggleJournalUI()
 {
     Journal();
+}
+
+void AHerbalistPlayerController::ToggleOrdersUI()
+{
+    if (bIsAnyWidgetOpen && OrdersWidgetInstance && OrdersWidgetInstance->IsInViewport())
+    {
+        CloseAnyWidget();
+        return;
+    }
+    OpenOrdersWindow();
+}
+
+// Тот же приём, что у Травника (Journal выше): окно строит себя в C++,
+// голого StaticClass() хватает, никакого WBP.
+void AHerbalistPlayerController::OpenOrdersWindow()
+{
+    if (bIsAnyWidgetOpen) return;
+
+    if (OrdersWidgetInstance)
+    {
+        OrdersWidgetInstance->RemoveFromParent();
+        OrdersWidgetInstance = nullptr;
+    }
+
+    UOrdersWindowWidget* Window = CreateWidget<UOrdersWindowWidget>(GetWorld(), UOrdersWindowWidget::StaticClass());
+    if (!Window) return;
+
+    Window->BindController(this);
+    Window->AddToViewport();
+    OrdersWidgetInstance = Window;
+
+    bShowMouseCursor = true;
+    FInputModeGameAndUI InputMode;
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+    SetIgnoreLookInput(true);
+    bIsAnyWidgetOpen = true;
 }
 
 void AHerbalistPlayerController::SaveGame()

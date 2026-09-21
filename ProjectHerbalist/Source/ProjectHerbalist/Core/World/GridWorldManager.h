@@ -1376,6 +1376,15 @@ public:
     // Отказ -- ничего не стоит и ничего не меняет.
     bool RefuseOrder(int32 Number);
     const TArray<FActiveOrder>& GetActiveOrders() const { return ActiveOrders; }
+
+    // Тайники для заказов (AOrderCacheActor, 2026-09-21). Регистрируются
+    // сами из своего BeginPlay. Отдать зелье можно у любого тайника; пока
+    // на уровне нет ни одного -- где угодно (иначе заказы встали бы до
+    // того, как автор уровня их расставит).
+    void RegisterOrderCache(class AOrderCacheActor* Cache);
+    void UnregisterOrderCache(class AOrderCacheActor* Cache);
+    bool HasAnyOrderCache() const;
+    bool IsDeliveryAllowedAt(const FVector& Location) const;
     const TArray<FPendingOrderConsequence>& GetPendingOrderConsequences() const { return PendingOrderConsequences; }
     int32 GetNextOrderNumber() const { return NextOrderNumber; }
     int32 GetLastOrderDay() const { return LastOrderDay; }
@@ -2263,6 +2272,9 @@ protected:
     // в продакшене должны стать ручно расставленны дизайнером.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Herbalist|Entities")
     TArray<FEntityLandmark> EntityLandmarks;
+
+    // Тайники для заказов -- актор уровня, в сейв не идут.
+    TArray<TWeakObjectPtr<class AOrderCacheActor>> OrderCaches;
 
     // Живые спавнеры Низших по клетке центра: ручные (зарегистрированные
     // актором) и автоматические (пересчитываются каждый такт по активной

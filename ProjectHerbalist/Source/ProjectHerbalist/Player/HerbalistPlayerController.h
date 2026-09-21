@@ -273,6 +273,17 @@ public:
     UFUNCTION(Exec)
     void RefuseOrder(int32 OrderNumber);
 
+    // Окно заказов (2026-09-21) вместо трёх команд выше: заказы слева,
+    // зелья из котомки справа, «Отдать» и «Отказаться». Открывается
+    // командой и взаимодействием с тайником (AOrderCacheActor).
+    UFUNCTION(Exec)
+    void ToggleOrdersUI();
+    void OpenOrdersWindow();
+
+    // Один путь отдачи для команды и окна: зелье только сваренное, и только
+    // у тайника, если тайники на уровне есть. false -- с причиной для игрока.
+    bool TryDeliverOrder(int32 OrderNumber, int32 InventoryIndex, FText& OutReason);
+
     // Торговля с общиной (§1.2) — WantedIngredientID должен существовать в
     // реестре (DT_IngredientClass), полученный предмет добавляется в
     // инвентарь тем же способом, что и любой другой (AddItem).
@@ -605,6 +616,10 @@ private:
     // RemoveFromParent) базовые, конкретный подкласс не нужен.
     UPROPERTY()
     UUserWidget* JournalWidgetInstance = nullptr;
+
+    // Окно заказов (UOrdersWindowWidget, 2026-09-21).
+    UPROPERTY()
+    UUserWidget* OrdersWidgetInstance = nullptr;
 
     UPROPERTY()
     class UMemoryRevealWidget* MemoryRevealWidgetInstance = nullptr;
