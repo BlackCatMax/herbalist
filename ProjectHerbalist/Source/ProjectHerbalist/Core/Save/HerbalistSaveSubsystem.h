@@ -36,7 +36,7 @@ public:
     static const FString DefaultSlotName;
 
     // Версия формата, которую пишет эта сборка (история -- у SaveGame).
-    static constexpr int32 CurrentSaveVersion = 7;
+    static constexpr int32 CurrentSaveVersion = 8;
 
     // Можно ли применить сейв к менеджеру (разметка мира, этап 8): версия не
     // новее сборки, разметка совместима, без разметки -- тот же размер сетки.

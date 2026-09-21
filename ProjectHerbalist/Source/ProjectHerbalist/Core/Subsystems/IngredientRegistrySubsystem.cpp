@@ -428,13 +428,15 @@ void UIngredientRegistrySubsystem::Reset()
 namespace
 {
     // Годится ли вид в двойники: настоящий собираемый вид, не вода, не
-    // инструмент, не оберег, не предмет без биома (артефакты).
+    // инструмент, не оберег, не предмет без биома (артефакты), не утварь
+    // (хворост растёт в лесу, но травой не прикинется -- ревью 2026-09-21).
     bool IsLookalikeCandidate(const FIngredientTableRow& Row)
     {
         const bool bNaturalClass = Row.Class == EIngredientClass::Plant || Row.Class == EIngredientClass::Fungus
             || Row.Class == EIngredientClass::Mineral;
         return bNaturalClass && !Row.bIsWater && !Row.bIsWard && !Row.bIsGatheringTool && !Row.bIsSilverWard
-            && Row.GrantsContainerType == EStorageContainerType::None && Row.AllowedBiomes.Num() > 0;
+            && Row.GrantsContainerType == EStorageContainerType::None && Row.AllowedBiomes.Num() > 0
+            && !Row.Tags.Contains(FName(TEXT("утварь")));
     }
 
     float LookalikeDistance(const FRealState& A, const FRealState& B)

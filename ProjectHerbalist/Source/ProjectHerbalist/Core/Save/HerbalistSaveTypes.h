@@ -136,6 +136,28 @@ struct PROJECTHERBALIST_API FSavedPlacedContainer
     TArray<FInventoryItem> Items;
 };
 
+// Котёл (этап 6 диегетики, 2026-09-21): заложенное и ждущий результат
+// ритуала. Котлы -- акторы уровня, узнаются по имени актора, как сундуки
+// (FSavedPlacedContainer): по клетке два котла в одной клетке или вне сетки
+// путали бы содержимое (ревью 2026-09-21).
+USTRUCT()
+struct PROJECTHERBALIST_API FSavedCauldron
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FName ActorName;
+
+    UPROPERTY()
+    TArray<FInventoryItem> Contents;
+
+    UPROPERTY()
+    bool bHasReadyResult = false;
+
+    UPROPERTY()
+    FInventoryItem ReadyResult;
+};
+
 // Чанк поля вытоптанности (2026-09-12, UTrampleSubsystem). Тропа живёт
 // неделю игрового времени -- без сейва любая загрузка стирала бы её.
 // Значения уже с применённым распадом, uint16 (довод -- у
@@ -248,6 +270,11 @@ public:
     // Сундуки и станции на карте (v7) — см. FSavedPlacedContainer выше.
     UPROPERTY()
     TArray<FSavedPlacedContainer> PlacedContainers;
+
+    // Заложенное в котлах (этап 6) -- см. FSavedCauldron выше. Сейв старее --
+    // пусто, котлы пусты, как раньше.
+    UPROPERTY()
+    TArray<FSavedCauldron> Cauldrons;
 
     // Молва общины (DESIGN_Community_And_Homestead.md §1, 2026-08-31) — тот
     // же принцип, что Shrines/EntityLandmarks выше: растёт/падает только

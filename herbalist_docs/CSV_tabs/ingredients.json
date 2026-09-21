@@ -3294,5 +3294,47 @@
             "ведьмино зелье",
             "глистник"
         ]
+    },
+    {
+        "Name": "Хворост",
+        "DisplayName": "NSLOCTEXT(\"DT_IngredientClass\", \"Хворост_DisplayName\", \"Хворост\")",
+        "Description": "NSLOCTEXT(\"DT_IngredientClass\", \"Хворост_Description\", \"# Хворост  ## Описание  Сухие ветки, сучья и валежник, собранные в вязанку и перетянутые лыком. Не трава и не снадобье — топливо: без него в лесу не развести огня, а без огня не переждать ночь вдали от дома. Лес отдаёт его без счёта, но и без выбора —\")",
+        "Icon": "",
+        "ResourceMesh": "",
+        "BaseState": {
+            "Magnitude": 0.05,
+            "Direction": {
+                "Body": 0.3,
+                "Mind": 0.05,
+                "Spirit": 0.05,
+                "Nature": 0.6
+            },
+            "Meta": {
+                "Distortion": 0.05,
+                "Stability": 0.8,
+                "Purity": 0.5,
+                "Potency": 0.05,
+                "Resonance": 0.2,
+                "Corruption": 0.02
+            }
+        },
+        "Class": "Plant",
+        "bIsWater": false,
+        "AllowedBiomes": [
+            "MixedForest",
+            "BroadleafForest",
+            "Taiga"
+        ],
+        "RarityWeight": 1,
+        "DecayRate": 0.0,
+        "Resilience": 1.0,
+        "Element": "Огонь",
+        "Tags": [
+            "хворост",
+            "сушняк",
+            "костёр",
+            "лагерь",
+            "утварь"
+        ]
     }
 ]

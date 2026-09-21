@@ -34,7 +34,13 @@ def parse_d_base(d_base_str):
     return [0.25, 0.25, 0.25, 0.25]
 
 def map_biome(rus_biome):
-    return BIOME_MAP.get(rus_biome, rus_biome)
+    # Карточки пишут биом вики-ссылкой "[[Смешанный лес]]" -- без снятия
+    # скобок сопоставление промахивалось, и в json уходила сама ссылка
+    # (ревью 2026-09-21: цепочка карточка -> json была молча сломана).
+    name = rus_biome.strip().strip('"').strip()
+    if name.startswith('[[') and name.endswith(']]'):
+        name = name[2:-2]
+    return BIOME_MAP.get(name, name)
 
 def normalize_biomes(biomes_raw):
     if isinstance(biomes_raw, list):

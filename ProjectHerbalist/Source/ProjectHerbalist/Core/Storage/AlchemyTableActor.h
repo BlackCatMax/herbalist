@@ -49,6 +49,11 @@ public:
     void OpenWindow(AHerbalistPlayerController* PC);
 
     FIntPoint GetGridCoords() const { return GridCoords; }
+
+    // Сохранение заложенного (этап 6): что лежит в котле и ждущий результат
+    // ритуала переживают сон и загрузку.
+    void CaptureSaved(TArray<FInventoryItem>& OutContents, bool& bOutHasReadyResult, FInventoryItem& OutReadyResult) const;
+    void RestoreSaved(const TArray<FInventoryItem>& InContents, bool bInHasReadyResult, const FInventoryItem& InReadyResult);
     const TArray<FInventoryItem>& GetContents() const { return Contents; }
     bool HasReadyResult() const { return bHasReadyResult; }
 

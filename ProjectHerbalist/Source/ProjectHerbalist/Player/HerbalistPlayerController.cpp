@@ -23,6 +23,7 @@
 #include "Core/Config/HerbalistSettings.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -56,6 +57,29 @@ void AHerbalistPlayerController::BeginPlay()
     Super::BeginPlay();
     bShowMouseCursor = false;
     CachedWorldManager = FindWorldManager();
+
+    // Автозагрузка (этап 6): меню нет -- есть сохранение, продолжаем с него.
+    // Только в игровом мире (PIE, игра) и не в автотестах: иначе тест
+    // поднимал бы чужой сейв. Следующим кадром -- после BeginPlay менеджера.
+    const UHerbalistSettings* StartSettings = GetHerbalistSettings();
+    if (IsLocalController() && GetWorld() && GetWorld()->IsGameWorld() && !GIsAutomationTesting
+        && StartSettings && StartSettings->bAutoLoadOnStart)
+    {
+        GetWorldTimerManager().SetTimerForNextTick([this]()
+        {
+            if (UGameInstance* GI = GetGameInstance())
+            {
+                if (UHerbalistSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UHerbalistSaveSubsystem>())
+                {
+                    if (UGameplayStatics::DoesSaveGameExist(UHerbalistSaveSubsystem::DefaultSlotName, 0))
+                    {
+                        UE_LOG(LogHerbalistPlayer, Log, TEXT("Автозагрузка: есть сохранение -- продолжаем"));
+                        SaveSubsystem->LoadGame();
+                    }
+                }
+            }
+        });
+    }
 
     if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
     {
@@ -1672,6 +1696,19 @@ bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, con
         }
     }
 
+    // Вязанка хвороста на землю -- лагерь (этап 6, решения пользователя
+    // 2026-09-21: где угодно, одна вязанка): костёр, сон до рассвета,
+    // сохранение. Вязанка сгорает.
+    // Раньше логова: хворост -- топливо, не дар (ревью 2026-09-21).
+    if (bOnGrid && Item.IngredientID == BrushwoodID())
+    {
+        InventoryComponent->RemoveItem(InventoryIndex, 1);
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Лагерь: костёр на (%d,%d)"), X, Y);
+        SleepUntilDawn();
+        ShowMemoryRevealText(FText::FromString(TEXT("Костёр прогорел к утру.")));
+        return true;
+    }
+
     // Логово Легендарной -- любой предмет здесь дар (решение пользователя
     // 2026-09-21): по одному, решает его чистота, артефакт -- этой сущности.
     // Отказ (регион не очищен, дар слаб, артефакт уже есть) предмет не
@@ -1696,6 +1733,7 @@ bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, con
         return PourPotionOnCell(InventoryIndex, Hit);
     }
     if (!bOnGrid) return false;
+
     if (Item.bIsPlantingStock)
     {
         return PlantFromSlot(InventoryIndex, FIntPoint(X, Y));
@@ -2681,6 +2719,30 @@ void AHerbalistPlayerController::OpenCauldronWindow()
     {
         Table->OpenWindow(this);
     }
+}
+
+bool AHerbalistPlayerController::SleepUntilDawn()
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return false;
+
+    // До следующего рассвета: сутки начинаются рассветом, так что это
+    // ближайшая граница суток впереди (JumpGameClock -- тот же путь, что
+    // SkipGameDays: погода, отрастание и ночные сущности видят время).
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    const double DaySeconds = (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0;
+    const double Now = WorldManager->GetGameClockSeconds();
+    const double Dawn = (FMath::FloorToDouble(Now / DaySeconds) + 1.0) * DaySeconds;
+    if (PesterComponent) PesterComponent->Close();
+    CancelChoice();
+    WorldManager->JumpGameClock(Dawn);
+    // Заказы, чей срок прошёл во сне, -- решить до записи: иначе сейв
+    // запомнил бы их открытыми (ревью 2026-09-21).
+    WorldManager->ResolveDueOrders();
+    SaveGame();
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("Сон: проспано %.0f с, рассвет, сохранено"), Dawn - Now);
+    ShowMemoryRevealText(FText::FromString(TEXT("Рассвело.")));
+    return true;
 }
 
 void AHerbalistPlayerController::OpenStorageWindow()

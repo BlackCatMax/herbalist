@@ -9,6 +9,7 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Journal/HerbalistJournalComponent.h"
 #include "Player/HerbalistPlayerController.h"
+#include "Core/Storage/AlchemyTableActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
 #include "ProjectHerbalist.h"
@@ -61,6 +62,8 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // другой (довод у предупреждения в LoadGame).
     // v7 (2026-09-14): HomeStorages -- только построенные хранилища; сундуки и
     // станции карты -- PlacedContainers, по имени актора.
+    // v8 (2026-09-21, диегетика, этап 6): Cauldrons -- заложенное в котлах,
+    // по имени актора. Сейв старее -- котлы пусты, как было.
     Save->SaveVersion = CurrentSaveVersion;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
@@ -90,6 +93,16 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     Save->LastOrderDay = WorldManager->GetLastOrderDay();
     Save->HomeStorages = WorldManager->CaptureHomeStorages();
     Save->PlacedContainers = WorldManager->CapturePlacedContainers();
+    for (TActorIterator<AAlchemyTableActor> It(WorldManager->GetWorld()); It; ++It)
+    {
+        FSavedCauldron Saved;
+        Saved.ActorName = It->GetFName();
+        It->CaptureSaved(Saved.Contents, Saved.bHasReadyResult, Saved.ReadyResult);
+        if (Saved.Contents.Num() > 0 || Saved.bHasReadyResult)
+        {
+            Save->Cauldrons.Add(Saved);
+        }
+    }
     Save->TieredWards = WorldManager->CaptureTieredWards();
     Save->bSilverWardActive = WorldManager->IsSilverWardActive();
     Save->KurganSites = WorldManager->GetKurganSites();
@@ -392,6 +405,14 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->ApplySaveCells(Save->Cells);
     WorldManager->RestoreHomeStorages(Save->HomeStorages);
     WorldManager->RestorePlacedContainers(Save->PlacedContainers);
+    // Котлы: сначала все пусты (в сейве пустые не пишутся), потом --
+    // заложенное по имени актора.
+    for (TActorIterator<AAlchemyTableActor> It(WorldManager->GetWorld()); It; ++It)
+    {
+        const FName Name = It->GetFName();
+        const FSavedCauldron* Saved = Save->Cauldrons.FindByPredicate([Name](const FSavedCauldron& Entry) { return Entry.ActorName == Name; });
+        It->RestoreSaved(Saved ? Saved->Contents : TArray<FInventoryItem>(), Saved && Saved->bHasReadyResult, Saved ? Saved->ReadyResult : FInventoryItem());
+    }
     WorldManager->RestoreTieredWards(Save->TieredWards);
     WorldManager->SetSilverWardActive(Save->bSilverWardActive);
     WorldManager->SetKurganSites(Save->KurganSites);

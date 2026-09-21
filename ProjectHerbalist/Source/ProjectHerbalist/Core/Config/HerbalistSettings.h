@@ -1427,6 +1427,13 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Wards", meta = (ClampMin = "0.0"))
     float WardDurationSeconds = 600.0f;
 
+    // Системного меню нет (DESIGN_Diegetic_Interface.md, этап 6): есть
+    // сохранение -- игра при запуске сразу продолжает с него (проснулся там,
+    // где уснул); нет -- новая игра. Выключить -- для проверок в PIE с
+    // чистого листа.
+    UPROPERTY(config, EditAnywhere, Category = "Save")
+    bool bAutoLoadOnStart = true;
+
     // BrewBoost — надбавка к Coherence, тем же путём, что и ShrineCoherenceBonus
     // (см. ProcessApplyCommand, PipelineV2.cpp), но БЕЗ радиуса влияния (личный
     // эффект ношения, не место) и заметно слабее: капище даёт до

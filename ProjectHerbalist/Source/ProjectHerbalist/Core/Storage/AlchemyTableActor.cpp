@@ -24,6 +24,13 @@ AAlchemyTableActor::AAlchemyTableActor()
     InteractionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionBox->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionBox->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Block);
+#if WITH_EDITORONLY_DATA
+    // Котёл -- дом: всегда загружен, как регионы биомов. Иначе World Partition,
+    // выгрузив его вдали, унёс бы заложенное (EndPlay его чистит) и
+    // регистрацию Домового (ревью 2026-09-21). Уже расставленные котлы
+    // получают это из дескриптора класса, пересохранять не нужно.
+    bIsSpatiallyLoaded = false;
+#endif
 }
 
 void AAlchemyTableActor::BeginPlay()
@@ -221,6 +228,21 @@ void AAlchemyTableActor::HandleBrewCompleted(const FInventoryItem& Produced, con
     {
         --PendingBrews;
     }
+}
+
+void AAlchemyTableActor::CaptureSaved(TArray<FInventoryItem>& OutContents, bool& bOutHasReadyResult, FInventoryItem& OutReadyResult) const
+{
+    OutContents = Contents;
+    bOutHasReadyResult = bHasReadyResult;
+    OutReadyResult = ReadyResult;
+}
+
+void AAlchemyTableActor::RestoreSaved(const TArray<FInventoryItem>& InContents, bool bInHasReadyResult, const FInventoryItem& InReadyResult)
+{
+    Contents = InContents;
+    bHasReadyResult = bInHasReadyResult;
+    ReadyResult = InReadyResult;
+    SyncContentsVisual();
 }
 
 void AAlchemyTableActor::ClearContents()
