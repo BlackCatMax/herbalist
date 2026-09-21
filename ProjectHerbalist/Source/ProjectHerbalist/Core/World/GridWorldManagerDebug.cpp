@@ -239,7 +239,8 @@ void AGridWorldManager::ShowJournal()
                 : E.Type == EJournalEntryType::Brew ? TEXT("Brew")
                 : E.Type == EJournalEntryType::CommunityNote ? TEXT("Molva")
                 : E.Type == EJournalEntryType::Inspection ? TEXT("Inspect")
-                : E.Type == EJournalEntryType::WorldSign ? TEXT("Sign") : TEXT("Memory"),
+                : E.Type == EJournalEntryType::WorldSign ? TEXT("Sign")
+                : E.Type == EJournalEntryType::HostSpeech ? TEXT("Speech") : TEXT("Memory"),
             *E.IngredientID.ToString(), E.Count, E.Cell.X, E.Cell.Y, (int32)E.Biome, E.bWasNight ? 1 : 0,
             E.GameTimeSeconds, S.Magnitude, S.Meta.Distortion, S.Meta.Purity, S.Meta.Corruption);
     }

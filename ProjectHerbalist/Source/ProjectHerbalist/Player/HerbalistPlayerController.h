@@ -321,6 +321,19 @@ public:
     UFUNCTION(Exec)
     void ChooseDialogueBranch(int32 BranchIndex);
 
+    // Строка выбора (этап 5): реплика -- субтитром, ответы -- строками под
+    // ней. Колесо мыши двигает выделение (MoveChoice), взаимодействие
+    // выбирает (ConfirmChoice), клавиша котомки -- уйти (CancelChoice).
+    // Один механизм на разговор и клубочек.
+    void BeginChoice(const FString& Prompt, const TArray<FString>& Options, TFunction<void(int32)> OnChosen);
+    void MoveChoice(int32 Delta);
+    void ConfirmChoice();
+    void CancelChoice();
+    bool IsChoosing() const { return ChoiceOptions.Num() > 0; }
+    int32 GetChoiceSelected() const { return ChoiceSelected; }
+    const TArray<FString>& GetChoiceOptions() const { return ChoiceOptions; }
+    const FString& GetChoicePrompt() const { return ChoicePrompt; }
+
     // Калинов мост, Сделка (§4.4, 2026-09-06) -- завершает уже вооружённую
     // ветку диалога, называя КОНКРЕТНЫЙ артефакт для жертвы (v1 консольный,
     // тем же путём, что и остальные Exec-команды проекта до появления
@@ -703,6 +716,16 @@ private:
     // объявления выше) — состояние UI-сессии, не мира, не UPROPERTY(SaveGame)
     // намеренно.
     FName CurrentDialogueID = NAME_None;
+
+    FString ChoicePrompt;
+    TArray<FString> ChoiceOptions;
+    int32 ChoiceSelected = 0;
+    TFunction<void(int32)> ChoiceCallback;
+    UPROPERTY()
+    TObjectPtr<class UChoiceLineWidget> ChoiceWidget = nullptr;
+    void ChoiceScrollUp() { MoveChoice(-1); }
+    void ChoiceScrollDown() { MoveChoice(1); }
+    void ShowDialogueNode(const struct FDialogueDefinition& Def, const struct FDialogueNode& Node, const struct FEntityLandmark& Landmark);
     FName CurrentDialogueNodeID = NAME_None;
     FIntPoint CurrentDialogueCell = HerbalistCore::InvalidCell();
 };

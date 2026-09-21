@@ -32,6 +32,7 @@
 #include "UI/InventoryTransferWidget.h"
 #include "UI/InventoryWidget.h"
 #include "UI/JournalLogWidget.h"
+#include "UI/ChoiceLineWidget.h"
 #include "UI/MemoryRevealWidget.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Dialogue/HerbalistDialogueTypes.h"
@@ -151,6 +152,11 @@ void AHerbalistPlayerController::SetupInputComponent()
         else { UE_LOG(LogHerbalistPlayer, Warning, TEXT("Ввод: MoveAction не назначен")); ++Missing; }
         if (LookAction) { EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHerbalistPlayerController::Look); ++Bound; }
         else { UE_LOG(LogHerbalistPlayer, Warning, TEXT("Ввод: LookAction не назначен")); ++Missing; }
+
+        // Колесо -- строка выбора (этап 5). Клавиша, не Input Action: ассета
+        // для него нет, а колесо ни на что другое не назначено.
+        InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AHerbalistPlayerController::ChoiceScrollUp);
+        InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AHerbalistPlayerController::ChoiceScrollDown);
 
         Bind(HarvestAction,      TEXT("HarvestAction (сбор)"),      ETriggerEvent::Started, &AHerbalistPlayerController::Harvest);
         Bind(InfoAction,         TEXT("InfoAction"),                ETriggerEvent::Started, &AHerbalistPlayerController::Info);
@@ -519,6 +525,13 @@ void AHerbalistPlayerController::Inventory()
     // пустеет, предмет и так остаётся в котомке. Окно котомки больше не
     // открывается: с этапа 3 и хранилища раскладываются пестерем, окно
     // переноса -- только отладочной OpenStorageWindow.
+    // Идёт выбор -- клавиша котомки значит «уйти».
+    if (IsChoosing())
+    {
+        CancelChoice();
+        CurrentDialogueID = NAME_None;
+        return;
+    }
     if (HeldItemComponent && HeldItemComponent->IsHolding())
     {
         HeldItemComponent->PutAway();
@@ -608,6 +621,12 @@ void AHerbalistPlayerController::FilterPotion()
 
 void AHerbalistPlayerController::Interact()
 {
+    // Идёт выбор (разговор, клубочек) -- взаимодействие выбирает.
+    if (IsChoosing())
+    {
+        ConfirmChoice();
+        return;
+    }
     if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
     {
         CloseAnyWidget();
@@ -933,7 +952,108 @@ void AHerbalistPlayerController::TalkTo(int32 X, int32 Y)
     const FDialogueNode* Node = FindDialogueNode(*Def, CurrentDialogueNodeID);
     if (Node)
     {
-        PrintDialogueNode(*Def, *Node, Landmark->Respect);
+        ShowDialogueNode(*Def, *Node, *Landmark);
+    }
+}
+
+void AHerbalistPlayerController::ShowDialogueNode(const FDialogueDefinition& Def, const FDialogueNode& Node, const FEntityLandmark& Landmark)
+{
+    PrintDialogueNode(Def, Node, Landmark.Respect);
+
+    // Реплика -- субтитром и в Травник (решение пользователя 2026-09-21).
+    const FString Line = FString::Printf(TEXT("%s: %s"), *Landmark.EntityID.ToString(), *Node.SpeakerLine.ToString());
+    if (JournalComponent)
+    {
+        FJournalEntry Entry;
+        Entry.Type = EJournalEntryType::HostSpeech;
+        Entry.IngredientID = Landmark.EntityID;
+        Entry.FragmentText = FText::FromString(Line);
+        Entry.Cell = CurrentDialogueCell;
+        if (const AGridWorldManager* Grid = FindWorldManager())
+        {
+            Entry.bWasNight = Grid->IsNight();
+            Entry.GameTimeSeconds = static_cast<float>(Grid->GetGameClockSeconds());
+        }
+        JournalComponent->AddEntry(Entry);
+    }
+
+    const TArray<const FDialogueBranch*> Available = GetAvailableBranches(Node, Landmark.Respect);
+    TArray<FString> Options;
+    for (const FDialogueBranch* Branch : Available)
+    {
+        Options.Add(Branch->ActionText.ToString());
+    }
+    if (Options.Num() == 0)
+    {
+        // Отвечать нечего -- остаётся только уйти.
+        BeginChoice(Line, { TEXT("Уйти") }, [this](int32)
+        {
+            CurrentDialogueID = NAME_None;
+            CurrentDialogueNodeID = NAME_None;
+        });
+        return;
+    }
+    BeginChoice(Line, Options, [this](int32 Index) { ChooseDialogueBranch(Index); });
+}
+
+void AHerbalistPlayerController::BeginChoice(const FString& Prompt, const TArray<FString>& Options, TFunction<void(int32)> OnChosen)
+{
+    ChoicePrompt = Prompt;
+    ChoiceOptions = Options;
+    ChoiceSelected = 0;
+    ChoiceCallback = MoveTemp(OnChosen);
+
+    // Без вьюпорта (автотесты) выбор только запоминается.
+    if (!IsLocalController() || !GetWorld() || !GetWorld()->GetGameViewport()) return;
+    if (!ChoiceWidget)
+    {
+        ChoiceWidget = CreateWidget<UChoiceLineWidget>(this, UChoiceLineWidget::StaticClass());
+        if (ChoiceWidget)
+        {
+            ChoiceWidget->AddToViewport(6);
+        }
+    }
+    if (ChoiceWidget)
+    {
+        ChoiceWidget->SetContent(ChoicePrompt, ChoiceOptions, ChoiceSelected);
+    }
+}
+
+void AHerbalistPlayerController::MoveChoice(int32 Delta)
+{
+    if (!IsChoosing()) return;
+    const int32 Num = ChoiceOptions.Num();
+    ChoiceSelected = ((ChoiceSelected + Delta) % Num + Num) % Num;
+    if (ChoiceWidget)
+    {
+        ChoiceWidget->SetContent(ChoicePrompt, ChoiceOptions, ChoiceSelected);
+    }
+}
+
+void AHerbalistPlayerController::ConfirmChoice()
+{
+    if (!IsChoosing()) return;
+    // Выбор может сразу начать новый (следующая реплика) -- старый снимаем
+    // до вызова.
+    const int32 Chosen = ChoiceSelected;
+    TFunction<void(int32)> Callback = MoveTemp(ChoiceCallback);
+    CancelChoice();
+    if (Callback)
+    {
+        Callback(Chosen);
+    }
+}
+
+void AHerbalistPlayerController::CancelChoice()
+{
+    ChoicePrompt.Reset();
+    ChoiceOptions.Reset();
+    ChoiceSelected = 0;
+    ChoiceCallback = nullptr;
+    if (ChoiceWidget)
+    {
+        ChoiceWidget->RemoveFromParent();
+        ChoiceWidget = nullptr;
     }
 }
 
@@ -998,6 +1118,7 @@ void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
     if (NextNodeID.IsNone())
     {
         UE_LOG(LogHerbalistPlayer, Log, TEXT("[Talk:%s] (разговор окончен)"), *CurrentDialogueID.ToString());
+        CancelChoice();
         CurrentDialogueID = NAME_None;
         CurrentDialogueNodeID = NAME_None;
         return;
@@ -1007,7 +1128,7 @@ void AHerbalistPlayerController::ChooseDialogueBranch(int32 BranchIndex)
     const FDialogueNode* NextNode = FindDialogueNode(*Def, CurrentDialogueNodeID);
     if (NextNode)
     {
-        PrintDialogueNode(*Def, *NextNode, Landmark->Respect);
+        ShowDialogueNode(*Def, *NextNode, *Landmark);
     }
 }
 

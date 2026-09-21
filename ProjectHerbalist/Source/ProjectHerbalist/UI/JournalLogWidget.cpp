@@ -181,7 +181,7 @@ void UJournalLogWidget::RefreshDisplay()
     {
         if (SelectedIngredientFilter != NAME_None
             && (AllEntries[i].Type == EJournalEntryType::MemoryFragment || AllEntries[i].Type == EJournalEntryType::CommunityNote
-                || AllEntries[i].Type == EJournalEntryType::WorldSign
+                || AllEntries[i].Type == EJournalEntryType::WorldSign || AllEntries[i].Type == EJournalEntryType::HostSpeech
                 || AllEntries[i].IngredientID != SelectedIngredientFilter))
         {
             continue;
@@ -232,7 +232,7 @@ void UJournalLogWidget::RefreshFilterOptions(UIngredientRegistrySubsystem* Ingre
     for (const FJournalEntry& Entry : JournalComponent->GetEntries())
     {
         if (Entry.Type == EJournalEntryType::MemoryFragment || Entry.Type == EJournalEntryType::CommunityNote
-            || Entry.Type == EJournalEntryType::WorldSign) continue;
+            || Entry.Type == EJournalEntryType::WorldSign || Entry.Type == EJournalEntryType::HostSpeech) continue;
         if (SeenIDs.Contains(Entry.IngredientID)) continue;
         SeenIDs.Add(Entry.IngredientID);
 
@@ -297,6 +297,13 @@ FText UJournalLogWidget::FormatEntry(const FJournalEntry& Entry, UIngredientRegi
     if (Entry.Type == EJournalEntryType::CommunityNote)
     {
         return FText::FromString(FString::Printf(TEXT("[Молва] %s\n     %s"),
+            *Entry.FragmentText.ToString(), Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
+    }
+
+    // Речь хозяина места -- просто текст, «кто: что сказал».
+    if (Entry.Type == EJournalEntryType::HostSpeech)
+    {
+        return FText::FromString(FString::Printf(TEXT("[Речь] %s\n     %s"),
             *Entry.FragmentText.ToString(), Entry.bWasNight ? TEXT("ночь") : TEXT("день")));
     }
 

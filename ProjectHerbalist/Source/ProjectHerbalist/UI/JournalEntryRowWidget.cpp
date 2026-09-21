@@ -15,7 +15,8 @@ void UJournalEntryRowWidget::InitializeRow(const FJournalEntry& InEntry, UIngred
     // Знак мира и осмотр (2026-09-21) -- тоже текст: у знака нет предмета
     // вовсе, у осмотра главное -- строка ощущения, а не «сварено ×N».
     if (InEntry.Type == EJournalEntryType::MemoryFragment || InEntry.Type == EJournalEntryType::CommunityNote
-        || InEntry.Type == EJournalEntryType::WorldSign || InEntry.Type == EJournalEntryType::Inspection)
+        || InEntry.Type == EJournalEntryType::WorldSign || InEntry.Type == EJournalEntryType::Inspection
+        || InEntry.Type == EJournalEntryType::HostSpeech)
     {
         if (NameText)
         {
@@ -26,6 +27,7 @@ void UJournalEntryRowWidget::InitializeRow(const FJournalEntry& InEntry, UIngred
             const TCHAR* Label = InEntry.Type == EJournalEntryType::CommunityNote ? TEXT("Молва")
                 : InEntry.Type == EJournalEntryType::WorldSign ? TEXT("Знак")
                 : InEntry.Type == EJournalEntryType::Inspection ? TEXT("Осмотр")
+                : InEntry.Type == EJournalEntryType::HostSpeech ? TEXT("Речь")
                 : TEXT("Воспоминание");
             ContextText->SetText(FText::FromString(Label));
         }
