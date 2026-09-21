@@ -627,6 +627,12 @@ void AHerbalistPlayerController::Interact()
         ConfirmChoice();
         return;
     }
+    // Поднесённое к лицу -- применить на себя (этап 5б): съесть, надеть,
+    // посмотреться. Не такой предмет -- взаимодействие как обычно.
+    if (HeldItemComponent && HeldItemComponent->IsInspecting() && UseHeldOnSelf())
+    {
+        return;
+    }
     if (CurrentAlchemyWidget && CurrentAlchemyWidget->IsInViewport())
     {
         CloseAnyWidget();
@@ -1143,6 +1149,9 @@ void AHerbalistPlayerController::PayKalinovMostToll(FName ArtifactID)
 
     if (Grid->TryPayKalinovMostToll(ArtifactID))
     {
+        // Отдан -- уходит и видимый предмет: раньше квитанция оставалась в
+        // котомке, а владения уже не было (найдено на этапе 5б).
+        RemoveArtifactFromInventory(ArtifactID);
         UE_LOG(LogHerbalistPlayer, Log, TEXT("[KalinovMost] %s given up as toll -- passage granted"), *ArtifactID.ToString());
     }
     else
@@ -1591,6 +1600,46 @@ bool AHerbalistPlayerController::IsArtifactReceipt(const FInventoryItem& Item) c
     return Manager && Manager->GetAcquiredFeathers().Contains(Item.IngredientID);
 }
 
+bool AHerbalistPlayerController::UseArtifactOnCell(FName ArtifactID, int32 X, int32 Y)
+{
+    // Имена -- те же, что у команд и в ArtifactTypes/перьях.
+    if (ArtifactID == FName(TEXT("Гребень")))        { UseComb(X, Y); return true; }
+    if (ArtifactID == FName(TEXT("Рог")))            { UseHorn(X, Y); return true; }
+    if (ArtifactID == FName(TEXT("Фонарь")))         { UseLanternDisclosure(X, Y); return true; }
+    if (ArtifactID == FName(TEXT("Перо Алконоста"))) { UseAlkonostFeather(X, Y); return true; }
+    if (ArtifactID == FName(TEXT("Перо Сирина")))    { UseSirinFeather(X, Y); return true; }
+    if (ArtifactID == FName(TEXT("Перо Жар-птицы"))) { UseZharPtitsaFeather(X, Y); return true; }
+    return false;
+}
+
+bool AHerbalistPlayerController::UseHeldOnSelf()
+{
+    if (!HeldItemComponent || !HeldItemComponent->IsHolding()) return false;
+    const FName ID = HeldItemComponent->GetHeldItem().IngredientID;
+    if (ID == FName(TEXT("Молодильное яблоко")))  { UseYouthApple(); return true; }
+    if (ID == FName(TEXT("Шапка-невидимка")))     { UseInvisibilityCap(); return true; }
+    if (ID == FName(TEXT("Зеркальце")))           { UseMirror(); return true; }
+    if (ID == FName(TEXT("Перо Гамаюна")))        { EatGamayunFeather(); return true; }
+    if (ID == FName(TEXT("Клубочек")))
+    {
+        // Куда вести -- строкой выбора, тем же механизмом, что разговор.
+        const AGridWorldManager* Grid = FindWorldManager();
+        if (!Grid || Grid->GetBases().Num() == 0)
+        {
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("Клубочек: баз нет -- вести некуда (FoundBase)"));
+            return true;
+        }
+        TArray<FString> Options;
+        for (int32 Index = 0; Index < Grid->GetBases().Num(); ++Index)
+        {
+            Options.Add(FString::Printf(TEXT("База %d %s"), Index + 1, *HerbalistCore::CellToDisplayString(Grid->GetBases()[Index].Cell)));
+        }
+        BeginChoice(TEXT("Куда вести клубочек?"), Options, [this](int32 Index) { UseYarnBall(Index); });
+        return true;
+    }
+    return false;
+}
+
 bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, const FHitResult& Hit)
 {
     if (!InventoryComponent || !InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
@@ -1598,6 +1647,30 @@ bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, con
 
     int32 X, Y;
     const bool bOnGrid = GetCellFromHit(Hit, X, Y);
+
+    // Артефакт с целью -- на клетку под взглядом (этап 5б): раньше логова,
+    // Гребнем можно причесать и клетку логова.
+    if (bOnGrid && UseArtifactOnCell(Item.IngredientID, X, Y))
+    {
+        return true;
+    }
+
+    // Зелье у логова Болотного царя -- приманка: Фонарь берут только обманом.
+    if (bOnGrid && Item.IngredientID == FName(TEXT("Potion")))
+    {
+        if (const AGridWorldManager* Grid = FindWorldManager())
+        {
+            for (const FArtifactDefinition& Def : GetArtifactDefinitions())
+            {
+                const FIntPoint* Anchor = Def.bDeceptionOnly ? Grid->GetLegendaryAnchors().Find(Def.LegendaryEntityID) : nullptr;
+                if (Anchor && *Anchor == FIntPoint(X, Y))
+                {
+                    LureSwampTsarFromSlot(InventoryIndex, X, Y);
+                    return true;
+                }
+            }
+        }
+    }
 
     // Логово Легендарной -- любой предмет здесь дар (решение пользователя
     // 2026-09-21): по одному, решает его чистота, артефакт -- этой сущности.
@@ -2161,25 +2234,24 @@ bool AHerbalistPlayerController::OfferForArtifactFromSlots(FName ArtID, TArray<i
 void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionIngredientID)
 {
     if (!InventoryComponent) return;
-    AGridWorldManager* WorldManager = FindWorldManager();
-    if (!WorldManager) return;
-
     const FName ID(*PotionIngredientID);
-    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
-    int32 FoundIndex = INDEX_NONE;
-    for (int32 i = 0; i < CurrentItems.Num(); ++i)
-    {
-        if (CurrentItems[i].IngredientID == ID)
-        {
-            FoundIndex = i;
-            break;
-        }
-    }
+    const int32 FoundIndex = InventoryComponent->GetItems().IndexOfByPredicate([ID](const FInventoryItem& Item) { return Item.IngredientID == ID; });
     if (FoundIndex == INDEX_NONE)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("LureSwampTsar: no %s in inventory"), *PotionIngredientID);
         return;
     }
+    LureSwampTsarFromSlot(FoundIndex, X, Y);
+}
+
+bool AHerbalistPlayerController::LureSwampTsarFromSlot(int32 PotionIndex, int32 X, int32 Y)
+{
+    if (!InventoryComponent) return false;
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!WorldManager) return false;
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    if (!CurrentItems.IsValidIndex(PotionIndex)) return false;
+    const int32 FoundIndex = PotionIndex;
 
     // Место под Фонарь -- ДО попытки (2026-09-14): удача пишет владение сразу,
     // а видимый предмет при полной сумке пропадал. Приманка из одной штуки
@@ -2188,7 +2260,8 @@ void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionI
     if (!IsArtifactAlreadyHeld(WorldManager, LanternID) && !HasRoomForArtifactItem(LanternID, CurrentItems[FoundIndex].Count <= 1 ? 1 : 0))
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("LureSwampTsar: сумка полна -- Фонарь некуда положить, приманка не тронута"));
-        return;
+        ShowMemoryRevealText(FText::FromString(TEXT("Фонарь некуда было бы спрятать -- котомка полна. Зелье осталось при вас.")));
+        return false;
     }
 
     bool bGranted = false;
@@ -2196,7 +2269,9 @@ void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionI
     if (!bAttempted)
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("LureSwampTsar: Болотный царь not manifested near (%d,%d), or Фонарь already held"), X, Y);
-        return;
+        // Жест из руки не молчит (ревью 2026-09-21): зелье осталось при себе.
+        ShowMemoryRevealText(FText::FromString(TEXT("Над топью никого -- приманивать некого. Зелье осталось при вас.")));
+        return false;
     }
 
     // Приманка расходуется в любом случае -- удалась она или нет (тот же
@@ -2213,6 +2288,7 @@ void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionI
         : FText::FromString(TEXT("Царь на миг замирает над ложным зельем -- и тут же снова смотрит на вас. Не в этот раз.")));
 
     UE_LOG(LogHerbalistPlayer, Log, TEXT("LureSwampTsar: attempt at (%d,%d), %s"), X, Y, bGranted ? TEXT("Фонарь stolen") : TEXT("failed"));
+    return true;
 }
 
 void AHerbalistPlayerController::UseHorn(int32 X, int32 Y)

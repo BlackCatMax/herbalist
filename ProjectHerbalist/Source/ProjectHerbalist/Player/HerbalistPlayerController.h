@@ -197,6 +197,18 @@ public:
     // OfferForArtifact и дара из руки у логова. false -- не добыт, ничего не
     // списано.
     bool OfferForArtifactFromSlots(FName ArtifactID, TArray<int32> Indices);
+
+    // Артефакты из руки (этап 5б, решения пользователя 2026-09-21). С целью
+    // (Гребень, Рог, Фонарь, перья Алконоста, Сирина, Жар-птицы) -- на
+    // клетку под взглядом; false -- это не такой артефакт. На себя
+    // (Молодильное яблоко, Шапка, Зеркальце, Перо Гамаюна, Клубочек) --
+    // поднести к лицу (осмотр) и взаимодействие; клубочек спрашивает базу
+    // строкой выбора. Пути -- те же, что у команд.
+    bool UseArtifactOnCell(FName ArtifactID, int32 X, int32 Y);
+    bool UseHeldOnSelf();
+    // Приманка Болотного царя из ячейки котомки -- общий путь команды
+    // LureSwampTsar и зелья из руки у его логова.
+    bool LureSwampTsarFromSlot(int32 PotionIndex, int32 X, int32 Y);
     void UpdateDistortionFromCell(int32 X, int32 Y);
 
     // Свой фиксированный сид, не WorldRNG — тот же приём, что уже

@@ -23,12 +23,13 @@
 
 #include "CoreMinimal.h"
 #include "Core/Entities/HerbalistEntityActor.h"
+#include "Core/Interaction/HeldItemTarget.h"
 #include "LandmarkEntityActor.generated.h"
 
 struct FEntityLandmark;
 
 UCLASS()
-class PROJECTHERBALIST_API ALandmarkEntityActor : public AHerbalistEntityActor
+class PROJECTHERBALIST_API ALandmarkEntityActor : public AHerbalistEntityActor, public IHeldItemTarget
 {
     GENERATED_BODY()
 
@@ -43,6 +44,11 @@ public:
     // Заговорить можно, пока хозяин виден (решение пользователя 2026-09-21):
     // взгляд на силуэт и взаимодействие -- разговор, тем же TalkTo.
     virtual void OnInteract_Implementation(AHerbalistPlayerController* PC) override;
+
+    // Калинов мост, Сделка (§4.4): после ветки «Сделка» артефакт из руки,
+    // поднесённый к Змею, -- плата (PayKalinovMostToll). Без сделки -- не
+    // для хозяина, взаимодействие как пустой рукой (разговор).
+    virtual bool ReceiveHeldItem(AHerbalistPlayerController* PC, int32 InventoryIndex) override;
 
     // Текущее состояние, не только момент пересечения -- Blueprint (или
     // тест) может опросить его напрямую (например, в BeginPlay, до

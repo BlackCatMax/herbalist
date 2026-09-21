@@ -110,7 +110,7 @@ Respect доступны разные ветки, не обе сразу.
 | Горюч-камень | применить зелье к его клетке (раздел 3) | `[GoryuchKamen] Thud at (x,y)`; сама клетка не меняется |
 | Соловей | пройти через его клетку | `[Solovey] Morok triggered at (x,y): AoE Purity/Stability radius N, burst B`; под сокрытием — `[Solovey] Passed at (x,y) under одолень-трава concealment -- no Morok`; после плакун-травы — `[Solovey] Calmed permanently by плакун-трава -- Morok will never trigger again` |
 | Калинов мост | `TalkTo` на клетке Змея; ветка «Бой» | `[KalinovMost] Fight chosen at (x,y): Purity/Stability cost C` |
-| | ветка «Сделка», затем `PayKalinovMostToll <артефакт>` | `[KalinovMost] Toll paid: <артефакт> given up безвозвратно, passage granted`; без сделки — `[KalinovMost] PayToll: no deal armed -- choose the Сделка branch first` |
+| | ветка «Сделка», затем артефакт из руки на силуэт Змея (или `PayKalinovMostToll <артефакт>`); отданный артефакт уходит и из котомки | `[KalinovMost] Toll paid: <артефакт> given up безвозвратно, passage granted`; без сделки — `[KalinovMost] PayToll: no deal armed -- choose the Сделка branch first` |
 
 Отладка посева: `ke * SeedPointsOfInterest` засевает курганы и точки интереса
 заново — меняет мир сессии, только для проверки самого посева.

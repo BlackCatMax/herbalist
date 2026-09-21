@@ -3,6 +3,7 @@
 #include "Core/World/GridWorldManager.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Components/StaticMeshComponent.h"
+#include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Config/HerbalistSettings.h"
 #include "Core/Types/HerbalistCoreMath.h"
 
@@ -14,6 +15,21 @@ ALandmarkEntityActor::ALandmarkEntityActor()
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     MeshComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
     MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+}
+
+bool ALandmarkEntityActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 InventoryIndex)
+{
+    AGridWorldManager* Manager = WorldManagerRef.Get();
+    if (!PC || !PC->InventoryComponent || !Manager || !Manager->IsKalinovMostDealPending()) return false;
+    // Плата -- только Змею на Калиновом мосту и только видимому (ревью
+    // 2026-09-21): сделка сама места не помнит, и без этой проверки
+    // артефакт уходил бы любому хозяину.
+    if (GridCell != Manager->GetKalinovMostSite() || IsHidden() || !MeshComponent || !MeshComponent->IsVisible()) return false;
+    if (!PC->InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
+    const FInventoryItem& Item = PC->InventoryComponent->GetItems()[InventoryIndex];
+    if (!PC->IsArtifactReceipt(Item)) return false;
+    PC->PayKalinovMostToll(Item.IngredientID);
+    return true;
 }
 
 void ALandmarkEntityActor::OnInteract_Implementation(AHerbalistPlayerController* PC)
