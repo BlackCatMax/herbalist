@@ -13,6 +13,8 @@
 #include "UI/OrdersWindowWidget.h"
 #include "Player/HeldItemComponent.h"
 #include "Player/LookHighlightComponent.h"
+#include "Player/PesterComponent.h"
+#include "Player/PesterItemActor.h"
 #include "Templates/TypeHash.h"
 #include "Core/World/GardenNicheUnlockTypes.h"
 #include "Core/Config/HerbalistSettings.h"
@@ -41,6 +43,7 @@ AHerbalistPlayerController::AHerbalistPlayerController()
     JournalComponent = CreateDefaultSubobject<UHerbalistJournalComponent>(TEXT("JournalComponent"));
     HeldItemComponent = CreateDefaultSubobject<UHeldItemComponent>(TEXT("HeldItemComponent"));
     LookHighlightComponent = CreateDefaultSubobject<ULookHighlightComponent>(TEXT("LookHighlightComponent"));
+    PesterComponent = CreateDefaultSubobject<UPesterComponent>(TEXT("PesterComponent"));
 }
 
 void AHerbalistPlayerController::BeginPlay()
@@ -456,6 +459,14 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
 
 void AHerbalistPlayerController::Info()
 {
+    // Предмет в руке -- клавиша сведений осматривает его (диегетический
+    // интерфейс, этап 2): поднести к глазам, строка ощущения. Без предмета --
+    // как раньше, сведения о клетке под взглядом.
+    if (HeldItemComponent && HeldItemComponent->IsHolding())
+    {
+        HeldItemComponent->ToggleInspect();
+        return;
+    }
     OnRightClick();
 }
 
@@ -494,56 +505,26 @@ void AHerbalistPlayerController::ReportGridCorruption()
 
 void AHerbalistPlayerController::Inventory()
 {
-    if (bIsAnyWidgetOpen && InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
+    // Диегетический интерфейс, этап 2 (DESIGN_Diegetic_Interface.md,
+    // 2026-09-21): клавиша котомки раскрывает пестерь перед камерой вместо
+    // окна. С предметом в руке та же клавиша убирает его обратно -- рука
+    // пустеет, предмет и так остаётся в котомке. Окно котомки больше не
+    // открывается этой клавишей: оно живо только внутри окна переноса у
+    // хранилищ, пока этап 3 не заменит и его.
+    if (HeldItemComponent && HeldItemComponent->IsHolding())
     {
-        CloseAnyWidget();
+        HeldItemComponent->PutAway();
         return;
     }
-
     if (bIsAnyWidgetOpen)
     {
-        // Открыт ДРУГОЙ виджет (варка, диалог). Снаружи это неотличимо от
-        // «инвентарь сломался»: клавиша нажата, не происходит ничего.
-        UE_LOG(LogHerbalistPlayer, Log, TEXT("Инвентарь: уже открыт другой виджет -- закрой его сначала"));
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Пестерь: открыто окно -- закрой его сначала"));
         return;
     }
-
-    if (InventoryWidgetInstance)
+    if (PesterComponent)
     {
-        InventoryWidgetInstance->RemoveFromParent();
-        InventoryWidgetInstance = nullptr;
+        PesterComponent->Toggle();
     }
-
-    // Обе ссылки назначаются в Blueprint'е контроллера; незаполненная
-    // InventoryWidgetClass -- ровно тот случай, когда клавиша молчит, и
-    // единственный способ это увидеть был раньше — читать код.
-    if (!InventoryWidgetClass)
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Инвентарь: InventoryWidgetClass не задан в Blueprint'е контроллера -- открывать нечего"));
-        return;
-    }
-    if (!InventoryComponent)
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Инвентарь: InventoryComponent отсутствует на контроллере"));
-        return;
-    }
-
-    InventoryWidgetInstance = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
-    if (!InventoryWidgetInstance)
-    {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Инвентарь: CreateWidget вернул null для класса %s"), *GetNameSafe(InventoryWidgetClass));
-        return;
-    }
-
-    InventoryWidgetInstance->BindInventory(InventoryComponent);
-    InventoryWidgetInstance->AddToViewport();
-
-    bShowMouseCursor = true;
-    FInputModeGameAndUI InputMode;
-    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-    SetInputMode(InputMode);
-    SetIgnoreLookInput(true);
-    bIsAnyWidgetOpen = true;
 }
 
 // ============================================================================
@@ -615,6 +596,21 @@ void AHerbalistPlayerController::Interact()
         return;
     }
 
+    // Открытый пестерь -- сначала он: мир его предметов не видит, спрашиваем
+    // его напрямую (ревью 2026-09-21). Взгляд мимо заглушек -- взаимодействие
+    // с миром за ними, как обычно.
+    if (PesterComponent && PesterComponent->IsOpen())
+    {
+        FVector ViewLocation;
+        FRotator ViewRotation;
+        GetPlayerViewPoint(ViewLocation, ViewRotation);
+        if (APesterItemActor* Item = PesterComponent->FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f))
+        {
+            IInteractable::Execute_OnInteract(Item, this);
+            return;
+        }
+    }
+
     FHitResult Hit;
     if (!GetHitResultFromCamera(Hit)) return;
 
@@ -636,12 +632,6 @@ void AHerbalistPlayerController::Interact()
 
 void AHerbalistPlayerController::CloseAnyWidget()
 {
-    if (InventoryWidgetInstance && InventoryWidgetInstance->IsInViewport())
-    {
-        InventoryWidgetInstance->RemoveFromParent();
-        InventoryWidgetInstance = nullptr;
-    }
-
     if (JournalWidgetInstance && JournalWidgetInstance->IsInViewport())
     {
         JournalWidgetInstance->RemoveFromParent();

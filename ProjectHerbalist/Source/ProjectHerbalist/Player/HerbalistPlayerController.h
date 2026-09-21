@@ -46,6 +46,10 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diegetic")
     class ULookHighlightComponent* LookHighlightComponent;
 
+    // Пестерь -- котомка в руках, этап 2 (2026-09-21).
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Diegetic")
+    class UPesterComponent* PesterComponent;
+
     UPROPERTY(BlueprintReadOnly, Category = "UI")
     bool bIsAnyWidgetOpen = false;
 
@@ -196,6 +200,13 @@ public:
     void InspectHeld();
     UFUNCTION(Exec)
     void PutAwayHeld();
+
+    // Клавиши котомки и сведений (2026-09-21) -- открыты, потому что теперь
+    // это не просто «открыть окно»: с предметом в руке они убирают его и
+    // осматривают, без него -- пестерь и сведения о клетке. Тесты проверяют
+    // именно этот выбор.
+    void Info();
+    void Inventory();
 
     // Сохранения v1 (Core/Save/HerbalistSaveSubsystem.h) — тонкие обёртки над
     // подсистемой, тем же паттерном, что HarvestTest/ApplyTest над пайплайном.
@@ -559,16 +570,11 @@ protected:
     UInputAction* JournalAction;
 
     UPROPERTY(EditDefaultsOnly, Category = "UI")
-    TSubclassOf<UInventoryWidget> InventoryWidgetClass;
-
-    UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UJournalWidget> JournalWidgetClass;
 
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
     void Harvest();
-    void Info();
-    void Inventory();
     void Journal();
     void ApplyAlchemy();
     void Interact();
@@ -624,9 +630,6 @@ public:
     void SetWorldManagerForTests(AGridWorldManager* InManager) { CachedWorldManager = InManager; }
 
 private:
-
-    UPROPERTY()
-    UInventoryWidget* InventoryWidgetInstance = nullptr;
 
     // UUserWidget, не UJournalWidget -- Journal() сейчас строит UJournalLogWidget
     // (см. комментарий у ToggleJournalUI ниже), JournalWidgetInstance хранит

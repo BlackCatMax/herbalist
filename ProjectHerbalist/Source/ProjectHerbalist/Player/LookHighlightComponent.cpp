@@ -4,6 +4,9 @@
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Player/HerbalistPlayerController.h"
+#include "Player/PesterComponent.h"
+#include "Player/PesterItemActor.h"
 #include "Engine/World.h"
 
 ULookHighlightComponent::ULookHighlightComponent()
@@ -76,6 +79,19 @@ void ULookHighlightComponent::TickComponent(float DeltaTime, ELevelTick TickType
     FHitResult Hit;
     const FVector End = ViewLocation + ViewRotation.Vector() * ReachCm;
     AActor* Target = nullptr;
+
+    // Открытый пестерь -- его предметы мир не видит, спрашиваем напрямую.
+    if (const AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC))
+    {
+        if (HPC->PesterComponent)
+        {
+            if (APesterItemActor* Item = HPC->PesterComponent->FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f))
+            {
+                SetFocusedActor(Item);
+                return;
+            }
+        }
+    }
     if (GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, End, ECC_Visibility, Params))
     {
         Target = Hit.GetActor();
