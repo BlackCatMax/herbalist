@@ -100,12 +100,9 @@
 отойти дальше 3 м — раскладка закрыта. Котомка полна — `Pester: котомка
 полна -- '<id>' остался в хранилище`.
 
-**Подготовка в редакторе.** На картах станций пока нет, Blueprint'ов тоже:
-Blueprint Class от класса станции (там же её визуал), поставить на уровень
-рядом со стартом. Прежнее окно переноса — только для отладки, консоль
-`OpenStorageWindow` со взглядом на хранилище; ему в Class Defaults нужен
-`TransferWidgetClass` = `WBP_InventoryTransferWidget`, как у
-`BP_StorageContainer`, иначе в логе `Missing components`.
+**Подготовка в редакторе** — `herbalist_docs/Herbalist_Vault/03_Technical/Current/Level_Assembly.md` (раздел «Дом»: станции и
+хранилища). Отладочное окно переноса — консоль `OpenStorageWindow` со
+взглядом на хранилище; без `TransferWidgetClass` в логе `Missing components`.
 
 | Станция | Что принимает | Длительность (при `GameDayMinutes = 32`) | Итог |
 |---|---|---|---|
