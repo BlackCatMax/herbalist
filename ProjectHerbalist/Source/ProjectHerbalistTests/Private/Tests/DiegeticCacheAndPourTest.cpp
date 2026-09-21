@@ -1,7 +1,7 @@
 // Source/ProjectHerbalistTests/Private/Tests/DiegeticCacheAndPourTest.cpp
 //
 // Диегетический интерфейс, этап 3 (DESIGN_Diegetic_Interface.md,
-// 2026-09-21): зелье из руки -- в тайник и на клетку. В тайнике оно
+// 2026-09-21): предмет из руки -- в тайник и на землю (зелье, перегной, семя). В тайнике оно
 // исполняет открытый заказ с ближайшим сроком (решение пользователя); на
 // земле -- поливает клетку тем же путём, что UsePotion.
 
@@ -201,6 +201,60 @@ bool FHerbalistDiegetic_CacheOutOfReachKeepsThePotion::RunTest(const FString& Pa
     Cache->Destroy();
     PC->UnPossess();
     Pawn->Destroy();
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistDiegetic_HeldItemsOnTheGroundTendTheGarden,
+    "Herbalist.Diegetic.HeldItemsOnTheGroundTendTheGarden",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistDiegetic_HeldItemsOnTheGroundTendTheGarden::RunTest(const FString& Parameters)
+{
+    // Перегной из руки на землю -- тот же ApplyFertilizerToCell, что у
+    // команды ApplyFertilizer. Посадка семени требует реестра (ниша
+    // растения), в мире автотестов его нет -- здесь проверено только, что без
+    // него семя не пропадает.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+
+    FGridCell* Cell = Manager->GetCell(7, 7);
+    if (!TestNotNull(TEXT("Клетка есть"), Cell)) { PC->Destroy(); Manager->Destroy(); return false; }
+    Cell->Environment.Fertility = 0.5f;
+    FHitResult Hit;
+    Hit.Location = Manager->GetCellWorldPosition(7, 7);
+    Hit.ImpactPoint = Hit.Location;
+
+    FInventoryItem Peregnoy = MakeHandPotion(331.0f);
+    Peregnoy.IngredientID = UHerbalistInventoryComponent::PeregnoyIngredientID;
+    PC->InventoryComponent->AddItem(Peregnoy, 1);
+    TestTrue(TEXT("Перегной внесён"), PC->ApplyHeldItemToGround(PC->InventoryComponent->FindItemIndex(Peregnoy), Hit));
+    TestTrue(TEXT("Клетка плодороднее"), Cell->Environment.Fertility > 0.5f);
+    TestEqual(TEXT("Перегной ушёл из котомки"), PC->InventoryComponent->FindItemIndex(Peregnoy), (int32)INDEX_NONE);
+
+    // Обычная трава на земле ни к чему.
+    FInventoryItem Herb = MakeHandPotion(332.0f);
+    Herb.IngredientID = FName(TEXT("bol_01"));
+    PC->InventoryComponent->AddItem(Herb, 1);
+    TestFalse(TEXT("Трава -- не для земли"), PC->ApplyHeldItemToGround(PC->InventoryComponent->FindItemIndex(Herb), Hit));
+    TestTrue(TEXT("Трава в котомке"), PC->InventoryComponent->FindItemIndex(Herb) != INDEX_NONE);
+
+    // Семя без реестра не садится и не пропадает.
+    FInventoryItem Seed = Herb;
+    Seed.CreationTime = 333.0f;
+    Seed.bIsPlantingStock = true;
+    PC->InventoryComponent->AddItem(Seed, 1);
+    const int32 SeedIndex = PC->InventoryComponent->FindItemIndex(Seed);
+    const int32 SeedCount = SeedIndex != INDEX_NONE ? PC->InventoryComponent->GetItems()[SeedIndex].Count : 0;
+    TestFalse(TEXT("Без реестра не посадить"), PC->ApplyHeldItemToGround(SeedIndex, Hit));
+    const int32 SeedAfter = PC->InventoryComponent->FindItemIndex(Seed);
+    TestTrue(TEXT("Семя цело"), SeedAfter != INDEX_NONE && PC->InventoryComponent->GetItems()[SeedAfter].Count == SeedCount);
+
     PC->Destroy();
     Manager->Destroy();
     return true;

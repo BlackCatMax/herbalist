@@ -26,8 +26,11 @@
 |---|---|---|
 | Грядка с нишей | `SetGardenPlot X Y mycelium` (`cellar`, `pond`, `sunny`, `shade`, `cave`; `none` — снять) | `[Garden] Plot at (x,y) set to niche N`; снять — `[Garden] Plot at (x,y) cleared`. Отказы: `SetGardenPlot: Molva … below threshold …, refused`, `SetGardenPlot: needs N '<материал>' in a single stack, not enough`, `SetGardenPlot: this niche is already built at (x,y)` |
 | Посадочный материал | `SetHarvestIntent seed`, затем собрать нужное растение (раздел 2) | в инвентаре — предмет-посадка |
-| Посадка | `PlantSeed X Y <id>` | `[Garden] PlantSeedInCell: (x,y) planted with <id>`. Отказы: `PlantSeed: no planting stock of '<id>' in inventory …`, `[Garden] PlantSeedInCell: (x,y) is niche N, species <id> needs niche M, refused`, `… has no garden plot registered` |
-| Перегной | `ApplyFertilizer X Y` | `[Fertilizer] ApplyFertilizerToCell: (x,y) Fertility now F`; `ApplyFertilizer: no Peregnoy in inventory` |
+| Посадка | в игре — посадочный материал в руке, взгляд на грядку, `IA_Interact`; отладка — `PlantSeed X Y <id>` | `[Garden] PlantSeedInCell: (x,y) planted with <id>`, одна штука ушла из котомки. Отказы: `PlantSeed: no planting stock of '<id>' in inventory …`, `[Garden] PlantSeedInCell: (x,y) is niche N, species <id> needs niche M, refused`, `… has no garden plot registered` |
+| Перегной | в игре — перегной в руке, взгляд на клетку, `IA_Interact`; отладка — `ApplyFertilizer X Y` | `[Fertilizer] ApplyFertilizerToCell: (x,y) Fertility now F`; `ApplyFertilizer: no Peregnoy in inventory` |
+
+Отказ грядки (не та ниша, нет пристройки) оставляет семя в руке: списывается
+только посаженное.
 
 Посаженное растение отрастает тем же видом (раздел 2, «Отрастание»). Грядка
 с пристройкой без посадки со временем растит растения своей ниши, а не

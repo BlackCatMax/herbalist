@@ -640,14 +640,14 @@ void AHerbalistPlayerController::Interact()
                 return;
             }
         }
-        // Зелье на землю, а не на цель, -- полить клетку (таблица «предмет +
-        // цель»: зелье + клетка земли). Куст или трава под взглядом -- не
+        // Предмет на землю, а не на цель, -- зелье поливает клетку, семя
+        // садится в грядку, перегной вносится (таблица «предмет + цель»). Куст или трава под взглядом -- не
         // земля (ревью 2026-09-21): взаимодействие по привычке вместо сбора
         // не должно выливать зелье.
         if (!(HitActor && (HitActor->Implements<UInteractable>() || HitActor->IsA<AHerbalistResourceActor>())))
         {
             const int32 HeldIndex = HeldItemComponent->ResolveHeldIndex();
-            if (HeldIndex != INDEX_NONE && PourPotionOnCell(HeldIndex, Hit))
+            if (HeldIndex != INDEX_NONE && ApplyHeldItemToGround(HeldIndex, Hit))
             {
                 return;
             }
@@ -1291,15 +1291,31 @@ void AHerbalistPlayerController::PlantSeed(int32 X, int32 Y, FString IngredientI
         return;
     }
 
-    if (!Manager->PlantSeedInCell(FIntPoint(X, Y), SpeciesID, Row->GardenNiche))
+    PlantFromSlot(FoundIndex, FIntPoint(X, Y));
+}
+
+bool AHerbalistPlayerController::PlantFromSlot(int32 SeedIndex, const FIntPoint& Cell)
+{
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!InventoryComponent || !Manager || !InventoryComponent->GetItems().IsValidIndex(SeedIndex)) return false;
+    const FInventoryItem& Seed = InventoryComponent->GetItems()[SeedIndex];
+    if (!Seed.bIsPlantingStock || Seed.Count <= 0) return false;
+
+    // Ниша растения -- из реестра (в автотестах его нет, см. PlantSeed).
+    const UGameInstance* GameInstance = GetGameInstance();
+    const UIngredientRegistrySubsystem* IngredientSubsystem = GameInstance ? GameInstance->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const FIngredientTableRow* Row = IngredientSubsystem ? IngredientSubsystem->GetRow(Seed.IngredientID) : nullptr;
+    if (!Row)
     {
-        // PlantSeedInCell уже отчиталась конкретной причиной отказа (нет
-        // клетки / нет пристройки / ниша не совпала) — здесь списывать
-        // предмет не за что.
-        return;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("PlantSeed: '%s' unknown ingredient"), *Seed.IngredientID.ToString());
+        return false;
     }
 
-    InventoryComponent->RemoveItem(FoundIndex, 1);
+    // PlantSeedInCell сама отчитывается причиной отказа (нет клетки / нет
+    // пристройки / ниша не совпала) — тогда списывать предмет не за что.
+    if (!Manager->PlantSeedInCell(Cell, Seed.IngredientID, Row->GardenNiche)) return false;
+    InventoryComponent->RemoveItem(SeedIndex, 1);
+    return true;
 }
 
 void AHerbalistPlayerController::ApplyFertilizer(int32 X, int32 Y)
@@ -1336,14 +1352,43 @@ void AHerbalistPlayerController::ApplyFertilizer(int32 X, int32 Y)
         return;
     }
 
-    if (!Manager->ApplyFertilizerToCell(FIntPoint(X, Y)))
+    FertilizeFromSlot(FoundIndex, FIntPoint(X, Y));
+}
+
+bool AHerbalistPlayerController::FertilizeFromSlot(int32 FertilizerIndex, const FIntPoint& Cell)
+{
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!InventoryComponent || !Manager || !InventoryComponent->GetItems().IsValidIndex(FertilizerIndex)) return false;
+    const FInventoryItem& Fertilizer = InventoryComponent->GetItems()[FertilizerIndex];
+    if (Fertilizer.IngredientID != UHerbalistInventoryComponent::PeregnoyIngredientID || Fertilizer.Count <= 0) return false;
+
+    // ApplyFertilizerToCell сама отчитывается причиной отказа (нет клетки) —
+    // тогда списывать предмет не за что.
+    if (!Manager->ApplyFertilizerToCell(Cell)) return false;
+    InventoryComponent->RemoveItem(FertilizerIndex, 1);
+    return true;
+}
+
+bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, const FHitResult& Hit)
+{
+    if (!InventoryComponent || !InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
+    const FInventoryItem& Item = InventoryComponent->GetItems()[InventoryIndex];
+    if (Item.IngredientID == FName(TEXT("Potion")))
     {
-        // ApplyFertilizerToCell уже отчиталась причиной отказа (нет клетки) —
-        // списывать предмет не за что.
-        return;
+        return PourPotionOnCell(InventoryIndex, Hit);
     }
 
-    InventoryComponent->RemoveItem(FoundIndex, 1);
+    int32 X, Y;
+    if (!GetCellFromHit(Hit, X, Y)) return false;
+    if (Item.bIsPlantingStock)
+    {
+        return PlantFromSlot(InventoryIndex, FIntPoint(X, Y));
+    }
+    if (Item.IngredientID == UHerbalistInventoryComponent::PeregnoyIngredientID)
+    {
+        return FertilizeFromSlot(InventoryIndex, FIntPoint(X, Y));
+    }
+    return false;
 }
 
 void AHerbalistPlayerController::ActivateWard(FString CrystalIngredientID)

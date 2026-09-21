@@ -171,6 +171,15 @@ public:
     // Вылить зелье из ячейки котомки на клетку под точкой попадания. Общий путь
     // UsePotion и зелья в руке (этап 3). false -- не зелье или мимо сетки.
     bool PourPotionOnCell(int32 PotionIndex, const FHitResult& Hit);
+    // Посадить семя / внести перегной из ячейки котомки в клетку. Общий путь
+    // команд PlantSeed/ApplyFertilizer и предмета в руке (этап 3). false --
+    // не тот предмет или клетка отказала (причину пишет менеджер).
+    bool PlantFromSlot(int32 SeedIndex, const FIntPoint& Cell);
+    bool FertilizeFromSlot(int32 FertilizerIndex, const FIntPoint& Cell);
+    // Предмет из руки -- на землю под точкой попадания: зелье поливает,
+    // семя садится, перегной вносится. false -- этому предмету на земле
+    // делать нечего.
+    bool ApplyHeldItemToGround(int32 InventoryIndex, const FHitResult& Hit);
     void UpdateDistortionFromCell(int32 X, int32 Y);
 
     // Свой фиксированный сид, не WorldRNG — тот же приём, что уже
