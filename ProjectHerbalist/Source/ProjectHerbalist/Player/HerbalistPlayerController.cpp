@@ -1369,17 +1369,66 @@ bool AHerbalistPlayerController::FertilizeFromSlot(int32 FertilizerIndex, const 
     return true;
 }
 
+FName AHerbalistPlayerController::FindArtifactOfLairAt(const FIntPoint& Cell) const
+{
+    const AGridWorldManager* Manager = FindWorldManager();
+    if (!Manager) return NAME_None;
+    for (const TPair<FName, FIntPoint>& Anchor : Manager->GetLegendaryAnchors())
+    {
+        if (Anchor.Value != Cell) continue;
+        for (const FArtifactDefinition& Def : GetArtifactDefinitions())
+        {
+            // Фонарь -- только обманом, приманкой (LureSwampTsar), не даром;
+            // добытый артефакт логово больше не ждёт -- клетка снова обычная
+            // земля: полить, посадить (ревью 2026-09-21).
+            if (Def.LegendaryEntityID == Anchor.Key && !Def.bDeceptionOnly && !IsArtifactAlreadyHeld(Manager, Def.ArtifactID))
+            {
+                return Def.ArtifactID;
+            }
+        }
+    }
+    return NAME_None;
+}
+
+bool AHerbalistPlayerController::IsArtifactReceipt(const FInventoryItem& Item) const
+{
+    if (FindArtifactDefinition(Item.IngredientID)) return true;
+    const AGridWorldManager* Manager = FindWorldManager();
+    return Manager && Manager->GetAcquiredFeathers().Contains(Item.IngredientID);
+}
+
 bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, const FHitResult& Hit)
 {
     if (!InventoryComponent || !InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
     const FInventoryItem& Item = InventoryComponent->GetItems()[InventoryIndex];
+
+    int32 X, Y;
+    const bool bOnGrid = GetCellFromHit(Hit, X, Y);
+
+    // Логово Легендарной -- любой предмет здесь дар (решение пользователя
+    // 2026-09-21): по одному, решает его чистота, артефакт -- этой сущности.
+    // Отказ (регион не очищен, дар слаб, артефакт уже есть) предмет не
+    // списывает и в клетку его не льёт.
+    if (bOnGrid)
+    {
+        const FName ArtifactID = FindArtifactOfLairAt(FIntPoint(X, Y));
+        if (!ArtifactID.IsNone())
+        {
+            if (IsArtifactReceipt(Item))
+            {
+                UE_LOG(LogHerbalistPlayer, Log, TEXT("OfferForArtifact: '%s' -- артефакт, в дар не идёт"), *Item.IngredientID.ToString());
+                return true;
+            }
+            OfferForArtifactFromSlots(ArtifactID, { InventoryIndex });
+            return true;
+        }
+    }
+
     if (Item.IngredientID == FName(TEXT("Potion")))
     {
         return PourPotionOnCell(InventoryIndex, Hit);
     }
-
-    int32 X, Y;
-    if (!GetCellFromHit(Hit, X, Y)) return false;
+    if (!bOnGrid) return false;
     if (Item.bIsPlantingStock)
     {
         return PlantFromSlot(InventoryIndex, FIntPoint(X, Y));
@@ -1810,7 +1859,20 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         return;
     }
 
-    const FName ArtID(*ArtifactID);
+    OfferForArtifactFromSlots(FName(*ArtifactID), Indices);
+}
+
+bool AHerbalistPlayerController::OfferForArtifactFromSlots(FName ArtID, TArray<int32> Indices)
+{
+    AGridWorldManager* Manager = FindWorldManager();
+    if (!InventoryComponent || !Manager || Indices.Num() == 0) return false;
+    const TArray<FInventoryItem> CurrentItems = InventoryComponent->GetItems();
+    TArray<FInventoryItem> Items;
+    for (int32 Index : Indices)
+    {
+        if (!CurrentItems.IsValidIndex(Index)) return false;
+        Items.Add(CurrentItems[Index]);
+    }
 
     // Место под предмет артефакта -- ДО добычи (2026-09-14): TryAcquireArtifact
     // сразу пишет владение, а видимый предмет при полной сумке пропадал.
@@ -1823,16 +1885,16 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
     }
     if (!IsArtifactAlreadyHeld(Manager, ArtID) && !HasRoomForArtifactItem(ArtID, SlotsFreedByOffering))
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: сумка полна -- %s некуда положить, подношение не тронуто"), *ArtifactID);
-        return;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: сумка полна -- %s некуда положить, подношение не тронуто"), *ArtID.ToString());
+        return false;
     }
 
     bool bViaDeception = false;
     const bool bAcquired = Manager->TryAcquireArtifact(ArtID, Items, bViaDeception);
     if (!bAcquired)
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s not acquired (entity not manifested, already held, or offering too weak)"), *ArtifactID);
-        return;
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s not acquired (entity not manifested, already held, or offering too weak)"), *ArtID.ToString());
+        return false;
     }
 
     // Зеркальце/Клубочек — выдают базовый предмет-спутник на честной
@@ -1858,7 +1920,7 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         bHasMirror = true;
         if (!Def || !Def->bWarmsCompanionItem)
         {
-            UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s выставляет bHasMirror, но bWarmsCompanionItem в DT_Artifacts не стоит -- данные разошлись с кодом"), *ArtifactID);
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s выставляет bHasMirror, но bWarmsCompanionItem в DT_Artifacts не стоит -- данные разошлись с кодом"), *ArtID.ToString());
         }
     }
     else if (ArtID == FName(TEXT("Клубочек")))
@@ -1866,12 +1928,12 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
         bHasYarnBall = true;
         if (!Def || !Def->bWarmsCompanionItem)
         {
-            UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s выставляет bHasYarnBall, но bWarmsCompanionItem в DT_Artifacts не стоит -- данные разошлись с кодом"), *ArtifactID);
+            UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s выставляет bHasYarnBall, но bWarmsCompanionItem в DT_Artifacts не стоит -- данные разошлись с кодом"), *ArtID.ToString());
         }
     }
     else if (Def && Def->bWarmsCompanionItem)
     {
-        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s помечен bWarmsCompanionItem в DT_Artifacts, но не опознан здесь -- нужна новая ветка для его флага-присутствия"), *ArtifactID);
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("OfferForArtifact: %s помечен bWarmsCompanionItem в DT_Artifacts, но не опознан здесь -- нужна новая ветка для его флага-присутствия"), *ArtID.ToString());
     }
 
     // Индексы по убыванию — RemoveItem(Index) не должен сдвинуть ещё не
@@ -1887,8 +1949,9 @@ void AHerbalistPlayerController::OfferForArtifact(FString ArtifactID, FString In
     // освобождённые строки учтены проверкой места выше.
     AddArtifactToInventory(ArtID);
 
-    UE_LOG(LogHerbalistPlayer, Log, TEXT("OfferForArtifact: %s acquired %s"), *ArtifactID,
+    UE_LOG(LogHerbalistPlayer, Log, TEXT("OfferForArtifact: %s acquired %s"), *ArtID.ToString(),
         bViaDeception ? TEXT("via deception") : TEXT("honestly"));
+    return true;
 }
 
 void AHerbalistPlayerController::LureSwampTsar(int32 X, int32 Y, FString PotionIngredientID)

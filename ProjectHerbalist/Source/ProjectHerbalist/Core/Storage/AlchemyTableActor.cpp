@@ -101,6 +101,11 @@ bool AAlchemyTableActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 I
 
     FInventoryItem Portion = PC->InventoryComponent->GetItems()[InventoryIndex];
     Portion.Count = 1;
+    if (PC->IsArtifactReceipt(Portion))
+    {
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("Cauldron: '%s' -- артефакт, в котёл не идёт"), *Portion.IngredientID.ToString());
+        return true;
+    }
 
     // Вода -- по реестру, как решало окно (UAlchemySlotWidget::CanAcceptItem);
     // без реестра (автотесты) -- по флагу самого предмета. Зелье водой не

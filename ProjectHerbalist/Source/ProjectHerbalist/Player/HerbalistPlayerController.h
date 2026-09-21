@@ -180,6 +180,19 @@ public:
     // семя садится, перегной вносится. false -- этому предмету на земле
     // делать нечего.
     bool ApplyHeldItemToGround(int32 InventoryIndex, const FHitResult& Hit);
+    // Артефакт Легендарной, чьё логово (якорь) -- эта клетка; NAME_None --
+    // не логово или дар там больше не ждут (артефакт добыт). Гребень Берегини
+    // сюда не попадает (у неё нет одного логова), Фонарь -- тоже (только
+    // приманкой, LureSwampTsar).
+    FName FindArtifactOfLairAt(const FIntPoint& Cell) const;
+    // Предмет -- «квитанция» артефакта или пера (владение пишет мировая
+    // бухгалтерия, см. AddArtifactToInventory). Такие не кладут в котёл, на
+    // жертвенник и в дар: предмет ушёл бы, а владение осталось.
+    bool IsArtifactReceipt(const FInventoryItem& Item) const;
+    // Подношение за артефакт из этих ячеек котомки -- общий путь команды
+    // OfferForArtifact и дара из руки у логова. false -- не добыт, ничего не
+    // списано.
+    bool OfferForArtifactFromSlots(FName ArtifactID, TArray<int32> Indices);
     void UpdateDistortionFromCell(int32 X, int32 Y);
 
     // Свой фиксированный сид, не WorldRNG — тот же приём, что уже
