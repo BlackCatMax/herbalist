@@ -5,6 +5,11 @@
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/Data/IngredientTableRow.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Storage/StorageContainer.h"
+#include "Core/World/GridWorldManager.h"
+#include "Core/Types/HerbalistNameUtils.h"
+#include "UI/InventorySlotWidget.h"
+#include "UI/SensationLineWidget.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 
@@ -58,6 +63,9 @@ void UPesterComponent::BeginPlay()
 
 void UPesterComponent::EndPlay(const EEndPlayReason::Type Reason)
 {
+    // Сначала закрыть: закрытие раскладки хранилища возвращает подписку на
+    // котомку, её и снимаем следом.
+    Close();
     if (const AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwner()))
     {
         if (PC->InventoryComponent)
@@ -77,11 +85,72 @@ void UPesterComponent::Open()
     Rebuild();
 }
 
+void UPesterComponent::OpenContainer(AStorageContainer* Container)
+{
+    if (!Container || !Container->InventoryComponent) return;
+    Close();
+    ViewedContainer = Container;
+    Container->InventoryComponent->OnInventoryChanged.AddDynamic(this, &UPesterComponent::OnInventoryChanged);
+    // Пока раскрыто хранилище, своя котомка раскладку не трогает (ревью
+    // 2026-09-21): иначе каждый перенос перестраивал её дважды, а распад в
+    // котомке -- ещё и без всякой причины.
+    if (const AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwner()))
+    {
+        if (PC->InventoryComponent)
+        {
+            PC->InventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UPesterComponent::OnInventoryChanged);
+        }
+    }
+    bOpen = true;
+    Rebuild();
+}
+
+void UPesterComponent::UnbindContainer()
+{
+    if (ViewedContainer.IsExplicitlyNull()) return;
+    if (AStorageContainer* Container = ViewedContainer.Get())
+    {
+        if (Container->InventoryComponent)
+        {
+            Container->InventoryComponent->OnInventoryChanged.RemoveDynamic(this, &UPesterComponent::OnInventoryChanged);
+        }
+    }
+    ViewedContainer.Reset();
+    if (const AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwner()))
+    {
+        if (PC->InventoryComponent && !PC->InventoryComponent->OnInventoryChanged.IsAlreadyBound(this, &UPesterComponent::OnInventoryChanged))
+        {
+            PC->InventoryComponent->OnInventoryChanged.AddDynamic(this, &UPesterComponent::OnInventoryChanged);
+        }
+    }
+}
+
 void UPesterComponent::Close()
 {
+    UnbindContainer();
+    StatusFocus.Reset();
+    StatusLine.Reset();
+    if (StatusWidget)
+    {
+        StatusWidget->RemoveFromParent();
+        StatusWidget = nullptr;
+    }
     if (!bOpen) return;
     bOpen = false;
     ClearLayout();
+}
+
+UHerbalistInventoryComponent* UPesterComponent::GetSourceInventory() const
+{
+    if (!ViewedContainer.IsExplicitlyNull())
+    {
+        // Раскрытое хранилище исчезло (выгружено, разрушено) до тика, который
+        // закроет раскладку, -- это не своя котомка (ревью 2026-09-21).
+        const AStorageContainer* Container = ViewedContainer.Get();
+        return Container ? Container->InventoryComponent : nullptr;
+    }
+    const AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwner());
+    return PC ? PC->InventoryComponent : nullptr;
 }
 
 void UPesterComponent::Toggle()
@@ -125,7 +194,13 @@ void UPesterComponent::Rebuild()
 
     AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwner());
     UWorld* World = GetWorld();
-    if (!PC || !PC->InventoryComponent || !World) return;
+    UHerbalistInventoryComponent* Source = GetSourceInventory();
+    if (!PC || !Source || !World) return;
+    // Предметы хранилища показываются воспринятыми, как их показывала
+    // подсказка окна переноса (UInventorySlotWidget::ResolvePerceivedItem).
+    const bool bContainer = ViewedContainer.IsValid();
+    const AGridWorldManager* Grid = bContainer ? PC->FindWorldManager() : nullptr;
+    const float Clarity = Grid ? Grid->GetGlobalPerceptionClarity() : 0.0f;
 
     const UIngredientRegistrySubsystem* Registry = nullptr;
     if (const UGameInstance* GI = PC->GetGameInstance())
@@ -134,7 +209,7 @@ void UPesterComponent::Rebuild()
     }
 
     int32 CountInPouch[static_cast<int32>(EPesterPouch::Count)] = {};
-    const TArray<FInventoryItem>& Items = PC->InventoryComponent->GetItems();
+    const TArray<FInventoryItem> Items = Source->GetItems();
     for (int32 Index = 0; Index < Items.Num(); ++Index)
     {
         const FInventoryItem& Item = Items[Index];
@@ -154,7 +229,7 @@ void UPesterComponent::Rebuild()
         const bool bMineral = Pouch == EPesterPouch::Stones;
         const bool bLiquid = Pouch == EPesterPouch::Vials;
         Actor->BindItem(Item, Index);
-        Actor->ShowItem(Item, bMineral, bLiquid);
+        Actor->ShowItem(bContainer ? UInventorySlotWidget::PerceiveSingleItem(Item, Clarity) : Item, bMineral, bLiquid);
         // Горсть и полный мешочек: крупнее стопка -- крупнее заглушка, но не
         // бесконечно.
         Actor->SetActorScale3D(FVector(0.04f + 0.008f * FMath::Min(Item.Count, 5)));
@@ -230,5 +305,70 @@ void UPesterComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
         Close();
         return;
     }
+
+    // Хранилище раскрыто, а игрок отошёл или хранилища больше нет --
+    // раскладка закрывается: в руки из погреба на другом конце поляны не
+    // берут.
+    if (ViewedContainer.IsValid() || !ViewedContainer.IsExplicitlyNull())
+    {
+        const AStorageContainer* Container = ViewedContainer.Get();
+        const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+        // У голого AStorageContainer (без Blueprint-меша) нет корня, а значит
+        // и места в мире -- мерить до него нечего, дальность не проверяется.
+        const bool bPlaced = Container && Container->GetRootComponent();
+        if (!Container || (Pawn && bPlaced && FVector::DistSquared(Pawn->GetActorLocation(), Container->GetActorLocation()) > FMath::Square(ContainerReachCm)))
+        {
+            Close();
+            return;
+        }
+        UpdateStatusLine();
+    }
     PlaceItems();
+}
+
+void UPesterComponent::UpdateStatusLine()
+{
+    APlayerController* PC = Cast<APlayerController>(GetOwner());
+    const AStorageContainer* Container = ViewedContainer.Get();
+    if (!PC || !Container || !Container->InventoryComponent) return;
+
+    FVector ViewLocation;
+    FRotator ViewRotation;
+    PC->GetPlayerViewPoint(ViewLocation, ViewRotation);
+    APesterItemActor* Focus = FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f);
+    if (Focus == StatusFocus.Get()) return;
+    StatusFocus = Focus;
+
+    StatusLine.Reset();
+    if (Focus)
+    {
+        const int32 Index = Container->InventoryComponent->FindItemIndex(Focus->GetItem(), Focus->GetIndexHint());
+        if (const FInventoryItem* Real = Container->InventoryComponent->GetSlot(Index))
+        {
+            StatusLine = GetItemProcessStatus(*Real, Container->InventoryComponent->StationType);
+        }
+    }
+
+    // Без вьюпорта (автотесты) строка только запоминается.
+    if (StatusLine.IsEmpty() || !PC->IsLocalController() || !GetWorld() || !GetWorld()->GetGameViewport())
+    {
+        if (StatusWidget)
+        {
+            StatusWidget->RemoveFromParent();
+            StatusWidget = nullptr;
+        }
+        return;
+    }
+    if (!StatusWidget)
+    {
+        StatusWidget = CreateWidget<USensationLineWidget>(PC, USensationLineWidget::StaticClass());
+        if (StatusWidget)
+        {
+            StatusWidget->AddToViewport(5);
+        }
+    }
+    if (StatusWidget)
+    {
+        StatusWidget->SetLine(StatusLine);
+    }
 }

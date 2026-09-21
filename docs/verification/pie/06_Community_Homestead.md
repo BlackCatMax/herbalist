@@ -60,10 +60,12 @@
 | `FoundBase X Y` | `[Base] Founded at (x,y), biome=N`; `[Base] (x,y) is water — not registered`; `[Base] (x,y) is outside the grid — not registered`; `[Base] (x,y) already registered` |
 | `BuildHomeStorage cellar` (`cabinet`, `jar`) | `BuildHomeStorage: built 'cellar' near (x,y)` и `[HomeStorage] Built container type=N near (x,y)`. Отказы: `BuildHomeStorage: Домовой Respect … below threshold …, refused`, `BuildHomeStorage: needs N Дубовая кора (broad_10) in a single stack, not enough`, `BuildHomeStorage: a cellar already exists, refusing a duplicate`, `BuildHomeStorage: no alchemy table (home anchor) found in the world` |
 
-Построенное хранилище открывается `IA_Interact` — раздел 3. Класс — 
+Построенное хранилище раскрывается пустой рукой, кладут в него из руки —
+раздел 3. Класс — 
 `HomeStorageContainerClass` у `AGridWorldManager`, по умолчанию
 `BP_StorageContainer`; не загрузился — `[HomeStorage] HomeStorageContainerClass
-не загрузился -- голый AStorageContainer, окно не откроется`. Погреб, шкаф и
+не загрузился -- голый AStorageContainer, окно не откроется` (окно — только
+отладочное `OpenStorageWindow`; раскладка и рука работают и у голого). Погреб, шкаф и
 кувшин стоят рядом со столом на четверть клетки друг от друга. Дубль ищется
 только среди построенных: сундук карты, выставленный погребом, постройку не
 запрещает.

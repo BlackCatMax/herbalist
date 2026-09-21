@@ -10,6 +10,11 @@
 //
 // Данные не меняются: пестерь -- раскладка UHerbalistInventoryComponent,
 // перестраивается на каждое изменение состава (OnInventoryChanged).
+//
+// Тем же пестерем раскладывается и хранилище (этап 3, решение пользователя
+// 2026-09-21): полка, короб, погреб, станции -- пустой рукой содержимое
+// ложится перед камерой, взгляд и взаимодействие -- предмет в котомке и в
+// руке. Окно переноса ушло.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -19,6 +24,9 @@
 #include "PesterComponent.generated.h"
 
 class APesterItemActor;
+class AStorageContainer;
+class UHerbalistInventoryComponent;
+class USensationLineWidget;
 
 // Мешочки пестеря -- по типу сырья, как в ресёрче (§3.1): коренья отдельно
 // от листьев, камни в своём лоскуте, склянки в гнёздах.
@@ -46,6 +54,18 @@ public:
     void Toggle();
     bool IsOpen() const { return bOpen; }
 
+    // Разложить содержимое хранилища вместо котомки. Отойти дальше
+    // ContainerReachCm -- раскладка закрывается сама.
+    void OpenContainer(AStorageContainer* Container);
+    AStorageContainer* GetViewedContainer() const { return ViewedContainer.Get(); }
+    // Чья раскладка сейчас: котомка игрока или хранилище.
+    UHerbalistInventoryComponent* GetSourceInventory() const;
+
+    // Строка хода процесса станции (сушка, отстой, выпаривание) у предмета
+    // хранилища под взглядом -- то, что раньше писала подсказка окна.
+    const FString& GetStatusLine() const { return StatusLine; }
+    static constexpr float ContainerReachCm = 300.0f;
+
     // Куда ляжет предмет. Класс -- из реестра ингредиентов (bIsMineral,
     // bIsLiquid и т.п. уже решены вызывающим); без реестра -- по признакам
     // самого предмета.
@@ -72,8 +92,17 @@ private:
     void Rebuild();
     void ClearLayout();
     void PlaceItems();
+    void UnbindContainer();
+    void UpdateStatusLine();
 
     bool bOpen = false;
+
+    TWeakObjectPtr<AStorageContainer> ViewedContainer;
+    TWeakObjectPtr<APesterItemActor> StatusFocus;
+    FString StatusLine;
+
+    UPROPERTY()
+    TObjectPtr<USensationLineWidget> StatusWidget = nullptr;
 
     UPROPERTY()
     TArray<TObjectPtr<APesterItemActor>> LaidOut;

@@ -1,4 +1,5 @@
 #include "Core/Storage/StorageContainer.h"
+#include "Player/PesterComponent.h"
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "Player/HerbalistPlayerController.h"
@@ -78,6 +79,28 @@ void AStorageContainer::EndPlay(const EEndPlayReason::Type EndPlayReason)
 }
 
 void AStorageContainer::OnInteract_Implementation(AHerbalistPlayerController* PC)
+{
+    if (!PC || !PC->PesterComponent) return;
+    if (PC->PesterComponent->IsOpen() && PC->PesterComponent->GetViewedContainer() == this)
+    {
+        PC->PesterComponent->Close();
+        return;
+    }
+    PC->PesterComponent->OpenContainer(this);
+}
+
+bool AStorageContainer::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 InventoryIndex)
+{
+    if (!PC || !PC->InventoryComponent || !InventoryComponent || !PC->InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
+    const FName ID = PC->InventoryComponent->GetItems()[InventoryIndex].IngredientID;
+    if (!PC->InventoryComponent->TransferItemTo(InventoryIndex, InventoryComponent))
+    {
+        UE_LOG(LogHerbalistAlchemy, Log, TEXT("Storage %s: '%s' не принят -- нет места"), *GetName(), *ID.ToString());
+    }
+    return true;
+}
+
+void AStorageContainer::OpenWindow(AHerbalistPlayerController* PC)
 {
     UE_LOG(LogHerbalistAlchemy, Log, TEXT("AStorageContainer::OnInteract called"));
 

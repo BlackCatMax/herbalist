@@ -510,8 +510,8 @@ void AHerbalistPlayerController::Inventory()
     // 2026-09-21): клавиша котомки раскрывает пестерь перед камерой вместо
     // окна. С предметом в руке та же клавиша убирает его обратно -- рука
     // пустеет, предмет и так остаётся в котомке. Окно котомки больше не
-    // открывается этой клавишей: оно живо только внутри окна переноса у
-    // хранилищ, пока этап 3 не заменит и его.
+    // открывается: с этапа 3 и хранилища раскладываются пестерем, окно
+    // переноса -- только отладочной OpenStorageWindow.
     if (HeldItemComponent && HeldItemComponent->IsHolding())
     {
         HeldItemComponent->PutAway();
@@ -2400,6 +2400,16 @@ void AHerbalistPlayerController::OpenCauldronWindow()
     if (AAlchemyTableActor* Table = Cast<AAlchemyTableActor>(Hit.GetActor()))
     {
         Table->OpenWindow(this);
+    }
+}
+
+void AHerbalistPlayerController::OpenStorageWindow()
+{
+    FHitResult Hit;
+    if (!GetHitResultFromCamera(Hit)) return;
+    if (AStorageContainer* Storage = Cast<AStorageContainer>(Hit.GetActor()))
+    {
+        Storage->OpenWindow(this);
     }
 }
 
