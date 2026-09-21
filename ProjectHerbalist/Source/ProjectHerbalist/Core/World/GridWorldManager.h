@@ -851,7 +851,9 @@ public:
     // его на витрине вместо поиска в сумке по времени создания -- поиск
     // промахивался, когда новое зелье сливалось с похожей стопкой (MergeStack
     // усредняет CreationTime).
-    DECLARE_MULTICAST_DELEGATE_OneParam(FOnBrewCompleted, const FInventoryItem& /*Produced*/);
+    // Вторым -- клетка котла: котлов бывает несколько, и каждый считает
+    // только свои варки (ревью 2026-09-21).
+    DECLARE_MULTICAST_DELEGATE_TwoParams(FOnBrewCompleted, const FInventoryItem& /*Produced*/, const FIntPoint& /*BrewCell*/);
     FOnBrewCompleted OnBrewCompleted;
 
     // Сопоставляет команды сбора и варки из пакета с предметами, которые

@@ -72,7 +72,7 @@ protected:
     // AGridWorldManager::OnBrewCompleted, сам предмет уже в сумке. Раньше
     // окно искало зелье в сумке по времени создания и промахивалось, когда
     // оно сливалось с похожей стопкой.
-    void HandleBrewCompleted(const FInventoryItem& Produced);
+    void HandleBrewCompleted(const FInventoryItem& Produced, const FIntPoint& BrewCell);
 
     // Варки из этого окна, ещё не вернувшие результат: чужой крафт в том же
     // тике витрину не трогает.

@@ -220,7 +220,7 @@ FReply UAlchemyTransferWidget::NativeOnKeyDown(const FGeometry& InGeometry, cons
 // Витрина результата
 // -----------------------------------------------------------------------------
 
-void UAlchemyTransferWidget::HandleBrewCompleted(const FInventoryItem& Produced)
+void UAlchemyTransferWidget::HandleBrewCompleted(const FInventoryItem& Produced, const FIntPoint& BrewCell)
 {
     if (PendingBrewCount <= 0) return;
     --PendingBrewCount;

@@ -4,6 +4,7 @@
 #include "Core/Storage/AlchemyTableActor.h"
 #include "Core/Zaryana/MemoryFragmentActor.h"
 #include "Core/Interaction/Interactable.h"
+#include "Core/Interaction/HeldItemTarget.h"
 #include "Core/Storage/StorageContainer.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Types/HerbalistNameUtils.h"
@@ -615,6 +616,21 @@ void AHerbalistPlayerController::Interact()
     if (!GetHitResultFromCamera(Hit)) return;
 
     AActor* HitActor = Hit.GetActor();
+
+    // Предмет в руке -- сначала применение (DESIGN_Diegetic_Interface.md,
+    // этап 3): трава в котёл и так далее по таблице «предмет + цель». Цели
+    // такой предмет ни к чему -- взаимодействие как пустой рукой.
+    if (HeldItemComponent && HeldItemComponent->IsHolding())
+    {
+        if (IHeldItemTarget* Target = Cast<IHeldItemTarget>(HitActor))
+        {
+            const int32 HeldIndex = HeldItemComponent->ResolveHeldIndex();
+            if (HeldIndex != INDEX_NONE && Target->ReceiveHeldItem(this, HeldIndex))
+            {
+                return;
+            }
+        }
+    }
 
     // Один интерфейс вместо цепочки Cast<> на каждый интерактивный класс
     // (2026-08-30, "заводим родительские классы для сущностей и связки") —
@@ -2244,6 +2260,16 @@ void AHerbalistPlayerController::PutAwayHeld()
     if (HeldItemComponent)
     {
         HeldItemComponent->PutAway();
+    }
+}
+
+void AHerbalistPlayerController::OpenCauldronWindow()
+{
+    FHitResult Hit;
+    if (!GetHitResultFromCamera(Hit)) return;
+    if (AAlchemyTableActor* Table = Cast<AAlchemyTableActor>(Hit.GetActor()))
+    {
+        Table->OpenWindow(this);
     }
 }
 

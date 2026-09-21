@@ -336,7 +336,7 @@ void AGridWorldManager::RunSimulationStep()
             // в сумке. До журнала: окну котла журнал не нужен.
             if (bIsCraft)
             {
-                OnBrewCompleted.Broadcast(Produced);
+                OnBrewCompleted.Broadcast(Produced, Cmd.Apply.TargetCell);
             }
 
             // Заряна, фрагмент CoherentBrew (обсуждение в сессии 2026-08-24) —
