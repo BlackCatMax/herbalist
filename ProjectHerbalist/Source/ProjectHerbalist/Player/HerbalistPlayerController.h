@@ -168,6 +168,9 @@ public:
     // false -- точка вне сетки (не отрицательная координата: с 2026-09-13
     // координаты клеток от начала сетки World Partition бывают отрицательными).
     bool GetCellFromHit(const FHitResult& Hit, int32& OutX, int32& OutY) const;
+    // Вылить зелье из ячейки котомки на клетку под точкой попадания. Общий путь
+    // UsePotion и зелья в руке (этап 3). false -- не зелье или мимо сетки.
+    bool PourPotionOnCell(int32 PotionIndex, const FHitResult& Hit);
     void UpdateDistortionFromCell(int32 X, int32 Y);
 
     // Свой фиксированный сид, не WorldRNG — тот же приём, что уже

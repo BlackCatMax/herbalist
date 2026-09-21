@@ -1375,6 +1375,9 @@ public:
     // Отдать зелье по заказу (сверка -- по его S_real, наутро). Вызывающая
     // сторона списывает предмет сама. false -- нет такого открытого заказа.
     bool DeliverOrder(int32 Number, const FInventoryItem& Potion);
+    // Открытый заказ с ближайшим сроком -- его исполняет зелье, положенное в
+    // тайник рукой (решение пользователя 2026-09-21). 0 -- открытых нет.
+    int32 FindMostUrgentOpenOrder() const;
     // Отказ -- ничего не стоит и ничего не меняет.
     bool RefuseOrder(int32 Number);
     const TArray<FActiveOrder>& GetActiveOrders() const { return ActiveOrders; }

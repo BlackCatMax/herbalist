@@ -18,6 +18,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/Interaction/Interactable.h"
+#include "Core/Interaction/HeldItemTarget.h"
 #include "OrderCacheActor.generated.h"
 
 class AGridWorldManager;
@@ -26,15 +27,21 @@ class UStaticMeshComponent;
 class USphereComponent;
 
 UCLASS(Blueprintable, BlueprintType)
-class PROJECTHERBALIST_API AOrderCacheActor : public AActor, public IInteractable
+class PROJECTHERBALIST_API AOrderCacheActor : public AActor, public IInteractable, public IHeldItemTarget
 {
     GENERATED_BODY()
 
 public:
     AOrderCacheActor();
 
-    // Открывает окно заказов: у тайника из него можно отдать зелье.
+    // Пустой рукой в тайнике делать нечего: окно заказов ушло
+    // (DESIGN_Diegetic_Interface.md, этап 3), осталось только отладочной
+    // ToggleOrdersUI.
     virtual void OnInteract_Implementation(AHerbalistPlayerController* PC) override;
+
+    // Зелье из руки ложится в тайник и исполняет открытый заказ с ближайшим
+    // сроком (решение пользователя 2026-09-21). Не зелье -- тайнику ни к чему.
+    virtual bool ReceiveHeldItem(AHerbalistPlayerController* PC, int32 InventoryIndex) override;
 
 protected:
     virtual void BeginPlay() override;

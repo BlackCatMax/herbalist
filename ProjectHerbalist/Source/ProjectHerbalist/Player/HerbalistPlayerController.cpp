@@ -570,12 +570,22 @@ void AHerbalistPlayerController::UsePotion()
 
     FHitResult Hit;
     if (!GetHitResultFromCamera(Hit)) return;
+    PourPotionOnCell(PotionIndex, Hit);
+}
+
+bool AHerbalistPlayerController::PourPotionOnCell(int32 PotionIndex, const FHitResult& Hit)
+{
+    AGridWorldManager* WorldManager = FindWorldManager();
+    if (!InventoryComponent || !WorldManager || !InventoryComponent->GetItems().IsValidIndex(PotionIndex)) return false;
+    const FInventoryItem& Potion = InventoryComponent->GetItems()[PotionIndex];
+    if (Potion.IngredientID != FName(TEXT("Potion")) || Potion.Count <= 0) return false;
 
     int32 X, Y;
-    if (!GetCellFromHit(Hit, X, Y) || !WorldManager->GetCell(X, Y)) return;
+    if (!GetCellFromHit(Hit, X, Y) || !WorldManager->GetCell(X, Y)) return false;
 
-    WorldManager->ApplyPotionToCell(X, Y, Items[PotionIndex].State);
+    WorldManager->ApplyPotionToCell(X, Y, Potion.State);
     InventoryComponent->RemoveItem(PotionIndex, 1);
+    return true;
 }
 
 void AHerbalistPlayerController::FilterPotion()
@@ -626,6 +636,18 @@ void AHerbalistPlayerController::Interact()
         {
             const int32 HeldIndex = HeldItemComponent->ResolveHeldIndex();
             if (HeldIndex != INDEX_NONE && Target->ReceiveHeldItem(this, HeldIndex))
+            {
+                return;
+            }
+        }
+        // Зелье на землю, а не на цель, -- полить клетку (таблица «предмет +
+        // цель»: зелье + клетка земли). Куст или трава под взглядом -- не
+        // земля (ревью 2026-09-21): взаимодействие по привычке вместо сбора
+        // не должно выливать зелье.
+        if (!(HitActor && (HitActor->Implements<UInteractable>() || HitActor->IsA<AHerbalistResourceActor>())))
+        {
+            const int32 HeldIndex = HeldItemComponent->ResolveHeldIndex();
+            if (HeldIndex != INDEX_NONE && PourPotionOnCell(HeldIndex, Hit))
             {
                 return;
             }

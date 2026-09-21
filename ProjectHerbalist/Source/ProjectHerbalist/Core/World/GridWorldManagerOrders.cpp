@@ -143,6 +143,20 @@ void AGridWorldManager::ReadOrderNote(int32 Number, AHerbalistPlayerController* 
     PostCommunityNote(FText::Format(NSLOCTEXT("Orders", "NoteEntry", "Заказ {0}: {1}"), FText::AsNumber(Number), Def->NoteText));
 }
 
+int32 AGridWorldManager::FindMostUrgentOpenOrder() const
+{
+    const FActiveOrder* Best = nullptr;
+    for (const FActiveOrder& Order : ActiveOrders)
+    {
+        // При равных сроках -- старший заказ: он раньше пришёл.
+        if (Order.State == EOrderState::Open && (!Best || Order.DeadlineClock < Best->DeadlineClock))
+        {
+            Best = &Order;
+        }
+    }
+    return Best ? Best->Number : 0;
+}
+
 bool AGridWorldManager::DeliverOrder(int32 Number, const FInventoryItem& Potion)
 {
     FActiveOrder* Order = FindActiveOrder(Number);
