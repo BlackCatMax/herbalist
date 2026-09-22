@@ -9,4 +9,4 @@ status: draft
 
 ## Связи
 - [[00_Core_Lock]]
-- [[03_Technical/Current/Core_Current|Техническая документация]]Core_Current]]
+- [[NN_Название_Tech|Техническая сторона]] — парный документ в `03_Technical/Current/`, разделы с теми же номерами
