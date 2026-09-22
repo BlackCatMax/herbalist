@@ -1348,6 +1348,12 @@ public:
     const TArray<FHerbalistBase>& GetBases() const { return Bases; }
     void SetBases(const TArray<FHerbalistBase>& InBases) { Bases = InBases; }
 
+    // Маркеры пристроек сада и баз -- по состоянию GardenPlots и Bases:
+    // лишние убирает, ниши обновляет, недостающие ставит. Зовётся после
+    // загрузки сейва, где состояние присваивается напрямую, мимо
+    // RegisterGardenPlot/RegisterBase.
+    void SyncHomesteadMarkers();
+
     // Место варки привязано к дому/базе (§20.2 "место варки — привязано к
     // дому/базе"): true для клетки любого капища (AShrineActor, расставляется
     // отдельно от котла с 2026-09-02) ИЛИ любой зарегистрированной базы.

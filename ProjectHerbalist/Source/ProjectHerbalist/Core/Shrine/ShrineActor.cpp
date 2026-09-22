@@ -17,6 +17,13 @@ AShrineActor::AShrineActor()
     // интерактивно, подношение идёт Apply-командой на его клетку, а не
     // взаимодействием с актором.
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+#if WITH_EDITORONLY_DATA
+    // Капище регистрируется в симуляции в BeginPlay -- всегда загружено, как
+    // котёл и регионы биомов (2026-09-22). Иначе дальнее капище, ни разу не
+    // попавшее в радиус стриминга, не существовало бы для мира: ни поля
+    // Restoration вокруг, ни учёта в условии Буяна.
+    bIsSpatiallyLoaded = false;
+#endif
 }
 
 void AShrineActor::BeginPlay()

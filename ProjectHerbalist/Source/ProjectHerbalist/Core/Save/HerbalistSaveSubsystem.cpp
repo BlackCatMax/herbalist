@@ -388,6 +388,7 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
     WorldManager->Molva = Save->Molva;
     WorldManager->GardenPlots = Save->GardenPlots;
     WorldManager->SetBases(Save->Bases);
+    WorldManager->SyncHomesteadMarkers();
     WorldManager->SetAcquiredArtifacts(Save->AcquiredArtifacts);
     WorldManager->SetGlobalPerceptionClarity(Save->GlobalPerceptionClarity);
     WorldManager->SetClarityAnchor(Save->ClarityAnchor);

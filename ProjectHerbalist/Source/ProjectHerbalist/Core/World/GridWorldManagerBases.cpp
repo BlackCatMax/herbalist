@@ -19,6 +19,7 @@
 #include "ProjectHerbalist.h"
 #include "HerbalistLogChannels.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 void AGridWorldManager::RegisterBase(const FIntPoint& Cell)
 {
@@ -58,6 +59,88 @@ void AGridWorldManager::RegisterBase(const FIntPoint& Cell)
     // спавн, без find-or-update ветки, что уже есть у RegisterGardenPlot.
     if (UWorld* World = GetWorld())
     {
+        if (AHomesteadMarkerActor* Marker = World->SpawnActor<AHomesteadMarkerActor>(
+            AHomesteadMarkerActor::StaticClass(), GetCellWorldPosition(Cell.X, Cell.Y), FRotator::ZeroRotator))
+        {
+            Marker->Init(Cell, EHomesteadMarkerKind::Base);
+        }
+    }
+}
+
+void AGridWorldManager::SyncHomesteadMarkers()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    TSet<FIntPoint> BaseCells;
+    for (const FHerbalistBase& Base : Bases)
+    {
+        BaseCells.Add(Base.Cell);
+    }
+
+    // Что уже стоит -- сверить с состоянием; дубликаты на одной клетке тоже
+    // убрать.
+    TSet<FIntPoint> MarkedPlots;
+    TSet<FIntPoint> MarkedBases;
+    for (TActorIterator<AHomesteadMarkerActor> It(World); It; ++It)
+    {
+        AHomesteadMarkerActor* Marker = *It;
+        const FIntPoint Cell = Marker->GetGridCell();
+        if (Marker->GetKind() == EHomesteadMarkerKind::Base)
+        {
+            if (!BaseCells.Contains(Cell) || MarkedBases.Contains(Cell))
+            {
+                Marker->Destroy();
+                continue;
+            }
+            MarkedBases.Add(Cell);
+        }
+        else
+        {
+            const EGardenNiche* Niche = GardenPlots.Find(Cell);
+            if (!Niche || *Niche == EGardenNiche::None || MarkedPlots.Contains(Cell))
+            {
+                Marker->Destroy();
+                continue;
+            }
+            Marker->SetNiche(*Niche);
+            MarkedPlots.Add(Cell);
+        }
+    }
+
+    for (const TPair<FIntPoint, EGardenNiche>& Plot : GardenPlots)
+    {
+        if (Plot.Value == EGardenNiche::None || MarkedPlots.Contains(Plot.Key))
+        {
+            continue;
+        }
+        // Сейв после смены разметки мира может ссылаться на клетку вне сетки
+        // -- маркер в пустоте не ставить.
+        if (!IsCellInGrid(Plot.Key.X, Plot.Key.Y))
+        {
+            UE_LOG(LogHerbalistWorld, Warning, TEXT("[Garden] Plot at (%d,%d) is outside the grid -- no marker"), Plot.Key.X, Plot.Key.Y);
+            continue;
+        }
+        if (AHomesteadMarkerActor* Marker = World->SpawnActor<AHomesteadMarkerActor>(
+            AHomesteadMarkerActor::StaticClass(), GetCellWorldPosition(Plot.Key.X, Plot.Key.Y), FRotator::ZeroRotator))
+        {
+            Marker->Init(Plot.Key, EHomesteadMarkerKind::GardenPristroyka, Plot.Value);
+        }
+    }
+    for (const FIntPoint& Cell : BaseCells)
+    {
+        if (MarkedBases.Contains(Cell))
+        {
+            continue;
+        }
+        if (!IsCellInGrid(Cell.X, Cell.Y))
+        {
+            UE_LOG(LogHerbalistWorld, Warning, TEXT("[Base] (%d,%d) is outside the grid -- no marker"), Cell.X, Cell.Y);
+            continue;
+        }
         if (AHomesteadMarkerActor* Marker = World->SpawnActor<AHomesteadMarkerActor>(
             AHomesteadMarkerActor::StaticClass(), GetCellWorldPosition(Cell.X, Cell.Y), FRotator::ZeroRotator))
         {
