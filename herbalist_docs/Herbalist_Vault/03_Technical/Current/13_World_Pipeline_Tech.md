@@ -113,6 +113,90 @@ based_on: ProjectHerbalist source, 2026-09-22
   (`docs/reference/TOOLS_REFERENCE.md`); регионы биомов — без
   пространственной загрузки. Сводка — [[Level_Assembly]].
 
+## PCG: сетка в графе и граф в сетке
+
+PCG в проекте — редакторный и рантаймовый инструмент растительности; сама
+симуляция от PCG не зависит (регионы биомов — обычные акторы, менеджер
+находит их при `BeginPlay`). Связь двусторонняя: граф читает состояние
+клеток и пишет места для ресурсов.
+
+### Свои узлы (`Core/PCG/`)
+
+| Узел | Вход → выход | Настройки | Когда нужен |
+|---|---|---|---|
+| **Get Herbalist Grid** (`UPCGHerbalistGridSettings`) | ничего → по точке на клетку | `bExcludeWaterCells` (нет), `bOnlyCellsClaimedByBiomeRegions` (да), `bOnlyActiveCells` (да — только клетки вокруг игрока) | правила «от состояния»: вытоптанное редеет, у капища гуще, под Мороком не растёт |
+| **Sample Herbalist Cell** (`UPCGHerbalistSampleCellSettings`) | чужие точки → те же точки с состоянием клетки под ними | `HealthyMeshKey` («Healthy»), `DegradingMeshKey` («Degrading»), `bDropPointsOutsideGrid` (нет), доли сезона `Spring/Summer/Autumn/WinterDensity` (1 / 1 / 0.8 / 0.4) | трава и кусты, которые меняют меш по порче и сезону |
+| **Write Herbalist Resource Slots** (`UPCGHerbalistWriteResourceSlotsSettings`) | точки мест → те же точки; запись в ассет `RS_<карта>` | `DefaultKind` (Land), `KindAttribute` («SlotKind») | места, где встают собираемые ресурсы; только редактор |
+
+Атрибуты точек **Get Herbalist Grid**: `Distortion`, `Corruption`, `Purity`,
+`Stability`, `HarvestStress`, `ShrineRestoration`, `Biome`, `bIsWater`,
+`ManifestedEntity`. **Sample Herbalist Cell** пишет `Distortion`,
+`Corruption`, `HarvestStress`, `Biome`, `bDegrading`, `MeshKey`
+(по `bDegrading` — липкому флагу испорченного полюса, чтобы флора не
+дребезжала у порога), `SeasonKey` (`Spring`…`Winter`) и `SeasonMeshKey`
+(`Healthy_Winter`) — его и сопоставляет `PCGMeshSelectorByAttribute`
+спавнера по строке. Прореживание по сезону вложенное: зимний набор —
+подмножество осеннего, держать `WinterDensity ≤ AutumnDensity`.
+
+Все три узла работают только на игровом потоке и не кэшируются. Первые два
+видят клетки **только в игре**: в редакторе сетки нет, узел пишет
+предупреждение в лог графа и пропускает точки как есть (или отдаёт ноль
+точек). Поэтому граф, который читает сетку, — только с
+**Generate at Runtime**.
+
+Непрерывный отклик (пожелтение по мере порчи, примятая трава, сезонный
+цвет) — не PCG, а материалы через карту состояния мира и функции
+`MF_*` (`docs/reference/TOOLS_REFERENCE.md`, «Функции материалов»):
+PCG перестраивает точки редко, материал читает карту каждый кадр.
+
+### Трава PCG
+
+- Граф висит PCG-компонентом в `BP_BiomeVolume`, три спавнера на GPU.
+  Цепочка: точки по ландшафту → `World Raycast` → `Projection` (вес слоя
+  `Ground` в атрибут) → фильтр «`Ground` < 0.8» (на покраске тропы травы
+  нет) → **Sample Herbalist Cell** → `Attribute Noise` → спавнеры с выбором
+  меша по `SeasonMeshKey`.
+- Узлы сезона и тропы вставляет `-run=PcgGrassSeasonSetup` (идемпотентно,
+  узлы ищет по типам — граф можно править руками).
+- Рантайм: `-run=WorldPartitionBuilderCommandlet /Game/Maps/L_TestDev
+  -Builder=PcgGrassRuntimeBuilder` — у шаблона компонента и экземпляров на
+  карте `GenerateAtRuntime` с разбиением (сетка 64 м, радиус 128 м), у PCG
+  World Actor кэш ландшафта `SerializeOnlyAtCook`. Без последнего в PIE
+  `Get Landscape Data` пуст и травы нет вовсе. Из Git Bash — с
+  `MSYS_NO_PATHCONV=1`.
+- Подводные камни: `GenerateOnLoad` запекает граф в редакторе без сетки —
+  сезона и порчи не будет; сменили сезон — новые клетки получат его при
+  следующей генерации (уйти за радиус и вернуться).
+
+### Слоты ресурсов у воды
+
+- Граф висит PCG-компонентом (`GenerateOnDemand`) в `BP_WaterVolume` и
+  строит точки от сплайна своего актора: вода (0.3 на м²), кромка (сдвиг до
+  1.5 м), суша (до 9 м), атрибут `SlotKind` = `Water` / `Shore` / `Land`, всё
+  — в **Write Herbalist Resource Slots**. Собирает граф и компонент
+  `-run=PcgResourceSlotsSetup` (непустой граф не трогает).
+- Запекание в `/Game/Data/ResourceSlots/RS_<карта>` — движковым билдером,
+  без `-nullrhi`: `-run=WorldPartitionBuilderCommandlet /Game/Maps/L_TestDev
+  -Builder=PCGWorldPartitionBuilder -IncludeGraphNames=PCG_ResourceSlots
+  -GenerateComponentEditingModeNormal -AllowCommandletRendering`; в логе
+  `[Slots] <актор>: записано N слотов`. В редакторе узел перезаписывает
+  набор своего актора при каждой генерации.
+- В игре менеджер сетки сам грузит `RS_<карта>` при старте (в логе
+  `[Slots] Слоты ресурсов …: N`) и ставит ресурсы клетки в её слоты: водные
+  виды — в `Water`/`Shore`, остальные — в `Shore`/`Land`
+  (`SlotSuitsSpecies`). Клетка без слотов — прежний разброс по клетке.
+- Пруд передвинули или переименовали — перезапечь; набор удалённого актора
+  в ассете остаётся (удалить ассет и перезапечь).
+
+### Ресурсы, расставленные графом
+
+Альтернатива заселению из C++: у региона снять `bSpawnResourcesFromGrid`
+([[10_Biomes_Reference_Tech#Регион биома на карте]]), в графе —
+`Spawn Actor` → `AHerbalistResourceActor` с override `IngredientID`
+(строка `DT_IngredientClass`). Актор сам регистрируется на клетке при
+`BeginPlay`, собирается и отрастает как обычный. Сценарий —
+`docs/verification/pie/02_Harvest_Inventory.md`, «Расстановка графом PCG».
+
 ## Детерминизм и трасса
 
 `Simulation::ReplayAndCompare` (`TraceReplay.h`) повторяет записанный кадр

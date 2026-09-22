@@ -29,7 +29,7 @@ based_on: ProjectHerbalist source, 2026-09-22
 мире: кандидат по биому — `UIngredientRegistrySubsystem::GetRandomResourceForBiome`
 (сад — `GetRandomResourceForNiche`), места — слоты ресурсов
 (`FHerbalistResourceSlot`, `Core/World/ResourceSlots.h`, PCG —
-`-run=PcgResourceSlotsSetup`), сбор — `GenerateHarvestResult`.
+`-run=PcgResourceSlotsSetup`, [[13_World_Pipeline_Tech#Слоты ресурсов у воды]]), сбор — `GenerateHarvestResult`.
 
 ## §8.5 Условия окружающей среды
 
