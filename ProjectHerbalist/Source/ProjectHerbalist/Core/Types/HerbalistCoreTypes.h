@@ -21,6 +21,17 @@ enum class EMoonPhase : uint8
     WaningMoon    // Убывающая
 };
 
+// Фаза суток (02_GDD/15_Cycles_And_Shrines.md §15.2): Рассвет 6 минут, День,
+// Закат 6, Ночь 6 -- те же границы, что IsDawn/IsDusk/IsNight.
+UENUM(BlueprintType)
+enum class EDayPhase : uint8
+{
+    Dawn,     // Рассвет
+    Day,      // День
+    Dusk,     // Закат
+    Night     // Ночь
+};
+
 // Годовой круг (02_GDD/15_Cycles_And_Shrines.md §15.4): с 2026-09-16 календарь
 // 365 суток и четыре метеорологических сезона по три месяца, как в Ultra
 // Dynamic Sky (Core/Types/HerbalistCalendar.h). Игроку по лору сезонов три --

@@ -85,6 +85,63 @@ based_on: ProjectHerbalist source, 2026-09-22
 - **В редакторе:** акторы UDS и UDW на карте; у UDW `Season Mode` — «Use UDS
   Date» ([[Level_Assembly]]).
 
+### Как устроена связь с UDS/UDW
+
+Мост опрашивает акторы каждый тик по именам свойств и функций (UDS/UDW —
+чистый Blueprint, C++ API у них нет; имена закреплены тестом
+`Herbalist.Sky.BridgeNamesExistInUltraDynamicSky`). На диспетчеры плагина
+никто в проекте не подписан.
+
+| Направление | Что | Где |
+|---|---|---|
+| часы игры → UDS | время суток и дата; свой ход времени UDS выключен | `PushTime` |
+| UDS → UDW | сезон из даты (`Season Mode` = Use UDS Date) | сам плагин |
+| UDW → симуляция | глобальные дождь, снег, ветер, туман (0–10 → 0–1) | `PullWeather` → `SetWeatherBridgeIntensities` |
+| сейв ↔ UDS/UDW | состояние неба и погоды | `CaptureState`, `QueueStateForLoad` |
+
+Нет UDW на карте или он выгрузился — погода возвращается к своему шуму
+(`ClearWeatherBridge`).
+
+### Подписка на события времени и погоды
+
+Источник правды — часы и погода симуляции, поэтому события — у менеджера
+сетки, а не у неба (`AGridWorldManager`, `GridWorldManagerEntities.cpp`,
+`UpdateCycleEvents` — каждый тик после хода часов):
+
+| Делегат | Параметры | Когда |
+|---|---|---|
+| `OnGameDayStarted` | `DayIndex` (`GetGameDayIndex`) | начались новые сутки (с рассвета) |
+| `OnDayPhaseChanged` | новая и прежняя `EDayPhase` (Dawn, Day, Dusk, Night; `GetDayPhase`) | сменилась фаза суток |
+| `OnMoonPhaseChanged` | новая и прежняя `EMoonPhase` | сменилась фаза луны |
+| `OnSeasonChanged` | новый и прежний `ESeason` | сменился сезон |
+| `OnWeatherChanged` | `bRainy`, `bWindy`, `bBlizzard` | сменился хотя бы один из флагов `IsRainy`/`IsWindy`/`IsBlizzard` |
+
+- **C++:** `Manager->OnSeasonChanged.AddDynamic(this, &ThisClass::HandleSeason)`
+  — обработчик обязан быть `UFUNCTION()`; отписка — `RemoveDynamic` в
+  `EndPlay`.
+- **Blueprint:** ссылка на менеджер (`Get Actor Of Class` →
+  `GridWorldManager`), затем `Bind Event to On Season Changed` и т. п.
+- **Правила.** Первая проверка после старта только запоминает состояние —
+  события «с нуля» не приходят; нужное начальное значение читать геттером
+  (`GetSeason`, `GetDayPhase`, `IsRainy`). Скачок часов (сон, перемотка,
+  загрузка) даёт одно событие с итоговым значением, пропущенные фазы и сутки
+  не проигрываются. Порядок в одном тике: сутки → сезон → луна → фаза суток →
+  погода. Состояние запоминается до рассылки, так что обработчик может сам
+  двигать часы.
+- **Погода без UDW** тоже шлёт события — от своего шума.
+
+Почему не диспетчеры UDS/UDW (Sunrise, Sunset, Hourly, Started Raining):
+часы UDS неравномерны (6 минут ночи игры растянуты на часы UDS — Hourly
+приходит неровно, Sunrise — на середине рассвета игры); прыжок часов при
+сне перескакивает время UDS разом; погодные события UDW, вероятно, про
+погоду у камеры с учётом локальных зон, а симуляция читает глобальную.
+Для чистого визуала (звук, частицы при дожде) диспетчер плагина допустим:
+Blueprint-наследник UDS/UDW (класс — в Herbalist Settings, мост найдёт
+наследника), Bind Event в его Event Graph. Игровую логику — только на
+делегаты менеджера.
+
+Регрессия: `Herbalist.CycleEvents.*`, `Herbalist.Sky.*`.
+
 История и разбор (перенесено из главы 2026-09-22):
 
 #### Реализация (2026-08-29) — `AGridWorldManager::GetWindIntensity/

@@ -399,8 +399,7 @@ void UUltraDynamicSkyBridge::PushTime(const AGridWorldManager& Manager)
         Settings ? Settings->UltraDynamicSkyTwilightHalfHours : 1.0f));
 
     // Дата -- только при смене суток: UDS пересчитывает от неё солнце и сезон.
-    const double DayLengthSeconds = FMath::Max(1.0, static_cast<double>(DayMinutes) * 60.0);
-    const int32 DayIndex = static_cast<int32>(FMath::FloorToDouble(FMath::Max(0.0, Manager.GetGameClockSeconds()) / DayLengthSeconds));
+    const int32 DayIndex = Manager.GetGameDayIndex();
     if (DayIndex != LastPushedDayIndex)
     {
         LastPushedDayIndex = DayIndex;

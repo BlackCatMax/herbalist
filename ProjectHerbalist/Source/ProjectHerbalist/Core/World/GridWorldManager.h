@@ -48,6 +48,17 @@ struct FWorldSnapshot;
 struct FStateDelta;
 struct FInventoryOperation;
 
+// События кругов времени и погоды (2026-09-22). Подписка из C++ -- AddDynamic,
+// из Blueprint -- Bind Event на менеджере сетки. Источник -- часы и погода
+// симуляции, не диспетчеры Ultra Dynamic Sky: небо идёт за часами игры, и его
+// часы неравномерны (ночь растянута), а погода UDW приходит в симуляцию через
+// мост (15_Cycles_And_Shrines_Tech §15.7).
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FHerbalistGameDayStartedSignature, int32, DayIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FHerbalistDayPhaseChangedSignature, EDayPhase, NewPhase, EDayPhase, PreviousPhase);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FHerbalistMoonPhaseChangedSignature, EMoonPhase, NewPhase, EMoonPhase, PreviousPhase);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FHerbalistSeasonChangedSignature, ESeason, NewSeason, ESeason, PreviousSeason);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FHerbalistWeatherChangedSignature, bool, bRainy, bool, bWindy, bool, bBlizzard);
+
 UCLASS()
 class PROJECTHERBALIST_API AGridWorldManager : public AActor
 {
@@ -1048,6 +1059,40 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
     bool IsDusk() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    EDayPhase GetDayPhase() const;
+
+    // Номер суток от начала часов (0 -- первые сутки). Сутки начинаются с
+    // рассвета.
+    UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
+    int32 GetGameDayIndex() const;
+
+    // ---- События кругов времени и погоды ----
+    // Проверяются каждый тик после хода часов. Первая проверка только
+    // запоминает состояние, ничего не рассылая. Скачок часов (сон, перемотка,
+    // загрузка) даёт одно событие с итоговым значением, пропущенные фазы и
+    // сутки не проигрываются. Порядок в одном тике: сутки, сезон, луна, фаза
+    // суток, погода. Погода -- пороговые флаги IsRainy/IsWindy/IsBlizzard,
+    // событие -- когда меняется хотя бы один.
+    UPROPERTY(BlueprintAssignable, Category = "Herbalist|Time")
+    FHerbalistGameDayStartedSignature OnGameDayStarted;
+
+    UPROPERTY(BlueprintAssignable, Category = "Herbalist|Time")
+    FHerbalistDayPhaseChangedSignature OnDayPhaseChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "Herbalist|Time")
+    FHerbalistMoonPhaseChangedSignature OnMoonPhaseChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "Herbalist|Time")
+    FHerbalistSeasonChangedSignature OnSeasonChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "Herbalist|Weather")
+    FHerbalistWeatherChangedSignature OnWeatherChanged;
+
+    // Сверяет круги и погоду с запомненными и рассылает события. Зовётся из
+    // Tick; публична ради тестов.
+    void UpdateCycleEvents();
 
     // 0 на входе в Закат, 1 у порога Ночи — "+Distortion (нарастающее)" §15.2.
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Time")
@@ -2222,6 +2267,17 @@ protected:
     const float HarvestCooldown = 0.2f;
 
     double GameClockSeconds = 0.0;
+
+    // Последнее разосланное состояние кругов и погоды (UpdateCycleEvents). Не
+    // сохраняется: после загрузки события приходят с новым значением.
+    bool bCycleEventsPrimed = false;
+    int32 LastEventDayIndex = 0;
+    EDayPhase LastEventDayPhase = EDayPhase::Dawn;
+    EMoonPhase LastEventMoonPhase = EMoonPhase::NewMoon;
+    ESeason LastEventSeason = ESeason::Spring;
+    bool bLastEventRainy = false;
+    bool bLastEventWindy = false;
+    bool bLastEventBlizzard = false;
 
     // Клетки, отклонившиеся от детерминированной генерации (DESIGN_World_State.md
     // §3 Вариант A + разбор открытых миров — Valheim/Skyrim и т.п. сохраняют

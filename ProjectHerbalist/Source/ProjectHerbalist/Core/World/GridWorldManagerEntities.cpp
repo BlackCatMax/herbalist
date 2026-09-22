@@ -203,6 +203,16 @@ bool AGridWorldManager::IsDusk() const
     return T >= DuskStartFraction && T < NightStartFraction;
 }
 
+EDayPhase AGridWorldManager::GetDayPhase() const
+{
+    // Порядок как в IsDawn/IsDusk/IsNight: при сутках короче 18 минут фазы
+    // перекрываются, и Ночь с Закатом берут верх над Рассветом.
+    if (IsNight()) return EDayPhase::Night;
+    if (IsDusk()) return EDayPhase::Dusk;
+    if (IsDawn()) return EDayPhase::Dawn;
+    return EDayPhase::Day;
+}
+
 float AGridWorldManager::GetDuskProgress01() const
 {
     // 0 на входе в Закат, 1 у порога Ночи — "+Distortion (нарастающее)"
@@ -292,6 +302,61 @@ namespace
         const UHerbalistSettings* Settings = GetHerbalistSettings();
         return FMath::Max(1.0f, (Settings ? Settings->GameDayMinutes : 32.0f) * 60.0f);
     }
+}
+
+int32 AGridWorldManager::GetGameDayIndex() const
+{
+    const double Days = FMath::Max(0.0, GameClockSeconds) / CalendarDayLengthSeconds();
+    return static_cast<int32>(FMath::FloorToDouble(Days));
+}
+
+void AGridWorldManager::UpdateCycleEvents()
+{
+    const int32 DayIndex = GetGameDayIndex();
+    const EDayPhase DayPhase = GetDayPhase();
+    const EMoonPhase MoonPhase = GetMoonPhase();
+    const ESeason Season = GetSeason();
+    const bool bRainy = IsRainy();
+    const bool bWindy = IsWindy();
+    const bool bBlizzard = IsBlizzard();
+
+    if (!bCycleEventsPrimed)
+    {
+        bCycleEventsPrimed = true;
+        LastEventDayIndex = DayIndex;
+        LastEventDayPhase = DayPhase;
+        LastEventMoonPhase = MoonPhase;
+        LastEventSeason = Season;
+        bLastEventRainy = bRainy;
+        bLastEventWindy = bWindy;
+        bLastEventBlizzard = bBlizzard;
+        return;
+    }
+
+    // Запомнить всё до рассылки: подписчик может сам двинуть часы (сон), и
+    // вложенный вызов не должен разослать то же событие второй раз.
+    const bool bDayChanged = DayIndex != LastEventDayIndex;
+    const bool bSeasonChanged = Season != LastEventSeason;
+    const bool bMoonChanged = MoonPhase != LastEventMoonPhase;
+    const bool bPhaseChanged = DayPhase != LastEventDayPhase;
+    const bool bWeatherChanged = bRainy != bLastEventRainy || bWindy != bLastEventWindy || bBlizzard != bLastEventBlizzard;
+    const ESeason PreviousSeason = LastEventSeason;
+    const EMoonPhase PreviousMoonPhase = LastEventMoonPhase;
+    const EDayPhase PreviousDayPhase = LastEventDayPhase;
+
+    LastEventDayIndex = DayIndex;
+    LastEventDayPhase = DayPhase;
+    LastEventMoonPhase = MoonPhase;
+    LastEventSeason = Season;
+    bLastEventRainy = bRainy;
+    bLastEventWindy = bWindy;
+    bLastEventBlizzard = bBlizzard;
+
+    if (bDayChanged) OnGameDayStarted.Broadcast(DayIndex);
+    if (bSeasonChanged) OnSeasonChanged.Broadcast(Season, PreviousSeason);
+    if (bMoonChanged) OnMoonPhaseChanged.Broadcast(MoonPhase, PreviousMoonPhase);
+    if (bPhaseChanged) OnDayPhaseChanged.Broadcast(DayPhase, PreviousDayPhase);
+    if (bWeatherChanged) OnWeatherChanged.Broadcast(bRainy, bWindy, bBlizzard);
 }
 
 int32 AGridWorldManager::GetDayOfYear() const

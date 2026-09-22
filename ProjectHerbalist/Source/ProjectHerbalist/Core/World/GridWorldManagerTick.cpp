@@ -80,6 +80,7 @@ void AGridWorldManager::Tick(float DeltaTime)
     // Игровые часы — не GetWorld()->GetTimeSeconds() (см. GridWorldManager.h):
     // должны пережить сохранение/загрузку, а движковое время level-relative.
     AdvanceGameClock(DeltaTime);
+    UpdateCycleEvents();
 
     // Время в материалах -- каждый кадр: раскрытие цветка за 6-минутный
     // рассвет при записи раз в секунду шло бы видимыми ступеньками.
