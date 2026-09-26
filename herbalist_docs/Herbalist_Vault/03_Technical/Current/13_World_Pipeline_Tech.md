@@ -47,8 +47,15 @@ based_on: ProjectHerbalist source, 2026-09-22
   Сбор — `ProcessHarvestCommand`, варка и применение — `ProcessApplyCommand`
   / `ComputeApplyResult` (подробно — [[05_Systems_Tech]]).
 - **Дельта** (`DeltaTypes.h`) `FStateDelta` — единственный канал изменений:
-  `WorldChanges` (перезапись клетки), `InventoryOps`, `BiomeActivations`,
-  `TargetStateNudges` (мягкая цель релаксации), `Footprints` (след в графе).
+  `WorldChanges` (итог шага по клетке), `CellApplications` (состояние,
+  оставленное каждым зельем на клетке, — по ним считаются подношения капищу
+  и хозяину места), `InventoryOps`, `BiomeActivations`, `TargetStateNudges`
+  (мягкая цель релаксации), `Footprints` (след в графе).
+- **Несколько команд на одну клетку за шаг** (с 2026-09-26): каждая видит
+  клетку уже изменённой предыдущими командами шага (`FindCellForCommand`),
+  а не снимок на начало шага — два сбора истощают клетку дважды, два зелья
+  на капище — два подношения. Порядок — порядок команд в пакете, так что
+  повтор тика детерминирован.
 - **Single-Writer:** в мир пишет только `ApplyStateDelta`. Известное
   исключение — `SeedRosaCorruptedCircle` (первое размещение Заряны,
   `GridWorldManagerZaryana.cpp`).

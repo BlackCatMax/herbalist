@@ -144,6 +144,30 @@ namespace Simulation
             }
         }
 
+        // Состояние от каждого зелья (аудит 2026-09-26, Б4): по нему считаются
+        // подношения, а WorldChanges хранит только итог клетки -- расхождение
+        // в первом из двух зелий на клетку там не видно. Та же глубина.
+        if (ReplayedDelta.CellApplications.Num() != Frame.GeneratedDelta.CellApplications.Num())
+        {
+            UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: CellApplications count mismatch"));
+            return false;
+        }
+        for (int32 i = 0; i < Frame.GeneratedDelta.CellApplications.Num(); ++i)
+        {
+            const FCellApplication& Original = Frame.GeneratedDelta.CellApplications[i];
+            const FCellApplication& Replayed = ReplayedDelta.CellApplications[i];
+            if (Original.Cell != Replayed.Cell ||
+                Original.State.Magnitude != Replayed.State.Magnitude ||
+                Original.State.Meta.Distortion != Replayed.State.Meta.Distortion ||
+                Original.State.Meta.Purity != Replayed.State.Meta.Purity ||
+                Original.State.Meta.Corruption != Replayed.State.Meta.Corruption)
+            {
+                UE_LOG(LogHerbalistSimulation, Warning, TEXT("ReplayAndCompare: CellApplication[%d] (%d,%d) mismatch"),
+                    i, Original.Cell.X, Original.Cell.Y);
+                return false;
+            }
+        }
+
         UE_LOG(LogHerbalistSimulation, Log, TEXT("ReplayAndCompare: SUCCESS — delta is deterministic"));
         return true;
     }

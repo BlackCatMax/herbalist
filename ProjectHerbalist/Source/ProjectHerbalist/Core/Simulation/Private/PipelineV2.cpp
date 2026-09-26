@@ -824,12 +824,24 @@ namespace Simulation
     // Обработчики команд
     // ---------------------------------------------------------
 
+    // Клетка, какой её видит команда: уже изменённая раньше в этом шаге --
+    // из дельты, иначе -- из снимка (аудит 2026-09-26, Б4). Указатель живёт
+    // до следующей записи в OutDelta.WorldChanges.
+    static const FGridCell* FindCellForCommand(const FWorldSnapshot& WorldSnap, const FStateDelta& Delta, const FIntPoint& Coord)
+    {
+        if (const FGridCell* Changed = Delta.WorldChanges.Find(Coord))
+        {
+            return Changed;
+        }
+        return WorldSnap.GridState.Find(Coord);
+    }
+
     static void ProcessHarvestCommand(const FHarvestCommand& Cmd,
                                      const FWorldSnapshot& WorldSnap,
                                      FRandomStream& Rng,
                                      FStateDelta& OutDelta)
     {
-        const FGridCell* Cell = WorldSnap.GridState.Find(Cmd.TargetCell);
+        const FGridCell* Cell = FindCellForCommand(WorldSnap, OutDelta, Cmd.TargetCell);
         if (!Cell)
         {
             UE_LOG(LogHerbalistSimulation, Warning, TEXT("PipelineV2: Harvest cell (%d,%d) not found"), Cmd.TargetCell.X, Cmd.TargetCell.Y);
@@ -965,7 +977,7 @@ namespace Simulation
         // 0. Контекст биома клетки-цели. При крафте (вне мира, TargetCell = HerbalistCore::InvalidCell())
         // контекста нет — Biome Context Injection применяется только при варке
         // непосредственно в мире, как описано в 05_Systems.md/14_Biome_Graph.md.
-        const FGridCell* TargetCell = Cmd.bIsCrafting ? nullptr : WorldSnap.GridState.Find(Cmd.TargetCell);
+        const FGridCell* TargetCell = Cmd.bIsCrafting ? nullptr : FindCellForCommand(WorldSnap, OutDelta, Cmd.TargetCell);
         const FBiomeFieldContext* BiomeCtx = nullptr;
         FName TargetBiomeID;
         if (TargetCell)
@@ -1150,6 +1162,7 @@ namespace Simulation
         Modified.Memory.AverageCoherence = FMath::Lerp(TargetCell->Memory.AverageCoherence, EffectiveIntent.Coherence, CoherenceAlpha);
 
         Modified.HarvestStress = FMath::Clamp(TargetCell->HarvestStress + 0.2f, 0.f, 1.f);
+        OutDelta.CellApplications.Add(FCellApplication{ Cmd.TargetCell, Modified.State });
         OutDelta.WorldChanges.Add(Cmd.TargetCell, Modified);
 
         UE_LOG(LogHerbalistSimulation, Log, TEXT("Applied potion to cell (%d,%d): Outcome=%d M=%.2f, Dist=%.2f"),

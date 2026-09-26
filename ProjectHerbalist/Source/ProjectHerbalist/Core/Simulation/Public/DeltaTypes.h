@@ -44,9 +44,23 @@ struct FBiomeFootprintEntry
     FVector4 AxisDelta = FVector4(0.f, 0.f, 0.f, 0.f);
 };
 
+// Одна варка на клетку за шаг (аудит 2026-09-26, Б4): состояние, которое
+// именно это зелье оставило в клетке. WorldChanges хранит итог шага по
+// клетке, а подношения капищу и хозяину места считаются по каждому зелью --
+// два зелья на капище за шаг -- два подношения, каждое своим качеством.
+struct FCellApplication
+{
+    FIntPoint Cell = FIntPoint::ZeroValue;
+    FRealState State;
+};
+
 struct FStateDelta
 {
+    // Итог шага по клетке. Команды шага идут по порядку, и каждая следующая
+    // на ту же клетку считается от уже набранного здесь (Б4), а не от снимка
+    // мира на начало шага: иначе вторая затирала бы первую.
     TMap<FIntPoint, FGridCell> WorldChanges;
+    TArray<FCellApplication> CellApplications;
     TArray<FInventoryOperation> InventoryOps;
     TArray<FName> BiomeActivations;   // теперь FName, как в реальной системе
 

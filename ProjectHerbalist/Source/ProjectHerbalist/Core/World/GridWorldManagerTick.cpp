@@ -417,25 +417,21 @@ void AGridWorldManager::RunSimulationStep()
     // поднести (применить) зелье на клетку капища, как полил бы им сохнущее
     // дерево. Delta.WorldChanges, не InventoryOps — Apply-на-клетку не кладёт
     // предмет в инвентарь, только меняет Cell.State напрямую.
-    if (Delta.WorldChanges.Num() > 0 && Shrines.Num() > 0)
+    // По каждому зелью, не по итогу клетки (аудит 2026-09-26, Б4): два зелья
+    // на капище за шаг -- два подношения, каждое своим качеством.
+    if (Delta.CellApplications.Num() > 0 && Shrines.Num() > 0)
     {
-        for (const FCommandEntry& Cmd : CommandsCopy)
+        for (const FCellApplication& Application : Delta.CellApplications)
         {
-            const bool bIsApplyToCell = Cmd.Primitive == ECommandPrimitive::Apply && !Cmd.Apply.bIsCrafting;
-            if (!bIsApplyToCell) continue;
-
-            FShrine* Shrine = FindShrineAt(Cmd.Apply.TargetCell);
+            FShrine* Shrine = FindShrineAt(Application.Cell);
             if (!Shrine) continue;
-
-            const FGridCell* Modified = Delta.WorldChanges.Find(Cmd.Apply.TargetCell);
-            if (!Modified) continue;
 
             // Чистое зелье (высокая Purity, низкая Corruption) — благословение,
             // скверное — осквернение: тот же знак, что уже определяет "хороший"/
             // "плохой" результат везде в проекте, без отдельной оси качества.
             const UHerbalistSettings* Settings = GetHerbalistSettings();
             const float OfferingGain = Settings ? Settings->ShrineOfferingGain : 0.05f;
-            const float DeltaRestoration = OfferingGain * (Modified->State.Meta.Purity - Modified->State.Meta.Corruption);
+            const float DeltaRestoration = OfferingGain * (Application.State.Meta.Purity - Application.State.Meta.Corruption);
             Shrine->Restoration = FMath::Clamp(Shrine->Restoration + DeltaRestoration, -1.0f, 1.0f);
         }
     }
@@ -451,22 +447,16 @@ void AGridWorldManager::RunSimulationStep()
     // клетки без единого явного жеста подношения — расходилась со
     // спецификацией §16.3 ("подношение/уважение"), мигрирована на этот
     // канал тем же решением, не оставлена особым случаем.
-    if (Delta.WorldChanges.Num() > 0 && EntityLandmarks.Num() > 0)
+    if (Delta.CellApplications.Num() > 0 && EntityLandmarks.Num() > 0)
     {
-        for (const FCommandEntry& Cmd : CommandsCopy)
+        for (const FCellApplication& Application : Delta.CellApplications)
         {
-            const bool bIsApplyToCell = Cmd.Primitive == ECommandPrimitive::Apply && !Cmd.Apply.bIsCrafting;
-            if (!bIsApplyToCell) continue;
-
-            FEntityLandmark* Landmark = FindLandmarkAt(Cmd.Apply.TargetCell);
+            FEntityLandmark* Landmark = FindLandmarkAt(Application.Cell);
             if (!Landmark) continue;
-
-            const FGridCell* Modified = Delta.WorldChanges.Find(Cmd.Apply.TargetCell);
-            if (!Modified) continue;
 
             const UHerbalistSettings* Settings = GetHerbalistSettings();
             const float OfferingGain = Settings ? Settings->LandmarkOfferingGain : 0.05f;
-            const float DeltaRespect = OfferingGain * (Modified->State.Meta.Purity - Modified->State.Meta.Corruption);
+            const float DeltaRespect = OfferingGain * (Application.State.Meta.Purity - Application.State.Meta.Corruption);
             Landmark->Respect = FMath::Clamp(Landmark->Respect + DeltaRespect, -1.0f, 1.0f);
         }
     }
