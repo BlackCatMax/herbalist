@@ -24,6 +24,7 @@
 | `DESIGN_Community_And_Homestead.md` | Диалоги, торговля, подношения, жилище, инструменты |
 | `DESIGN_Brewing_Situations_And_Lore.md` | Ситуации варки, POI и лорные прецеденты |
 | `DESIGN_Entity_Actors_Art.md` | Визуал проявления сущностей |
+| `ART_BRIEF_Creatures_And_People.md` | ТЗ концепт-художнику: все существа и люди (кроме Заряны и Индрика), что сдать, порядок работ |
 | `DESIGN_Diegetic_Interface.md` | Диегетический интерфейс: рука, взгляд, пестерь (утверждено 2026-09-21) |
 | `DESIGN_Entity_Spawners.md` | Низшие на спавнерах вместо клеток (черновик на утверждение) |
 | `DESIGN_POI_Art_And_LevelDesign.md` | Точки интереса: визуал, левел-дизайн, звук |
