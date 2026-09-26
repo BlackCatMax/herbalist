@@ -25,6 +25,7 @@
 #include "Core/BiomeGraph/BiomeGraphTypes.h"
 #include "Core/World/WorldLayout.h"
 #include "Core/Community/OrderTypes.h"
+#include "Core/Alchemy/RitualTypes.h"
 #include "HerbalistSaveTypes.generated.h"
 
 USTRUCT()
@@ -275,6 +276,13 @@ public:
     // пусто, котлы пусты, как раньше.
     UPROPERTY()
     TArray<FSavedCauldron> Cauldrons;
+
+    // Начатые многошаговые ритуалы по клетке котла (v9, аудит 2026-09-26,
+    // Б1): принятые шаги и уже потраченные на них травы. Без этого сон между
+    // шагами (закат -- рассвет) обнулял ритуал и съедал травы. Сейв старее --
+    // пусто, ритуалов нет.
+    UPROPERTY()
+    TMap<FIntPoint, FActiveRitualState> ActiveRituals;
 
     // Молва общины (DESIGN_Community_And_Homestead.md §1, 2026-08-31) — тот
     // же принцип, что Shrines/EntityLandmarks выше: растёт/падает только

@@ -30,9 +30,13 @@ FSavedCellState AGridWorldManager::CaptureCellState(const FGridCell& Cell)
     Saved.bResourcesSeeded = Cell.bResourcesSeeded;
     Saved.PendingRegrowthCount = Cell.PendingRegrowthCount;
 
+    // Только выращенные сеткой (аудит 2026-09-26, Б2): чужие -- от PCG-графа
+    // или руками -- регистрируются на клетке сами и после загрузки живут
+    // своим актором уровня; запиши их сюда -- загрузка вырастила бы рядом
+    // копию. Тот же фильтр, что у выгрузки страницы и усыпления чанка.
     for (const TWeakObjectPtr<AHerbalistResourceActor>& ResourceActor : Cell.ResourceActors)
     {
-        if (ResourceActor.IsValid())
+        if (ResourceActor.IsValid() && ResourceActor->WasSpawnedByGrid())
         {
             Saved.ResourceIngredientIDs.Add(ResourceActor->GetIngredientID());
             Saved.ResourceSlots.Add(ResourceActor->GetPlacementSlot());

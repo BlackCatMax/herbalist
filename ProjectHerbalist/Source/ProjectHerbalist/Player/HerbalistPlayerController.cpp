@@ -2630,13 +2630,19 @@ void AHerbalistPlayerController::OpenOrdersWindow()
 
 void AHerbalistPlayerController::SaveGame()
 {
+    TrySaveGame();
+}
+
+bool AHerbalistPlayerController::TrySaveGame()
+{
     if (UGameInstance* GI = GetGameInstance())
     {
         if (UHerbalistSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UHerbalistSaveSubsystem>())
         {
-            SaveSubsystem->SaveGame();
+            return SaveSubsystem->SaveGame();
         }
     }
+    return false;
 }
 
 void AHerbalistPlayerController::LoadGame()
@@ -2739,9 +2745,18 @@ bool AHerbalistPlayerController::SleepUntilDawn()
     // Заказы, чей срок прошёл во сне, -- решить до записи: иначе сейв
     // запомнил бы их открытыми (ревью 2026-09-21).
     WorldManager->ResolveDueOrders();
-    SaveGame();
-    UE_LOG(LogHerbalistPlayer, Log, TEXT("Сон: проспано %.0f с, рассвет, сохранено"), Dawn - Now);
-    ShowMemoryRevealText(FText::FromString(TEXT("Рассвело.")));
+    if (TrySaveGame())
+    {
+        UE_LOG(LogHerbalistPlayer, Log, TEXT("Сон: проспано %.0f с, рассвет, сохранено"), Dawn - Now);
+        ShowMemoryRevealText(FText::FromString(TEXT("Рассвело.")));
+    }
+    else
+    {
+        // Сон состоялся, запись -- нет: игрок должен это знать, иначе выйдет,
+        // считая себя сохранённым.
+        UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сон: проспано %.0f с, рассвет, СОХРАНИТЬ НЕ УДАЛОСЬ"), Dawn - Now);
+        ShowMemoryRevealText(FText::FromString(TEXT("Рассвело. Сохранить не удалось.")));
+    }
     return true;
 }
 

@@ -64,6 +64,8 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
     // станции карты -- PlacedContainers, по имени актора.
     // v8 (2026-09-21, диегетика, этап 6): Cauldrons -- заложенное в котлах,
     // по имени актора. Сейв старее -- котлы пусты, как было.
+    // v9 (2026-09-26, аудит Б1): ActiveRituals -- начатые ритуалы по клетке
+    // котла. Сейв старее -- ритуалов нет.
     Save->SaveVersion = CurrentSaveVersion;
     Save->RngBaseSeed = WorldManager->RngBaseSeed;
     Save->GridSizeX = WorldManager->GridSizeX;
@@ -103,6 +105,7 @@ bool UHerbalistSaveSubsystem::SaveGame(const FString& SlotName)
             Save->Cauldrons.Add(Saved);
         }
     }
+    Save->ActiveRituals = WorldManager->ActiveRituals;
     Save->TieredWards = WorldManager->CaptureTieredWards();
     Save->bSilverWardActive = WorldManager->IsSilverWardActive();
     Save->KurganSites = WorldManager->GetKurganSites();
@@ -414,6 +417,8 @@ bool UHerbalistSaveSubsystem::LoadGame(const FString& SlotName)
         const FSavedCauldron* Saved = Save->Cauldrons.FindByPredicate([Name](const FSavedCauldron& Entry) { return Entry.ActorName == Name; });
         It->RestoreSaved(Saved ? Saved->Contents : TArray<FInventoryItem>(), Saved && Saved->bHasReadyResult, Saved ? Saved->ReadyResult : FInventoryItem());
     }
+    // Загрузка заменяет начатое в сессии целиком, пустое -- тоже.
+    WorldManager->ActiveRituals = Save->ActiveRituals;
     WorldManager->RestoreTieredWards(Save->TieredWards);
     WorldManager->SetSilverWardActive(Save->bSilverWardActive);
     WorldManager->SetKurganSites(Save->KurganSites);

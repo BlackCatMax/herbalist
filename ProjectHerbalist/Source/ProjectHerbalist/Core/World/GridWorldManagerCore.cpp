@@ -885,7 +885,7 @@ void AGridWorldManager::CatchUpActivatedChunks()
 
     ActiveChunks = ComputeChunksWithinRadius(ActiveChunkCenters, Radius);
 
-    const float Now = GameClockSeconds;
+    const double Now = GameClockSeconds;
     for (const FIntPoint& Chunk : ActiveChunks)
     {
         // Страница чанка -- до догона: он читает клетки (этап 8в). Уже
@@ -899,14 +899,14 @@ void AGridWorldManager::CatchUpActivatedChunks()
         // сетки — не «с этой секунды». Иначе дальний мир стоял бы
         // замороженным до первого визита, и клетка, испорченная до ухода
         // игрока, не восстановилась бы никогда.
-        float* Last = &ChunkLastSimulatedGameTime.FindOrAdd(Chunk, GridInitGameClock);
+        double* Last = &ChunkLastSimulatedGameTime.FindOrAdd(Chunk, GridInitGameClock);
 
         // Догон только для тех, кто ТОЛЬКО ЧТО стал активным. Для уже
         // активных этот же интервал считает обычный проход в Tick — иначе
         // релаксация шла бы дважды за кадр.
         if (!PreviousActiveChunks.Contains(Chunk))
         {
-            const float Elapsed = Now - *Last;
+            const float Elapsed = static_cast<float>(Now - *Last);
             if (Elapsed > KINDA_SMALL_NUMBER)
             {
                 RegenerateCellParameters(Elapsed, &Chunk);
@@ -3815,8 +3815,8 @@ float AGridWorldManager::GetCurrentHarvestStress(const FGridCell& Cell) const
     }
     // Тот же линейный спад, что в RegenerateCellParameters: полное зарастание --
     // GetStressRecoverySecondsForCell (биом, сезон, Лесное капище).
-    const float* LastSimulated = ChunkLastSimulatedGameTime.Find(Chunk);
-    const float Elapsed = FMath::Max(GameClockSeconds - (LastSimulated ? *LastSimulated : GridInitGameClock), 0.0f);
+    const double* LastSimulated = ChunkLastSimulatedGameTime.Find(Chunk);
+    const float Elapsed = static_cast<float>(FMath::Max(GameClockSeconds - (LastSimulated ? *LastSimulated : GridInitGameClock), 0.0));
     return FMath::Max(Stress - Elapsed / GetStressRecoverySecondsForCell(Cell), 0.0f);
 }
 

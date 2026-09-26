@@ -270,6 +270,10 @@ public:
     UFUNCTION(Exec)
     void SaveGame();
 
+    // То же, с результатом записи (аудит 2026-09-26, Б3): сон сообщает игроку,
+    // если сохранить не удалось, а не выдаёт неудачу за успех.
+    bool TrySaveGame();
+
     UFUNCTION(Exec)
     void LoadGame();
 
