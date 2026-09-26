@@ -73,22 +73,31 @@ void UIngredientRegistrySubsystem::BuildCache()
 
     for (const auto& Pair : Rows)
     {
+        // ClampMin у RarityWeight -- только подсказка панели: ряд, записанный
+        // коммандлетом или правкой json, может прийти с нулём или минусом, а
+        // минус ломает накопление во взвешенном выборе (аудит 2026-09-26, Б9).
+        const int32 Weight = FMath::Max(Pair.Value.RarityWeight, 0);
+        if (Pair.Value.RarityWeight < 0)
+        {
+            UE_LOG(LogHerbalistData, Warning, TEXT("Ingredient '%s': RarityWeight %d < 0 -- взят 0, вид не выпадет"),
+                *Pair.Key.ToString(), Pair.Value.RarityWeight);
+        }
         for (EBiomeType Biome : Pair.Value.AllowedBiomes)
         {
             CachedResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
-            CachedWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
+            CachedWeightsByBiome.FindOrAdd(Biome).Add(Weight);
 
             // Водные растения (2026-09-02) -- та же принадлежность биому
             // (AllowedBiomes), отдельный пул, не смешанный с земляным.
             if (Pair.Value.bGrowsOnWater)
             {
                 CachedAquaticResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
-                CachedAquaticWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
+                CachedAquaticWeightsByBiome.FindOrAdd(Biome).Add(Weight);
             }
             else
             {
                 CachedLandResourcesByBiome.FindOrAdd(Biome).Add(Pair.Key);
-                CachedLandWeightsByBiome.FindOrAdd(Biome).Add(Pair.Value.RarityWeight);
+                CachedLandWeightsByBiome.FindOrAdd(Biome).Add(Weight);
             }
         }
 
@@ -97,7 +106,7 @@ void UIngredientRegistrySubsystem::BuildCache()
         if (Pair.Value.GardenNiche != EGardenNiche::None)
         {
             CachedResourcesByNiche.FindOrAdd(Pair.Value.GardenNiche).Add(Pair.Key);
-            CachedWeightsByNiche.FindOrAdd(Pair.Value.GardenNiche).Add(Pair.Value.RarityWeight);
+            CachedWeightsByNiche.FindOrAdd(Pair.Value.GardenNiche).Add(Weight);
         }
     }
 }

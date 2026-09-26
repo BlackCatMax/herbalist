@@ -2,6 +2,7 @@
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
+#include "Core/Types/HerbalistText.h"
 #include "Misc/Crc.h"
 
 // ============================================================================
@@ -230,29 +231,15 @@ namespace
     const FCaseForms EpithetKipyachyonaya{
         TEXT("кипячёная"), TEXT("кипячёной"), TEXT("кипячёной"), TEXT("кипячёную"), TEXT("кипячёной"), TEXT("о кипячёной") };
 
-    // FString::ToUpper() полагается на локаль C-рантайма (towupper) -- под
-    // "C"/нейтральной локалью автотест-раннера это тихий no-op на кириллице
-    // (найдено этим же тестом: "Зола" выходило как "зола"). Явная таблица по
-    // первым буквам словаря — не зависит от локали процесса вообще.
+    // Заглавная -- общим помощником (HerbalistText.h): FString::ToUpper() на
+    // кириллице -- тихий no-op (найдено тестом: "Зола" выходило как "зола").
+    // Имя -- заголовок, поэтому заглавная в любом падеже; вставлять его
+    // посреди фразы (косвенные падежи, в предложном -- с «о») будет первый
+    // такой вызов -- ему нужна строчная, а не этот помощник (ревью 2026-09-26:
+    // прежняя таблица случайно оставляла «о» строчной).
     FString Capitalize(const FString& S)
     {
-        if (S.IsEmpty()) return S;
-        FString Result = S;
-        TCHAR& First = Result[0];
-        switch (First)
-        {
-            case TEXT('в'): First = TEXT('В'); break;
-            case TEXT('д'): First = TEXT('Д'); break;
-            case TEXT('з'): First = TEXT('З'); break;
-            case TEXT('к'): First = TEXT('К'); break;
-            case TEXT('м'): First = TEXT('М'); break;
-            case TEXT('н'): First = TEXT('Н'); break;
-            case TEXT('п'): First = TEXT('П'); break;
-            case TEXT('с'): First = TEXT('С'); break;
-            case TEXT('х'): First = TEXT('Х'); break;
-            default: break; // уже заглавная или буква вне словаря — не трогаем
-        }
-        return Result;
+        return HerbalistCore::Text::CapitalizeFirst(S);
     }
 
     FString Combine(const FCaseForms& Epithet, const FPotionNoun& Noun, EGrammaticalCase Case)

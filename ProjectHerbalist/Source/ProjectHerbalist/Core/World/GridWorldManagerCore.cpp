@@ -1884,6 +1884,18 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
         // по сетке равно MorokField, и RecalculateFieldsFromGrid ничего не
         // сдвигает -- рост возможен только если что-то РЕАЛЬНОЕ (контагион,
         // варка) сдвинет хоть одну клетку первым.
+        // Норма биома клетки -- одна на обе ветки ниже, считается при первой
+        // нужде (аудит 2026-09-26, П6: раньше дважды на клетку).
+        TOptional<FRealState> CachedBiomeDefault;
+        auto GetBiomeDefault = [this, &Cell, &CachedBiomeDefault]() -> const FRealState&
+        {
+            if (!CachedBiomeDefault.IsSet())
+            {
+                CachedBiomeDefault = GetCellDefaultState(Cell);
+            }
+            return CachedBiomeDefault.GetValue();
+        };
+
         const float* MorokField = MorokFields.Find(BiomeID);
         if (MorokField)
         {
@@ -1908,7 +1920,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             // Раньше "ведро" тянуло абсолютный Distortion к затухающему полю,
             // то есть к нулю, и заодно метило грязными все 400 клеток каждый
             // шаг при настоящих дефолтах биомов.
-            const FRealState MorokBiomeDefault = GetCellDefaultState(Cell);
+            const FRealState& MorokBiomeDefault = GetBiomeDefault();
             const float DistortionDeviation = NewTarget.Meta.Distortion - MorokBiomeDefault.Meta.Distortion;
             const float NewDistortionDeviation = DistortionDeviation
                 + (*MorokField * PushRate * GlobalScale - DecayRate * DistortionDeviation) * DeltaTime;
@@ -1938,7 +1950,7 @@ void AGridWorldManager::ApplyBiomeInfluences(const TMap<FName, float>& MorokFiel
             const float PushRate = Settings ? Settings->ZaryanaEffectPushRate : 0.01f;
             const float DecayRate = Settings ? Settings->ZaryanaEffectDecayRate : 0.01f;
 
-            const FRealState BiomeDefault = GetCellDefaultState(Cell);
+            const FRealState& BiomeDefault = GetBiomeDefault();
 
             const float StabilityDeviation = NewTarget.Meta.Stability - BiomeDefault.Meta.Stability;
             const float NewStabilityDeviation = StabilityDeviation

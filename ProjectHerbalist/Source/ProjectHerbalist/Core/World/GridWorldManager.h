@@ -2268,10 +2268,6 @@ protected:
     UPROPERTY()
     TArray<TWeakObjectPtr<AWaterRegionVolume>> CachedWaterRegions;
 
-    // ---- Вспомогательные данные ----
-    TMap<int32, float> LastHarvestTimeMap;
-    const float HarvestCooldown = 0.2f;
-
     double GameClockSeconds = 0.0;
 
     // Последнее разосланное состояние кругов и погоды (UpdateCycleEvents). Не
@@ -2390,7 +2386,7 @@ protected:
     // до какого GameClockSeconds. Следующее применение просто перезаписывает
     // оба поля, тот же принцип, что InvisibilityCapExpiryGameSeconds.
     EBiomeType AlkonostSuppressedBiome = EBiomeType::ForestSteppe;
-    float AlkonostSuppressionExpiryGameSeconds = 0.0f;
+    double AlkonostSuppressionExpiryGameSeconds = 0.0;
 
     // Общая часть GetZaryanaPerceivedState/GetZaryanaTrueState — Слои 1+3
     // §19.2 (реальное State клетки + подмешанное влияние капищ/хозяев в
@@ -2402,11 +2398,11 @@ protected:
     // Молодильное яблоко — GameClockSeconds, до которого действует окно
     // сниженного шума росы. 0 = не активно (GameClockSeconds никогда не
     // отрицателен, безопасный сентинел).
-    float YouthAppleClarityBoostExpiryGameSeconds = 0.0f;
+    double YouthAppleClarityBoostExpiryGameSeconds = 0.0;
 
     // Шапка-невидимка — GameClockSeconds, до которого подавлены новые
     // проявления. Тот же сентинел, что и выше.
-    float InvisibilityCapExpiryGameSeconds = 0.0f;
+    double InvisibilityCapExpiryGameSeconds = 0.0;
 
     // Центр настоящей зоны Шапки (2026-09-02) — клетка игрока в момент
     // применения. InvalidCell() = никогда не применялась (тот же сентинел, что
@@ -2418,10 +2414,10 @@ protected:
     // (Save/Load) — тот же сознательно принятый класс "короткого окна", что
     // уже не сохраняют InvisibilityCap/YouthApple/Alkonost выше: активация
     // — часть текущей игровой сессии, не долгоживущий прогресс. ----
-    float WardBrewBoostExpiryGameSeconds = 0.0f;
-    float WardConcealmentExpiryGameSeconds = 0.0f;
+    double WardBrewBoostExpiryGameSeconds = 0.0;
+    double WardConcealmentExpiryGameSeconds = 0.0;
     FIntPoint WardConcealmentCenter = HerbalistCore::InvalidCell();
-    float WardMorokReductionExpiryGameSeconds = 0.0f;
+    double WardMorokReductionExpiryGameSeconds = 0.0;
     FIntPoint WardMorokReductionCenter = HerbalistCore::InvalidCell();
 
     // ---- Тиражные обереги (награда ритуалов перехода ярусов биомов,

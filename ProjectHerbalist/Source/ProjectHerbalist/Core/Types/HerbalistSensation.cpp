@@ -1,5 +1,6 @@
 // HerbalistSensation.cpp
 #include "Core/Types/HerbalistSensation.h"
+#include "Core/Types/HerbalistText.h"
 #include "Algo/Sort.h"
 
 namespace
@@ -63,10 +64,7 @@ FString HerbalistSensation::Describe(const FRealState& Perceived)
     }
     Result += TEXT(".");
 
-    // С заглавной -- это фраза, не список.
-    if (Result.Len() > 0)
-    {
-        Result[0] = FChar::ToUpper(Result[0]);
-    }
-    return Result;
+    // С заглавной -- это фраза, не список. Не FChar::ToUpper: тот меняет
+    // только латиницу (аудит 2026-09-26, Б5).
+    return HerbalistCore::Text::CapitalizeFirst(Result);
 }

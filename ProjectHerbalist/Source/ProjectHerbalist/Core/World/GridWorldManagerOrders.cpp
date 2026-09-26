@@ -560,7 +560,7 @@ void AGridWorldManager::PostCommunityNote(const FText& Text)
     Entry.FragmentText = Text;
     Entry.Cell = ZaryanaCell;
     Entry.bWasNight = IsNight();
-    Entry.GameTimeSeconds = static_cast<float>(GameClockSeconds);
+    Entry.GameTimeSeconds = GameClockSeconds;
     PC->JournalComponent->AddEntry(Entry);
 }
 

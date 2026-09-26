@@ -86,7 +86,7 @@ void UHeldItemComponent::ToggleInspect()
         if (const AGridWorldManager* Grid = PC->FindWorldManager())
         {
             Entry.bWasNight = Grid->IsNight();
-            Entry.GameTimeSeconds = static_cast<float>(Grid->GetGameClockSeconds());
+            Entry.GameTimeSeconds = Grid->GetGameClockSeconds();
         }
         PC->JournalComponent->AddEntry(Entry);
     }

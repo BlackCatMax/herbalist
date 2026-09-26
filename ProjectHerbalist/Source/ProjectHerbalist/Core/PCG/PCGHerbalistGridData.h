@@ -85,4 +85,8 @@ protected:
     // страницы (разметка мира, этап 8в) -- читать их из рабочего потока PCG
     // нельзя.
     virtual bool CanExecuteOnlyOnMainThread(FPCGContext* Context) const override { return true; }
+    // Не кэшировать: точки -- живое состояние мира, а ключ кэша PCG -- только
+    // настройки узла (входов нет). Иначе перегенерация отдала бы прошлое
+    // состояние сетки (аудит 2026-09-26, Б6; соседние узлы -- так же).
+    virtual bool IsCacheable(const UPCGSettings* InSettings) const override { return false; }
 };

@@ -80,8 +80,11 @@ struct PROJECTHERBALIST_API FJournalEntry
     // GetWorld()->GetTimeSeconds() — тот же единственный источник времени,
     // что уже используется для CreationTime предметов и суточного цикла
     // (AUDIT_AND_REFACTORING_PLAN §3.4, устранённое дублирование часов).
+    // double, как сами часы (аудит 2026-09-26): float терял доли секунды на
+    // долгом прохождении. Старые сейвы с float читаются -- тег свойства
+    // приводится к double при загрузке.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Journal")
-    float GameTimeSeconds = 0.0f;
+    double GameTimeSeconds = 0.0;
 
     // Только для Type == MemoryFragment — само воспоминание (Def->TrueText/
     // FalseText, см. GridWorldManagerZaryana.cpp::CollectMemoryFragment).

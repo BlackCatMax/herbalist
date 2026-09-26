@@ -1002,7 +1002,7 @@ void AHerbalistPlayerController::ShowDialogueNode(const FDialogueDefinition& Def
         if (const AGridWorldManager* Grid = FindWorldManager())
         {
             Entry.bWasNight = Grid->IsNight();
-            Entry.GameTimeSeconds = static_cast<float>(Grid->GetGameClockSeconds());
+            Entry.GameTimeSeconds = Grid->GetGameClockSeconds();
         }
         JournalComponent->AddEntry(Entry);
     }
@@ -1700,7 +1700,10 @@ bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, con
     // 2026-09-21: где угодно, одна вязанка): костёр, сон до рассвета,
     // сохранение. Вязанка сгорает.
     // Раньше логова: хворост -- топливо, не дар (ревью 2026-09-21).
-    if (bOnGrid && Item.IngredientID == BrushwoodID())
+    // Мир проверен до того, как вязанка сгорит: без него сна не будет, а
+    // вязанка пропала бы зря (аудит 2026-09-26, Б7). Списать -- до сна: сон
+    // сохраняет, и в сейве вязанки уже не должно быть.
+    if (bOnGrid && Item.IngredientID == BrushwoodID() && FindWorldManager())
     {
         InventoryComponent->RemoveItem(InventoryIndex, 1);
         UE_LOG(LogHerbalistPlayer, Log, TEXT("Лагерь: костёр на (%d,%d)"), X, Y);

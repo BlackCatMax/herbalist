@@ -130,6 +130,8 @@ void UPesterComponent::Close()
     UnbindContainer();
     StatusFocus.Reset();
     StatusLine.Reset();
+    // Следующее хранилище -- строка в первый же кадр, не через 0.1 с.
+    StatusLineAccumulator = StatusLineRefreshSeconds;
     if (StatusWidget)
     {
         StatusWidget->RemoveFromParent();
@@ -321,7 +323,14 @@ void UPesterComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
             Close();
             return;
         }
-        UpdateStatusLine();
+        // Трасса по каждому предмету раскладки -- не каждый кадр (аудит
+        // 2026-09-26, П6): строка под взглядом успевает и за 0.1 с.
+        StatusLineAccumulator += DeltaTime;
+        if (StatusLineAccumulator >= StatusLineRefreshSeconds)
+        {
+            StatusLineAccumulator = 0.0f;
+            UpdateStatusLine();
+        }
     }
     PlaceItems();
 }

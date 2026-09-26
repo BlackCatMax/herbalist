@@ -49,6 +49,14 @@ void UWaterTypeRegistrySubsystem::LoadFromDataTable(UDataTable* WaterTypeTable)
     {
         if (const FWaterTypeRow* Row = WaterTypeTable->FindRow<FWaterTypeRow>(RowName, Context))
         {
+            // WaterTypeID -- свободное поле ряда, уникальность никто не
+            // держит: дубль молча вытеснил бы другой тип воды (аудит
+            // 2026-09-26, Б9).
+            if (WaterTypeMap.Contains(Row->WaterTypeID))
+            {
+                UE_LOG(LogHerbalistData, Warning, TEXT("WaterTypeTable: ряд '%s' повторяет WaterTypeID '%s' -- прежний тип вытеснен"),
+                    *RowName.ToString(), *Row->WaterTypeID.ToString());
+            }
             WaterTypeMap.Add(Row->WaterTypeID, *Row);
         }
     }

@@ -99,6 +99,9 @@ private:
 
     TWeakObjectPtr<AStorageContainer> ViewedContainer;
     TWeakObjectPtr<APesterItemActor> StatusFocus;
+    static constexpr float StatusLineRefreshSeconds = 0.1f;
+    // Стартует «просроченным»: первая строка -- в первый же кадр.
+    float StatusLineAccumulator = StatusLineRefreshSeconds;
     FString StatusLine;
 
     UPROPERTY()
