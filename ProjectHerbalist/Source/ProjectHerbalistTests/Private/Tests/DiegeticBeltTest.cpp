@@ -78,7 +78,9 @@ bool FHerbalistDiegetic_BeltWearsAndReleasesTheTool::RunTest(const FString& Para
     // Надетый серп ушёл из котомки -- пояс отпускает его сам.
     Belt->PutOn(BeltIndexOf(PC, Blade));
     PC->InventoryComponent->RemoveItem(BeltIndexOf(PC, Blade), PC->InventoryComponent->GetItems()[BeltIndexOf(PC, Blade)].Count);
-    Belt->ReleaseMissing();
+    // Тиком -- не каждый кадр, а раз в четверть секунды (аудит 2026-09-26, П1).
+    Belt->TickComponent(0.1f, LEVELTICK_All, nullptr);
+    Belt->TickComponent(0.2f, LEVELTICK_All, nullptr);
     TestTrue(TEXT("Серпа нет -- голыми руками"), PC->CurrentGatheringTool == EGatheringTool::BareHands);
 
     // Трава -- не вещь для пояса.

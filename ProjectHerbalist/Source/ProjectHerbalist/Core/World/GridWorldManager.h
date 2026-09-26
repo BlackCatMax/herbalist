@@ -2703,6 +2703,9 @@ private:
     // Прямоугольники загруженной земли на текущий кадр (XY, мировые).
     TArray<FBox2D> GroundCoverage;
     bool bGroundCoverageKnown = false;
+    // Пересчёт покрытия землёй -- не чаще этого (П2 аудита 2026-09-26).
+    static constexpr double GroundCoverageRefreshSeconds = 0.5;
+    double LastGroundCoverageRefreshSeconds = -1.0e9;
     bool bLoggedEmptyGroundCoverage = false;
     TOptional<TArray<FBox2D>> GroundCoverageOverride;
     // Отпечаток земли, по которому последний раз собран набор чанков: пока

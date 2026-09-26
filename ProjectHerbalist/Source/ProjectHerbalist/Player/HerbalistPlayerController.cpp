@@ -621,7 +621,7 @@ bool AHerbalistPlayerController::PourPotionOnCell(int32 PotionIndex, const FHitR
 {
     AGridWorldManager* WorldManager = FindWorldManager();
     if (!InventoryComponent || !WorldManager || !InventoryComponent->GetItems().IsValidIndex(PotionIndex)) return false;
-    const FInventoryItem& Potion = InventoryComponent->GetItems()[PotionIndex];
+    const FInventoryItem Potion = *InventoryComponent->GetSlot(PotionIndex);
     if (Potion.IngredientID != FName(TEXT("Potion")) || Potion.Count <= 0) return false;
 
     int32 X, Y;
@@ -1525,7 +1525,7 @@ bool AHerbalistPlayerController::PlantFromSlot(int32 SeedIndex, const FIntPoint&
 {
     AGridWorldManager* Manager = FindWorldManager();
     if (!InventoryComponent || !Manager || !InventoryComponent->GetItems().IsValidIndex(SeedIndex)) return false;
-    const FInventoryItem& Seed = InventoryComponent->GetItems()[SeedIndex];
+    const FInventoryItem Seed = *InventoryComponent->GetSlot(SeedIndex);
     if (!Seed.bIsPlantingStock || Seed.Count <= 0) return false;
 
     // Ниша растения -- из реестра (в автотестах его нет, см. PlantSeed).
@@ -1586,7 +1586,7 @@ bool AHerbalistPlayerController::FertilizeFromSlot(int32 FertilizerIndex, const 
 {
     AGridWorldManager* Manager = FindWorldManager();
     if (!InventoryComponent || !Manager || !InventoryComponent->GetItems().IsValidIndex(FertilizerIndex)) return false;
-    const FInventoryItem& Fertilizer = InventoryComponent->GetItems()[FertilizerIndex];
+    const FInventoryItem Fertilizer = *InventoryComponent->GetSlot(FertilizerIndex);
     if (Fertilizer.IngredientID != UHerbalistInventoryComponent::PeregnoyIngredientID || Fertilizer.Count <= 0) return false;
 
     // ApplyFertilizerToCell сама отчитывается причиной отказа (нет клетки) —
@@ -1667,7 +1667,7 @@ bool AHerbalistPlayerController::UseHeldOnSelf()
 bool AHerbalistPlayerController::ApplyHeldItemToGround(int32 InventoryIndex, const FHitResult& Hit)
 {
     if (!InventoryComponent || !InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
-    const FInventoryItem& Item = InventoryComponent->GetItems()[InventoryIndex];
+    const FInventoryItem Item = *InventoryComponent->GetSlot(InventoryIndex);
 
     int32 X, Y;
     const bool bOnGrid = GetCellFromHit(Hit, X, Y);

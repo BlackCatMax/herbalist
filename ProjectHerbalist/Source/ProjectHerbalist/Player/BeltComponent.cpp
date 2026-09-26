@@ -74,7 +74,7 @@ bool UBeltComponent::OwnsItem(FName ItemID) const
 {
     const AHerbalistPlayerController* PC = GetController();
     if (!PC || !PC->InventoryComponent || ItemID.IsNone()) return false;
-    for (const FInventoryItem& Item : PC->InventoryComponent->GetItems())
+    for (const FInventoryItem& Item : PC->InventoryComponent->ViewItems())
     {
         if (Item.IngredientID == ItemID && Item.Count > 0) return true;
     }
@@ -94,7 +94,7 @@ FName UBeltComponent::GetSlotItem(EBeltSlot Slot) const
         if (!PC->InventoryComponent || PC->InventoryComponent->ContainerType == EStorageContainerType::None) return NAME_None;
         // После загрузки тип контейнера восстановлен, а какой предмет его
         // дал -- нет: ищем в котомке по карточке. Без реестра -- что надели.
-        for (const FInventoryItem& Item : PC->InventoryComponent->GetItems())
+        for (const FInventoryItem& Item : PC->InventoryComponent->ViewItems())
         {
             const FIngredientTableRow* Row = FindRow(PC, Item.IngredientID);
             if (Row && Row->GrantsContainerType == PC->InventoryComponent->ContainerType) return Item.IngredientID;
@@ -390,7 +390,15 @@ void UBeltComponent::SyncVisual()
 void UBeltComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-    ReleaseMissing();
+    // Что ушло из котомки -- тем же тактом, что обновление заглушек, не каждый
+    // кадр (аудит 2026-09-26, П1): отпустить предмет на четверть секунды
+    // позже никто не заметит.
+    ReleaseAccumulator += DeltaTime;
+    if (ReleaseAccumulator >= BeltRefreshSeconds)
+    {
+        ReleaseAccumulator = 0.0f;
+        ReleaseMissing();
+    }
 
     if (!IsInView())
     {

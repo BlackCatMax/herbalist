@@ -147,8 +147,15 @@ public:
     // части свой таймер), и пропадал при занятых строках.
     bool ReturnSplitToSlot(int32 Index, const FInventoryItem& SplitItem);
 
+    // Копия: безопасна, если по ходу котомка меняется. Ссылку на элемент
+    // копии держать нельзя -- копия умирает в конце выражения (аудит
+    // 2026-09-26: так висели ссылки на предмет в руке).
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     TArray<FInventoryItem> GetItems() const { return Items; }
+
+    // Без копии -- для частых чтений (каждый кадр). Не держать, пока котомка
+    // меняется: ссылки станут недействительны.
+    const TArray<FInventoryItem>& ViewItems() const { return Items; }
 
     int32 GetNumSlots() const { return Items.Num(); }
 

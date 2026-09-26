@@ -177,7 +177,8 @@ void UHeldItemComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
     }
     if (const AHerbalistPlayerController* Owner = Cast<AHerbalistPlayerController>(GetOwner()))
     {
-        HeldItem = Owner->InventoryComponent->GetItems()[Index];
+        // Без копии всей котомки -- это каждый кадр (аудит 2026-09-26, П1).
+        HeldItem = *Owner->InventoryComponent->GetSlot(Index);
         HeldIndexHint = Index;
     }
 

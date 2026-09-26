@@ -80,4 +80,5 @@ private:
     UPROPERTY()
     TArray<TObjectPtr<ABeltItemActor>> Shown;
     float VisualRefreshAccumulator = 0.0f;
+    float ReleaseAccumulator = 0.0f;
 };

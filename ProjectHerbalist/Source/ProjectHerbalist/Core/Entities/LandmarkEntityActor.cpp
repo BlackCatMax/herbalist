@@ -26,7 +26,7 @@ bool ALandmarkEntityActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32
     // артефакт уходил бы любому хозяину.
     if (GridCell != Manager->GetKalinovMostSite() || IsHidden() || !MeshComponent || !MeshComponent->IsVisible()) return false;
     if (!PC->InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
-    const FInventoryItem& Item = PC->InventoryComponent->GetItems()[InventoryIndex];
+    const FInventoryItem Item = *PC->InventoryComponent->GetSlot(InventoryIndex);
     if (!PC->IsArtifactReceipt(Item)) return false;
     PC->PayKalinovMostToll(Item.IngredientID);
     return true;

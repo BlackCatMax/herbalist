@@ -48,10 +48,33 @@ namespace UltraDynamicSkyNames
 
 namespace
 {
+    // Поиск свойства по имени -- линейный проход по свойствам Blueprint-класса
+    // (у UDS их сотни), а мост спрашивает одни и те же 6--8 имён каждый кадр
+    // (аудит 2026-09-26, П4). Кэш по классу и имени, промахи тоже; только
+    // игровой поток. В редакторе (и PIE) кэша нет: компиляция Blueprint'а
+    // может пересобрать свойства того же объекта класса, и закэшированный
+    // указатель остался бы на удалённое свойство (ревью пакета 2). В
+    // собранной игре классы не пересобираются.
     template <typename TProperty>
     TProperty* FindUdsProperty(const UObject* Object, FName Name)
     {
-        return Object ? FindFProperty<TProperty>(Object->GetClass(), Name) : nullptr;
+        if (!Object)
+        {
+            return nullptr;
+        }
+        if (GIsEditor)
+        {
+            return FindFProperty<TProperty>(Object->GetClass(), Name);
+        }
+        static TMap<TPair<TWeakObjectPtr<const UClass>, FName>, TProperty*> Cache;
+        const TPair<TWeakObjectPtr<const UClass>, FName> Key(Object->GetClass(), Name);
+        if (TProperty** Cached = Cache.Find(Key))
+        {
+            return *Cached;
+        }
+        TProperty* Found = FindFProperty<TProperty>(Object->GetClass(), Name);
+        Cache.Add(Key, Found);
+        return Found;
     }
 
     bool SetUdsDouble(UObject* Object, FName Name, double Value)

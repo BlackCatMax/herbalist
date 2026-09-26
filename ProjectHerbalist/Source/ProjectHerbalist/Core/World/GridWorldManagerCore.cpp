@@ -999,6 +999,22 @@ bool AGridWorldManager::IsChunkGroundLoaded(const FIntPoint& Chunk) const
 
 void AGridWorldManager::RefreshGroundCoverage()
 {
+    // Плитки ландшафта грузятся и выгружаются редко, а зовут это каждый кадр
+    // (аудит 2026-09-26, П2): обход прокси ландшафта и их компонентов -- не
+    // чаще раза в GroundCoverageRefreshSeconds. Задержка материализации на
+    // полсекунды после подгрузки плитки не видна: земля грузится на 250 м
+    // вокруг, ресурсы встают задолго до того, как игрок подойдёт.
+    const UWorld* ThrottleWorld = GetWorld();
+    if (!GroundCoverageOverride.IsSet() && bGroundCoverageKnown && ThrottleWorld
+        && ThrottleWorld->GetTimeSeconds() - LastGroundCoverageRefreshSeconds < GroundCoverageRefreshSeconds)
+    {
+        return;
+    }
+    if (ThrottleWorld)
+    {
+        LastGroundCoverageRefreshSeconds = ThrottleWorld->GetTimeSeconds();
+    }
+
     GroundCoverage.Reset();
     bGroundCoverageKnown = false;
 
