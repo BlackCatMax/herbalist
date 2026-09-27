@@ -329,6 +329,33 @@ int32 UPcgGrassSeasonSetupCommandlet::FixGroundExclusion(UPCGGraph* Graph)
     return bWired && bFilterFeedsSampler ? 1 : -1;
 }
 
+int32 UPcgGrassSeasonSetupCommandlet::FixRuntimeActorFilter(UPCGGraph* Graph)
+{
+    int32 Fixed = 0;
+    for (UPCGNode* Node : Graph->GetNodes())
+    {
+        UPCGSettings* Settings = Node ? Node->GetSettings() : nullptr;
+        FStructProperty* Selector = Settings ? FindFProperty<FStructProperty>(Settings->GetClass(), TEXT("ActorSelector")) : nullptr;
+        if (!Selector)
+        {
+            continue;
+        }
+        FString Text;
+        Selector->ExportTextItem_InContainer(Text, Settings, nullptr, Settings, PPF_None);
+        if (!Text.Contains(TEXT("ActorFilter=Parent")))
+        {
+            continue;
+        }
+        const FString NewText = Text.Replace(TEXT("ActorFilter=Parent"), TEXT("ActorFilter=Original"));
+        if (Selector->ImportText_InContainer(*NewText, Settings, Settings, PPF_None) != nullptr)
+        {
+            UE_LOG(LogTemp, Display, TEXT("  %s: фильтр актора Parent -> Original"), *Node->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
+            ++Fixed;
+        }
+    }
+    return Fixed > 0 ? 1 : 0;
+}
+
 int32 UPcgGrassSeasonSetupCommandlet::Main(const FString& Params)
 {
     UE_LOG(LogTemp, Display, TEXT("=== PcgGrassSeasonSetup ==="));
@@ -355,7 +382,10 @@ int32 UPcgGrassSeasonSetupCommandlet::Main(const FString& Params)
     }
     UE_LOG(LogTemp, Display, TEXT("Исключение покраски Ground: %s"), GroundResult == 0 ? TEXT("уже исправлено") : TEXT("исправлено"));
 
-    if (Result == 0 && GroundResult == 0)
+    const int32 FilterResult = FixRuntimeActorFilter(Graph);
+    UE_LOG(LogTemp, Display, TEXT("Сплайн региона в рантайме: %s"), FilterResult == 0 ? TEXT("уже Original") : TEXT("исправлено"));
+
+    if (Result == 0 && GroundResult == 0 && FilterResult == 0)
     {
         UE_LOG(LogTemp, Display, TEXT("Менять нечего -- не сохраняю."));
         return 0;
