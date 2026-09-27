@@ -76,11 +76,14 @@ based_on: ProjectHerbalist source, 2026-09-22
 - Подсвечивается то, что `IInteractable` или `AHerbalistResourceActor`: на
   его примитивах включается Custom Depth с трафаретом **42**
   (`HighlightStencilValue`), прежние значения возвращаются при уходе взгляда.
-- **В редакторе:** Project Settings → Rendering → Custom Depth-Stencil Pass
-  = `Enabled with Stencil`; материал пост-процесса, рисующий трафарет 42
-  контуром или свечением, — в Post Process Volume карты. Без этого C++
-  отмечает цель, но на экране ничего не видно. Проверить без материала —
-  режим показа `Buffer Visualization → Custom Stencil`.
+- **В редакторе** (настроено 2026-09-27): `r.CustomDepth=3` в
+  `DefaultEngine.ini` (Custom Depth-Stencil Pass = `Enabled with Stencil`);
+  проверочный материал `/Game/Materials/PostProcess/M_PP_LookHighlight` —
+  заливка трафарета 42 оттенком `HighlightTint` с силой `HighlightStrength`
+  (0.35), после тонмаппинга; на `L_TestDev` — `PPV_LookHighlight`
+  (`Infinite Extent`, не выгружается). Контур вместо заливки — работа
+  художника. Без материала цель видна режимом `Buffer Visualization →
+  Custom Stencil`.
 
 ### §7.13.3 Пестерь
 
@@ -210,7 +213,7 @@ based_on: ProjectHerbalist source, 2026-09-22
 | колесо мыши | строка выбора (клавиша, не Input Action) |
 
 Отдельной клавиши сбора нет с 2026-09-27: `HarvestAction` убран, `IA_Harvest`
-в раскладке никто не слушает (его можно удалить из `IMC_Default`). Из
-консоли сбор под прицелом — `HarvestHere`.
+снят с `IMC_Default` (ассет действия остался). Из консоли сбор под
+прицелом — `HarvestHere`.
 
 Проверка: `pie/01_Start.md` (строки `Ввод:`).

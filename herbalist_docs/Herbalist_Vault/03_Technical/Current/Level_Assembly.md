@@ -32,21 +32,21 @@ Partition).
 2. **Ввод — готово, клавиши проверить.** В Class Defaults контроллера:
    `IMC_Default`, `IA_Move`, `IA_Look`, `IA_Info`, `IA_Inventory`,
    `IA_ApplyAlchemy`, `IA_Interact`. Сбор — тем же «Взаимодействием» по
-   растению (2026-09-27); `IA_Harvest` в раскладке больше никто не слушает. `Journal Action` и
+   растению (2026-09-27); `IA_Harvest` с раскладки снят. `Journal Action` и
    `Use Potion Action` пусты — в диегетике не нужны (Травник — консоль
    `ToggleJournalUI`, зелье — из руки). Колесо мыши для строки выбора код
    привязывает сам. Какие клавиши стоят на действиях — открыть `IMC_Default`
    (в нём W A S D, пробел, E, F, I, C, B, правая кнопка мыши).
-3. **Настройки проекта — нужно.** Rendering → Custom Depth-Stencil Pass =
-   `Enabled with Stencil` (сейчас не включено). Herbalist → Entities|Spawners
+3. **Настройки проекта.** Rendering → Custom Depth-Stencil Pass =
+   `Enabled with Stencil` — включено 2026-09-27 (`r.CustomDepth=3`). Herbalist → Entities|Spawners
    → `Use Ambient Spawners` — выключено до проверки спавнеров; Save →
    `bAutoLoadOnStart` — для проверки с чистого листа выключить или удалить сейв.
-4. **Подсветка взгляда — нужно.** Материал постобработки: Domain = Post
-   Process; `SceneTexture: CustomStencil` = 42 → маска; Emissive = цвет кадра
-   плюс маска × оттенок (для проверки хватит заливки, контур — позже).
-   `PostProcessVolume` с `Infinite Extent (Unbound)` и этим материалом в
-   Blendables — на карте его нет. Без материала проверять режимом
-   `Buffer Visualization → Custom Stencil`.
+4. **Подсветка взгляда — стоит (2026-09-27).** Проверочная заливка
+   `M_PP_LookHighlight` (`/Game/Materials/PostProcess`): трафарет 42 → маска,
+   цвет кадра смешивается с `HighlightTint` на `HighlightStrength`.
+   `PPV_LookHighlight` на `L_TestDev` — `Infinite Extent (Unbound)`, материал
+   в Blendables. Контур — позже, работа художника. Без материала проверять
+   режимом `Buffer Visualization → Custom Stencil`.
 5. **Карта — стоит, проверить меши.** На `L_TestDev` уже есть: менеджер
    сетки, котёл, лавка, камень-жертвенник, два тайника, сундук, капище, пруд,
    8 регионов биомов, UDS и UDW, PlayerStart. Взаимодействие у камня, тайников,
@@ -60,7 +60,7 @@ Partition).
 
 | Что | Где | Зачем | Подробно |
 |---|---|---|---|
-| Custom Depth-Stencil Pass = `Enabled with Stencil` | Project Settings → Rendering | **нужно** для подсветки того, на что смотришь | [[07_UX_Tech#§7.13.2 Взгляд и подсветка]] |
+| Custom Depth-Stencil Pass = `Enabled with Stencil` | Project Settings → Rendering | включено (`r.CustomDepth=3`), подсветка того, на что смотришь | [[07_UX_Tech#§7.13.2 Взгляд и подсветка]] |
 | `Use Ambient Spawners` | Project Settings → Herbalist → Entities\|Spawners | включает Низших на спавнерах (пока выключено, ждёт проверки) | [[16_Entity_Manifestation_Tech#§16.2 Низший]], `pie/05_Places_Entities.md` |
 | `bAutoLoadOnStart` | Project Settings → Herbalist → Save | автозагрузка при старте; выключить — проверка с чистого листа | [[07_UX_Tech#§7.13.7 Сон, лагерь, автозагрузка]] |
 
@@ -132,7 +132,7 @@ Partition).
 |---|---|---|
 | Input Actions в Blueprint контроллера | **нужно**: `MoveAction`, `LookAction`, `InteractAction`, `InventoryAction`, `InfoAction`, `JournalAction` (сейчас не назначен), `ApplyAlchemyAction`, `UsePotionAction`; раскладка — `IMC_Default`, `IMC_MouseLook` | [[07_UX_Tech#Ввод]], `pie/01_Start.md` |
 | Колесо мыши для строки выбора | привязано клавишей в коде; если в PIE не работает — завести Input Action | [[07_UX_Tech#§7.13.6 Строка выбора и речь хозяев]] |
-| Материал подсветки (трафарет 42) | **нужно**: пост-процесс в Post Process Volume карты | [[07_UX_Tech#§7.13.2 Взгляд и подсветка]] |
+| Материал подсветки (трафарет 42) | стоит: `M_PP_LookHighlight` в `PPV_LookHighlight` на `L_TestDev` (проверочная заливка) | [[07_UX_Tech#§7.13.2 Взгляд и подсветка]] |
 
 ## Данные
 

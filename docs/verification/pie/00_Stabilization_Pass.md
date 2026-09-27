@@ -34,12 +34,14 @@
 (что готово, что включить), и памятка «Как пользоваться» в
 [1](01_Start.md) — там же, как работает пояс.
 
-- [ ] А1. Рядом с котлом на `L_TestDev`: лавка (`ASleepBenchActor`),
+- [x] А1. Рядом с котлом на `L_TestDev`: лавка (`ASleepBenchActor`),
   камень-жертвенник (`AOfferingStoneActor`), один-два тайника
-  (`AOrderCacheActor`). Карта **сохранена**.
-- [ ] А2. Подсветка: либо Custom Depth-Stencil Pass = `Enabled with Stencil` и
-  материал трафарета 42 в Post Process Volume, либо проверять режимом
-  `Buffer Visualization → Custom Stencil` (`herbalist_docs/Herbalist_Vault/03_Technical/Current/Level_Assembly.md`, «Настройки
+  (`AOrderCacheActor`). Карта **сохранена**. (2026-09-27: на карте лавка,
+  камень и два тайника.)
+- [ ] А2. Подсветка: настроено 2026-09-27 (`r.CustomDepth=3`,
+  `M_PP_LookHighlight` в `PPV_LookHighlight`) — **перезапустить редактор**
+  (настройка стенсила читается при старте) и увидеть тёплую заливку на
+  растении под прицелом. Запасной путь — `Buffer Visualization → Custom Stencil` (`herbalist_docs/Herbalist_Vault/03_Technical/Current/Level_Assembly.md`, «Настройки
   проекта»).
 - [ ] А3. Чистый лист: удалить `ProjectHerbalist/Saved/SaveGames/HerbalistSave.sav`
   (автозагрузка иначе продолжит старое).
