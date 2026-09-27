@@ -1,5 +1,6 @@
 // BeltComponent.cpp
 #include "Player/BeltComponent.h"
+#include "Player/ViewAnchor.h"
 #include "Player/BeltItemActor.h"
 #include "Player/HeldItemComponent.h"
 #include "Player/HerbalistPlayerController.h"
@@ -403,6 +404,7 @@ void UBeltComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
     if (!IsInView())
     {
         ClearVisual();
+        bAnchorSet = false;
         return;
     }
 
@@ -419,7 +421,12 @@ void UBeltComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
     FVector ViewLocation;
     FRotator ViewRotation;
     PC->GetPlayerViewPoint(ViewLocation, ViewRotation);
-    const FRotator Yaw(0.0f, ViewRotation.Yaw, 0.0f);
+    // Поворот -- запомненный, когда взгляд опустился (ViewAnchor.h): иначе
+    // пояс поворачивался бы вместе со взглядом и прицел всегда смотрел бы в
+    // его середину.
+    AnchorYaw = bAnchorSet ? HerbalistView::FollowAnchorYaw(AnchorYaw, ViewRotation.Yaw) : ViewRotation.Yaw;
+    bAnchorSet = true;
+    const FRotator Yaw(0.0f, AnchorYaw, 0.0f);
     const FVector Base = ViewLocation + Yaw.RotateVector(BeltOffset);
     for (ABeltItemActor* Actor : Shown)
     {

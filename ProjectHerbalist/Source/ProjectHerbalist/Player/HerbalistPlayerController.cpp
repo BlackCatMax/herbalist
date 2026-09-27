@@ -182,7 +182,9 @@ void AHerbalistPlayerController::SetupInputComponent()
         InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AHerbalistPlayerController::ChoiceScrollUp);
         InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AHerbalistPlayerController::ChoiceScrollDown);
 
-        Bind(HarvestAction,      TEXT("HarvestAction (сбор)"),      ETriggerEvent::Started, &AHerbalistPlayerController::Harvest);
+        // Сбора на отдельной клавише нет (2026-09-27): растение под прицелом
+        // собирает «Взаимодействие». IA_Harvest в раскладке больше никто не
+        // слушает.
         Bind(InfoAction,         TEXT("InfoAction"),                ETriggerEvent::Started, &AHerbalistPlayerController::Info);
         Bind(InventoryAction,    TEXT("InventoryAction"),           ETriggerEvent::Started, &AHerbalistPlayerController::Inventory);
         Bind(JournalAction,      TEXT("JournalAction"),             ETriggerEvent::Started, &AHerbalistPlayerController::Journal);
@@ -385,10 +387,14 @@ void AHerbalistPlayerController::Harvest()
         TryHarvestResource(Resource);
         return;
     }
+    TryCollectWaterAt(Hit);
+}
 
+bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit)
+{
     // Сбор воды (без актора)
     AGridWorldManager* WorldManager = FindWorldManager();
-    if (!WorldManager) return;
+    if (!WorldManager) return false;
 
     if (GetPawn())
     {
@@ -396,7 +402,7 @@ void AHerbalistPlayerController::Harvest()
         if (Dist > MaxHarvestDistance)
         {
             UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: до точки %.1f см, предел %.1f см -- подойди ближе"), Dist, MaxHarvestDistance);
-            return;
+            return false;
         }
     }
 
@@ -404,7 +410,7 @@ void AHerbalistPlayerController::Harvest()
     if (!GetCellFromHit(Hit, X, Y))
     {
         UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: точка попадания вне сетки"));
-        return;
+        return false;
     }
 
     FGridCell* Cell = WorldManager->GetCell(X, Y);
@@ -419,7 +425,7 @@ void AHerbalistPlayerController::Harvest()
             (Cell && Here == 0 && !WorldManager->IsCellClaimedByBiomeRegion(*Cell))
                 ? TEXT(" (клетка вне всех ABiomeRegionVolume -- контент тут не спавнится вовсе)")
                 : TEXT(""));
-        return;
+        return false;
     }
 
     // Та же проверка места, что у растения (TryHarvestResource): ID и
@@ -434,12 +440,13 @@ void AHerbalistPlayerController::Harvest()
         if (InventoryComponent->GetAvailableCapacityFor(Expected) < 1)
         {
             UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: сумка полна -- воду '%s' некуда налить"), *Expected.IngredientID.ToString());
-            return;
+            return false;
         }
     }
 
     WorldManager->CollectWater(X, Y);
     UE_LOG(LogHerbalistPlayer, Log, TEXT("Collected water from cell (%d,%d)"), X, Y);
+    return true;
 }
 
 bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Resource)
@@ -701,29 +708,36 @@ void AHerbalistPlayerController::Interact()
         }
     }
 
+    // Цель -- ровно то, что подсвечено (2026-09-27, по образцу
+    // CustomizableInteractionPlugin): один детектор на подсветку и на
+    // действие, с помощью в наведении. Луч взгляда -- только для земли:
+    // куда вылить, где посадить, где набрать воду.
+    AActor* Target = LookHighlightComponent ? LookHighlightComponent->RefreshFocus() : nullptr;
     FHitResult Hit;
-    if (!GetHitResultFromCamera(Hit)) return;
-
-    AActor* HitActor = Hit.GetActor();
+    const bool bHaveHit = GetHitResultFromCamera(Hit);
+    if (!LookHighlightComponent && bHaveHit && ULookHighlightComponent::IsHighlightable(Hit.GetActor()))
+    {
+        Target = Hit.GetActor();
+    }
+    const bool bHolding = HeldItemComponent && HeldItemComponent->IsHolding();
 
     // Предмет в руке -- сначала применение (DESIGN_Diegetic_Interface.md,
     // этап 3): трава в котёл и так далее по таблице «предмет + цель». Цели
     // такой предмет ни к чему -- взаимодействие как пустой рукой.
-    if (HeldItemComponent && HeldItemComponent->IsHolding())
+    if (bHolding)
     {
-        if (IHeldItemTarget* Target = Cast<IHeldItemTarget>(HitActor))
+        if (IHeldItemTarget* HeldTarget = Cast<IHeldItemTarget>(Target))
         {
             const int32 HeldIndex = HeldItemComponent->ResolveHeldIndex();
-            if (HeldIndex != INDEX_NONE && Target->ReceiveHeldItem(this, HeldIndex))
+            if (HeldIndex != INDEX_NONE && HeldTarget->ReceiveHeldItem(this, HeldIndex))
             {
                 return;
             }
         }
         // Предмет на землю, а не на цель, -- зелье поливает клетку, семя
-        // садится в грядку, перегной вносится (таблица «предмет + цель»). Куст или трава под взглядом -- не
-        // земля (ревью 2026-09-21): взаимодействие по привычке вместо сбора
-        // не должно выливать зелье.
-        if (!(HitActor && (HitActor->Implements<UInteractable>() || HitActor->IsA<AHerbalistResourceActor>())))
+        // садится в грядку, перегной вносится. Под прицелом цель (куст, трава,
+        // камень) -- не земля (ревью 2026-09-21): зелье не выливается.
+        if (!Target && bHaveHit)
         {
             const int32 HeldIndex = HeldItemComponent->ResolveHeldIndex();
             if (HeldIndex != INDEX_NONE && ApplyHeldItemToGround(HeldIndex, Hit))
@@ -733,13 +747,31 @@ void AHerbalistPlayerController::Interact()
         }
     }
 
-    // Один интерфейс вместо цепочки Cast<> на каждый интерактивный класс
-    // (2026-08-30, "заводим родительские классы для сущностей и связки") —
-    // см. Core/Interaction/Interactable.h. AHerbalistResourceActor::Harvest()
-    // намеренно не через этот путь, см. комментарий там же.
-    if (HitActor && HitActor->Implements<UInteractable>())
+    // Растение -- собрать. Рука занята -- не собираем: сперва убрать
+    // предмет, иначе промах мимо цели для предмета срывал бы куст.
+    if (AHerbalistResourceActor* Resource = Cast<AHerbalistResourceActor>(Target))
     {
-        IInteractable::Execute_OnInteract(HitActor, this);
+        if (bHolding)
+        {
+            UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: рука занята -- убери предмет, чтобы сорвать %s"), *Resource->GetIngredientID().ToString());
+            return;
+        }
+        TryHarvestResource(Resource);
+        return;
+    }
+
+    // Один интерфейс вместо цепочки Cast<> на каждый интерактивный класс
+    // (2026-08-30) -- см. Core/Interaction/Interactable.h.
+    if (Target && Target->Implements<UInteractable>())
+    {
+        IInteractable::Execute_OnInteract(Target, this);
+        return;
+    }
+
+    // Цели нет, рука пуста -- вода под взглядом набирается.
+    if (!bHolding && bHaveHit)
+    {
+        TryCollectWaterAt(Hit);
     }
 }
 

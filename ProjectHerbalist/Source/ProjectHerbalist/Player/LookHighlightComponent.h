@@ -33,6 +33,17 @@ public:
     UPROPERTY(EditAnywhere, Category = "Herbalist|Highlight")
     float ReachCm = 1000.0f;
 
+    // Помощь в наведении (2026-09-27, по образцу CustomizableInteractionPlugin):
+    // прямой луч прошёл мимо -- та же линия толстой сферой, ближайшая цель.
+    // Мелкую траву и край камня не нужно ловить пикселем.
+    UPROPERTY(EditAnywhere, Category = "Herbalist|Highlight", meta = (ClampMin = "0.0"))
+    float AssistRadiusCm = 20.0f;
+
+    // Цель под прицелом прямо сейчас: пересчитать и подсветить. Одна цель на
+    // всё -- подсветка, взаимодействие и сбор бьют ровно в подсвеченное
+    // (решение пользователя 2026-09-27: одна клавиша, действие решает цель).
+    AActor* RefreshFocus();
+
     // Что подсвечено сейчас (для тестов и для этапа 3 -- «применить к цели
     // под взглядом»).
     AActor* GetFocusedActor() const { return FocusedActor.Get(); }

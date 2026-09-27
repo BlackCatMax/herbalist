@@ -264,6 +264,11 @@ public:
     // именно этот выбор.
     void Info();
     void Inventory();
+    // Одна клавиша на всё (2026-09-27, решение пользователя): действие с
+    // целью под прицелом (ULookHighlightComponent::RefreshFocus) решает сама
+    // цель -- растение собирается, котёл мешается, с предметом в руке --
+    // применение. Отдельной клавиши сбора нет.
+    void Interact();
 
     // Сохранения v1 (Core/Save/HerbalistSaveSubsystem.h) — тонкие обёртки над
     // подсистемой, тем же паттерном, что HarvestTest/ApplyTest над пайплайном.
@@ -639,8 +644,6 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* LookAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    UInputAction* HarvestAction;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InfoAction;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InventoryAction;
@@ -660,7 +663,6 @@ protected:
     void Harvest();
     void Journal();
     void ApplyAlchemy();
-    void Interact();
 
     bool GetHitResultFromCamera(FHitResult& OutHit, ECollisionChannel Channel = ECC_Visibility);
     // OnLeftClick() удалён 2026-09-02 (чистка мёртвого кода) — объявление без
@@ -733,6 +735,8 @@ private:
     AGridWorldManager* CachedWorldManager = nullptr;
 
     bool TryHarvestResource(AHerbalistResourceActor* Resource);
+    // Набрать воду в точке взгляда. false -- не вода, далеко или некуда.
+    bool TryCollectWaterAt(const FHitResult& Hit);
 
     // Текущий разговор (TalkTo/ChooseDialogueBranch, § комментарий у их
     // объявления выше) — состояние UI-сессии, не мира, не UPROPERTY(SaveGame)

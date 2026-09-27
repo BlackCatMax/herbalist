@@ -81,4 +81,9 @@ private:
     TArray<TObjectPtr<ABeltItemActor>> Shown;
     float VisualRefreshAccumulator = 0.0f;
     float ReleaseAccumulator = 0.0f;
+
+    // Поворот пояса (Player/ViewAnchor.h): запоминается, когда взгляд опустился
+    // на пояс, -- мышь водит прицелом по заглушкам.
+    bool bAnchorSet = false;
+    float AnchorYaw = 0.0f;
 };

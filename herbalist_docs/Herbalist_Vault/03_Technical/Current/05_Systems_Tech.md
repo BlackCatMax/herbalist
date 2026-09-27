@@ -47,8 +47,9 @@ Inventory_Current, 2026-09-22); детерминированный пайпла�
 
 ## §5 Система сбора
 
-- Путь: взгляд и `HarvestAction` → `AHerbalistPlayerController::Harvest`
-  (луч `ECC_Visibility`, затем `ECC_GameTraceChannel1` — канал ресурсов) →
+- Путь: растение под прицелом и «Взаимодействие» пустой рукой
+  (`ULookHighlightComponent::RefreshFocus` → `TryHarvestResource`; вода —
+  `TryCollectWaterAt`; из консоли — `HarvestHere`) →
   команда `Harvest` в очередь менеджера → `ProcessHarvestCommand` /
   `GenerateHarvestResult` (`Core/Simulation/Private/PipelineV2.cpp`):
   `BaseState` карточки, сдвинутый состоянием клетки и её `Resilience`,

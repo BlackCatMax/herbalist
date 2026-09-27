@@ -1,5 +1,6 @@
 // PesterComponent.cpp
 #include "Player/PesterComponent.h"
+#include "Player/ViewAnchor.h"
 #include "Player/PesterItemActor.h"
 #include "Player/HerbalistPlayerController.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
@@ -127,6 +128,7 @@ void UPesterComponent::UnbindContainer()
 
 void UPesterComponent::Close()
 {
+    bAnchorSet = false;
     UnbindContainer();
     StatusFocus.Reset();
     StatusLine.Reset();
@@ -279,8 +281,12 @@ void UPesterComponent::PlaceItems()
     FRotator ViewRotation;
     PC->GetPlayerViewPoint(ViewLocation, ViewRotation);
     // Пестерь держится по горизонтали взгляда: наклон головы вниз не должен
-    // уводить короб вниз вместе с камерой -- в него смотрят сверху.
-    const FRotator Yaw(0.0f, ViewRotation.Yaw, 0.0f);
+    // уводить короб вниз вместе с камерой -- в него смотрят сверху. Поворот --
+    // запомненный при открытии (ViewAnchor.h): иначе прицел всегда смотрел бы
+    // в середину раскладки и до крайних мешочков было не дотянуться.
+    AnchorYaw = bAnchorSet ? HerbalistView::FollowAnchorYaw(AnchorYaw, ViewRotation.Yaw) : ViewRotation.Yaw;
+    bAnchorSet = true;
+    const FRotator Yaw(0.0f, AnchorYaw, 0.0f);
     const FVector Base = ViewLocation + Yaw.RotateVector(PesterOffset);
     for (int32 i = 0; i < LaidOut.Num(); ++i)
     {

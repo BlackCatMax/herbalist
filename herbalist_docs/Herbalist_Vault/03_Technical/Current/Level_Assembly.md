@@ -30,8 +30,9 @@ Partition).
    добавляют — они видны унаследованными. Заглушки предметов в руке, пестере
    и на поясе — движковые сфера, куб, цилиндр, ассеты не нужны.
 2. **Ввод — готово, клавиши проверить.** В Class Defaults контроллера:
-   `IMC_Default`, `IA_Move`, `IA_Look`, `IA_Harvest`, `IA_Info`,
-   `IA_Inventory`, `IA_ApplyAlchemy`, `IA_Interact`. `Journal Action` и
+   `IMC_Default`, `IA_Move`, `IA_Look`, `IA_Info`, `IA_Inventory`,
+   `IA_ApplyAlchemy`, `IA_Interact`. Сбор — тем же «Взаимодействием» по
+   растению (2026-09-27); `IA_Harvest` в раскладке больше никто не слушает. `Journal Action` и
    `Use Potion Action` пусты — в диегетике не нужны (Травник — консоль
    `ToggleJournalUI`, зелье — из руки). Колесо мыши для строки выбора код
    привязывает сам. Какие клавиши стоят на действиях — открыть `IMC_Default`
@@ -129,7 +130,7 @@ Partition).
 
 | Что | Как | Подробно |
 |---|---|---|
-| Input Actions в Blueprint контроллера | **нужно**: `MoveAction`, `LookAction`, `HarvestAction`, `InteractAction`, `InventoryAction`, `InfoAction`, `JournalAction` (сейчас не назначен), `ApplyAlchemyAction`, `UsePotionAction`; раскладка — `IMC_Default`, `IMC_MouseLook` | [[07_UX_Tech#Ввод]], `pie/01_Start.md` |
+| Input Actions в Blueprint контроллера | **нужно**: `MoveAction`, `LookAction`, `InteractAction`, `InventoryAction`, `InfoAction`, `JournalAction` (сейчас не назначен), `ApplyAlchemyAction`, `UsePotionAction`; раскладка — `IMC_Default`, `IMC_MouseLook` | [[07_UX_Tech#Ввод]], `pie/01_Start.md` |
 | Колесо мыши для строки выбора | привязано клавишей в коде; если в PIE не работает — завести Input Action | [[07_UX_Tech#§7.13.6 Строка выбора и речь хозяев]] |
 | Материал подсветки (трафарет 42) | **нужно**: пост-процесс в Post Process Volume карты | [[07_UX_Tech#§7.13.2 Взгляд и подсветка]] |
 

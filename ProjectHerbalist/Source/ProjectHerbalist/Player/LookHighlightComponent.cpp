@@ -64,9 +64,22 @@ void ULookHighlightComponent::SetFocusedActor(AActor* NewTarget)
 void ULookHighlightComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    // Подсветка -- только у своего игрока; явный RefreshFocus (нажатие
+    // клавиши, тесты) идёт без этой проверки.
+    const APlayerController* PC = Cast<APlayerController>(GetOwner());
+    if (PC && PC->IsLocalController())
+    {
+        RefreshFocus();
+    }
+}
 
+AActor* ULookHighlightComponent::RefreshFocus()
+{
     APlayerController* PC = Cast<APlayerController>(GetOwner());
-    if (!PC || !PC->IsLocalController() || !GetWorld()) return;
+    if (!PC || !GetWorld())
+    {
+        return FocusedActor.Get();
+    }
 
     FVector ViewLocation;
     FRotator ViewRotation;
@@ -74,15 +87,7 @@ void ULookHighlightComponent::TickComponent(float DeltaTime, ELevelTick TickType
     FCollisionQueryParams Params(SCENE_QUERY_STAT(HerbalistLookHighlight), false);
     Params.AddIgnoredActor(PC->GetPawn());
 
-    // Те же два канала и в том же порядке, что у Interact и сбора
-    // (GetHitResultFromCamera): сначала видимость, канал ресурсов --
-    // запасной. Иначе подсветка и то, что сработает по клавише, могли бы
-    // разойтись.
-    FHitResult Hit;
-    const FVector End = ViewLocation + ViewRotation.Vector() * ReachCm;
-    AActor* Target = nullptr;
-
-    // Открытый пестерь -- его предметы мир не видит, спрашиваем напрямую.
+    // Открытый пестерь и пояс -- их предметы мир не видит, спрашиваем напрямую.
     if (const AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC))
     {
         if (HPC->PesterComponent)
@@ -90,28 +95,63 @@ void ULookHighlightComponent::TickComponent(float DeltaTime, ELevelTick TickType
             if (APesterItemActor* Item = HPC->PesterComponent->FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f))
             {
                 SetFocusedActor(Item);
-                return;
+                return Item;
             }
         }
-        // Пояс -- так же: мир его заглушки не видит.
         if (HPC->BeltComponent)
         {
             if (ABeltItemActor* Item = HPC->BeltComponent->FindItemUnderView(ViewLocation, ViewLocation + ViewRotation.Vector() * 200.0f))
             {
                 SetFocusedActor(Item);
-                return;
+                return Item;
             }
         }
     }
+
+    // Мир: прямой луч по видимости, затем по каналу взаимодействия; мимо --
+    // сфера по тем же каналам, ближайшая к глазу цель.
+    const FVector End = ViewLocation + ViewRotation.Vector() * ReachCm;
+    AActor* Target = nullptr;
+    FHitResult Hit;
+    // Что глаз видит первым -- дальше него сфера не ищет: канал
+    // взаимодействия стены не держат, и без этой границы подсветилось бы
+    // то, что за стеной.
+    float SightLimit = ReachCm;
     if (GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, End, ECC_Visibility, Params))
     {
-        Target = Hit.GetActor();
+        // Край того, что закрывает вид, -- с запасом на толщину сферы.
+        SightLimit = FVector::Dist(ViewLocation, Hit.ImpactPoint) + AssistRadiusCm * 2.0f;
+        if (IsHighlightable(Hit.GetActor()))
+        {
+            Target = Hit.GetActor();
+        }
     }
-    if (!IsHighlightable(Target) && GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, End, ECC_GameTraceChannel1, Params))
+    if (!Target && GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, End, ECC_GameTraceChannel1, Params)
+        && IsHighlightable(Hit.GetActor()) && FVector::Dist(ViewLocation, Hit.ImpactPoint) <= SightLimit)
     {
         Target = Hit.GetActor();
     }
+    if (!Target && AssistRadiusCm > 0.0f)
+    {
+        const FCollisionShape Sphere = FCollisionShape::MakeSphere(AssistRadiusCm);
+        float BestDistSq = TNumericLimits<float>::Max();
+        for (const ECollisionChannel Channel : { ECC_Visibility, ECC_GameTraceChannel1 })
+        {
+            TArray<FHitResult> Hits;
+            GetWorld()->SweepMultiByChannel(Hits, ViewLocation, End, FQuat::Identity, Channel, Sphere, Params);
+            for (const FHitResult& Candidate : Hits)
+            {
+                const float DistSq = FVector::DistSquared(ViewLocation, Candidate.ImpactPoint);
+                if (IsHighlightable(Candidate.GetActor()) && DistSq < BestDistSq && DistSq <= FMath::Square(SightLimit))
+                {
+                    BestDistSq = DistSq;
+                    Target = Candidate.GetActor();
+                }
+            }
+        }
+    }
     SetFocusedActor(Target);
+    return FocusedActor.Get();
 }
 
 void ULookHighlightComponent::EndPlay(const EEndPlayReason::Type Reason)
