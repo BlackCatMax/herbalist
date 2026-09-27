@@ -10,6 +10,7 @@
 #include "Engine/Texture.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialFunction.h"
+#include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
 #include "Materials/MaterialExpressionStaticSwitchParameter.h"
@@ -20,9 +21,9 @@
 
 namespace
 {
-    bool SaveMaterialFunctionPackage(UMaterialFunction* Function)
+    bool SaveAssetPackage(UObject* Asset)
     {
-        UPackage* Package = Function->GetOutermost();
+        UPackage* Package = Asset->GetOutermost();
         Package->MarkPackageDirty();
         const FString FileName = FPackageName::LongPackageNameToFilename(
             Package->GetName(), FPackageName::GetAssetPackageExtension());
@@ -30,7 +31,7 @@ namespace
         FSavePackageArgs Args;
         Args.TopLevelFlags = RF_Public | RF_Standalone;
         Args.SaveFlags = SAVE_NoError;
-        return UPackage::SavePackage(Package, Function, *FileName, Args);
+        return UPackage::SavePackage(Package, Asset, *FileName, Args);
     }
 
     enum class EMaterialFunctionPrepareResult
@@ -72,40 +73,23 @@ namespace
         return EMaterialFunctionPrepareResult::Build;
     }
 
-    // -verify: временный материал с вызовом функции, выход -- в свойство
-    // материала, синхронная компиляция под текущую платформу шейдеров. Автотест
-    // графа компиляцию не видит, это её единственная проверка без редактора.
-    // Попадание текстуры в скомпилированный материал доказывает, что ветка с
-    // выборкой карты действительно собрана, а не отброшена.
-    bool VerifyMaterialFunctionCompiles(UMaterialFunction* Function, const TCHAR* OutputName, EMaterialProperty Property,
-        const TCHAR* Case, UTexture* Texture, bool bExpectTexture)
+    // Синхронная компиляция под текущую платформу шейдеров. Попадание текстуры
+    // в скомпилированный материал доказывает, что ветка с выборкой карты
+    // действительно собрана, а не отброшена.
+    bool VerifyCompiledMaterial(UMaterialInterface* Material, const FString& Label, UTexture* Texture, bool bExpectTexture)
     {
-        UMaterial* Material = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
-        if (Property == MP_OpacityMask)
-        {
-            // Маска компилируется только у маскированного материала.
-            Material->BlendMode = BLEND_Masked;
-        }
-        UMaterialExpressionMaterialFunctionCall* Call = Cast<UMaterialExpressionMaterialFunctionCall>(
-            UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMaterialFunctionCall::StaticClass()));
-        if (!Call || !Call->SetMaterialFunction(Function) || !UMaterialEditingLibrary::ConnectMaterialProperty(Call, OutputName, Property))
-        {
-            UE_LOG(LogTemp, Error, TEXT("[verify] %s (%s): не удалось подключить выход %s"), *Function->GetName(), Case, OutputName);
-            return false;
-        }
-
         Material->ForceRecompileForRendering(EMaterialShaderPrecompileMode::Synchronous);
         FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform);
         if (!Resource)
         {
-            UE_LOG(LogTemp, Error, TEXT("[verify] %s (%s): нет ресурса материала для платформы шейдеров (запуск без -nullrhi, с -AllowCommandletRendering)"),
-                *Function->GetName(), Case);
+            UE_LOG(LogTemp, Error, TEXT("[verify] %s: нет ресурса материала для платформы шейдеров (запуск без -nullrhi, с -AllowCommandletRendering)"),
+                *Label);
             return false;
         }
         Resource->FinishCompilation();
         for (const FString& CompileError : Resource->GetCompileErrors())
         {
-            UE_LOG(LogTemp, Error, TEXT("[verify] %s (%s): %s"), *Function->GetName(), Case, *CompileError);
+            UE_LOG(LogTemp, Error, TEXT("[verify] %s: %s"), *Label, *CompileError);
         }
         if (Resource->GetCompileErrors().Num() > 0)
         {
@@ -123,13 +107,135 @@ namespace
         }
         if (bTextureReferenced != bExpectTexture)
         {
-            UE_LOG(LogTemp, Error, TEXT("[verify] %s (%s): карта %s %s, ожидалось обратное"), *Function->GetName(), Case,
+            UE_LOG(LogTemp, Error, TEXT("[verify] %s: карта %s %s, ожидалось обратное"), *Label,
                 *GetNameSafe(Texture), bTextureReferenced ? TEXT("читается") : TEXT("не читается"));
             return false;
         }
-        UE_LOG(LogTemp, Display, TEXT("[verify] %s (%s): компилируется, карта %s"), *Function->GetName(), Case,
+        UE_LOG(LogTemp, Display, TEXT("[verify] %s: компилируется, карта %s"), *Label,
             bTextureReferenced ? TEXT("читается") : TEXT("не читается"));
         return true;
+    }
+
+    // -wire: тропа в мастер-материалы травы и ландшафта и переключатель
+    // Trampleable в инстансах низкого покрова. Повторный запуск ничего не
+    // меняет. Сохраняет только то, что поменял.
+    bool WireTrampleMaterials(UMaterialFunction* Trample, UMaterialFunction* Compress, TArray<UMaterialInterface*>& OutWired)
+    {
+        using namespace HerbalistMaterialFunctions;
+        auto Finish = [&OutWired](UMaterial* Material, EWireResult Result, const TCHAR* What)
+        {
+            if (Result == EWireResult::Failed)
+            {
+                return false;
+            }
+            OutWired.Add(Material);
+            if (Result == EWireResult::AlreadyWired)
+            {
+                UE_LOG(LogTemp, Display, TEXT("[wire] %s: %s уже подключено"), *Material->GetName(), What);
+                return true;
+            }
+            UMaterialEditingLibrary::RecompileMaterial(Material);
+            if (!SaveAssetPackage(Material))
+            {
+                UE_LOG(LogTemp, Error, TEXT("[wire] не удалось сохранить %s"), *Material->GetPathName());
+                return false;
+            }
+            UE_LOG(LogTemp, Display, TEXT("[wire] %s: %s"), *Material->GetName(), What);
+            return true;
+        };
+
+        for (const TCHAR* Path : GrassMaterialPaths)
+        {
+            UMaterial* Material = LoadObject<UMaterial>(nullptr, Path);
+            if (!Material)
+            {
+                UE_LOG(LogTemp, Error, TEXT("[wire] нет %s"), Path);
+                return false;
+            }
+            if (!Finish(Material, WireTrampleCompressIntoWPO(Material, Compress), TEXT("World Position Offset через MF_TrampleCompressWPO")))
+            {
+                return false;
+            }
+        }
+
+        UMaterial* Landscape = LoadObject<UMaterial>(nullptr, LandscapeMaterialPath);
+        if (!Landscape)
+        {
+            UE_LOG(LogTemp, Error, TEXT("[wire] нет %s"), LandscapeMaterialPath);
+            return false;
+        }
+        const bool bLandscapeSamples = Landscape->GetExpressions().ContainsByPredicate([Trample](UMaterialExpression* Expression)
+        {
+            const UMaterialExpressionMaterialFunctionCall* Call = Cast<UMaterialExpressionMaterialFunctionCall>(Expression);
+            return Call && Call->MaterialFunction == Trample;
+        });
+        const EWireResult LandscapeResult = ReplaceCompressWithSampleTrample(Landscape, Compress, Trample);
+        if (LandscapeResult == EWireResult::AlreadyWired && !bLandscapeSamples)
+        {
+            // Слой тропы ландшафта -- решение художника (какая текстура, какой
+            // слой): без готового Lerp коммандлету подключать не к чему.
+            UE_LOG(LogTemp, Warning, TEXT("[wire] %s: MF_SampleTrample нет -- Lerp цвета к земле тропы по Trample собрать руками (TOOLS_REFERENCE.md)"),
+                *Landscape->GetName());
+        }
+        if (!Finish(Landscape, LandscapeResult, TEXT("тропа по пикселю через MF_SampleTrample")))
+        {
+            return false;
+        }
+
+        for (const TCHAR* Path : TrampleableInstancePaths)
+        {
+            UMaterialInstanceConstant* Instance = LoadObject<UMaterialInstanceConstant>(nullptr, Path);
+            if (!Instance)
+            {
+                UE_LOG(LogTemp, Error, TEXT("[wire] нет %s"), Path);
+                return false;
+            }
+            OutWired.Add(Instance);
+            if (UMaterialEditingLibrary::GetMaterialInstanceStaticSwitchParameterValue(Instance, TrampleableSwitchName))
+            {
+                UE_LOG(LogTemp, Display, TEXT("[wire] %s: Trampleable уже включён"), *Instance->GetName());
+                continue;
+            }
+            // Возвращаемое значение не смотреть: в 5.7 оно всегда false
+            // (bResult в движке не присваивается) -- проверка чтением.
+            UMaterialEditingLibrary::SetMaterialInstanceStaticSwitchParameterValue(Instance, TrampleableSwitchName, true);
+            if (!UMaterialEditingLibrary::GetMaterialInstanceStaticSwitchParameterValue(Instance, TrampleableSwitchName))
+            {
+                UE_LOG(LogTemp, Error, TEXT("[wire] %s: переключатель Trampleable не включился -- его нет у родителя %s?"),
+                    *Instance->GetName(), *GetNameSafe(Instance->Parent));
+                return false;
+            }
+            if (!SaveAssetPackage(Instance))
+            {
+                UE_LOG(LogTemp, Error, TEXT("[wire] не удалось сохранить %s"), *Instance->GetPathName());
+                return false;
+            }
+            UE_LOG(LogTemp, Display, TEXT("[wire] %s: Trampleable включён"), *Instance->GetName());
+        }
+        return true;
+    }
+
+    // -verify: временный материал с вызовом функции, выход -- в свойство
+    // материала. Автотест графа компиляцию не видит, это её единственная
+    // проверка без редактора.
+    bool VerifyMaterialFunctionCompiles(UMaterialFunction* Function, const TCHAR* OutputName, EMaterialProperty Property,
+        const TCHAR* Case, UTexture* Texture, bool bExpectTexture)
+    {
+        UMaterial* Material = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+        if (Property == MP_OpacityMask)
+        {
+            // Маска компилируется только у маскированного материала.
+            Material->BlendMode = BLEND_Masked;
+        }
+        UMaterialExpressionMaterialFunctionCall* Call = Cast<UMaterialExpressionMaterialFunctionCall>(
+            UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMaterialFunctionCall::StaticClass()));
+        if (!Call || !Call->SetMaterialFunction(Function) || !UMaterialEditingLibrary::ConnectMaterialProperty(Call, OutputName, Property))
+        {
+            UE_LOG(LogTemp, Error, TEXT("[verify] %s (%s): не удалось подключить выход %s"), *Function->GetName(), Case, OutputName);
+            return false;
+        }
+
+        return VerifyCompiledMaterial(Material, FString::Printf(TEXT("%s (%s)"), *Function->GetName(), Case), Texture, bExpectTexture);
     }
 
     // Переключатель по умолчанию выключен -- ветка сжатия без этого не
@@ -262,13 +368,20 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         RestoreFunctionPinIds(Function, PinIds);
         UMaterialEditingLibrary::LayoutMaterialFunctionExpressions(Function);
         UMaterialEditingLibrary::UpdateMaterialFunction(Function, nullptr);
-        if (!SaveMaterialFunctionPackage(Function))
+        if (!SaveAssetPackage(Function))
         {
             UE_LOG(LogTemp, Error, TEXT("Не удалось сохранить %s"), *Function->GetPathName());
             return 1;
         }
         bTrampleBuilt |= Step.Slot == &Trample;
         UE_LOG(LogTemp, Display, TEXT("Собрана %s"), *Function->GetPathName());
+    }
+
+    TArray<UMaterialInterface*> Wired;
+    if (FParse::Param(*Params, TEXT("wire")) && !WireTrampleMaterials(Trample, Compress, Wired))
+    {
+        UE_LOG(LogTemp, Error, TEXT("[wire] не доведено -- сохранено то, что успело до ошибки"));
+        return 1;
     }
 
     if (FParse::Param(*Params, TEXT("verify")))
@@ -289,6 +402,13 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         bAllCompile &= VerifyTrampleCompressBothBranches(GrassSquash, Sources.TrampleMap);
         bAllCompile &= VerifyMaterialFunctionCompiles(FlowerOpen, TEXT("WPO"), MP_WorldPositionOffset, TEXT("шейдер вершин"), Sources.TrampleMap, false);
         bAllCompile &= VerifyMaterialFunctionCompiles(FlowerOpen, TEXT("Open"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
+        // Подключённые -wire: мастера травы тропу не читают (Trampleable по
+        // умолчанию выключен), ландшафт и инстансы низкого покрова -- читают.
+        for (UMaterialInterface* Material : Wired)
+        {
+            const bool bExpectTrample = Material->IsA<UMaterialInstance>() || Material->GetOutermost()->GetName() == LandscapeMaterialPath;
+            bAllCompile &= VerifyCompiledMaterial(Material, Material->GetName(), Sources.TrampleMap, bExpectTrample);
+        }
         if (!bAllCompile)
         {
             UE_LOG(LogTemp, Error, TEXT("[verify] есть ошибки"));

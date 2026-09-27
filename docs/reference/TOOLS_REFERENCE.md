@@ -21,7 +21,7 @@
 | `-run=PcgResourceSlotsSetup` | Слоты ресурсов (этап 5б, `DESIGN_Living_Vegetation_Research.md` §4.1), оба шага идемпотентны. (1) Собирает `/Game/PCG/PCG_ResourceSlots`, если его нет или он пуст (непустой — не трогает, дальше граф правит художник): от сплайна своего актора — вода (`Create Surface From Spline` → `Surface Sampler`, 0.3 на м²), кромка (точки по сплайну, сдвиг до 1.5 м по каждой оси, минус вода, проекция на ландшафт), суша (то же, сдвиг до 9 м по каждой оси); атрибут `SlotKind` = `Water`/`Shore`/`Land`; всё сходится в узел **Write Herbalist Resource Slots**. Шаг по сплайну — в локальных единицах сплайна (масштаб актора его растягивает). (2) Добавляет в `BP_WaterVolume` PCG-компонент с графом, `GenerateOnDemand`. Запекание слотов в ассет карты `/Game/Data/ResourceSlots/RS_<карта>` — движковым билдером, без `-nullrhi`: `MSYS_NO_PATHCONV=1 UnrealEditor-Cmd.exe <uproject> -run=WorldPartitionBuilderCommandlet /Game/Maps/L_TestDev -Builder=PCGWorldPartitionBuilder -IncludeGraphNames=PCG_ResourceSlots -GenerateComponentEditingModeNormal -AllowCommandletRendering`; в логе `[Slots] <актор>: записано N слотов`. В редакторе узел перезаписывает набор своего актора при каждой генерации компонента и помечает ассет изменённым. Набор удалённого или переименованного актора в ассете остаётся — удалить ассет и перезапечь | 2026-09-19 |
 | `-run=TrampleMapSetup` | Создаёт `RT_TrampleMap` (1024×1024, RGBA8, линейная гамма, билинейный, **wrap**) и заводит в `MPC_WorldStateFields` параметры `TrampleMapFrame`/`TramplePlayerPosition`. Карты не трогает — пути лежат в Herbalist Settings. Идемпотентен | 2026-09-12 |
 | `-run=TimeDisplaySetup` | Заводит в `MPC_WorldStateFields` (путь — `TimeDisplayCollection` в Herbalist Settings) параметры времени для материалов: скаляры `TimeOfDay01`, `SeasonUDW`, `LeafDrop01`, `LeafFall01`, `LeafLitter01`, `MoonFull01`, `Morok01` (воспринятое искажение в клетке игрока, сглаженное — под цветокоррекцию поста, `DECISIONS_LOG.md` №6), векторы `DayPhaseWeights` (R рассвет, G день, B закат, A ночь) и `SeasonWeights` (R весна, G лето, B осень, A зима). Значения пишет менеджер сетки каждый тик. Карты не трогает. Идемпотентен | 2026-09-16 |
-| `-run=MaterialFunctionsSetup [-rebuild [-only=MF_A,MF_B]] [-verify]` | Собирает функции материалов в `/Game/Materials/Functions`: для карт мира `MF_SampleWorldState`, `MF_SampleTrample`, `MF_TrampleCompressWPO`; слой сезона и суток `MF_SeasonWeights`, `MF_SeasonColor`, `MF_LeafDrop`, `MF_GrassSquash`, `MF_FlowerOpen` (подключение — раздел «Функции материалов» ниже). Нужны ассеты коммандлетов выше (`WorldStateMapSetup`, `TrampleMapSetup`, `TimeDisplaySetup`) и коллекция Ultra Dynamic Weather. Существующую функцию не трогает; `-rebuild` перестраивает граф (правки в редакторе теряются, Id входов и выходов сохраняются — подключения в материалах не рвутся), с `-only=` — только перечисленные функции (без `-rebuild` не действует; перестроенная `MF_SampleTrample` тянет за собой зовущие её `MF_TrampleCompressWPO` и `MF_GrassSquash`). Материалы не трогает. `-verify` компилирует каждую функцию во временном материале (шейдер пикселей и вершин, обе ветки `Trampleable` у `MF_TrampleCompressWPO` и `MF_GrassSquash`) и печатает ошибки компилятора; запускать **без** `-nullrhi` и с `-AllowCommandletRendering`, иначе ресурса материала нет и проверка отказывает | 2026-09-16 |
+| `-run=MaterialFunctionsSetup [-rebuild [-only=MF_A,MF_B]] [-wire] [-verify]` | Собирает функции материалов в `/Game/Materials/Functions`: для карт мира `MF_SampleWorldState`, `MF_SampleTrample`, `MF_TrampleCompressWPO`; слой сезона и суток `MF_SeasonWeights`, `MF_SeasonColor`, `MF_LeafDrop`, `MF_GrassSquash`, `MF_FlowerOpen` (подключение — раздел «Функции материалов» ниже). Нужны ассеты коммандлетов выше (`WorldStateMapSetup`, `TrampleMapSetup`, `TimeDisplaySetup`) и коллекция Ultra Dynamic Weather. Существующую функцию не трогает; `-rebuild` перестраивает граф (правки в редакторе теряются, Id входов и выходов сохраняются — подключения в материалах не рвутся), с `-only=` — только перечисленные функции (без `-rebuild` не действует; перестроенная `MF_SampleTrample` тянет за собой зовущие её `MF_TrampleCompressWPO` и `MF_GrassSquash`). Материалы трогает только с `-wire` (2026-09-27): тропа в мастерах — см. «Тропа в мастер-материалах» ниже; повторный запуск ничего не меняет. `-verify` компилирует каждую функцию во временном материале (шейдер пикселей и вершин, обе ветки `Trampleable` у `MF_TrampleCompressWPO` и `MF_GrassSquash`), с `-wire` — и подключённые мастера с инстансами, и печатает ошибки компилятора; запускать **без** `-nullrhi` и с `-AllowCommandletRendering`, иначе ресурса материала нет и проверка отказывает | 2026-09-16 |
 | `-run=CompendiumAudit [-CompendiumPath=<папка>]` | Только чтение: сверка карточек компендиума с DataTable (ранги, оси, биомы; геймплейного тюнинга в карточках нет — его не сверяет) | 2026-09-03 |
 | `-run=PlaytestMapCreate` | Создаёт карту `L_Playtest`: восемь `ABiomeRegionVolume` полосами, менеджер сетки, домашний якорь. `L_TestDev` не трогает | 2026-09-06 |
 | `-run=BiomeGraphExport` | `DA_BiomeGraph` → `CSV_tabs/DA_BiomeGraph.json`, чтобы значения графа ревьюились в git | 2026-08-24 |
@@ -38,11 +38,27 @@
 |---|---|---|---|
 | `MF_SampleWorldState` | `WorldPosition` | `Distortion` (R), `Corruption` (G), `HarvestStress` (B), `ShrineInfluence` (A), `UV`, `InsideWindow` | цвет травы и ландшафта по клетке; за окном карты оси — крайние тексели, умножать или смешивать по `InsideWindow` |
 | `MF_SampleTrample` | `Position` | `Trample` (с затуханием к краю окна), `RawTrample`, `Fade` | земля на тропе: `Lerp` к слою тропы по `Trample` |
-| `MF_TrampleCompressWPO` | `WPO` (ветер) | `WPO`, `Trample` | трава на тропе: выход `WPO` — в World Position Offset вместо ветра. Переключатель `Trampleable` (выключен) включить в инстансах низкого покрова — список в `CHANGELOG.md`, «схема травы на тропе» |
+| `MF_TrampleCompressWPO` | `WPO` (ветер) | `WPO`, `Trample` | трава на тропе: выход `WPO` — в World Position Offset вместо ветра. Переключатель `Trampleable` (выключен) — в инстансах низкого покрова. Подключает `-wire`. Ландшафту не годится: читает тропу в основании экземпляра, у ландшафта это начало компонента |
 
 Выборки карт — с явным мипом 0 (в шейдере вершин нет производных), основание
 кустика — `Instance & Particle Space` (PCG-трава — Nanite). Компиляцию проверяет
 `-verify`; после подключения в материал — Apply без ошибок в редакторе.
+
+#### Тропа в мастер-материалах (`-wire`)
+
+`-run=MaterialFunctionsSetup -wire -verify -AllowCommandletRendering` (редактор
+закрыт — коммандлет сохраняет материалы). Узлы материалов не удаляет, кроме
+неверного вызова сжатия в ландшафте; повторный запуск ничего не меняет.
+
+| Ассет | Что делает `-wire` |
+|---|---|
+| `M_Foliage_Master`, `M_plants` | то, что стояло в World Position Offset (ветер со своими `Lerp`), → вход `WPO` вызова `MF_TrampleCompressWPO` → World Position Offset. Вызов встаёт последним: сжатие — всей травинке, ветер слабеет по той же доле |
+| `M_landscape` | вызовы `MF_TrampleCompressWPO` заменяет на `MF_SampleTrample` (`Position` не подключён — позиция пикселя): выход `Trample` — туда же, куда шёл (`Lerp` к земле тропы), выход `WPO` — на то, что было на его входе. Без `MF_SampleTrample` и без сжатия — предупреждение: `Lerp` к слою тропы собрать руками, текстура тропы — выбор художника |
+| `MI_Grass`, `MI_Clover`, `MI_Fern`, `MI_grass_01/02_Inst`, `MI_flower_01/02_Inst` | `Trampleable` включён. Кусты и листва деревьев (`MI_Bush`, `MI_*_Tree_Leaves`, `MI_shrub_*`) — выключен: они на тропе стоят |
+
+Списки — `HerbalistMaterialFunctionGraphs.h`. Вызов сжатия уже стоит в
+материале, но не в World Position Offset — отказ с ошибкой: подключено руками
+иначе, второй вызов считал бы тропу дважды.
 
 ### Листопад у игрока (`ULeafFallSubsystem`)
 
@@ -80,21 +96,24 @@ ini можно дополнить или заменить, но не очист�
 | `MF_GrassSquash` | `WPO` (ветер), `WinterStrength` (0.8), `SnowStrength` (1), `Snow` (`Snowy` UDW) | `WPO`, `Squash`, `Trample` | трава: `WPO` — в World Position Offset вместо ветра; ложится от максимума тропы (`Trampleable`), зимы и снега; `Squash` — для пожухлого цвета |
 | `MF_FlowerOpen` | `OpenPhase` (Vector4, R рассвет, G день, B закат, A ночь; день), `WPO`, `PetalMask` (красный канал цвета вершин), `CloseAmount` (0.7) | `WPO`, `Open` | цветы: `WPO` цепочкой **до** `MF_GrassSquash` (ветер → `MF_FlowerOpen` → `MF_GrassSquash`): закрытие цветка ослабляет входящий WPO и после сжатия отменило бы его — цветок вставал бы из-под снега; `OpenPhase` — параметр вектора в мастере, значение в инстансе вида |
 
-**Подключение в мастер-материалы — вручную в редакторе.** Коммандлет в них не
-пишет: в `M_Foliage_Master` и `M_landscape` уже стоит ручная сборка троп.
+**Подключение в мастер-материалы — вручную в редакторе**, кроме тропы (её
+ставит `-wire`, см. выше).
 
 - `M_Foliage_Master` (листва и трава Stylized PBR Nature): текущий цвет перед
-  Base Color → `MF_SeasonColor.Color` → Base Color. Текущий WPO (ветер со
-  сборкой троп) → `MF_GrassSquash.WPO` → World Position Offset, `Trampleable`
-  выключен, чтобы тропа не считалась дважды. Листве деревьев — текущая маска →
+  Base Color → `MF_SeasonColor.Color` → Base Color. `MF_GrassSquash` —
+  **вместо** вызова `MF_TrampleCompressWPO`, а не после него: переключатель
+  `Trampleable` у них общий, цепочка из двух считала бы тропу дважды. Зима и
+  снег в `MF_GrassSquash` за переключателем не спрятаны — на этом мастере
+  они положили бы и кусты с листвой деревьев; нужен свой статический
+  переключатель «трава». Листве деревьев — текущая маска →
   `MF_LeafDrop.OpacityMask` → Opacity Mask под статическим переключателем
   «листва», траве не нужен. «Nanite Foliage выключается» в плане — это
   `r.Nanite.Foliage`; маскированная листва на Nanite-меше — программируемый
   растеризатор, дорого: для деревьев с листопадом Nanite у меша лучше выключить.
-- `M_plants` (Stylized Forest): цвет → `MF_SeasonColor`; `SimpleGrassWind` →
-  `MF_GrassSquash.WPO` → World Position Offset; у цветов между ними
-  `MF_FlowerOpen`: `SimpleGrassWind` → `MF_FlowerOpen.WPO` →
-  `MF_GrassSquash.WPO`, `OpenPhase` — параметр вектора.
+- `M_plants` (Stylized Forest): цвет → `MF_SeasonColor`; `MF_GrassSquash`
+  встаёт на место `MF_TrampleCompressWPO` (то же, что выше); у цветов перед
+  ним `MF_FlowerOpen`: ветер → `MF_FlowerOpen.WPO` → `MF_GrassSquash.WPO`,
+  `OpenPhase` — параметр вектора.
 - `M_landscape`: цвет слоя травы → `MF_SeasonColor`; подстилка — `Lerp` цвета
   земли к текстуре опавшей листвы по `MF_SeasonWeights.LeafLitter01` (текстура
   подстилки — выбор художника). Снега в нём сейчас нет

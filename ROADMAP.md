@@ -272,14 +272,12 @@
 - **Тропы** (2026-09-12) — ядро сделано: `UTrampleSubsystem` + `FTrampleField`
   + `FTrampleWindow`, данные на CPU, распад формулой, сохранение, показ через
   одну мировую текстуру `RT_TrampleMap` вокруг игрока. Проверено глазами:
-  `M_Floor` на `L_PlaytestPaint` и `M_landscape` на `L_TestDev`. Осталось в
-  редакторе: **трава на тропе прижимается к основанию** — `M_Foliage_Master` и
-  `M_plants`: схема нод собрана функцией `MF_TrampleCompressWPO` (2026-09-16,
-  переключатель `Trampleable` внутри), осталось подключить её выход в World
-  Position Offset обоих материалов и включить переключатель в `MI_Grass`,
-  `MI_Clover`, `MI_Fern`, `MI_grass_01/02_Inst`, `MI_flower_01/02_Inst`.
-  Проверка — в `CHANGELOG.md`, запись «хвосты: что подтверждено в движке,
-  схема травы на тропе».
+  `M_Floor` на `L_PlaytestPaint` и `M_landscape` на `L_TestDev`. **Трава на
+  тропе** подключена 2026-09-27 (`-run=MaterialFunctionsSetup -wire`:
+  `MF_TrampleCompressWPO` в World Position Offset `M_Foliage_Master` и
+  `M_plants`, `Trampleable` в семи инстансах низкого покрова, ландшафт — на
+  `MF_SampleTrample`). Осталось глазами в PIE — проверка в `CHANGELOG.md`,
+  запись «хвосты: что подтверждено в движке, схема травы на тропе».
 - **Гребень/Шапка-невидимка** снимают сущность с клетки/подавляют
   проявление, но не блокируют передвижение физически — в проекте нет
   механики непроходимости вовсе, тот же класс упрощения.

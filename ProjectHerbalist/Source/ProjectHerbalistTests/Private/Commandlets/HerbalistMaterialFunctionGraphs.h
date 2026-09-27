@@ -33,6 +33,7 @@
 
 #include "CoreMinimal.h"
 
+class UMaterial;
 class UMaterialFunction;
 class UMaterialParameterCollection;
 class UTexture;
@@ -59,6 +60,25 @@ namespace HerbalistMaterialFunctions
 
     // Имя переключателя -- то же, что в схеме бэклога и в инстансах травы.
     inline const TCHAR* TrampleableSwitchName = TEXT("Trampleable");
+
+    // Тропа в мастер-материалах (-wire, 2026-09-27). Трава -- сжатие в WPO,
+    // ландшафт -- выборка по пикселю для Lerp к земле тропы.
+    inline const TCHAR* GrassMaterialPaths[] = {
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/M_Foliage_Master"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/M_plants"),
+    };
+    inline const TCHAR* LandscapeMaterialPath = TEXT("/Game/Stylized_Forest/Materials/landscape/M_landscape");
+    // Низкий покров ложится на тропе; кусты и листва деревьев на тех же
+    // мастерах стоят (CHANGELOG.md, 2026-09-12, «схема травы на тропе»).
+    inline const TCHAR* TrampleableInstancePaths[] = {
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/MI_Grass"),
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/MI_Clover"),
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/MI_Fern"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_grass_01_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_grass_02_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_flower_01_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_flower_02_Inst"),
+    };
 
     struct FSources
     {
@@ -95,4 +115,25 @@ namespace HerbalistMaterialFunctions
     };
     FFunctionPinIds CaptureFunctionPinIds(const UMaterialFunction* Function);
     void RestoreFunctionPinIds(UMaterialFunction* Function, const FFunctionPinIds& PinIds);
+
+    enum class EWireResult
+    {
+        AlreadyWired,   // уже так, материал не тронут
+        Wired,
+        Failed,         // причина в логе
+    };
+
+    // Трава: то, что было в World Position Offset (ветер), -> вход WPO вызова
+    // MF_TrampleCompressWPO -> World Position Offset. Узлы материала не
+    // трогаются, вызов встаёт последним. Вызов уже есть, но не в WPO --
+    // Failed: подключено руками иначе, второй вызов считал бы тропу дважды.
+    EWireResult WireTrampleCompressIntoWPO(UMaterial* Material, UMaterialFunction* Compress);
+
+    // Ландшафт: вызовы MF_TrampleCompressWPO заменяются MF_SampleTrample.
+    // Сжатие читает тропу в основании экземпляра, а у ландшафта это начало
+    // компонента -- один тексель на весь компонент; выборке нужна позиция
+    // пикселя (вход Position не подключён). Выход Trample переходит на
+    // выборку, выход WPO -- на то, что было на его входе (переключатель в
+    // ландшафте выключен, выход равен входу).
+    EWireResult ReplaceCompressWithSampleTrample(UMaterial* Material, UMaterialFunction* Compress, UMaterialFunction* SampleTrample);
 }

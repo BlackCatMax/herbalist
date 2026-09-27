@@ -5,6 +5,7 @@
 #include "MaterialEditingLibrary.h"
 #include "Engine/Texture.h"
 #include "Engine/EngineTypes.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "Materials/MaterialExpressionAdd.h"
@@ -718,4 +719,160 @@ void HerbalistMaterialFunctions::RestoreFunctionPinIds(UMaterialFunction* Functi
             if (const FGuid* Id = PinIds.Outputs.Find(Output->OutputName)) Output->Id = *Id;
         }
     }
+}
+
+namespace
+{
+    UMaterialExpressionMaterialFunctionCall* AsCallTo(UMaterialExpression* Expression, const UMaterialFunction* Function)
+    {
+        UMaterialExpressionMaterialFunctionCall* Call = Cast<UMaterialExpressionMaterialFunctionCall>(Expression);
+        return Call && Call->MaterialFunction == Function ? Call : nullptr;
+    }
+
+    FExpressionInput* FindCallInput(UMaterialExpressionMaterialFunctionCall* Call, FName Name)
+    {
+        for (FFunctionExpressionInput& CallInput : Call->FunctionInputs)
+        {
+            if (CallInput.ExpressionInput && CallInput.ExpressionInput->InputName == Name)
+            {
+                return &CallInput.Input;
+            }
+        }
+        return nullptr;
+    }
+
+    int32 FindCallOutput(const UMaterialExpressionMaterialFunctionCall* Call, FName Name)
+    {
+        for (int32 i = 0; i < Call->FunctionOutputs.Num(); ++i)
+        {
+            const UMaterialExpressionFunctionOutput* CallOutput = Call->FunctionOutputs[i].ExpressionOutput;
+            if (CallOutput && CallOutput->OutputName == Name)
+            {
+                return i;
+            }
+        }
+        return INDEX_NONE;
+    }
+
+    UMaterialExpressionMaterialFunctionCall* AddCall(UMaterial* Material, UMaterialFunction* Function, int32 X, int32 Y)
+    {
+        UMaterialExpressionMaterialFunctionCall* Call = Cast<UMaterialExpressionMaterialFunctionCall>(
+            UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMaterialFunctionCall::StaticClass(), X, Y));
+        return Call && Call->SetMaterialFunction(Function) ? Call : nullptr;
+    }
+}
+
+HerbalistMaterialFunctions::EWireResult HerbalistMaterialFunctions::WireTrampleCompressIntoWPO(UMaterial* Material, UMaterialFunction* Compress)
+{
+    if (!Material || !Compress) return EWireResult::Failed;
+    FExpressionInput* Wpo = Material->GetExpressionInputForProperty(MP_WorldPositionOffset);
+    if (!Wpo) return EWireResult::Failed;
+    if (AsCallTo(Wpo->Expression, Compress))
+    {
+        return EWireResult::AlreadyWired;
+    }
+    for (UMaterialExpression* Expression : Material->GetExpressions())
+    {
+        if (AsCallTo(Expression, Compress))
+        {
+            UE_LOG(LogTemp, Error, TEXT("%s: %s уже стоит, но не в World Position Offset -- подключено руками иначе, не трогаю"),
+                *Material->GetName(), *Compress->GetName());
+            return EWireResult::Failed;
+        }
+    }
+
+    UMaterialExpression* Previous = Wpo->Expression;
+    const int32 PreviousOutput = Wpo->OutputIndex;
+    const int32 X = Previous ? Previous->MaterialExpressionEditorX + 300 : -300;
+    const int32 Y = Previous ? Previous->MaterialExpressionEditorY : 0;
+    UMaterialExpressionMaterialFunctionCall* Call = AddCall(Material, Compress, X, Y);
+    FExpressionInput* WindPin = Call ? FindCallInput(Call, TEXT("WPO")) : nullptr;
+    if (!WindPin)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: вызов %s без входа WPO"), *Material->GetName(), *Compress->GetName());
+        return EWireResult::Failed;
+    }
+    if (Previous)
+    {
+        WindPin->Connect(PreviousOutput, Previous);
+    }
+    if (!UMaterialEditingLibrary::ConnectMaterialProperty(Call, TEXT("WPO"), MP_WorldPositionOffset))
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: выход WPO не подключился к World Position Offset"), *Material->GetName());
+        return EWireResult::Failed;
+    }
+    return EWireResult::Wired;
+}
+
+HerbalistMaterialFunctions::EWireResult HerbalistMaterialFunctions::ReplaceCompressWithSampleTrample(UMaterial* Material,
+    UMaterialFunction* Compress, UMaterialFunction* SampleTrample)
+{
+    if (!Material || !Compress || !SampleTrample) return EWireResult::Failed;
+    TArray<UMaterialExpressionMaterialFunctionCall*> Wrong;
+    for (UMaterialExpression* Expression : Material->GetExpressions())
+    {
+        if (UMaterialExpressionMaterialFunctionCall* Call = AsCallTo(Expression, Compress))
+        {
+            Wrong.Add(Call);
+        }
+    }
+    if (Wrong.IsEmpty())
+    {
+        return EWireResult::AlreadyWired;
+    }
+
+    UMaterialExpressionMaterialFunctionCall* Sample = AddCall(Material, SampleTrample,
+        Wrong[0]->MaterialExpressionEditorX, Wrong[0]->MaterialExpressionEditorY);
+    const int32 TrampleOutput = Sample ? FindCallOutput(Sample, TEXT("Trample")) : INDEX_NONE;
+    if (TrampleOutput == INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: вызов %s без выхода Trample"), *Material->GetName(), *SampleTrample->GetName());
+        return EWireResult::Failed;
+    }
+
+    auto Redirect = [&Wrong, Sample, TrampleOutput](FExpressionInput* Input)
+    {
+        UMaterialExpressionMaterialFunctionCall* From = Input ? Cast<UMaterialExpressionMaterialFunctionCall>(Input->Expression) : nullptr;
+        if (!From || !Wrong.Contains(From))
+        {
+            return;
+        }
+        if (Input->OutputIndex == FindCallOutput(From, TEXT("Trample")))
+        {
+            Input->Connect(TrampleOutput, Sample);
+            return;
+        }
+        const FExpressionInput* Through = FindCallInput(From, TEXT("WPO"));
+        if (Through && Through->Expression)
+        {
+            Input->Connect(Through->OutputIndex, Through->Expression);
+        }
+        else
+        {
+            Input->Expression = nullptr;
+        }
+    };
+
+    const TArray<UMaterialExpression*> Expressions(Material->GetExpressions());
+    for (UMaterialExpression* Expression : Expressions)
+    {
+        if (Wrong.Contains(Expression))
+        {
+            continue;
+        }
+        for (FExpressionInput* Input : Expression->GetInputsView())
+        {
+            Redirect(Input);
+        }
+    }
+    // Все свойства, как у UMaterialEditingLibrary::DeleteMaterialExpression.
+    for (int32 Property = 0; Property < MP_MAX; ++Property)
+    {
+        Redirect(Material->GetExpressionInputForProperty(static_cast<EMaterialProperty>(Property)));
+    }
+    for (UMaterialExpressionMaterialFunctionCall* Call : Wrong)
+    {
+        UMaterialEditingLibrary::DeleteMaterialExpression(Material, Call);
+    }
+    return EWireResult::Wired;
 }
