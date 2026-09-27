@@ -128,6 +128,15 @@ void AHerbalistResourceActor::RegisterOnCell()
     }
 }
 
+void AHerbalistResourceActor::UnregisterFromCell()
+{
+    if (!WorldManager) return;
+    if (FGridCell* Cell = WorldManager->GetCell(GridX, GridY))
+    {
+        Cell->ResourceActors.Remove(this);
+    }
+}
+
 void AHerbalistResourceActor::FindAndSetWorldManager()
 {
     UWorld* World = GetWorld();
@@ -158,6 +167,16 @@ void AHerbalistResourceActor::Init(FName InIngredientID, const FText& InDisplayN
     bDelicate = InDelicate;
     bInitializedFromCode = true;
     bSpawnedByGrid = true;   // C++-путь спавна -- см. WasSpawnedByGrid()
+    // SpawnActor уже проиграл BeginPlay, и тот поставил актор на клетку по
+    // позиции -- ближайший угол, а растение со слота стоит внутри клетки
+    // (WorldPositionToCell). Клетка сетки главнее: без снятия актор числился
+    // в двух клетках, сбор снимал его с одной, у второй оставалась мёртвая
+    // запись, а сейв второй клетки выращивал копию (2026-09-27, по PIE-логу
+    // «Resource=None x10», «ресурсов 47»).
+    if (WorldManager != InWorldManager || GridX != InGridX || GridY != InGridY)
+    {
+        UnregisterFromCell();
+    }
     WorldManager = InWorldManager;
     GridX = InGridX;
     GridY = InGridY;

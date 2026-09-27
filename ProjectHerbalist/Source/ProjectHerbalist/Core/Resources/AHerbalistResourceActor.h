@@ -89,6 +89,11 @@ protected:
     // менеджера (сбор/возрождение/сохранение/дебаг читают этот список).
     void RegisterOnCell();
 
+    // Снимает this со списка клетки (GridX,GridY). Init() зовёт перед сменой
+    // клетки: SpawnActor проигрывает BeginPlay раньше Init(), и актор уже
+    // стоит на клетке, найденной по позиции (2026-09-27).
+    void UnregisterFromCell();
+
     UFUNCTION(BlueprintImplementableEvent, Category = "Herbalist|Effects")
     void OnHarvestStarted();
 
