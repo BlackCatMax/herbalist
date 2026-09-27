@@ -29,6 +29,11 @@
 
 ## А. Подготовка в редакторе
 
+Сначала — «Настройка по шагам» в
+`herbalist_docs/Herbalist_Vault/03_Technical/Current/Level_Assembly.md`
+(что готово, что включить), и памятка «Как пользоваться» в
+[1](01_Start.md) — там же, как работает пояс.
+
 - [ ] А1. Рядом с котлом на `L_TestDev`: лавка (`ASleepBenchActor`),
   камень-жертвенник (`AOfferingStoneActor`), один-два тайника
   (`AOrderCacheActor`). Карта **сохранена**.
