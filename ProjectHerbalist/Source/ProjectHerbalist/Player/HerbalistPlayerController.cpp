@@ -35,6 +35,7 @@
 #include "UI/JournalLogWidget.h"
 #include "UI/ChoiceLineWidget.h"
 #include "UI/MemoryRevealWidget.h"
+#include "UI/SensationLineWidget.h"
 #include "Core/Simulation/Public/CommandTypes.h"
 #include "Core/Dialogue/HerbalistDialogueTypes.h"
 
@@ -341,8 +342,15 @@ bool AHerbalistPlayerController::GetHitResultFromCamera(FHitResult& OutHit, ECol
 bool AHerbalistPlayerController::CanHarvestActor(AActor* TargetActor) const
 {
     if (!TargetActor || !GetPawn()) return false;
-    const float Distance = FVector::Dist(GetPawn()->GetActorLocation(), TargetActor->GetActorLocation());
-    return Distance <= MaxHarvestDistance;
+    return HarvestDistanceTo(TargetActor->GetActorLocation()) <= MaxHarvestDistance;
+}
+
+float AHerbalistPlayerController::HarvestDistanceTo(const FVector& Point) const
+{
+    // По горизонтали (2026-09-27, по PIE-логу: подсвеченное растение «далеко
+    // -- 202 см» стоя вплотную). Центр капсулы выше земли почти на метр, и
+    // в пространстве до основания растения набегало ~2 м при любом подходе.
+    return GetPawn() ? FVector::Dist2D(GetPawn()->GetActorLocation(), Point) : TNumericLimits<float>::Max();
 }
 
 // ============================================================================
@@ -390,7 +398,7 @@ void AHerbalistPlayerController::Harvest()
     TryCollectWaterAt(Hit);
 }
 
-bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit)
+bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit, bool bQuiet)
 {
     // Сбор воды (без актора)
     AGridWorldManager* WorldManager = FindWorldManager();
@@ -398,7 +406,7 @@ bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit)
 
     if (GetPawn())
     {
-        const float Dist = FVector::Dist(GetPawn()->GetActorLocation(), Hit.Location);
+        const float Dist = HarvestDistanceTo(Hit.Location);
         if (Dist > MaxHarvestDistance)
         {
             UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: до точки %.1f см, предел %.1f см -- подойди ближе"), Dist, MaxHarvestDistance);
@@ -419,6 +427,10 @@ bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit)
         // Самый частый и самый непонятный случай: игрок целится в землю, на
         // которой ничего не выросло. Причин ровно две, и обе стоит назвать,
         // иначе отличить «не туда смотрю» от «мир пуст» невозможно.
+        if (bQuiet)
+        {
+            return false;
+        }
         const int32 Here = Cell ? Cell->ResourceActors.Num() : 0;
         UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: под прицелом %s -- не ресурс и не вода. Клетка (%d,%d): ресурсов %d%s"),
             *GetNameSafe(Hit.GetActor()), X, Y, Here,
@@ -440,6 +452,7 @@ bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit)
         if (InventoryComponent->GetAvailableCapacityFor(Expected) < 1)
         {
             UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: сумка полна -- воду '%s' некуда налить"), *Expected.IngredientID.ToString());
+            ShowHintLine(TEXT("Котомка полна."));
             return false;
         }
     }
@@ -461,7 +474,7 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
         // вертикали. Без цифр в логе понять, что упираешься именно в
         // MaxHarvestDistance, а не в промах прицела, невозможно. Десятые
         // (2026-09-14, по PIE-логу): «200 см при пределе 200» -- это 200.4.
-        const float Dist = GetPawn() ? FVector::Dist(GetPawn()->GetActorLocation(), Resource->GetActorLocation()) : -1.0f;
+        const float Dist = GetPawn() ? HarvestDistanceTo(Resource->GetActorLocation()) : -1.0f;
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: %s далеко -- %.1f см при пределе MaxHarvestDistance=%.1f см"),
             *Resource->GetName(), Dist, MaxHarvestDistance);
         return false;
@@ -484,6 +497,7 @@ bool AHerbalistPlayerController::TryHarvestResource(AHerbalistResourceActor* Res
     {
         UE_LOG(LogHerbalistPlayer, Warning, TEXT("Сбор: сумка полна -- для '%s' нужна свободная строка, растение не тронуто"),
             *Resource->GetIngredientID().ToString());
+        ShowHintLine(TEXT("Котомка полна."));
         return false;
     }
 
@@ -768,10 +782,11 @@ void AHerbalistPlayerController::Interact()
         return;
     }
 
-    // Цели нет, рука пуста -- вода под взглядом набирается.
+    // Цели нет, рука пуста -- вода под взглядом набирается; не вода --
+    // молча: по пустой земле жмут постоянно.
     if (!bHolding && bHaveHit)
     {
-        TryCollectWaterAt(Hit);
+        TryCollectWaterAt(Hit, /*bQuiet=*/true);
     }
 }
 
@@ -2608,6 +2623,37 @@ void AHerbalistPlayerController::Journal()
 // обычной игры сам по себе, не блокирует ввод и не конкурирует с
 // Инвентарём/Травником за тот же канал -- игрок может продолжать двигаться,
 // пока текст на экране.
+void AHerbalistPlayerController::ShowHintLine(const FString& Line, float Seconds)
+{
+    LastHintLine = Line;
+    if (!IsLocalController() || !GetWorld() || !GetWorld()->GetGameViewport())
+    {
+        return;
+    }
+    if (!HintWidget)
+    {
+        HintWidget = CreateWidget<USensationLineWidget>(this, USensationLineWidget::StaticClass());
+        if (HintWidget)
+        {
+            HintWidget->AddToViewport(6);
+        }
+    }
+    if (!HintWidget)
+    {
+        return;
+    }
+    HintWidget->SetLine(Line);
+    HintWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+    TWeakObjectPtr<USensationLineWidget> Weak = HintWidget;
+    GetWorldTimerManager().SetTimer(HintTimer, FTimerDelegate::CreateLambda([Weak]()
+    {
+        if (USensationLineWidget* Widget = Weak.Get())
+        {
+            Widget->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }), FMath::Max(Seconds, 0.1f), false);
+}
+
 void AHerbalistPlayerController::ShowMemoryRevealText(const FText& Text)
 {
     if (!MemoryRevealWidgetInstance)

@@ -167,6 +167,8 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Herbalist|Harvesting")
     bool CanHarvestActor(AActor* TargetActor) const;
+    // Дальность сбора -- по горизонтали от персонажа (без высоты капсулы).
+    float HarvestDistanceTo(const FVector& Point) const;
 	
     AGridWorldManager* FindWorldManager() const;
     // false -- точка вне сетки (не отрицательная координата: с 2026-09-13
@@ -635,6 +637,13 @@ public:
     // Травник ниже — для перечитать позже, не единственный способ увидеть.
     void ShowMemoryRevealText(const FText& Text);
 
+    // Короткая строка внизу экрана на пару секунд -- то, что травник замечает
+    // сам: «Котомка полна» (2026-09-27, по PIE-логу: отказ был виден только в
+    // логе, игрок жал снова и снова). Без вьюпорта (автотесты) строка только
+    // запоминается.
+    void ShowHintLine(const FString& Line, float Seconds = 2.5f);
+    const FString& GetLastHintLine() const { return LastHintLine; }
+
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
@@ -736,7 +745,14 @@ private:
 
     bool TryHarvestResource(AHerbalistResourceActor* Resource);
     // Набрать воду в точке взгляда. false -- не вода, далеко или некуда.
-    bool TryCollectWaterAt(const FHitResult& Hit);
+    // bQuiet -- не писать в лог «не ресурс и не вода»: «Взаимодействие» по
+    // пустой земле -- обычное дело, а не промах сбора.
+    bool TryCollectWaterAt(const FHitResult& Hit, bool bQuiet = false);
+
+    UPROPERTY()
+    TObjectPtr<class USensationLineWidget> HintWidget = nullptr;
+    FString LastHintLine;
+    FTimerHandle HintTimer;
 
     // Текущий разговор (TalkTo/ChooseDialogueBranch, § комментарий у их
     // объявления выше) — состояние UI-сессии, не мира, не UPROPERTY(SaveGame)

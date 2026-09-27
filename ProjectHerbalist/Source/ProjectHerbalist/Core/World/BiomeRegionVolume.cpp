@@ -152,10 +152,16 @@ FRandomPlacementTransform ABiomeRegionVolume::RollPlacementTransform(const FVect
 
     // Затухание скейла к границе -- см. довод у ScaleFalloffStrength в .h.
     // 0 (дефолт) -- множитель всегда 1, поведение не меняется.
+    // Множитель не ниже MinScaleFalloffFactor (2026-09-27, по PIE-логу:
+    // «Scale3D is (nearly) zero»): при силе 1 растение у дальней вершины
+    // получало масштаб 0 -- невидимое, несобираемое, но занимало место в
+    // клетке. Не ставить такое растение нельзя: записанный набор растений
+    // клетки (сейв, спящие чанки) при каждом пробуждении терял бы его молча.
+    // Редеть к краю -- дело DensityFalloffStrength.
     if (ScaleFalloffStrength > 0.0f)
     {
         const float T = GetNormalizedDistanceFromCenter(BasePosition);
-        Result.UniformScale *= FMath::Lerp(1.0f, 1.0f - T, ScaleFalloffStrength);
+        Result.UniformScale *= FMath::Max(FMath::Lerp(1.0f, 1.0f - T, ScaleFalloffStrength), MinScaleFalloffFactor);
     }
 
     return Result;

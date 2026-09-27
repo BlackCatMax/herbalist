@@ -181,6 +181,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Biome|Placement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float ScaleFalloffStrength = 0.0f;
 
+    // Затухание масштаба не опускает растение ниже этой доли его размера:
+    // нулевой масштаб -- невидимое несобираемое растение (2026-09-27).
+    static constexpr float MinScaleFalloffFactor = 0.3f;
+
     // Принудительно пересчитать кэш точек сплайна. GridWorldManager вызывает
     // это явно на каждом найденном регионе перед проверкой клеток — не
     // полагается на то, что BeginPlay() региона уже отработал (UE не

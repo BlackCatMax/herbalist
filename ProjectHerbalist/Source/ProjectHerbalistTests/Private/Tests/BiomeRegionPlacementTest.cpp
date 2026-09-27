@@ -146,7 +146,7 @@ bool FHerbalistBiomeRegion_ScaleFalloffShrinksNearTheEdge::RunTest(const FString
     // не от случайного разброса самого скейла.
     Region->MinUniformScale = 1.0f;
     Region->MaxUniformScale = 1.0f;
-    Region->ScaleFalloffStrength = 1.0f;   // максимальное -- у самого края скейл уходит в 0
+    Region->ScaleFalloffStrength = 1.0f;   // максимальное -- у самого края скейл на нижнем пределе
 
     FRandomStream Rng(20260903);
     const float ScaleAtCentroid = Region->RollPlacementTransform(FVector(500.0f, 500.0f, 0.0f), Rng).UniformScale;
@@ -154,8 +154,11 @@ bool FHerbalistBiomeRegion_ScaleFalloffShrinksNearTheEdge::RunTest(const FString
 
     TestTrue(FString::Printf(TEXT("At centroid, scale stays near 1.0 (got %f)"), ScaleAtCentroid),
         FMath::IsNearlyEqual(ScaleAtCentroid, 1.0f, 0.01f));
-    TestTrue(FString::Printf(TEXT("At the farthest corner, scale shrinks toward 0 (got %f)"), ScaleAtCorner),
-        FMath::IsNearlyEqual(ScaleAtCorner, 0.0f, 0.01f));
+    // Не в ноль (2026-09-27): растение нулевого масштаба невидимо и не
+    // собирается -- множитель затухания не ниже MinScaleFalloffFactor.
+    TestTrue(FString::Printf(TEXT("At the farthest corner, scale shrinks to the floor, not to 0 (got %f)"), ScaleAtCorner),
+        FMath::IsNearlyEqual(ScaleAtCorner, ABiomeRegionVolume::MinScaleFalloffFactor, 0.01f));
+    TestTrue(TEXT("Corner is smaller than centroid"), ScaleAtCorner < ScaleAtCentroid);
 
     Region->Destroy();
     return true;

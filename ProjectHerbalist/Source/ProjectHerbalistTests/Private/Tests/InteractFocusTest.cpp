@@ -160,4 +160,27 @@ bool FHerbalistFocus_BeltHoldsStillUnderTheMouse::RunTest(const FString& Paramet
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_HintLineRemembersWithoutViewport,
+    "Herbalist.Focus.HintLineRemembersWithoutViewport",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_HintLineRemembersWithoutViewport::RunTest(const FString& Parameters)
+{
+    // Строка «Котомка полна» (2026-09-27): без вьюпорта -- только запоминается,
+    // без падений на создании виджета.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+
+    PC->ShowHintLine(TEXT("Котомка полна."));
+    TestEqual(TEXT("Строка запомнена"), PC->GetLastHintLine(), FString(TEXT("Котомка полна.")));
+
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
 #endif
