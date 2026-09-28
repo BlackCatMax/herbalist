@@ -26,6 +26,7 @@
 #include "PCGHerbalistBiomeTrees.generated.h"
 
 class UStaticMesh;
+class AWaterRegionVolume;
 
 // Строка DT_BiomeTrees: один вид дерева в одном биоме.
 USTRUCT(BlueprintType)
@@ -89,6 +90,10 @@ public:
     // Строка по доле Pick (0..1) пропорционально TreesPer100SquareMeters;
     // строк нет или плотность нулевая -- INDEX_NONE.
     static int32 PickRow(const TArray<const FHerbalistBiomeTreeRow*>& Rows, float Pick);
+    // Над водой деревья не растут (2026-09-28, по PIE): точка внутри объёма
+    // воды по X-Y. По высоте не сравнивается -- сплайн пруда и сплайн региона
+    // на разной высоте, вычитание поверхности в графе их не пересекало.
+    static bool IsOverWater(const TArray<const AWaterRegionVolume*>& Waters, const FVector& Location);
 
 protected:
     virtual TArray<FPCGPinProperties> InputPinProperties() const override;

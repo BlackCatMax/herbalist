@@ -9,6 +9,7 @@
 #include "LandscapeProxy.h"
 #include "LandscapeComponent.h"
 #include "Engine/OverlapResult.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Core/Entities/HerbalistEntityActor.h"
 #include "Core/World/HomesteadMarkerActor.h"
 #include "Core/World/KurganActor.h"
@@ -317,6 +318,21 @@ bool AGridWorldManager::IsSpawnPointBlocked(const FVector& Point) const
         // значило бы запретить двум травам расти рядом.
         if (Other->IsA<AHerbalistResourceActor>()) continue;
         if (Other->IsA<AHerbalistEntityActor>()) continue;
+
+        // Экземпляры мешей на объёме региона -- это деревья PCG_Trees: только
+        // ствол (TreeTrunkClearanceCm). Прочая геометрия объёмов (меш воды --
+        // не экземпляры) -- как раньше. Появятся на объёмах другие экземпляры
+        // (камни) -- отличать по мешу или тегу.
+        if (Other->IsA<ABiomeRegionVolume>())
+        {
+            FTransform Tree;
+            const UInstancedStaticMeshComponent* Trees = Cast<UInstancedStaticMeshComponent>(Overlap.GetComponent());
+            if (Trees && Trees->GetInstanceTransform(Overlap.ItemIndex, Tree, /*bWorldSpace=*/true)
+                && FVector::Dist2D(Point, Tree.GetLocation()) > TreeTrunkClearanceCm * FMath::Max(Tree.GetScale3D().X, 0.01))
+            {
+                continue;
+            }
+        }
 
         return true;
     }

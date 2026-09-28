@@ -15,6 +15,9 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Components/BoxComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Core/World/BiomeRegionVolume.h"
+#include "Engine/StaticMesh.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -133,6 +136,61 @@ bool FHerbalistSpawnPlacement_BlockerMakesThePointOccupied::RunTest(const FStrin
         }
 
         Blocker->Destroy();
+    }
+
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistSpawnPlacement_BiomeTreeBlocksOnlyItsTrunk,
+    "Herbalist.SpawnPlacement.BiomeTreeBlocksOnlyItsTrunk",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistSpawnPlacement_BiomeTreeBlocksOnlyItsTrunk::RunTest(const FString& Parameters)
+{
+    // 2026-09-28, по PIE: «нет ресурсов там, где растут деревья». Деревья --
+    // экземпляры PCG_Trees на объёме региона; сфера проверки цепляла их
+    // коллизию ветвей и кроны. Дерево -- куб 1 м экземпляром на объёме: рядом
+    // с основанием занято, в метре с лишним (куб ещё задевает сферу) -- свободно.
+    // Такой же куб обычным актором на том же месте по-прежнему занимает точку.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+    if (!TestNotNull(TEXT("Engine cube"), Cube)) return false;
+
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("AGridWorldManager spawned"), Manager)) return false;
+
+    {
+        FScopedPlacementSettings Scoped(/*bReject=*/true, /*Clearance=*/100.0f, /*bTrace=*/false);
+        const FVector Point = Manager->GetCellWorldPosition(9, 9);
+        const FVector TreeBase = Point + FVector(0.0f, 0.0f, 50.0f);
+
+        ABiomeRegionVolume* Region = World->SpawnActor<ABiomeRegionVolume>(TreeBase, FRotator::ZeroRotator);
+        if (!TestNotNull(TEXT("Region spawned"), Region)) { Manager->Destroy(); return false; }
+        UInstancedStaticMeshComponent* Trees = NewObject<UInstancedStaticMeshComponent>(Region);
+        Trees->SetMobility(EComponentMobility::Movable);
+        Trees->SetStaticMesh(Cube);
+        Trees->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        Trees->SetCollisionObjectType(ECC_WorldStatic);
+        Trees->SetCollisionResponseToAllChannels(ECR_Block);
+        Trees->SetupAttachment(Region->GetRootComponent());
+        Trees->RegisterComponent();
+        Trees->AddInstance(FTransform(TreeBase), /*bWorldSpace=*/true);
+
+        const float NearTrunk = AGridWorldManager::TreeTrunkClearanceCm * 0.5f;
+        const float UnderCrown = 120.0f;
+        TestTrue(TEXT("У ствола -- занято"), Manager->IsSpawnPointBlocked(Point + FVector(NearTrunk, 0.0f, 0.0f)));
+        TestFalse(TEXT("Под кроной, вне ствола -- свободно"), Manager->IsSpawnPointBlocked(Point + FVector(UnderCrown, 0.0f, 0.0f)));
+        Region->Destroy();
+
+        AActor* Stone = SpawnBlocker(World, TreeBase);
+        if (Stone)
+        {
+            TestTrue(TEXT("Не дерево -- та же точка занята, как раньше"),
+                Manager->IsSpawnPointBlocked(Point + FVector(UnderCrown, 0.0f, 0.0f)));
+            Stone->Destroy();
+        }
     }
 
     Manager->Destroy();

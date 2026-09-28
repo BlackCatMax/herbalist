@@ -10,8 +10,10 @@
 #include "Metadata/PCGMetadataAttributeTpl.h"
 #include "Helpers/PCGHelpers.h"
 #include "Engine/StaticMesh.h"
+#include "EngineUtils.h"
 
 #include "Core/World/BiomeRegionVolume.h"
+#include "Core/World/WaterRegionVolume.h"
 #include "HerbalistLogChannels.h"
 
 #define LOCTEXT_NAMESPACE "PCGHerbalistBiomeTrees"
@@ -54,6 +56,18 @@ int32 UPCGHerbalistBiomeTreesSettings::PickRow(const TArray<const FHerbalistBiom
     }
     // Pick == 1 -- последняя строка с весом.
     return LastWithWeight;
+}
+
+bool UPCGHerbalistBiomeTreesSettings::IsOverWater(const TArray<const AWaterRegionVolume*>& Waters, const FVector& Location)
+{
+    for (const AWaterRegionVolume* Water : Waters)
+    {
+        if (Water && Water->IsPointInside(Location))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 TArray<FPCGPinProperties> UPCGHerbalistBiomeTreesSettings::InputPinProperties() const
@@ -121,7 +135,14 @@ bool FPCGHerbalistBiomeTreesElement::ExecuteInternal(FPCGContext* Context) const
             FText::AsNumber(BiomeDensity), FText::AsNumber(Settings->SamplerTreesPer100SquareMeters)));
     }
 
+    TArray<const AWaterRegionVolume*> Waters;
+    for (TActorIterator<AWaterRegionVolume> It(Region->GetWorld()); It; ++It)
+    {
+        Waters.Add(*It);
+    }
+
     int32 Planted = 0;
+    int32 OverWater = 0;
     for (const FPCGTaggedData& Input : Inputs)
     {
         const UPCGBasePointData* InPointData = Cast<UPCGBasePointData>(Input.Data);
@@ -144,6 +165,11 @@ bool FPCGHerbalistBiomeTreesElement::ExecuteInternal(FPCGContext* Context) const
         for (int32 Index = 0; Index < NumPoints; ++Index)
         {
             const FVector Location = InRanges.TransformRange[Index].GetLocation();
+            if (UPCGHerbalistBiomeTreesSettings::IsOverWater(Waters, Location))
+            {
+                ++OverWater;
+                continue;
+            }
             const int32 PointSeed = InRanges.SeedRange[Index] != 0
                 ? InRanges.SeedRange[Index]
                 : PCGHelpers::ComputeSeedFromPosition(Location);
@@ -196,8 +222,8 @@ bool FPCGHerbalistBiomeTreesElement::ExecuteInternal(FPCGContext* Context) const
         Planted += Chosen.Num();
     }
 
-    UE_LOG(LogHerbalistWorld, Log, TEXT("[PCG] BiomeTrees %s (%s): деревьев %d, видов %d, плотность %.2f на 100 м²"),
-        *Region->GetName(), *UEnum::GetValueAsString(Region->Biome), Planted, Rows.Num(), BiomeDensity);
+    UE_LOG(LogHerbalistWorld, Log, TEXT("[PCG] BiomeTrees %s (%s): деревьев %d, видов %d, плотность %.2f на 100 м², над водой отброшено %d"),
+        *Region->GetName(), *UEnum::GetValueAsString(Region->Biome), Planted, Rows.Num(), BiomeDensity, OverWater);
     return true;
 }
 

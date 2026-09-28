@@ -10,16 +10,17 @@
 //   2. /Game/PCG/PCG_Trees -- граф: сплайн региона (фильтр Original, тег
 //      компонента Biome) -> поверхность -> Surface Sampler (плотность на м²
 //      мира: выборка по внутренности сплайна считает шаг в локальных единицах
-//      и зависит от масштаба объёма) -> минус вода (сплайны с тегом Water) ->
-//      на ландшафт -> не на покраске Ground (как у травы, Ground < 0.8) ->
-//      Herbalist Biome Trees -> Self Pruning -> Static Mesh Spawner (меш из
-//      атрибута TreeMesh). Непустой граф не трогается.
+//      и зависит от масштаба объёма) -> на ландшафт -> не на покраске Ground
+//      (как у травы, Ground < 0.8) -> Herbalist Biome Trees (он же отбрасывает
+//      точки над водой) -> Self Pruning -> Static Mesh Spawner (меш из
+//      атрибута TreeMesh). Непустой граф не трогается; -rebuildgraph --
+//      очистить и собрать заново.
 //   3. BP_BiomeVolume -- компонент PCG_Trees с этим графом, генерация по
 //      запросу: в игре граф не работает, деревья запекаются билдером мира
 //      (-run=WorldPartitionBuilderCommandlet ... -Builder=PCGWorldPartitionBuilder
 //      -IncludeGraphNames=PCG_Trees, TOOLS_REFERENCE.md).
 //
-// Запуск: UnrealEditor-Cmd.exe <uproject> -run=PcgTreesSetup [-refilltable]
+// Запуск: UnrealEditor-Cmd.exe <uproject> -run=PcgTreesSetup [-refilltable] [-rebuildgraph]
 #pragma once
 
 #include "CoreMinimal.h"

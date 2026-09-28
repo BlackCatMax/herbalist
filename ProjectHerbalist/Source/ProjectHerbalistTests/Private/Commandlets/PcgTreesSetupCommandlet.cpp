@@ -75,14 +75,11 @@ namespace
         return bSet;
     }
 
-    // Get Spline Data: сплайны актора по тегу компонента. Original -- сплайн
-    // своего объёма и на актерах разделов (как у травы, 2026-09-27); чужие
-    // актеры (вода) -- с тем же тегом у актора, что у компонента.
-    bool SetSplineSource(UPCGSettings* Settings, bool bOwnVolume, const TCHAR* ComponentTag)
+    // Get Spline Data: сплайн своего объёма по тегу компонента, фильтр
+    // Original -- и на актерах разделов (как у травы, 2026-09-27).
+    bool SetSplineSource(UPCGSettings* Settings, const TCHAR* ComponentTag)
     {
-        const FString Actor = bOwnVolume
-            ? FString(TEXT("(ActorFilter=Original,ActorSelection=ByTag,ActorSelectionTag=\"\")"))
-            : FString::Printf(TEXT("(ActorFilter=AllWorldActors,ActorSelection=ByTag,ActorSelectionTag=\"%s\")"), ComponentTag);
+        const FString Actor = TEXT("(ActorFilter=Original,ActorSelection=ByTag,ActorSelectionTag=\"\")");
         const FString Component = FString::Printf(TEXT("(ComponentSelection=ByTag,ComponentSelectionTag=\"%s\")"), ComponentTag);
         return SetTreesSetting(Settings, TEXT("ActorSelector"), *Actor)
             && SetTreesSetting(Settings, TEXT("ComponentSelector"), *Component);
@@ -155,9 +152,6 @@ int32 UPcgTreesSetupCommandlet::BuildTreesGraph(UPCGGraph* Graph)
     UPCGSettings* RegionSettings = nullptr;
     UPCGSettings* RegionSurfaceSettings = nullptr;
     UPCGSettings* SamplerSettings = nullptr;
-    UPCGSettings* WaterSettings = nullptr;
-    UPCGSettings* WaterSurfaceSettings = nullptr;
-    UPCGSettings* DifferenceSettings = nullptr;
     UPCGSettings* LandscapeSettings = nullptr;
     UPCGSettings* ProjectionSettings = nullptr;
     UPCGSettings* GroundSettings = nullptr;
@@ -166,9 +160,6 @@ int32 UPcgTreesSetupCommandlet::BuildTreesGraph(UPCGGraph* Graph)
     UPCGNode* Region = AddTreesNode(Graph, TEXT("PCGGetSplineSettings"), 0, 0, RegionSettings);
     UPCGNode* RegionSurface = AddTreesNode(Graph, TEXT("PCGCreateSurfaceFromSplineSettings"), 300, 0, RegionSurfaceSettings);
     UPCGNode* Sampler = AddTreesNode(Graph, TEXT("PCGSurfaceSamplerSettings"), 600, 0, SamplerSettings);
-    UPCGNode* Water = AddTreesNode(Graph, TEXT("PCGGetSplineSettings"), 0, 300, WaterSettings);
-    UPCGNode* WaterSurface = AddTreesNode(Graph, TEXT("PCGCreateSurfaceFromSplineSettings"), 300, 300, WaterSurfaceSettings);
-    UPCGNode* Difference = AddTreesNode(Graph, TEXT("PCGDifferenceSettings"), 900, 0, DifferenceSettings);
     UPCGNode* Landscape = AddTreesNode(Graph, TEXT("PCGGetLandscapeSettings"), 900, 300, LandscapeSettings);
     UPCGNode* Projection = AddTreesNode(Graph, TEXT("PCGProjectionSettings"), 1200, 0, ProjectionSettings);
     UPCGNode* Ground = AddTreesNode(Graph, TEXT("PCGAttributeFilteringSettings"), 1500, 0, GroundSettings);
@@ -176,7 +167,7 @@ int32 UPcgTreesSetupCommandlet::BuildTreesGraph(UPCGGraph* Graph)
     UPCGNode* Spawner = AddTreesNode(Graph, TEXT("PCGStaticMeshSpawnerSettings"), 2400, 0, SpawnerSettings);
     UPCGSettings* TreesSettings = nullptr;
     UPCGNode* Trees = Graph->AddNodeOfType(UPCGHerbalistBiomeTreesSettings::StaticClass(), TreesSettings);
-    if (!Region || !RegionSurface || !Sampler || !Water || !WaterSurface || !Difference || !Landscape
+    if (!Region || !RegionSurface || !Sampler || !Landscape
         || !Projection || !Ground || !Pruning || !Spawner || !Trees)
     {
         UE_LOG(LogTemp, Error, TEXT("Узлы графа деревьев не созданы"));
@@ -185,12 +176,9 @@ int32 UPcgTreesSetupCommandlet::BuildTreesGraph(UPCGGraph* Graph)
     Trees->SetNodePosition(1800, 0);
     CastChecked<UPCGHerbalistBiomeTreesSettings>(TreesSettings)->SamplerTreesPer100SquareMeters = SamplerTreesPer100SquareMeters;
 
-    const bool bConfigured = SetSplineSource(RegionSettings, /*bOwnVolume=*/true, TEXT("Biome"))
-        && SetSplineSource(WaterSettings, /*bOwnVolume=*/false, TEXT("Water"))
+    const bool bConfigured = SetSplineSource(RegionSettings, TEXT("Biome"))
         && SetTreesSetting(SamplerSettings, TEXT("PointsPerSquaredMeter"), *FString::SanitizeFloat(SamplerTreesPer100SquareMeters / 100.0f))
         && SetTreesSetting(SamplerSettings, TEXT("bUnbounded"), TEXT("True"))
-        && SetTreesSetting(DifferenceSettings, TEXT("DensityFunction"), TEXT("Binary"))
-        && SetTreesSetting(DifferenceSettings, TEXT("Mode"), TEXT("Discrete"))
         // Высота и веса слоёв -- с ландшафта; ствол стоит прямо, не по склону.
         && SetTreesSetting(ProjectionSettings, TEXT("ProjectionParams"), TEXT("(bProjectPositions=True,bProjectRotations=False,bProjectScales=False)"))
         && SetGroundFilter(GroundSettings)
@@ -210,10 +198,10 @@ int32 UPcgTreesSetupCommandlet::BuildTreesGraph(UPCGGraph* Graph)
     const FName In = PCGPinConstants::DefaultInputLabel;
     Link(Region, Out, RegionSurface, In);
     Link(RegionSurface, Out, Sampler, TEXT("Surface"));
-    Link(Water, Out, WaterSurface, In);
-    Link(Sampler, Out, Difference, TEXT("Source"));
-    Link(WaterSurface, Out, Difference, TEXT("Differences"));
-    Link(Difference, Out, Projection, In);
+    // Воду отбрасывает узел деревьев (IsOverWater): вычитание поверхности
+    // сплайна пруда здесь сравнивало точки в 3D, а пруд и регион -- на разной
+    // высоте (2026-09-28, по PIE: деревья в воде).
+    Link(Sampler, Out, Projection, In);
     Link(Landscape, Out, Projection, TEXT("Projection Target"));
     Link(Projection, Out, Ground, In);
     Link(Ground, PCGPinConstants::DefaultInFilterLabel, Trees, In);
@@ -363,6 +351,12 @@ int32 UPcgTreesSetupCommandlet::Main(const FString& Params)
         UPackage* Package = CreatePackage(TreesGraphPackage);
         Graph = NewObject<UPCGGraph>(Package, TEXT("PCG_Trees"), RF_Public | RF_Standalone);
         FAssetRegistryModule::AssetCreated(Graph);
+    }
+    if (FParse::Param(*Params, TEXT("rebuildgraph")) && Graph->GetNodes().Num() > 0)
+    {
+        TArray<UPCGNode*> Nodes = Graph->GetNodes();
+        Graph->RemoveNodes(Nodes);
+        UE_LOG(LogTemp, Display, TEXT("PCG_Trees: узлы убраны (-rebuildgraph), собираю заново"));
     }
     const int32 GraphResult = BuildTreesGraph(Graph);
     if (GraphResult < 0 || (GraphResult > 0 && !SaveTreesAsset(Graph)))

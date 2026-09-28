@@ -8,6 +8,7 @@
 #include "Commandlets/PcgTreesSetupCommandlet.h"
 #include "Core/PCG/PCGHerbalistBiomeTrees.h"
 
+#include "Editor.h"
 #include "Engine/Blueprint.h"
 #include "Engine/DataTable.h"
 #include "Engine/SCS_Node.h"
@@ -17,6 +18,7 @@
 #include "PCGGraph.h"
 #include "PCGNode.h"
 #include "UObject/UnrealType.h"
+#include "TestWorldHelpers.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -47,6 +49,29 @@ bool FHerbalistBiomeTrees_KeepAndPickRules::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeTrees_NoTreesOverWater,
+    "Herbalist.BiomeTrees.NoTreesOverWater",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistBiomeTrees_NoTreesOverWater::RunTest(const FString& Parameters)
+{
+    // 2026-09-28, по PIE: деревья в пруду. Над водой -- по X-Y, высота точки
+    // не важна: сплайн пруда и точка на ландшафте на разной высоте.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world"), World)) return false;
+    AWaterRegionVolume* Pond = SpawnWaterRegionCoveringWorldRect(World, 900000.0f, 900000.0f, 901000.0f, 901000.0f);
+    if (!TestNotNull(TEXT("Пруд"), Pond)) return false;
+
+    using S = UPCGHerbalistBiomeTreesSettings;
+    const TArray<const AWaterRegionVolume*> Waters = { Pond };
+    TestTrue(TEXT("Посреди пруда -- вода"), S::IsOverWater(Waters, FVector(900500.0f, 900500.0f, 0.0f)));
+    TestTrue(TEXT("Высота не важна"), S::IsOverWater(Waters, FVector(900500.0f, 900500.0f, -700.0f)));
+    TestFalse(TEXT("Рядом с прудом -- суша"), S::IsOverWater(Waters, FVector(901200.0f, 900500.0f, 0.0f)));
+    TestFalse(TEXT("Воды нет -- суша"), S::IsOverWater({}, FVector(900500.0f, 900500.0f, 0.0f)));
+    Pond->Destroy();
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistBiomeTrees_GraphBuildsOnce,
     "Herbalist.BiomeTrees.GraphBuildsOnce",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
@@ -57,6 +82,13 @@ bool FHerbalistBiomeTrees_GraphBuildsOnce::RunTest(const FString& Parameters)
     UPCGGraph* Scratch = NewObject<UPCGGraph>(GetTransientPackage());
     TestEqual(TEXT("Граф собран"), UPcgTreesSetupCommandlet::BuildTreesGraph(Scratch), 1);
     TestEqual(TEXT("Повтор -- уже собран"), UPcgTreesSetupCommandlet::BuildTreesGraph(Scratch), 0);
+    // Воду отбрасывает узел деревьев; вычитания поверхности пруда в графе нет
+    // (2026-09-28: оно сравнивало точки в 3D и не срабатывало).
+    for (const UPCGNode* Node : Scratch->GetNodes())
+    {
+        const UPCGSettings* Settings = Node ? Node->GetSettings() : nullptr;
+        TestFalse(TEXT("Нет узла Difference"), Settings && Settings->GetClass()->GetName() == TEXT("PCGDifferenceSettings"));
+    }
 
     const UPCGHerbalistBiomeTreesSettings* Trees = nullptr;
     const UPCGSettings* Spawner = nullptr;
