@@ -8,6 +8,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "Materials/MaterialExpressionAbs.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionAppendVector.h"
 #include "Materials/MaterialExpressionCollectionParameter.h"
@@ -392,6 +393,93 @@ bool HerbalistMaterialFunctions::BuildTrampleCompressWPO(UMaterialFunction* Func
     return true;
 }
 
+bool HerbalistMaterialFunctions::BuildPlayerPushWPO(UMaterialFunction* Function, const FSources& Sources)
+{
+    using namespace Detail;
+    if (!Function || !Sources.Collection) return false;
+
+    DescribeFunction(Function, TEXT("Трава расступается перед игроком: вершина уходит от TramplePlayerPosition по горизонтали на Height x Push, где Push = (1 - SmoothStep(0, Radius, расстояние основания до игрока)) x Strength, и приседает на треть того. Игрок выше или ниже основания больше чем на 1.5-3 м -- эффекта нет. Переключатель Pushable (по умолчанию выключен) включается в инстансах травы и кустов. Выход WPO -- в World Position Offset, после MF_TrampleCompressWPO."));
+
+    UMaterialExpressionFunctionInput* Wind = AddWindInput(Function, 0, 1, 0);
+    UMaterialExpressionFunctionInput* Radius = AddScalarInput(Function, TEXT("Radius"), 90.0f,
+        TEXT("Радиус, см: дальше от игрока трава стоит."), 1, 1, 8);
+    UMaterialExpressionFunctionInput* Strength = AddScalarInput(Function, TEXT("Strength"), 0.6f,
+        TEXT("Наклон у самого игрока: сдвиг верхушки в долях её высоты."), 2, 1, 9);
+
+    // Основание экземпляра -- Instance & Particle Space, как у сжатия тропы:
+    // PCG-трава -- Nanite, Local Space там -- весь компонент.
+    UMaterialExpressionConstant3Vector* Origin = AddNode<UMaterialExpressionConstant3Vector>(Function, 0, 3);
+    Origin->Constant = FLinearColor(0.0f, 0.0f, 0.0f);
+    UMaterialExpressionTransformPosition* Pivot = AddNode<UMaterialExpressionTransformPosition>(Function, 1, 3);
+    Pivot->TransformSourceType = TRANSFORMPOSSOURCE_Instance;
+    Pivot->TransformType = TRANSFORMPOSSOURCE_World;
+    Pivot->Input.Connect(0, Origin);
+    UMaterialExpressionCollectionParameter* Player = AddCollectionParameter(Function, Sources.Collection, TEXT("TramplePlayerPosition"), 1, 5);
+    if (!Player) return false;
+
+    // От игрока к основанию, по горизонтали.
+    UMaterialExpressionComponentMask* PivotXY = AddMask(Function, Pivot, 0, true, true, false, false, 2, 3);
+    UMaterialExpressionComponentMask* PlayerXY = AddMask(Function, Player, 0, true, true, false, false, 2, 5);
+    UMaterialExpressionSubtract* Away = AddBinary<UMaterialExpressionSubtract>(Function, PivotXY, 0, PlayerXY, 0, 3, 4);
+    UMaterialExpressionLength* Distance = AddNode<UMaterialExpressionLength>(Function, 4, 5);
+    Distance->Input.Connect(0, Away);
+    UMaterialExpressionMax* SafeDistance = AddBinary<UMaterialExpressionMax>(Function, Distance, 0, AddConstant(Function, 1.0f, 4, 6), 0, 5, 5);
+    UMaterialExpressionDivide* Direction = AddBinary<UMaterialExpressionDivide>(Function, Away, 0, SafeDistance, 0, 6, 4);
+
+    // Сила: у игрока Strength, к Radius -- ноль.
+    UMaterialExpressionSmoothStep* Fade = AddNode<UMaterialExpressionSmoothStep>(Function, 5, 7);
+    Fade->ConstMin = 0.0f;
+    Fade->Max.Connect(0, Radius);
+    Fade->Value.Connect(0, Distance);
+    UMaterialExpressionOneMinus* Near = AddNode<UMaterialExpressionOneMinus>(Function, 6, 7);
+    Near->Input.Connect(0, Fade);
+
+    // Игрок на другой высоте (мост, склон, прыжок) -- трава не знает о нём.
+    // Позиция игрока -- центр капсулы, около 90 см над землёй.
+    UMaterialExpressionComponentMask* PivotZ = AddMask(Function, Pivot, 0, false, false, true, false, 2, 10);
+    UMaterialExpressionComponentMask* PlayerZ = AddMask(Function, Player, 0, false, false, true, false, 2, 11);
+    UMaterialExpressionSubtract* FeetZ = AddBinary<UMaterialExpressionSubtract>(Function, PlayerZ, 0, AddConstant(Function, 90.0f, 2, 12), 0, 3, 11);
+    UMaterialExpressionSubtract* Gap = AddBinary<UMaterialExpressionSubtract>(Function, PivotZ, 0, FeetZ, 0, 4, 10);
+    UMaterialExpressionAbs* GapAbs = AddNode<UMaterialExpressionAbs>(Function, 5, 10);
+    GapAbs->Input.Connect(0, Gap);
+    UMaterialExpressionSmoothStep* Beyond = AddNode<UMaterialExpressionSmoothStep>(Function, 6, 10);
+    Beyond->ConstMin = 150.0f;
+    Beyond->ConstMax = 300.0f;
+    Beyond->Value.Connect(0, GapAbs);
+    UMaterialExpressionOneMinus* SameLevel = AddNode<UMaterialExpressionOneMinus>(Function, 7, 10);
+    SameLevel->Input.Connect(0, Beyond);
+
+    UMaterialExpressionMultiply* Reach = AddBinary<UMaterialExpressionMultiply>(Function, Near, 0, SameLevel, 0, 8, 8);
+    UMaterialExpressionMultiply* Push = AddBinary<UMaterialExpressionMultiply>(Function, Reach, 0, Strength, 0, 9, 8);
+
+    // Высота вершины над основанием: позиция без смещений шейдера (иначе
+    // цикл через WPO) минус основание.
+    UMaterialExpressionWorldPosition* Vertex = AddNode<UMaterialExpressionWorldPosition>(Function, 2, 13);
+    Vertex->WorldPositionShaderOffset = WPT_ExcludeAllShaderOffsets;
+    UMaterialExpressionComponentMask* VertexZ = AddMask(Function, Vertex, 0, false, false, true, false, 3, 13);
+    UMaterialExpressionSubtract* Rise = AddBinary<UMaterialExpressionSubtract>(Function, VertexZ, 0, PivotZ, 0, 4, 13);
+    UMaterialExpressionMax* Height = AddBinary<UMaterialExpressionMax>(Function, Rise, 0, AddConstant(Function, 0.0f, 4, 14), 0, 5, 13);
+    UMaterialExpressionMultiply* Bend = AddBinary<UMaterialExpressionMultiply>(Function, Height, 0, Push, 0, 10, 9);
+
+    UMaterialExpressionMultiply* Aside = AddBinary<UMaterialExpressionMultiply>(Function, Direction, 0, Bend, 0, 11, 5);
+    UMaterialExpressionMultiply* Down = AddBinary<UMaterialExpressionMultiply>(Function, Bend, 0, AddConstant(Function, -0.35f, 10, 10), 0, 11, 9);
+    UMaterialExpressionAppendVector* Offset = AddNode<UMaterialExpressionAppendVector>(Function, 12, 6);
+    Offset->A.Connect(0, Aside);
+    Offset->B.Connect(0, Down);
+    UMaterialExpressionAdd* Pushed = AddBinary<UMaterialExpressionAdd>(Function, Wind, 0, Offset, 0, 13, 2);
+
+    UMaterialExpressionStaticSwitchParameter* Switch = AddNode<UMaterialExpressionStaticSwitchParameter>(Function, 14, 1);
+    Switch->ParameterName = PushableSwitchName;
+    Switch->DefaultValue = false;
+    Switch->A.Connect(0, Pushed);   // True
+    Switch->B.Connect(0, Wind);     // False
+    Switch->UpdateParameterGuid(true, true);
+
+    AddOutput(Function, TEXT("WPO"), TEXT("В World Position Offset."), 0, Switch, 0, 15, 1);
+    AddOutput(Function, TEXT("Push"), TEXT("Сила наклона у основания, 0..Strength."), 1, Push, 0, 15, 3);
+    return true;
+}
+
 bool HerbalistMaterialFunctions::BuildSeasonWeights(UMaterialFunction* Function, const FSources& Sources)
 {
     using namespace Detail;
@@ -764,18 +852,31 @@ namespace
 
 HerbalistMaterialFunctions::EWireResult HerbalistMaterialFunctions::WireTrampleCompressIntoWPO(UMaterial* Material, UMaterialFunction* Compress)
 {
+    return WireFunctionIntoWPO(Material, Compress);
+}
+
+HerbalistMaterialFunctions::EWireResult HerbalistMaterialFunctions::WireFunctionIntoWPO(UMaterial* Material, UMaterialFunction* Compress)
+{
     if (!Material || !Compress) return EWireResult::Failed;
     FExpressionInput* Wpo = Material->GetExpressionInputForProperty(MP_WorldPositionOffset);
     if (!Wpo) return EWireResult::Failed;
-    if (AsCallTo(Wpo->Expression, Compress))
+    // Уже в цепочке World Position Offset -- не обязательно последним: за
+    // сжатием тропы встаёт раздвигание (2026-09-28). Идём вглубь по входам
+    // WPO вызовов функций.
+    for (UMaterialExpression* Link = Wpo->Expression; UMaterialExpressionMaterialFunctionCall* Call = Cast<UMaterialExpressionMaterialFunctionCall>(Link);)
     {
-        return EWireResult::AlreadyWired;
+        if (Call->MaterialFunction == Compress)
+        {
+            return EWireResult::AlreadyWired;
+        }
+        const FExpressionInput* Upstream = FindCallInput(Call, TEXT("WPO"));
+        Link = Upstream ? Upstream->Expression : nullptr;
     }
     for (UMaterialExpression* Expression : Material->GetExpressions())
     {
         if (AsCallTo(Expression, Compress))
         {
-            UE_LOG(LogTemp, Error, TEXT("%s: %s уже стоит, но не в World Position Offset -- подключено руками иначе, не трогаю"),
+            UE_LOG(LogTemp, Error, TEXT("%s: %s уже стоит, но не в цепочке World Position Offset -- подключено руками иначе, не трогаю"),
                 *Material->GetName(), *Compress->GetName());
             return EWireResult::Failed;
         }

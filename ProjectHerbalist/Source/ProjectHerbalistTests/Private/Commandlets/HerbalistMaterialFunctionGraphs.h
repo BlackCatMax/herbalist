@@ -53,6 +53,7 @@ namespace HerbalistMaterialFunctions
     inline const TCHAR* LeafDropName = TEXT("MF_LeafDrop");
     inline const TCHAR* GrassSquashName = TEXT("MF_GrassSquash");
     inline const TCHAR* FlowerOpenName = TEXT("MF_FlowerOpen");
+    inline const TCHAR* PlayerPushName = TEXT("MF_PlayerPushWPO");
 
     // Коллекция Ultra Dynamic Weather: покрытие снегом материалов -- Snowy.
     inline const TCHAR* WeatherCollectionPath = TEXT("/Game/UltraDynamicSky/Materials/Weather/UltraDynamicWeather_Parameters");
@@ -60,6 +61,8 @@ namespace HerbalistMaterialFunctions
 
     // Имя переключателя -- то же, что в схеме бэклога и в инстансах травы.
     inline const TCHAR* TrampleableSwitchName = TEXT("Trampleable");
+    // Трава и кусты расступаются перед игроком (MF_PlayerPushWPO, 2026-09-28).
+    inline const TCHAR* PushableSwitchName = TEXT("Pushable");
 
     // Тропа в мастер-материалах (-wire, 2026-09-27). Трава -- сжатие в WPO,
     // ландшафт -- выборка по пикселю для Lerp к земле тропы.
@@ -78,6 +81,21 @@ namespace HerbalistMaterialFunctions
         TEXT("/Game/Stylized_Forest/Materials/plants/MI_grass_02_Inst"),
         TEXT("/Game/Stylized_Forest/Materials/plants/MI_flower_01_Inst"),
         TEXT("/Game/Stylized_Forest/Materials/plants/MI_flower_02_Inst"),
+    };
+    // Расступаются перед игроком: низкий покров и кусты (решение пользователя
+    // 2026-09-28: «как и кусты, деревья гнуть не надо»). Листва деревьев на
+    // тех же мастерах -- нет.
+    inline const TCHAR* PushableInstancePaths[] = {
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/MI_Grass"),
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/MI_Clover"),
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/MI_Fern"),
+        TEXT("/Game/Stylized_PBR_Nature/Foliage/Materials/MI_Bush"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_grass_01_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_grass_02_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_flower_01_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_flower_02_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_shrub_01_Inst"),
+        TEXT("/Game/Stylized_Forest/Materials/plants/MI_shrub_flower_01_Inst"),
     };
 
     struct FSources
@@ -99,6 +117,11 @@ namespace HerbalistMaterialFunctions
     bool BuildLeafDrop(UMaterialFunction* Function, const FSources& Sources);
     bool BuildGrassSquash(UMaterialFunction* Function, const FSources& Sources, UMaterialFunction* SampleTrample);
     bool BuildFlowerOpen(UMaterialFunction* Function, const FSources& Sources);
+    // Трава расступается перед игроком: вершина уходит от TramplePlayerPosition
+    // по горизонтали пропорционально своей высоте над основанием экземпляра,
+    // сила спадает к Radius, выше или ниже игрока на пару метров -- нет. За
+    // переключателем Pushable (по умолчанию выключен).
+    bool BuildPlayerPushWPO(UMaterialFunction* Function, const FSources& Sources);
 
     // Удаляет все узлы функции. false -- что-то осталось. Своя, а не
     // UMaterialEditingLibrary::DeleteAllMaterialExpressionsInFunction: та удаляет
@@ -128,6 +151,9 @@ namespace HerbalistMaterialFunctions
     // трогаются, вызов встаёт последним. Вызов уже есть, но не в WPO --
     // Failed: подключено руками иначе, второй вызов считал бы тропу дважды.
     EWireResult WireTrampleCompressIntoWPO(UMaterial* Material, UMaterialFunction* Compress);
+    // То же для любой функции со входом и выходом WPO: встаёт последней в
+    // цепочку World Position Offset (2026-09-28: MF_PlayerPushWPO -- после сжатия).
+    EWireResult WireFunctionIntoWPO(UMaterial* Material, UMaterialFunction* Function);
 
     // Ландшафт: вызовы MF_TrampleCompressWPO заменяются MF_SampleTrample.
     // Сжатие читает тропу в основании экземпляра, а у ландшафта это начало

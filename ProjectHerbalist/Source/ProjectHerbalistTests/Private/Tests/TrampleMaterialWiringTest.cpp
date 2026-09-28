@@ -131,7 +131,7 @@ bool FHerbalistTrampleWiring_ManualCompressElsewhereIsLeftAlone::RunTest(const F
 
     UMaterial* Material = NewTransientMaterial();
     if (!TestNotNull(TEXT("Ручной вызов"), AddCall(Material, Functions.Compress))) return false;
-    AddExpectedError(TEXT("не в World Position Offset"), EAutomationExpectedErrorFlags::Contains, 1);
+    AddExpectedError(TEXT("подключено руками иначе"), EAutomationExpectedErrorFlags::Contains, 1);
     TestTrue(TEXT("Отказ"), WireTrampleCompressIntoWPO(Material, Functions.Compress) == EWireResult::Failed);
     TestEqual(TEXT("Вызов один"), CountCallsTo(Material, Functions.Compress), 1);
     return true;
@@ -196,6 +196,43 @@ bool FHerbalistTrampleWiring_LandscapeKeepsWhatFedCompressWpo::RunTest(const FSt
     TestTrue(TEXT("Заменено"), ReplaceCompressWithSampleTrample(Material, Functions.Compress, Functions.Sample) == EWireResult::Wired);
     TestEqual(TEXT("В WPO -- то, что было на входе сжатия"),
         Material->GetExpressionInputForProperty(MP_WorldPositionOffset)->Expression, static_cast<UMaterialExpression*>(Offset));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistTrampleWiring_PushGoesAfterCompress,
+    "Herbalist.MaterialFunctions.Wiring.PushGoesAfterCompress",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistTrampleWiring_PushGoesAfterCompress::RunTest(const FString& Parameters)
+{
+    // Ветер -> сжатие тропы -> раздвигание игроком -> World Position Offset
+    // (2026-09-28): примятая трава расступается так же. Повтор ничего не меняет.
+    using namespace HerbalistTrampleWiringTest;
+    FTrampleFunctions Functions;
+    if (!TestTrue(TEXT("Функции тропы собраны"), BuildTrampleFunctions(Functions))) return false;
+    FSources Sources;
+    Sources.Collection = LoadObject<UMaterialParameterCollection>(nullptr, CollectionPath);
+    UMaterialFunction* Push = NewObject<UMaterialFunction>(GetTransientPackage(), NAME_None, RF_Transient);
+    if (!TestTrue(TEXT("Раздвигание собрано"), BuildPlayerPushWPO(Push, Sources))) return false;
+
+    UMaterial* Material = NewTransientMaterial();
+    UMaterialExpressionConstant3Vector* Wind = AddExpression<UMaterialExpressionConstant3Vector>(Material);
+    UMaterialEditingLibrary::ConnectMaterialProperty(Wind, FString(), MP_WorldPositionOffset);
+    TestTrue(TEXT("Сжатие подключено"), WireTrampleCompressIntoWPO(Material, Functions.Compress) == EWireResult::Wired);
+    TestTrue(TEXT("Раздвигание подключено"), WireFunctionIntoWPO(Material, Push) == EWireResult::Wired);
+
+    UMaterialExpressionMaterialFunctionCall* Last = Cast<UMaterialExpressionMaterialFunctionCall>(
+        Material->GetExpressionInputForProperty(MP_WorldPositionOffset)->Expression);
+    if (!TestTrue(TEXT("Последним -- раздвигание"), Last && Last->MaterialFunction == Push)) return false;
+    const FExpressionInput* PushIn = CallInput(Last, TEXT("WPO"));
+    const UMaterialExpressionMaterialFunctionCall* Before = PushIn ? Cast<UMaterialExpressionMaterialFunctionCall>(PushIn->Expression) : nullptr;
+    TestTrue(TEXT("Перед ним -- сжатие тропы"), Before && Before->MaterialFunction == Functions.Compress);
+
+    TestTrue(TEXT("Повтор раздвигания -- уже"), WireFunctionIntoWPO(Material, Push) == EWireResult::AlreadyWired);
+    // Повторный -wire: сжатие уже не последнее, но в цепочке -- не отказ.
+    TestTrue(TEXT("Повтор сжатия за раздвиганием -- уже"), WireTrampleCompressIntoWPO(Material, Functions.Compress) == EWireResult::AlreadyWired);
+    TestEqual(TEXT("Вызов сжатия один"), CountCallsTo(Material, Functions.Compress), 1);
+    TestEqual(TEXT("Вызов раздвигания один"), CountCallsTo(Material, Push), 1);
     return true;
 }
 

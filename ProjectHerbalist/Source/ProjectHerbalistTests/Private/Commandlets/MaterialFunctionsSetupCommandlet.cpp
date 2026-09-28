@@ -116,10 +116,44 @@ namespace
         return true;
     }
 
-    // -wire: тропа в мастер-материалы травы и ландшафта и переключатель
-    // Trampleable в инстансах низкого покрова. Повторный запуск ничего не
-    // меняет. Сохраняет только то, что поменял.
-    bool WireTrampleMaterials(UMaterialFunction* Trample, UMaterialFunction* Compress, TArray<UMaterialInterface*>& OutWired)
+    // Статический переключатель в инстансе: включить, если выключен, и
+    // сохранить. Инстанс -- в OutWired для проверки компиляции.
+    bool EnableInstanceSwitch(const TCHAR* Path, const TCHAR* SwitchName, TArray<UMaterialInterface*>& OutWired)
+    {
+        UMaterialInstanceConstant* Instance = LoadObject<UMaterialInstanceConstant>(nullptr, Path);
+        if (!Instance)
+        {
+            UE_LOG(LogTemp, Error, TEXT("[wire] нет %s"), Path);
+            return false;
+        }
+        OutWired.AddUnique(Instance);
+        if (UMaterialEditingLibrary::GetMaterialInstanceStaticSwitchParameterValue(Instance, SwitchName))
+        {
+            UE_LOG(LogTemp, Display, TEXT("[wire] %s: %s уже включён"), *Instance->GetName(), SwitchName);
+            return true;
+        }
+        // Возвращаемое значение не смотреть: в 5.7 оно всегда false
+        // (bResult в движке не присваивается) -- проверка чтением.
+        UMaterialEditingLibrary::SetMaterialInstanceStaticSwitchParameterValue(Instance, SwitchName, true);
+        if (!UMaterialEditingLibrary::GetMaterialInstanceStaticSwitchParameterValue(Instance, SwitchName))
+        {
+            UE_LOG(LogTemp, Error, TEXT("[wire] %s: переключатель %s не включился -- его нет у родителя %s?"),
+                *Instance->GetName(), SwitchName, *GetNameSafe(Instance->Parent));
+            return false;
+        }
+        if (!SaveAssetPackage(Instance))
+        {
+            UE_LOG(LogTemp, Error, TEXT("[wire] не удалось сохранить %s"), *Instance->GetPathName());
+            return false;
+        }
+        UE_LOG(LogTemp, Display, TEXT("[wire] %s: %s включён"), *Instance->GetName(), SwitchName);
+        return true;
+    }
+
+    // -wire: тропа в мастер-материалы травы и ландшафта, раздвигание травы
+    // игроком (2026-09-28) и переключатели Trampleable/Pushable в инстансах.
+    // Повторный запуск ничего не меняет. Сохраняет только то, что поменял.
+    bool WireTrampleMaterials(UMaterialFunction* Trample, UMaterialFunction* Compress, UMaterialFunction* Push, TArray<UMaterialInterface*>& OutWired)
     {
         using namespace HerbalistMaterialFunctions;
         auto Finish = [&OutWired](UMaterial* Material, EWireResult Result, const TCHAR* What)
@@ -128,7 +162,7 @@ namespace
             {
                 return false;
             }
-            OutWired.Add(Material);
+            OutWired.AddUnique(Material);
             if (Result == EWireResult::AlreadyWired)
             {
                 UE_LOG(LogTemp, Display, TEXT("[wire] %s: %s уже подключено"), *Material->GetName(), What);
@@ -153,6 +187,12 @@ namespace
                 return false;
             }
             if (!Finish(Material, WireTrampleCompressIntoWPO(Material, Compress), TEXT("World Position Offset через MF_TrampleCompressWPO")))
+            {
+                return false;
+            }
+            // Раздвигание -- последним, после сжатия тропы: примятая трава
+            // расступается так же.
+            if (!Finish(Material, WireFunctionIntoWPO(Material, Push), TEXT("World Position Offset через MF_PlayerPushWPO")))
             {
                 return false;
             }
@@ -184,33 +224,17 @@ namespace
 
         for (const TCHAR* Path : TrampleableInstancePaths)
         {
-            UMaterialInstanceConstant* Instance = LoadObject<UMaterialInstanceConstant>(nullptr, Path);
-            if (!Instance)
+            if (!EnableInstanceSwitch(Path, TrampleableSwitchName, OutWired))
             {
-                UE_LOG(LogTemp, Error, TEXT("[wire] нет %s"), Path);
                 return false;
             }
-            OutWired.Add(Instance);
-            if (UMaterialEditingLibrary::GetMaterialInstanceStaticSwitchParameterValue(Instance, TrampleableSwitchName))
+        }
+        for (const TCHAR* Path : PushableInstancePaths)
+        {
+            if (!EnableInstanceSwitch(Path, PushableSwitchName, OutWired))
             {
-                UE_LOG(LogTemp, Display, TEXT("[wire] %s: Trampleable уже включён"), *Instance->GetName());
-                continue;
-            }
-            // Возвращаемое значение не смотреть: в 5.7 оно всегда false
-            // (bResult в движке не присваивается) -- проверка чтением.
-            UMaterialEditingLibrary::SetMaterialInstanceStaticSwitchParameterValue(Instance, TrampleableSwitchName, true);
-            if (!UMaterialEditingLibrary::GetMaterialInstanceStaticSwitchParameterValue(Instance, TrampleableSwitchName))
-            {
-                UE_LOG(LogTemp, Error, TEXT("[wire] %s: переключатель Trampleable не включился -- его нет у родителя %s?"),
-                    *Instance->GetName(), *GetNameSafe(Instance->Parent));
                 return false;
             }
-            if (!SaveAssetPackage(Instance))
-            {
-                UE_LOG(LogTemp, Error, TEXT("[wire] не удалось сохранить %s"), *Instance->GetPathName());
-                return false;
-            }
-            UE_LOG(LogTemp, Display, TEXT("[wire] %s: Trampleable включён"), *Instance->GetName());
         }
         return true;
     }
@@ -241,7 +265,7 @@ namespace
     // Переключатель по умолчанию выключен -- ветка сжатия без этого не
     // компилировалась бы вовсе. Значение меняется только в памяти, не сохраняется.
     // Годится для любой функции с переключателем Trampleable (MF_TrampleCompressWPO, MF_GrassSquash).
-    bool VerifyTrampleCompressBothBranches(UMaterialFunction* Function, UTexture* TrampleMap)
+    bool VerifyTrampleCompressBothBranches(UMaterialFunction* Function, UTexture* TrampleMap, bool bOnReadsMap = true)
     {
         UMaterialExpressionStaticSwitchParameter* Switch = nullptr;
         for (UMaterialExpression* Expression : Function->GetExpressions())
@@ -259,11 +283,13 @@ namespace
 
         const bool bDefault = Switch->DefaultValue;
         Switch->DefaultValue = false;
+        const FString Off = Switch->ParameterName.ToString() + TEXT(" выключен");
+        const FString On = Switch->ParameterName.ToString() + TEXT(" включён");
         const bool bWindOnly = VerifyMaterialFunctionCompiles(Function, TEXT("WPO"), MP_WorldPositionOffset,
-            TEXT("Trampleable выключен"), TrampleMap, /*bExpectTexture=*/false);
+            *Off, TrampleMap, /*bExpectTexture=*/false);
         Switch->DefaultValue = true;
         const bool bTrampled = VerifyMaterialFunctionCompiles(Function, TEXT("WPO"), MP_WorldPositionOffset,
-            TEXT("Trampleable включён"), TrampleMap, /*bExpectTexture=*/true);
+            *On, TrampleMap, /*bExpectTexture=*/bOnReadsMap);
         Switch->DefaultValue = bDefault;
         return bWindOnly && bTrampled;
     }
@@ -310,6 +336,7 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
     UMaterialFunction* LeafDrop = nullptr;
     UMaterialFunction* GrassSquash = nullptr;
     UMaterialFunction* FlowerOpen = nullptr;
+    UMaterialFunction* PlayerPush = nullptr;
     bool bTrampleBuilt = false;
 
     struct FStep
@@ -330,6 +357,8 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         // Тоже зовёт MF_SampleTrample.
         { GrassSquashName, &GrassSquash, [&Sources, &Trample](UMaterialFunction* F) { return BuildGrassSquash(F, Sources, Trample); } },
         { FlowerOpenName, &FlowerOpen, [&Sources](UMaterialFunction* F) { return BuildFlowerOpen(F, Sources); } },
+        // Раздвигание травы игроком (2026-09-28).
+        { PlayerPushName, &PlayerPush, [&Sources](UMaterialFunction* F) { return BuildPlayerPushWPO(F, Sources); } },
     };
 
     for (const FString& Only : OnlyNames)
@@ -378,7 +407,7 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
     }
 
     TArray<UMaterialInterface*> Wired;
-    if (FParse::Param(*Params, TEXT("wire")) && !WireTrampleMaterials(Trample, Compress, Wired))
+    if (FParse::Param(*Params, TEXT("wire")) && !WireTrampleMaterials(Trample, Compress, PlayerPush, Wired))
     {
         UE_LOG(LogTemp, Error, TEXT("[wire] не доведено -- сохранено то, что успело до ошибки"));
         return 1;
@@ -402,11 +431,19 @@ int32 UMaterialFunctionsSetupCommandlet::Main(const FString& Params)
         bAllCompile &= VerifyTrampleCompressBothBranches(GrassSquash, Sources.TrampleMap);
         bAllCompile &= VerifyMaterialFunctionCompiles(FlowerOpen, TEXT("WPO"), MP_WorldPositionOffset, TEXT("шейдер вершин"), Sources.TrampleMap, false);
         bAllCompile &= VerifyMaterialFunctionCompiles(FlowerOpen, TEXT("Open"), MP_BaseColor, TEXT("шейдер пикселей"), Sources.TrampleMap, false);
+        // Раздвигание карту тропы не читает -- только позицию игрока.
+        bAllCompile &= VerifyTrampleCompressBothBranches(PlayerPush, Sources.TrampleMap, /*bOnReadsMap=*/false);
         // Подключённые -wire: мастера травы тропу не читают (Trampleable по
         // умолчанию выключен), ландшафт и инстансы низкого покрова -- читают.
         for (UMaterialInterface* Material : Wired)
         {
-            const bool bExpectTrample = Material->IsA<UMaterialInstance>() || Material->GetOutermost()->GetName() == LandscapeMaterialPath;
+            // Карту тропы читают ландшафт и инстансы с Trampleable; кусты
+            // (только Pushable) и мастера -- нет.
+            bool bExpectTrample = Material->GetOutermost()->GetName() == LandscapeMaterialPath;
+            for (const TCHAR* Path : TrampleableInstancePaths)
+            {
+                bExpectTrample |= Material->GetOutermost()->GetName() == Path;
+            }
             bAllCompile &= VerifyCompiledMaterial(Material, Material->GetName(), Sources.TrampleMap, bExpectTrample);
         }
         if (!bAllCompile)

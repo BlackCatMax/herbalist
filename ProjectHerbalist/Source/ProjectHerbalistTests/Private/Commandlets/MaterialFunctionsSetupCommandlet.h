@@ -3,14 +3,17 @@
 // Собирает функции материалов для карт мира (2026-09-16), см.
 // HerbalistMaterialFunctionGraphs.h: MF_SampleWorldState, MF_SampleTrample,
 // MF_TrampleCompressWPO и слой сезона (MF_SeasonWeights, MF_SeasonColor,
-// MF_LeafDrop, MF_GrassSquash, MF_FlowerOpen) в /Game/Materials/Functions.
+// MF_LeafDrop, MF_GrassSquash, MF_FlowerOpen) и MF_PlayerPushWPO в
+// /Game/Materials/Functions.
 //
 // Существующую функцию не трогает (её могли поправить в редакторе); -rebuild
 // перестраивает граф заново, -rebuild -only=MF_A,MF_B -- только перечисленные.
 // Материалы трогает только с -wire (2026-09-27): тропа в мастерах травы
 // (MF_TrampleCompressWPO в World Position Offset), в M_landscape
 // MF_TrampleCompressWPO заменяется MF_SampleTrample, Trampleable включается в
-// инстансах низкого покрова (списки -- HerbalistMaterialFunctionGraphs.h).
+// инстансах низкого покрова; с 2026-09-28 -- ещё MF_PlayerPushWPO последним в
+// World Position Offset мастеров травы и Pushable в инстансах травы и кустов
+// (списки -- HerbalistMaterialFunctionGraphs.h).
 // Повторный запуск ничего не меняет. Остальное подключение -- вручную,
 // docs/reference/TOOLS_REFERENCE.md.
 //

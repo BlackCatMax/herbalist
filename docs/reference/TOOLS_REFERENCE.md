@@ -56,10 +56,21 @@
 | `M_Foliage_Master`, `M_plants` | то, что стояло в World Position Offset (ветер со своими `Lerp`), → вход `WPO` вызова `MF_TrampleCompressWPO` → World Position Offset. Вызов встаёт последним: сжатие — всей травинке, ветер слабеет по той же доле |
 | `M_landscape` | вызовы `MF_TrampleCompressWPO` заменяет на `MF_SampleTrample` (`Position` не подключён — позиция пикселя): выход `Trample` — туда же, куда шёл (`Lerp` к земле тропы), выход `WPO` — на то, что было на его входе. Без `MF_SampleTrample` и без сжатия — предупреждение: `Lerp` к слою тропы собрать руками, текстура тропы — выбор художника |
 | `MI_Grass`, `MI_Clover`, `MI_Fern`, `MI_grass_01/02_Inst`, `MI_flower_01/02_Inst` | `Trampleable` включён. Кусты и листва деревьев (`MI_Bush`, `MI_*_Tree_Leaves`, `MI_shrub_*`) — выключен: они на тропе стоят |
+| `M_Foliage_Master`, `M_plants` (с 2026-09-28) | после сжатия тропы — `MF_PlayerPushWPO`, последним в цепочке World Position Offset |
+| те же семь инстансов травы и цветов плюс `MI_Bush`, `MI_shrub_01_Inst`, `MI_shrub_flower_01_Inst` | `Pushable` включён — трава и кусты расступаются перед игроком. Листва деревьев — нет |
 
-Списки — `HerbalistMaterialFunctionGraphs.h`. Вызов сжатия уже стоит в
-материале, но не в World Position Offset — отказ с ошибкой: подключено руками
-иначе, второй вызов считал бы тропу дважды.
+Списки — `HerbalistMaterialFunctionGraphs.h`. «Уже подключено» ищется по всей
+цепочке World Position Offset (через входы `WPO` вызовов функций), не только
+последним узлом. Вызов стоит в материале, но вне этой цепочки — отказ с
+ошибкой: подключено руками иначе, второй вызов считал бы тропу дважды.
+
+`MF_PlayerPushWPO` (раздвигание игроком): входы `WPO`, `Radius` (90 см),
+`Strength` (0.6); выходы `WPO`, `Push`. Вершина уходит от
+`TramplePlayerPosition` по горизонтали на высоту над основанием экземпляра ×
+`Push`, где `Push` = (1 − SmoothStep(0, Radius, расстояние основания до
+игрока)) × `Strength`, и приседает на треть того; игрок выше или ниже основания
+на 1.5–3 м — эффекта нет. Карт не читает. Переключатель `Pushable` выключен по
+умолчанию.
 
 ### Листопад у игрока (`ULeafFallSubsystem`)
 

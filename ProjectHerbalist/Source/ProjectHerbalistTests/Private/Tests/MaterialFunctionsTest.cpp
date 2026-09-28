@@ -579,4 +579,47 @@ bool FHerbalistMaterialFunctions_FlowerOpenFollowsDayPhaseWindow::RunTest(const 
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistMaterialFunctions_PlayerPushFollowsScheme,
+    "Herbalist.MaterialFunctions.PlayerPushFollowsScheme",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistMaterialFunctions_PlayerPushFollowsScheme::RunTest(const FString& Parameters)
+{
+    // Раздвигание травы игроком (2026-09-28): позиция игрока из коллекции,
+    // основание -- Instance & Particle Space, карт не читает, за Pushable.
+    using namespace HerbalistMaterialFunctionsTest;
+    const FSources Sources = LoadMaterialFunctionSources();
+    if (!TestNotNull(TEXT("MPC_WorldStateFields"), Sources.Collection)) return false;
+    UMaterialFunction* Function = NewTransientMaterialFunction();
+    if (!TestTrue(TEXT("Граф собран"), BuildPlayerPushWPO(Function, Sources))) return false;
+
+    const TSet<FName> Inputs = FunctionInputNames(Function);
+    TestTrue(TEXT("Входы WPO, Radius, Strength"), Inputs.Contains(TEXT("WPO")) && Inputs.Contains(TEXT("Radius")) && Inputs.Contains(TEXT("Strength")));
+    const TSet<FName> Outputs = FunctionOutputNames(Function);
+    TestTrue(TEXT("Выходы WPO и Push"), Outputs.Contains(TEXT("WPO")) && Outputs.Contains(TEXT("Push")));
+
+    bool bReadsPlayer = false;
+    for (UMaterialExpressionCollectionParameter* Parameter : FunctionNodesOfType<UMaterialExpressionCollectionParameter>(Function))
+    {
+        bReadsPlayer |= Parameter->ParameterName == FName(TEXT("TramplePlayerPosition"));
+    }
+    TestTrue(TEXT("Позиция игрока -- из MPC"), bReadsPlayer);
+    TestEqual(TEXT("Карт не читает"), FunctionNodesOfType<UMaterialExpressionTextureSample>(Function).Num(), 0);
+
+    const TArray<UMaterialExpressionTransformPosition*> Pivots = FunctionNodesOfType<UMaterialExpressionTransformPosition>(Function);
+    TestTrue(TEXT("Основание -- Instance & Particle Space"),
+        Pivots.Num() == 1 && Pivots[0]->TransformSourceType == TRANSFORMPOSSOURCE_Instance);
+    bool bNoOffsets = true;
+    for (UMaterialExpressionWorldPosition* Position : FunctionNodesOfType<UMaterialExpressionWorldPosition>(Function))
+    {
+        bNoOffsets &= Position->WorldPositionShaderOffset == WPT_ExcludeAllShaderOffsets;
+    }
+    TestTrue(TEXT("Высота вершины -- без смещений шейдера (иначе цикл через WPO)"), bNoOffsets);
+
+    const TArray<UMaterialExpressionStaticSwitchParameter*> Switches = FunctionNodesOfType<UMaterialExpressionStaticSwitchParameter>(Function);
+    TestTrue(TEXT("Переключатель Pushable, по умолчанию выключен"),
+        Switches.Num() == 1 && Switches[0]->ParameterName == FName(PushableSwitchName) && !Switches[0]->DefaultValue);
+    return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS && WITH_EDITOR
