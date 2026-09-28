@@ -17,6 +17,7 @@
 #include "Player/PesterItemActor.h"
 #include "Player/HeldItemActor.h"
 #include "Core/Community/OfferingStoneActor.h"
+#include "Core/Community/OrderCacheActor.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
 #include "Core/World/GridWorldManager.h"
@@ -347,6 +348,47 @@ bool FHerbalistFocus_ItemShowsPlantMeshAtHandSize::RunTest(const FString& Parame
     TestNull(TEXT("У зелья меша растения нет"), AHeldItemActor::FindItemMesh(Actor, Potion));
 
     Actor->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_CacheAndStoneSayWhatGoesThere,
+    "Herbalist.Focus.CacheAndStoneSayWhatGoesThere",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_CacheAndStoneSayWhatGoesThere::RunTest(const FString& Parameters)
+{
+    // «Взаимодействие» по тайнику и камню пустой рукой или не тем -- строка
+    // на экране, а не только в логе (2026-09-28, по PIE: четыре нажатия по
+    // тайнику без ответа).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+    AOrderCacheActor* Cache = World->SpawnActor<AOrderCacheActor>();
+    AOfferingStoneActor* Stone = World->SpawnActor<AOfferingStoneActor>();
+    if (!TestTrue(TEXT("Тайник и камень"), Cache && Stone)) { PC->Destroy(); Manager->Destroy(); return false; }
+
+    // Напрямую: в мире редактора без игры события актора (Execute_) не идут.
+    Cache->OnInteract_Implementation(PC);
+    TestEqual(TEXT("Тайник пустой рукой"), PC->GetLastHintLine(), FString(TEXT("Сюда кладут зелье.")));
+    Stone->OnInteract_Implementation(PC);
+    TestEqual(TEXT("Камень пустой рукой"), PC->GetLastHintLine(), FString(TEXT("Сюда кладут подношение.")));
+
+    FInventoryItem Herb;
+    Herb.IngredientID = FName(TEXT("bol_01"));
+    Herb.Count = 1;
+    PC->InventoryComponent->AddItem(Herb, 1);
+    PC->HideHintLine();
+    TestFalse(TEXT("Трава в тайник не идёт"), Cache->ReceiveHeldItem(PC, PC->InventoryComponent->FindItemIndex(Herb)));
+    TestEqual(TEXT("И об этом сказано"), PC->GetLastHintLine(), FString(TEXT("Сюда кладут зелье.")));
+    TestFalse(TEXT("Строка на время, а не держится"), PC->IsHintLineHeld());
+
+    Stone->Destroy();
+    Cache->Destroy();
+    PC->Destroy();
+    Manager->Destroy();
     return true;
 }
 

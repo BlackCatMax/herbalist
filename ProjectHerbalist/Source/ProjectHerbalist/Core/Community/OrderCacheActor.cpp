@@ -54,13 +54,24 @@ void AOrderCacheActor::EndPlay(const EEndPlayReason::Type Reason)
 void AOrderCacheActor::OnInteract_Implementation(AHerbalistPlayerController* PC)
 {
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Orders] Тайник: зелье кладут рукой"));
+    // На экране, а не только в логе (2026-09-28, по PIE: четыре нажатия
+    // пустой рукой по тайнику -- ни звука).
+    if (PC)
+    {
+        PC->ShowHintLine(TEXT("Сюда кладут зелье."));
+    }
 }
 
 bool AOrderCacheActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 InventoryIndex)
 {
     if (!PC || !PC->InventoryComponent || !PC->InventoryComponent->GetItems().IsValidIndex(InventoryIndex)) return false;
     const FInventoryItem Potion = PC->InventoryComponent->GetItems()[InventoryIndex];
-    if (!HerbalistOrders::IsDeliverable(Potion)) return false;
+    if (!HerbalistOrders::IsDeliverable(Potion))
+    {
+        // Не зелье -- в тайник не идёт; раньше отказ был молчаливым.
+        PC->ShowHintLine(TEXT("Сюда кладут зелье."));
+        return false;
+    }
 
     AGridWorldManager* Manager = PC->FindWorldManager();
     if (!Manager) return true;
@@ -74,6 +85,7 @@ bool AOrderCacheActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 Inv
         if (FVector::DistSquared(Pawn->GetActorLocation(), GetActorLocation()) > FMath::Square(ReachCm))
         {
             UE_LOG(LogHerbalistWorld, Log, TEXT("[Orders] До тайника не дотянуться -- подойдите ближе"));
+            PC->ShowHintLine(TEXT("Не дотянуться."));
             return true;
         }
     }
@@ -83,6 +95,7 @@ bool AOrderCacheActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 Inv
     if (Number == 0 || !Manager->DeliverOrder(Number, Potion))
     {
         UE_LOG(LogHerbalistWorld, Log, TEXT("[Orders] Открытых заказов нет -- зелье осталось в котомке"));
+        PC->ShowHintLine(TEXT("Никто ничего не просил."));
         return true;
     }
     PC->InventoryComponent->RemoveItem(InventoryIndex, 1);

@@ -30,6 +30,11 @@ AOfferingStoneActor::AOfferingStoneActor()
 void AOfferingStoneActor::OnInteract_Implementation(AHerbalistPlayerController* PC)
 {
     UE_LOG(LogHerbalistWorld, Log, TEXT("[Community] Камень-жертвенник: подношение кладут рукой"));
+    // На экране, а не только в логе (2026-09-28, как у тайника).
+    if (PC)
+    {
+        PC->ShowHintLine(TEXT("Сюда кладут подношение."));
+    }
 }
 
 bool AOfferingStoneActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 InventoryIndex)
@@ -43,6 +48,7 @@ bool AOfferingStoneActor::ReceiveHeldItem(AHerbalistPlayerController* PC, int32 
     if (PC->IsArtifactReceipt(Offering))
     {
         UE_LOG(LogHerbalistWorld, Log, TEXT("[Community] '%s' -- артефакт, на камень не кладут"), *Offering.IngredientID.ToString());
+        PC->ShowHintLine(TEXT("Такое на камень не кладут."));
         return true;
     }
     // Тот же путь, что у команды OfferToCommunity: менеджер меняет Молву,
