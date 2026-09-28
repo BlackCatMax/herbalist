@@ -2628,6 +2628,7 @@ void AHerbalistPlayerController::Journal()
 void AHerbalistPlayerController::ShowHintLine(const FString& Line, float Seconds)
 {
     LastHintLine = Line;
+    bHintLineHeld = Seconds <= 0.0f;
     if (!IsLocalController() || !GetWorld() || !GetWorld()->GetGameViewport())
     {
         return;
@@ -2646,6 +2647,12 @@ void AHerbalistPlayerController::ShowHintLine(const FString& Line, float Seconds
     }
     HintWidget->SetLine(Line);
     HintWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+    if (Seconds <= 0.0f)
+    {
+        // Держится, пока не снимут (имя предмета под взглядом).
+        GetWorldTimerManager().ClearTimer(HintTimer);
+        return;
+    }
     TWeakObjectPtr<USensationLineWidget> Weak = HintWidget;
     GetWorldTimerManager().SetTimer(HintTimer, FTimerDelegate::CreateLambda([Weak]()
     {
@@ -2654,6 +2661,17 @@ void AHerbalistPlayerController::ShowHintLine(const FString& Line, float Seconds
             Widget->SetVisibility(ESlateVisibility::Collapsed);
         }
     }), FMath::Max(Seconds, 0.1f), false);
+}
+
+void AHerbalistPlayerController::HideHintLine()
+{
+    LastHintLine.Reset();
+    bHintLineHeld = false;
+    GetWorldTimerManager().ClearTimer(HintTimer);
+    if (HintWidget)
+    {
+        HintWidget->SetVisibility(ESlateVisibility::Collapsed);
+    }
 }
 
 void AHerbalistPlayerController::ShowMemoryRevealText(const FText& Text)

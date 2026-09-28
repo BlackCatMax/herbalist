@@ -13,6 +13,9 @@
 #include "Player/BeltComponent.h"
 #include "Player/BeltItemActor.h"
 #include "Player/ViewAnchor.h"
+#include "Player/PesterComponent.h"
+#include "Player/PesterItemActor.h"
+#include "Player/HeldItemActor.h"
 #include "Core/Community/OfferingStoneActor.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
 #include "Core/Inventory/HerbalistInventoryComponent.h"
@@ -259,6 +262,91 @@ bool FHerbalistFocus_BeltAimAssistCatchesNearMiss::RunTest(const FString& Parame
 
     PC->Destroy();
     Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_PesterItemNameWhileLookedAt,
+    "Herbalist.Focus.PesterItemNameWhileLookedAt",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_PesterItemNameWhileLookedAt::RunTest(const FString& Parameters)
+{
+    // Имя предмета под взглядом (2026-09-28, решение пользователя): держится,
+    // пока смотришь; ушёл взгляд -- ушло имя. Строку «взял в руку» на пару
+    // секунд уход взгляда не снимает.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+
+    FInventoryItem Herb;
+    Herb.IngredientID = FName(TEXT("bol_01"));
+    Herb.Count = 1;
+    PC->InventoryComponent->AddItem(Herb, 1);
+    PC->PesterComponent->Toggle();
+    if (!TestTrue(TEXT("Пестерь разложен"), PC->PesterComponent->GetLaidOutItems().Num() > 0)) { PC->Destroy(); Manager->Destroy(); return false; }
+    APesterItemActor* Item = PC->PesterComponent->GetLaidOutItems()[0].Get();
+    const FString Name = PC->GetPerceivedDisplayName(Item->GetItem());
+
+    PC->LookHighlightComponent->SetFocusedActor(Item);
+    TestFalse(TEXT("Имя не пустое"), Name.IsEmpty());
+    TestEqual(TEXT("Под взглядом -- имя"), PC->GetLastHintLine(), Name);
+    TestTrue(TEXT("Держится без таймера"), PC->IsHintLineHeld());
+
+    PC->LookHighlightComponent->SetFocusedActor(nullptr);
+    TestTrue(TEXT("Взгляд ушёл -- имени нет"), PC->GetLastHintLine().IsEmpty());
+
+    PC->LookHighlightComponent->SetFocusedActor(Item);
+    PC->ShowHintLine(TEXT("Котомка полна."));
+    PC->LookHighlightComponent->SetFocusedActor(nullptr);
+    TestEqual(TEXT("Строку на пару секунд уход взгляда не снимает"), PC->GetLastHintLine(), FString(TEXT("Котомка полна.")));
+
+    // Взяли последний из стопки, глядя на него: актор уничтожен раньше, чем
+    // взгляд ушёл, -- имя всё равно снимается.
+    PC->LookHighlightComponent->SetFocusedActor(Item);
+    Item->Destroy();
+    PC->LookHighlightComponent->SetFocusedActor(nullptr);
+    TestTrue(TEXT("Предмет под взглядом исчез -- имени нет"), PC->GetLastHintLine().IsEmpty());
+
+    PC->PesterComponent->Toggle();
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_ItemShowsPlantMeshAtHandSize,
+    "Herbalist.Focus.ItemShowsPlantMeshAtHandSize",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_ItemShowsPlantMeshAtHandSize::RunTest(const FString& Parameters)
+{
+    // Меш растения вместо шарика (2026-09-28): тот же размер горсти по
+    // наибольшей стороне, в полтора раза крупнее шара. Зелье -- заглушка.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AHeldItemActor* Actor = World->SpawnActor<AHeldItemActor>();
+    UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+    if (!TestTrue(TEXT("Актор и меш"), Actor && Cube)) { if (Actor) Actor->Destroy(); return false; }
+
+    FInventoryItem Herb;
+    Herb.IngredientID = FName(TEXT("bol_01"));
+    Actor->SetShownSize(0.05f);
+    Actor->ShowItem(Herb, false, false, Cube);
+    TestTrue(TEXT("Показан меш растения"), Actor->IsShowingItemMesh());
+    const float Longest = 2.0f * Cube->GetBounds().BoxExtent.GetMax();
+    TestEqual(TEXT("Наибольшая сторона -- полторы горсти"), static_cast<float>(Actor->GetActorScale3D().X) * Longest, 0.05f * 1.5f * 100.0f, 0.01f);
+
+    Actor->ShowItem(Herb, false, true, Cube);
+    TestFalse(TEXT("Жидкость -- заглушка, не меш"), Actor->IsShowingItemMesh());
+    TestEqual(TEXT("Заглушка -- размер как был"), static_cast<float>(Actor->GetActorScale3D().X), 0.05f, 0.0001f);
+
+    FInventoryItem Potion;
+    Potion.IngredientID = FName(TEXT("Potion"));
+    TestNull(TEXT("У зелья меша растения нет"), AHeldItemActor::FindItemMesh(Actor, Potion));
+
+    Actor->Destroy();
     return true;
 }
 

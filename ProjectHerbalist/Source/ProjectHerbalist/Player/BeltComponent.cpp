@@ -374,10 +374,12 @@ void UBeltComponent::SyncVisual()
             Actor = World->SpawnActor<ABeltItemActor>(ABeltItemActor::StaticClass(), FTransform::Identity, Params);
             if (!Actor) continue;
             Actor->SetSlot(Slot);
-            Actor->SetActorScale3D(FVector(0.06f));
+            Actor->SetShownSize(0.06f);
         }
         const bool bHard = Slot == EBeltSlot::Tool || Slot == EBeltSlot::Ward;
-        Actor->ShowItem(Look, bHard, false);
+        // Оберег -- заглушкой: его «действует / погас» -- яркость окраски
+        // (SetBrightness), у меша со своими материалами её нет.
+        Actor->ShowItem(Look, bHard, false, Slot == EBeltSlot::Ward ? nullptr : AHeldItemActor::FindItemMesh(this, Look));
         if (Slot == EBeltSlot::Ward)
         {
             Actor->SetBrightness(IsWardLit() ? LitBrightness : DimBrightness);

@@ -285,8 +285,8 @@ void AAlchemyTableActor::SyncContentsVisual()
         AHeldItemActor* Actor = World->SpawnActor<AHeldItemActor>(AHeldItemActor::StaticClass(), FTransform::Identity, Params);
         if (!Actor) continue;
         const FInventoryItem& Laid = Shown[Index];
-        Actor->ShowItem(Laid, false, Laid.bIsWater);
-        Actor->SetActorScale3D(FVector(0.05f));
+        Actor->ShowItem(Laid, false, Laid.bIsWater, AHeldItemActor::FindItemMesh(this, Laid));
+        Actor->SetShownSize(0.05f);
         const float Offset = (Index - (Shown.Num() - 1) * 0.5f) * Spacing;
         Actor->SetActorLocation(Top + GetActorRightVector() * Offset);
         ContentActors.Add(Actor);

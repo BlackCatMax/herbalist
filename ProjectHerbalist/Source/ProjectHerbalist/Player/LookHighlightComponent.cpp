@@ -72,10 +72,55 @@ void ULookHighlightComponent::SetFocusedActor(AActor* NewTarget)
 {
     AActor* Current = FocusedActor.Get();
     AActor* Wanted = IsHighlightable(NewTarget) ? NewTarget : nullptr;
-    if (Current == Wanted) return;
+    if (Current == Wanted)
+    {
+        // Предмет под взглядом уничтожен (взяли последний из стопки -- раскладка
+        // перестроилась): слабая ссылка уже пуста, но имя его ещё висит.
+        if (!Wanted && bShowingItemName)
+        {
+            ShowFocusedItemName(nullptr);
+        }
+        return;
+    }
     Unhighlight();
     FocusedActor = Wanted;
     Highlight(Wanted);
+    ShowFocusedItemName(Wanted);
+}
+
+void ULookHighlightComponent::ShowFocusedItemName(AActor* Actor)
+{
+    AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwner());
+    if (!HPC)
+    {
+        return;
+    }
+    // Пестерь -- настоящий предмет (имя искажает восприятие, а не раскладка),
+    // пояс -- тот, что показан.
+    const FInventoryItem* Named = nullptr;
+    if (const APesterItemActor* PesterItem = Cast<APesterItemActor>(Actor))
+    {
+        Named = &PesterItem->GetItem();
+    }
+    else if (const ABeltItemActor* BeltItem = Cast<ABeltItemActor>(Actor))
+    {
+        Named = &BeltItem->GetShownItem();
+    }
+    if (Named)
+    {
+        HPC->ShowHintLine(HPC->GetPerceivedDisplayName(*Named), 0.0f);
+        bShowingItemName = true;
+    }
+    else if (bShowingItemName)
+    {
+        // Только своё: строку на пару секунд («взял в руку …», «Котомка
+        // полна.») уход взгляда не снимает.
+        if (HPC->IsHintLineHeld())
+        {
+            HPC->HideHintLine();
+        }
+        bShowingItemName = false;
+    }
 }
 
 void ULookHighlightComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

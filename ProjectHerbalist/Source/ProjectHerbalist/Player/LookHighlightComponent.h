@@ -68,7 +68,12 @@ private:
     void Highlight(AActor* Actor);
     void Unhighlight();
 
+    // Имя предмета пестеря или пояса под взглядом -- строкой внизу, пока
+    // взгляд на нём (2026-09-28, решение пользователя: имя при взгляде).
+    void ShowFocusedItemName(AActor* Actor);
+
     TWeakObjectPtr<AActor> FocusedActor;
+    bool bShowingItemName = false;
 
     // Что было на примитивах до подсветки (ревью 2026-09-21): снимая
     // подсветку, возвращаем их как было, а не выключаем Custom Depth

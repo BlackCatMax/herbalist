@@ -37,7 +37,7 @@ int32 UHeldItemComponent::ResolveHeldIndex() const
 
 bool UHeldItemComponent::TakeFromInventory(int32 InventoryIndex)
 {
-    const AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwner());
+    AHerbalistPlayerController* PC = Cast<AHerbalistPlayerController>(GetOwner());
     if (!PC || !PC->InventoryComponent || !PC->InventoryComponent->GetItems().IsValidIndex(InventoryIndex))
     {
         return false;
@@ -48,6 +48,8 @@ bool UHeldItemComponent::TakeFromInventory(int32 InventoryIndex)
     bInspecting = false;
     ShowSensation(false);
     SyncVisual();
+    // Что взял -- строкой внизу на пару секунд (2026-09-28).
+    PC->ShowHintLine(PC->GetPerceivedDisplayName(HeldItem));
     return true;
 }
 
@@ -104,6 +106,11 @@ void UHeldItemComponent::ShowSensation(bool bShow)
         }
         return;
     }
+    // Строка ощущения встаёт на место строки имени -- не поверх неё.
+    if (AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(PC))
+    {
+        HPC->HideHintLine();
+    }
     // Без мира с вьюпортом (автотесты) строка только запоминается.
     if (!PC || !PC->IsLocalController() || !GetWorld() || !GetWorld()->GetGameViewport()) return;
     if (!SensationWidget)
@@ -159,7 +166,7 @@ void UHeldItemComponent::SyncVisual()
             }
         }
     }
-    HeldActor->ShowItem(HeldItem, bMineral, bLiquid);
+    HeldActor->ShowItem(HeldItem, bMineral, bLiquid, AHeldItemActor::FindItemMesh(this, HeldItem));
 }
 
 void UHeldItemComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

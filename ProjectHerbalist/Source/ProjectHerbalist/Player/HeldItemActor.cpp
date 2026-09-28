@@ -5,6 +5,10 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "Core/Subsystems/IngredientRegistrySubsystem.h"
+#include "Core/Data/IngredientTableRow.h"
 
 AHeldItemActor::AHeldItemActor()
 {
@@ -46,24 +50,61 @@ FLinearColor AHeldItemActor::ColorForState(const FRealState& Perceived)
     return FLinearColor(0.3f, 0.6f, 0.25f);
 }
 
-void AHeldItemActor::ShowItem(const FInventoryItem& Item, bool bIsMineral, bool bIsLiquid)
+void AHeldItemActor::ShowItem(const FInventoryItem& Item, bool bIsMineral, bool bIsLiquid, UStaticMesh* ItemMesh)
 {
+    ShownItem = Item;
+    ShownColor = ColorForState(Item.State);
+    bShowingItemMesh = ItemMesh && !bIsLiquid;
+    if (bShowingItemMesh)
+    {
+        MeshComponent->SetStaticMesh(ItemMesh);
+        MeshComponent->EmptyOverrideMaterials();
+        const float Longest = 2.0f * ItemMesh->GetBounds().BoxExtent.GetMax();
+        MeshNormalize = Longest > 1.0f ? PlantSizeOverShape * 100.0f / Longest : 1.0f;
+        ApplySize();
+        return;
+    }
+
+    MeshNormalize = 1.0f;
     UStaticMesh* Mesh = bIsLiquid ? CylinderMesh.Get() : (bIsMineral ? CubeMesh.Get() : SphereMesh.Get());
     if (Mesh)
     {
         MeshComponent->SetStaticMesh(Mesh);
     }
-
     if (!TintMaterial && BaseMaterial)
     {
         TintMaterial = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-        MeshComponent->SetMaterial(0, TintMaterial);
     }
-    ShownColor = ColorForState(Item.State);
     if (TintMaterial)
     {
+        MeshComponent->SetMaterial(0, TintMaterial);
         TintMaterial->SetVectorParameterValue(TEXT("Color"), ShownColor);
     }
+    ApplySize();
+}
+
+UStaticMesh* AHeldItemActor::FindItemMesh(const UObject* WorldContext, const FInventoryItem& Item)
+{
+    if (!WorldContext || Item.bIsWater || Item.IngredientID == FName(TEXT("Potion")))
+    {
+        return nullptr;
+    }
+    const UWorld* World = WorldContext->GetWorld();
+    const UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+    const UIngredientRegistrySubsystem* Registry = GI ? GI->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
+    const FIngredientTableRow* Row = Registry ? Registry->GetRow(Item.IngredientID) : nullptr;
+    return Row ? Row->ResourceMesh : nullptr;
+}
+
+void AHeldItemActor::SetShownSize(float Size)
+{
+    ShownSize = Size;
+    ApplySize();
+}
+
+void AHeldItemActor::ApplySize()
+{
+    SetActorScale3D(FVector(ShownSize * MeshNormalize));
 }
 
 void AHeldItemActor::SetBrightness(float Brightness)

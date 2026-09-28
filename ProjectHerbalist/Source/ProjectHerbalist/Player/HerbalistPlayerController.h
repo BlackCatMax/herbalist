@@ -643,9 +643,13 @@ public:
     // Короткая строка внизу экрана на пару секунд -- то, что травник замечает
     // сам: «Котомка полна» (2026-09-27, по PIE-логу: отказ был виден только в
     // логе, игрок жал снова и снова). Без вьюпорта (автотесты) строка только
-    // запоминается.
+    // запоминается. Seconds <= 0 -- держится до HideHintLine: так показывается
+    // имя предмета под взглядом (2026-09-28).
     void ShowHintLine(const FString& Line, float Seconds = 2.5f);
+    void HideHintLine();
     const FString& GetLastHintLine() const { return LastHintLine; }
+    // Строка держится без таймера (имя под взглядом), а не на пару секунд.
+    bool IsHintLineHeld() const { return bHintLineHeld; }
 
 protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -754,6 +758,7 @@ private:
     UPROPERTY()
     TObjectPtr<class USensationLineWidget> HintWidget = nullptr;
     FString LastHintLine;
+    bool bHintLineHeld = false;
     FTimerHandle HintTimer;
 
     // Текущий разговор (TalkTo/ChooseDialogueBranch, § комментарий у их

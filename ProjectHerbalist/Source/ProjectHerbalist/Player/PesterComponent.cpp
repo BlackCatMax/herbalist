@@ -233,10 +233,11 @@ void UPesterComponent::Rebuild()
         const bool bMineral = Pouch == EPesterPouch::Stones;
         const bool bLiquid = Pouch == EPesterPouch::Vials;
         Actor->BindItem(Item, Index);
-        Actor->ShowItem(bContainer ? UInventorySlotWidget::PerceiveSingleItem(Item, Clarity) : Item, bMineral, bLiquid);
+        Actor->ShowItem(bContainer ? UInventorySlotWidget::PerceiveSingleItem(Item, Clarity) : Item, bMineral, bLiquid,
+            AHeldItemActor::FindItemMesh(this, Item));
         // Горсть и полный мешочек: крупнее стопка -- крупнее заглушка, но не
         // бесконечно.
-        Actor->SetActorScale3D(FVector(0.04f + 0.008f * FMath::Min(Item.Count, 5)));
+        Actor->SetShownSize(0.04f + 0.008f * FMath::Min(Item.Count, 5));
 
         // Мешочки в ряд по центру, внутри -- по два в ряд, ряды вглубь и вверх.
         const float PouchY = (PouchIndex - (static_cast<int32>(EPesterPouch::Count) - 1) * 0.5f) * PouchSpacing;
