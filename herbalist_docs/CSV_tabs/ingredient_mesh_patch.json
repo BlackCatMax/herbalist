@@ -1,0 +1,19 @@
+[
+  { "Name": "Железный серп", "ResourceMesh": "/Game/Fab/Sickle/sickle/StaticMeshes/sickle.sickle" },
+  { "Name": "Медный серп", "ResourceMesh": "/Game/Fab/Sickle/sickle/StaticMeshes/sickle.sickle" },
+  { "Name": "Костяной нож", "ResourceMesh": "/Game/Fab/Old_Rusty_Knife/old_rusty_knife/StaticMeshes/old_rusty_knife.old_rusty_knife" },
+  { "Name": "Корзина", "ResourceMesh": "/Game/UltimateFarming/Meshes/SM_GreenHouse_Basket.SM_GreenHouse_Basket" },
+  { "Name": "les_09", "ResourceMesh": "/Game/UltimateFarming/Meshes/SM_Poricini_Mushroom_A.SM_Poricini_Mushroom_A" },
+  { "Name": "mix_09", "ResourceMesh": "/Game/UltimateFarming/Meshes/SM_Poricini_Mushroom_A.SM_Poricini_Mushroom_A" },
+  { "Name": "tai_09", "ResourceMesh": "/Game/UltimateFarming/Meshes/SM_Poricini_Mushroom_A.SM_Poricini_Mushroom_A" },
+  { "Name": "mix_10", "ResourceMesh": "/Game/UltimateFarming/Meshes/SM_Poricini_Mushroom_B.SM_Poricini_Mushroom_B" },
+  { "Name": "broad_09", "ResourceMesh": "/Game/UltimateFarming/Meshes/SM_Poricini_Mushroom_B.SM_Poricini_Mushroom_B" },
+  { "Name": "Зорин-камень", "ResourceMesh": "/Game/DreamscapeSeries/DreamscapeTower/Meshes/Crystals/SM_Crystal_01_Red.SM_Crystal_01_Red" },
+  { "Name": "Синь-камень", "ResourceMesh": "/Game/DreamscapeSeries/DreamscapeTower/Meshes/Crystals/SM_Crystal_01_Blue.SM_Crystal_01_Blue" },
+  { "Name": "Громовая стрела", "ResourceMesh": "/Game/Crystal_cave/Meshes/Crystal/SM_crystal_02.SM_crystal_02" },
+  { "Name": "Гагат", "ResourceMesh": "/Game/Stylized_Forest/Meshes/stones/SM_small_stone_01.SM_small_stone_01" },
+  { "Name": "Куриный бог", "ResourceMesh": "/Game/Stylized_Forest/Meshes/stones/SM_small_stone_02.SM_small_stone_02" },
+  { "Name": "Плакун-камень", "ResourceMesh": "/Game/Stylized_Forest/Meshes/stones/SM_small_stone_03.SM_small_stone_03" },
+  { "Name": "Фонарь", "ResourceMesh": "/Game/Crystal_cave/Meshes/Lantern/SM_Lantern.SM_Lantern" },
+  { "Name": "Water", "ResourceMesh": "" }
+]

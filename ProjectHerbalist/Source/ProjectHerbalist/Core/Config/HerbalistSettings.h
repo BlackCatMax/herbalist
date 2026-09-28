@@ -35,6 +35,15 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Content|Placeholders")
     TSoftObjectPtr<UStaticMesh> PlaceholderMemoryFragmentMesh;
 
+    // Вид зелья и воды в руке, в пестере и над котлом (2026-09-28): у них нет
+    // строки с мешем в DT_IngredientClass, меш -- отсюда. Пусто -- цилиндр,
+    // окрашенный по состоянию.
+    UPROPERTY(config, EditAnywhere, Category = "Content|Placeholders")
+    TSoftObjectPtr<UStaticMesh> PotionItemMesh;
+
+    UPROPERTY(config, EditAnywhere, Category = "Content|Placeholders")
+    TSoftObjectPtr<UStaticMesh> WaterItemMesh;
+
     // --- Такт тяжёлых полных обходов сетки (2026-09-03, подготовка к
     // большому миру) ---
     // UpdateEntityManifestations — самый дорогой проход в проекте: на КАЖДУЮ

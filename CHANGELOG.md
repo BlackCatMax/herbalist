@@ -16860,3 +16860,37 @@ Herbalist Cell` — ноль точек. В игре партициониров�
 
 Строки в логе остались. Тест `Herbalist.Focus.CacheAndStoneSayWhatGoesThere`.
 Эталон 787 / 0.
+
+## 2026-09-28 — модели из паков в руке и в пестере
+
+Пользователь скачал паки; лавка, котёл и сундук в блюпринтах — его работа.
+
+- **`-run=IngredientMeshPatch`** (новый, по образцу
+  `IngredientDryingDurationPatch`: точечно через `FindRow`, без полного круга
+  через JSON). Данные — `herbalist_docs/CSV_tabs/ingredient_mesh_patch.json`,
+  17 строк:
+
+  | Строки | Меш |
+  |---|---|
+  | Железный серп, Медный серп | `Fab/Sickle` |
+  | Костяной нож | `Fab/Old_Rusty_Knife` |
+  | Корзина | `UltimateFarming/SM_GreenHouse_Basket` |
+  | грибы `les_09`, `mix_09`, `tai_09` / `mix_10`, `broad_09` | `UltimateFarming/SM_Poricini_Mushroom_A` / `_B` |
+  | Зорин-камень / Синь-камень | кристаллы Dreamscape, красный / синий |
+  | Громовая стрела | `Crystal_cave/SM_crystal_02` |
+  | Гагат, Куриный бог, Плакун-камень | `Stylized_Forest/SM_small_stone_01–03` |
+  | Фонарь | `Crystal_cave/SM_Lantern` |
+  | Water | меш снят (там стояли стрелки осей LiveLink) |
+
+  Камни, инструменты и фонарь в мире не растут (нет `AllowedBiomes`),
+  поэтому огромный исходный размер моделей паков (серп — 82 м, кристалл —
+  6,7 м) виден только в руке и пестере, где размер приводится к горсти.
+  Грибы растут в мире: белый гриб в паке натуральной величины.
+- **Зелье и вода** — меши из Herbalist Settings: `PotionItemMesh` (склянка
+  `MagicPotion/SM_Bottle1`), `WaterItemMesh` (ведро Megascans). Раньше —
+  цилиндр. Жидкость с мешем показывается им, а не заглушкой.
+- Попутно: unity-сборка поставила новый файл так, что
+  `IngredientHarvestWindowPatch` и `AmbientTimeGatesPatch` оказались в одной
+  единице с одинаковым шаблоном `StringToEnum` — у первого теперь своё имя.
+- Тесты `Herbalist.Focus.PackModelsReachIngredientRows`, обновлён
+  `ItemShowsPlantMeshAtHandSize`. Эталон 788 / 0.

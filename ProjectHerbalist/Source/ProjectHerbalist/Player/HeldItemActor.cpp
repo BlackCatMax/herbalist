@@ -9,6 +9,7 @@
 #include "Engine/World.h"
 #include "Core/Subsystems/IngredientRegistrySubsystem.h"
 #include "Core/Data/IngredientTableRow.h"
+#include "Core/Config/HerbalistSettings.h"
 
 AHeldItemActor::AHeldItemActor()
 {
@@ -54,7 +55,7 @@ void AHeldItemActor::ShowItem(const FInventoryItem& Item, bool bIsMineral, bool 
 {
     ShownItem = Item;
     ShownColor = ColorForState(Item.State);
-    bShowingItemMesh = ItemMesh && !bIsLiquid;
+    bShowingItemMesh = ItemMesh != nullptr;
     if (bShowingItemMesh)
     {
         MeshComponent->SetStaticMesh(ItemMesh);
@@ -85,14 +86,20 @@ void AHeldItemActor::ShowItem(const FInventoryItem& Item, bool bIsMineral, bool 
 
 UStaticMesh* AHeldItemActor::FindItemMesh(const UObject* WorldContext, const FInventoryItem& Item)
 {
-    if (!WorldContext || Item.bIsWater || Item.IngredientID == FName(TEXT("Potion")))
+    // Зелье и вода -- из настроек: строки с мешем у них нет (2026-09-28).
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
+    if (Item.IngredientID == FName(TEXT("Potion")))
     {
-        return nullptr;
+        return Settings ? Settings->PotionItemMesh.LoadSynchronous() : nullptr;
     }
-    const UWorld* World = WorldContext->GetWorld();
+    const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
     const UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
     const UIngredientRegistrySubsystem* Registry = GI ? GI->GetSubsystem<UIngredientRegistrySubsystem>() : nullptr;
     const FIngredientTableRow* Row = Registry ? Registry->GetRow(Item.IngredientID) : nullptr;
+    if (Item.bIsWater || (Row && Row->Class == EIngredientClass::Water))
+    {
+        return Settings ? Settings->WaterItemMesh.LoadSynchronous() : nullptr;
+    }
     return Row ? Row->ResourceMesh : nullptr;
 }
 

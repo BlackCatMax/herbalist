@@ -27,8 +27,12 @@ based_on: ProjectHerbalist source, 2026-09-22
   со строкой `DT_IngredientClass` и мешем `ResourceMesh` — этот меш, своими
   материалами, в пестере, на поясе, в руке и над котлом
   (`AHeldItemActor::FindItemMesh`). Размер — наибольшей стороной в полтора
-  раза крупнее шара того же места (`SetShownSize`). Вода и зелье —
-  заглушки; инструменты, мешочки и камни без меша — тоже.
+  раза крупнее шара того же места (`SetShownSize`). Зелье и вода — меши
+  из Herbalist Settings (`PotionItemMesh` — склянка `MagicPotion/SM_Bottle1`,
+  `WaterItemMesh` — ведро Megascans), пусто — цилиндр. Модели паков
+  проставлены строкам `-run=IngredientMeshPatch` (серпы, нож, корзина,
+  грибы, камни, фонарь). Мешок, туёс, мешочки и артефакты без модели —
+  заглушки.
 - **Имя при взгляде**: предмет пестеря или пояса под прицелом — его имя
   строкой внизу, пока взгляд на нём (`ULookHighlightComponent`,
   `ShowHintLine(…, 0)` / `HideHintLine`); взял в руку — имя на 2,5 с.

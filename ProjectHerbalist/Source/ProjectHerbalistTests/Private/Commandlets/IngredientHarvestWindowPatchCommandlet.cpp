@@ -15,11 +15,13 @@
 
 namespace
 {
+    // Своё имя, не StringToEnum (2026-09-28): в unity-сборке этот файл делит
+    // единицу с AmbientTimeGatesPatch, где есть такой же шаблон.
     // Общий разбор enum-строки из патча в любой UENUM (Season/HarvestTimeWindow/
     // MoonPhase здесь) -- StaticEnum<T>()->GetValueByNameString возвращает
     // INDEX_NONE на опечатку, что и даёт громкую ошибку вместо тихого 0.
     template<typename TEnum>
-    bool StringToEnum(const FString& Value, TEnum& OutValue)
+    bool HarvestWindowStringToEnum(const FString& Value, TEnum& OutValue)
     {
         const UEnum* Enum = StaticEnum<TEnum>();
         const int64 Index = Enum->GetValueByNameString(Value);
@@ -88,7 +90,7 @@ int32 UIngredientHarvestWindowPatchCommandlet::Main(const FString& Params)
         if (Obj->TryGetStringField(TEXT("HarvestTimeWindow"), EnumStr))
         {
             EHarvestTimeWindow Window;
-            if (!StringToEnum(EnumStr, Window))
+            if (!HarvestWindowStringToEnum(EnumStr, Window))
             {
                 UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' -- неизвестное значение HarvestTimeWindow '%s'"), *RowName, *EnumStr);
                 return 1;
@@ -98,7 +100,7 @@ int32 UIngredientHarvestWindowPatchCommandlet::Main(const FString& Params)
         if (Obj->TryGetStringField(TEXT("RequiredMoonPhase"), EnumStr))
         {
             EMoonPhase Phase;
-            if (!StringToEnum(EnumStr, Phase))
+            if (!HarvestWindowStringToEnum(EnumStr, Phase))
             {
                 UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' -- неизвестное значение RequiredMoonPhase '%s'"), *RowName, *EnumStr);
                 return 1;
@@ -114,7 +116,7 @@ int32 UIngredientHarvestWindowPatchCommandlet::Main(const FString& Params)
             {
                 ESeason Season;
                 const FString SeasonStr = SeasonValue->AsString();
-                if (!StringToEnum(SeasonStr, Season))
+                if (!HarvestWindowStringToEnum(SeasonStr, Season))
                 {
                     UE_LOG(LogTemp, Error, TEXT("IngredientHarvestWindowPatch: ряд '%s' -- неизвестное значение AllowedSeasons '%s'"), *RowName, *SeasonStr);
                     return 1;

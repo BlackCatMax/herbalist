@@ -155,6 +155,7 @@ ini можно дополнить или заменить, но не очист�
 | `-run=IngredientHarvestWindowPatch` | Окна сбора (сезоны, время суток, луна, сухая погода) из `ingredient_harvest_windows.json` | 2026-08-29 |
 | `-run=IngredientGatheringAndGardenPatch` | `bIronAverse`, `bDelicate`, `GardenNiche` из `ingredient_gathering_and_garden_flags.json` | 2026-08-31 |
 | `-run=DryingStatePatch` | `DriedStateDelta` из `ingredient_drying_state_patch.json` | 2026-09-05 |
+| `-run=IngredientMeshPatch` | `ResourceMesh` точечным строкам из `ingredient_mesh_patch.json` (пустая строка — снять меш); сначала проверяет все строки и меши, потом меняет | 2026-09-28 |
 | `-run=IngredientDryingDurationPatch` | `DryingDurationSeconds` всем растениям и грибам из `ingredient_drying_duration_patch.json` | 2026-09-05 |
 | `-run=RitualRewardAppend` | Три награды ритуалов (Полынный пояс, Одолень-корень, Перунов цвет) | 2026-09-20 |
 | `-run=AmbientTimeGatesPatch` | Время (сутки, сезон, погода) двенадцати Низшим из `ambient_time_gates.json` | 2026-09-20 |

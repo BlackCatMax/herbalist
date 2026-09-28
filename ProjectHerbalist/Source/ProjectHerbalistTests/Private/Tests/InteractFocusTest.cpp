@@ -16,6 +16,9 @@
 #include "Player/PesterComponent.h"
 #include "Player/PesterItemActor.h"
 #include "Player/HeldItemActor.h"
+#include "Core/Config/HerbalistSettings.h"
+#include "Core/Data/IngredientTableRow.h"
+#include "Engine/DataTable.h"
 #include "Core/Community/OfferingStoneActor.h"
 #include "Core/Community/OrderCacheActor.h"
 #include "Core/Resources/AHerbalistResourceActor.h"
@@ -339,15 +342,42 @@ bool FHerbalistFocus_ItemShowsPlantMeshAtHandSize::RunTest(const FString& Parame
     const float Longest = 2.0f * Cube->GetBounds().BoxExtent.GetMax();
     TestEqual(TEXT("Наибольшая сторона -- полторы горсти"), static_cast<float>(Actor->GetActorScale3D().X) * Longest, 0.05f * 1.5f * 100.0f, 0.01f);
 
-    Actor->ShowItem(Herb, false, true, Cube);
-    TestFalse(TEXT("Жидкость -- заглушка, не меш"), Actor->IsShowingItemMesh());
+    Actor->ShowItem(Herb, false, true, nullptr);
+    TestFalse(TEXT("Без меша -- заглушка"), Actor->IsShowingItemMesh());
     TestEqual(TEXT("Заглушка -- размер как был"), static_cast<float>(Actor->GetActorScale3D().X), 0.05f, 0.0001f);
 
+    // Зелье и вода -- меши из Herbalist Settings (строки с мешем у них нет).
+    const UHerbalistSettings* Settings = GetHerbalistSettings();
     FInventoryItem Potion;
     Potion.IngredientID = FName(TEXT("Potion"));
-    TestNull(TEXT("У зелья меша растения нет"), AHeldItemActor::FindItemMesh(Actor, Potion));
+    FInventoryItem Water;
+    Water.IngredientID = FName(TEXT("Water"));
+    Water.bIsWater = true;
+    TestNotNull(TEXT("Склянка зелья задана в настройках"), Settings ? Settings->PotionItemMesh.LoadSynchronous() : nullptr);
+    TestEqual(TEXT("Зелье -- склянкой"), AHeldItemActor::FindItemMesh(Actor, Potion), Settings ? Settings->PotionItemMesh.LoadSynchronous() : nullptr);
+    TestEqual(TEXT("Вода -- ведром"), AHeldItemActor::FindItemMesh(Actor, Water), Settings ? Settings->WaterItemMesh.LoadSynchronous() : nullptr);
 
     Actor->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_PackModelsReachIngredientRows,
+    "Herbalist.Focus.PackModelsReachIngredientRows",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_PackModelsReachIngredientRows::RunTest(const FString& Parameters)
+{
+    // -run=IngredientMeshPatch (2026-09-28): модели паков дошли до строк
+    // таблицы, у «Water» снят меш стрелок осей LiveLink.
+    const UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/Herbalist/Data/DT_IngredientClass"));
+    if (!TestNotNull(TEXT("DT_IngredientClass"), Table)) return false;
+    for (const TCHAR* Name : { TEXT("Железный серп"), TEXT("Костяной нож"), TEXT("Корзина"), TEXT("les_09"), TEXT("Гагат"), TEXT("Фонарь") })
+    {
+        const FIngredientTableRow* Row = Table->FindRow<FIngredientTableRow>(FName(Name), TEXT("PackModels"), false);
+        TestTrue(FString::Printf(TEXT("У '%s' есть меш"), Name), Row && Row->ResourceMesh);
+    }
+    const FIngredientTableRow* WaterRow = Table->FindRow<FIngredientTableRow>(FName(TEXT("Water")), TEXT("PackModels"), false);
+    TestTrue(TEXT("У воды в строке меша нет"), WaterRow && !WaterRow->ResourceMesh);
     return true;
 }
 
