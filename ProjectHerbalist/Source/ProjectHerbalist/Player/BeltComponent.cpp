@@ -309,7 +309,7 @@ ABeltItemActor* UBeltComponent::FindItemUnderView(const FVector& Start, const FV
             }
         }
     }
-    return Best;
+    return Best ? Best : HerbalistView::NearestToAim(Shown, Start, End);
 }
 
 void UBeltComponent::ClearVisual()

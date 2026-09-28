@@ -271,6 +271,9 @@ public:
     // цель -- растение собирается, котёл мешается, с предметом в руке --
     // применение. Отдельной клавиши сбора нет.
     void Interact();
+    // Клавиша зелья: первое зелье котомки -- в клетку под взглядом. Ничего,
+    // кроме зелья, не трогает (2026-09-28).
+    void ApplyAlchemy();
 
     // Сохранения v1 (Core/Save/HerbalistSaveSubsystem.h) — тонкие обёртки над
     // подсистемой, тем же паттерном, что HarvestTest/ApplyTest над пайплайном.
@@ -671,7 +674,6 @@ protected:
     void Look(const FInputActionValue& Value);
     void Harvest();
     void Journal();
-    void ApplyAlchemy();
 
     bool GetHitResultFromCamera(FHitResult& OutHit, ECollisionChannel Channel = ECC_Visibility);
     // OnLeftClick() удалён 2026-09-02 (чистка мёртвого кода) — объявление без

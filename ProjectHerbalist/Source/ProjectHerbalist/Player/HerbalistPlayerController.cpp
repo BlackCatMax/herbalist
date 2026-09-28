@@ -404,6 +404,16 @@ bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit, bool b
     AGridWorldManager* WorldManager = FindWorldManager();
     if (!WorldManager) return false;
 
+    int32 X, Y;
+    const bool bOnGrid = GetCellFromHit(Hit, X, Y);
+    FGridCell* Cell = bOnGrid ? WorldManager->GetCell(X, Y) : nullptr;
+    // Тихо -- только вода говорит о дальности (2026-09-28, по PIE-логу: каждое
+    // нажатие по далёкой земле писало «до точки … подойди ближе»).
+    if (bQuiet && (!Cell || !Cell->bIsWater))
+    {
+        return false;
+    }
+
     if (GetPawn())
     {
         const float Dist = HarvestDistanceTo(Hit.Location);
@@ -414,23 +424,17 @@ bool AHerbalistPlayerController::TryCollectWaterAt(const FHitResult& Hit, bool b
         }
     }
 
-    int32 X, Y;
-    if (!GetCellFromHit(Hit, X, Y))
+    if (!bOnGrid)
     {
         UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: точка попадания вне сетки"));
         return false;
     }
 
-    FGridCell* Cell = WorldManager->GetCell(X, Y);
     if (!Cell || !Cell->bIsWater)
     {
         // Самый частый и самый непонятный случай: игрок целится в землю, на
         // которой ничего не выросло. Причин ровно две, и обе стоит назвать,
         // иначе отличить «не туда смотрю» от «мир пуст» невозможно.
-        if (bQuiet)
-        {
-            return false;
-        }
         const int32 Here = Cell ? Cell->ResourceActors.Num() : 0;
         UE_LOG(LogHerbalistPlayer, Log, TEXT("Сбор: под прицелом %s -- не ресурс и не вода. Клетка (%d,%d): ресурсов %d%s"),
             *GetNameSafe(Hit.GetActor()), X, Y, Here,
@@ -604,13 +608,11 @@ void AHerbalistPlayerController::ApplyAlchemy()
 
 void AHerbalistPlayerController::OnApplyAlchemyKey()
 {
-    FHitResult Hit;
-    if (!GetHitResultFromCamera(Hit)) return;
-
-    int32 X, Y;
-    if (!GetCellFromHit(Hit, X, Y)) return;
-
-    ApplyTest(X, Y);
+    // Первое зелье котомки -- в клетку под взглядом (07_UX_Tech, «Ввод»).
+    // До 2026-09-28 здесь стоял отладочный ApplyTest: два первых предмета
+    // котомки, какие есть, выливались смесью -- по PIE-логу так ушли серп и
+    // корзина с пояса. ApplyTest остался консольной командой.
+    UsePotion();
 }
 
 void AHerbalistPlayerController::OnUsePotion()

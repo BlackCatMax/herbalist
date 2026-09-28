@@ -31,4 +31,32 @@ namespace HerbalistView
         }
         return AnchorYaw;
     }
+
+    // Помощь в наведении по раскладке (2026-09-28, по PIE: «слишком мелкий
+    // трейс, трудно целиться»): луч мимо всех заглушек -- берётся та, что
+    // ближе всех к прицелу по углу, если не дальше этого конуса.
+    constexpr float ItemPickAssistDegrees = 8.0f;
+
+    template <typename ActorType>
+    ActorType* NearestToAim(const TArray<TObjectPtr<ActorType>>& Candidates, const FVector& Start, const FVector& End,
+        float MaxDegrees = ItemPickAssistDegrees)
+    {
+        const FVector Aim = (End - Start).GetSafeNormal();
+        float BestCos = FMath::Cos(FMath::DegreesToRadians(MaxDegrees));
+        ActorType* Best = nullptr;
+        for (ActorType* Candidate : Candidates)
+        {
+            if (!Candidate)
+            {
+                continue;
+            }
+            const float Cos = FVector::DotProduct(Aim, (Candidate->GetActorLocation() - Start).GetSafeNormal());
+            if (Cos > BestCos)
+            {
+                BestCos = Cos;
+                Best = Candidate;
+            }
+        }
+        return Best;
+    }
 }

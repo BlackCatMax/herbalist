@@ -55,6 +55,10 @@ public:
     // Можно ли с этим что-то сделать -- только такое подсвечивается.
     static bool IsHighlightable(const AActor* Actor);
 
+    // Годится ли в цель: подсвечиваемое, а растение -- ещё и в пределах сбора
+    // (MaxHarvestDistance владельца, по горизонтали).
+    bool IsFocusCandidate(const AActor* Actor) const;
+
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:

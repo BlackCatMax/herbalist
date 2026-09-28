@@ -20,6 +20,11 @@
 #include "Misc/AutomationTest.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/CollisionProfile.h"
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/Pawn.h"
 
 #if WITH_AUTOMATION_TESTS && WITH_EDITOR
 
@@ -178,6 +183,132 @@ bool FHerbalistFocus_HintLineRemembersWithoutViewport::RunTest(const FString& Pa
     PC->ShowHintLine(TEXT("Котомка полна."));
     TestEqual(TEXT("Строка запомнена"), PC->GetLastHintLine(), FString(TEXT("Котомка полна.")));
 
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_FarPlantIsNotHighlighted,
+    "Herbalist.Focus.FarPlantIsNotHighlighted",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_FarPlantIsNotHighlighted::RunTest(const FString& Parameters)
+{
+    // Подсвечено -- значит сработает (2026-09-28, по PIE-логу: растение
+    // горело за 10 м, а сбор отказывал «далеко -- 225 см»).
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+    APawn* Pawn = World->SpawnActor<APawn>(APawn::StaticClass(), FVector(0.0f, 0.0f, 90000.0f), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Pawn"), Pawn)) { PC->Destroy(); Manager->Destroy(); return false; }
+    PC->Possess(Pawn);
+    PC->SetControlRotation(FRotator::ZeroRotator);
+
+    FVector View;
+    FRotator ViewRotation;
+    PC->GetPlayerViewPoint(View, ViewRotation);
+    AHerbalistResourceActor* Plant = World->SpawnActor<AHerbalistResourceActor>(AHerbalistResourceActor::StaticClass(),
+        View + ViewRotation.Vector() * 150.0f, FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Растение"), Plant)) { Pawn->Destroy(); PC->Destroy(); Manager->Destroy(); return false; }
+    TestEqual(TEXT("В пределах сбора -- подсвечено"), PC->LookHighlightComponent->RefreshFocus(), static_cast<AActor*>(Plant));
+
+    Plant->SetActorLocation(View + ViewRotation.Vector() * (PC->MaxHarvestDistance + 100.0f));
+    TestNull(TEXT("Дальше предела сбора -- не подсвечено"), PC->LookHighlightComponent->RefreshFocus());
+
+    Plant->Destroy();
+    Pawn->Destroy();
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_BeltAimAssistCatchesNearMiss,
+    "Herbalist.Focus.BeltAimAssistCatchesNearMiss",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_BeltAimAssistCatchesNearMiss::RunTest(const FString& Parameters)
+{
+    // Прицел чуть мимо заглушки пояса -- всё равно она (2026-09-28, по PIE:
+    // «слишком мелкий трейс»). Далеко мимо -- ничего.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+    UBeltComponent* Belt = PC->BeltComponent;
+
+    PC->SetControlRotation(FRotator(-70.0f, 0.0f, 0.0f));
+    Belt->TickComponent(0.1f, LEVELTICK_All, nullptr);
+    if (!TestTrue(TEXT("Пояс виден"), Belt->GetShownItems().Num() > 0)) { PC->Destroy(); Manager->Destroy(); return false; }
+    FVector View;
+    FRotator ViewRotation;
+    PC->GetPlayerViewPoint(View, ViewRotation);
+    const ABeltItemActor* First = Belt->GetShownItems()[0].Get();
+    const FVector ToItem = (First->GetActorLocation() - View).GetSafeNormal();
+    const FVector Side = FVector::CrossProduct(ToItem, FVector::UpVector).GetSafeNormal();
+
+    const FVector NearMiss = ToItem.RotateAngleAxis(3.0f, FVector::CrossProduct(ToItem, Side).GetSafeNormal());
+    TestNotNull(TEXT("На 3° мимо -- заглушка найдена"), Belt->FindItemUnderView(View, View + NearMiss * 200.0f));
+
+    const FVector FarMiss = ToItem.RotateAngleAxis(40.0f, Side);
+    TestNull(TEXT("На 40° мимо -- ничего"), Belt->FindItemUnderView(View, View + FarMiss * 200.0f));
+
+    PC->Destroy();
+    Manager->Destroy();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHerbalistFocus_PotionKeyPoursOnlyThePotion,
+    "Herbalist.Focus.PotionKeyPoursOnlyThePotion",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHerbalistFocus_PotionKeyPoursOnlyThePotion::RunTest(const FString& Parameters)
+{
+    // Клавиша зелья (2026-09-28, по PIE-логу: отладочный ApplyTest выливал два
+    // первых предмета котомки -- ушли серп и корзина). Теперь -- только зелье.
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!TestNotNull(TEXT("Editor world available"), World)) return false;
+    AGridWorldManager* Manager = SpawnAndBeginPlay(World);
+    if (!TestNotNull(TEXT("Manager spawned"), Manager)) return false;
+    AHerbalistPlayerController* PC = SpawnControllerAndBeginPlay(World, Manager);
+    if (!TestNotNull(TEXT("Controller spawned"), PC)) { Manager->Destroy(); return false; }
+
+    // Взгляд сверху на кубик в клетке (3,3) -- лучу есть во что попасть.
+    const FVector Above = Manager->GetCellWorldPositionFlat(3, 3) + FVector(Manager->CellSize * 0.5f, Manager->CellSize * 0.5f, 0.0f);
+    AStaticMeshActor* Floor = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Above + FVector(0.0f, 0.0f, 100.0f), FRotator::ZeroRotator);
+    UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+    if (!TestTrue(TEXT("Кубик"), Floor && Cube)) { PC->Destroy(); Manager->Destroy(); return false; }
+    Floor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+    Floor->GetStaticMeshComponent()->SetStaticMesh(Cube);
+    Floor->GetStaticMeshComponent()->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+    Floor->SetActorScale3D(FVector(0.3f));
+    static_cast<AActor*>(PC)->SetActorLocation(Above + FVector(0.0f, 0.0f, 500.0f));
+    PC->SetControlRotation(FRotator(-89.9f, 0.0f, 0.0f));
+
+    FInventoryItem Sickle;
+    Sickle.IngredientID = FName(TEXT("bol_01"));
+    Sickle.Count = 1;
+    FInventoryItem Basket;
+    Basket.IngredientID = FName(TEXT("tun_02"));
+    Basket.Count = 1;
+    FInventoryItem Potion;
+    Potion.IngredientID = FName(TEXT("Potion"));
+    Potion.Count = 1;
+    Potion.State.Magnitude = 0.5f;
+    PC->InventoryComponent->AddItem(Sickle, 1);
+    PC->InventoryComponent->AddItem(Basket, 1);
+    PC->InventoryComponent->AddItem(Potion, 1);
+
+    PC->ApplyAlchemy();
+    TestTrue(TEXT("Первый предмет котомки на месте"), PC->InventoryComponent->FindItemIndex(Sickle) != INDEX_NONE);
+    TestTrue(TEXT("Второй предмет котомки на месте"), PC->InventoryComponent->FindItemIndex(Basket) != INDEX_NONE);
+    TestEqual(TEXT("Зелье вылито"), PC->InventoryComponent->FindItemIndex(Potion), INDEX_NONE);
+
+    Floor->Destroy();
     PC->Destroy();
     Manager->Destroy();
     return true;

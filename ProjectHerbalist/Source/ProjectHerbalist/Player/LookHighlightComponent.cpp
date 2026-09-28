@@ -25,6 +25,23 @@ bool ULookHighlightComponent::IsHighlightable(const AActor* Actor)
     return Actor && (Actor->Implements<UInteractable>() || Actor->IsA<AHerbalistResourceActor>());
 }
 
+bool ULookHighlightComponent::IsFocusCandidate(const AActor* Actor) const
+{
+    if (!IsHighlightable(Actor))
+    {
+        return false;
+    }
+    // Растение -- только в пределах сбора (2026-09-28, по PIE-логу: подсвечено
+    // за 10 м, «Взаимодействие» отказывало «далеко -- 225 см»). Что подсвечено,
+    // с тем клавиша и сработает. Без пешки мерить не от чего -- не режем.
+    const AHerbalistPlayerController* HPC = Cast<AHerbalistPlayerController>(GetOwner());
+    if (HPC && HPC->GetPawn() && Actor->IsA<AHerbalistResourceActor>())
+    {
+        return HPC->HarvestDistanceTo(Actor->GetActorLocation()) <= HPC->MaxHarvestDistance;
+    }
+    return true;
+}
+
 void ULookHighlightComponent::Highlight(AActor* Actor)
 {
     if (!Actor) return;
@@ -121,13 +138,13 @@ AActor* ULookHighlightComponent::RefreshFocus()
     {
         // Край того, что закрывает вид, -- с запасом на толщину сферы.
         SightLimit = FVector::Dist(ViewLocation, Hit.ImpactPoint) + AssistRadiusCm * 2.0f;
-        if (IsHighlightable(Hit.GetActor()))
+        if (IsFocusCandidate(Hit.GetActor()))
         {
             Target = Hit.GetActor();
         }
     }
     if (!Target && GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation, End, ECC_GameTraceChannel1, Params)
-        && IsHighlightable(Hit.GetActor()) && FVector::Dist(ViewLocation, Hit.ImpactPoint) <= SightLimit)
+        && IsFocusCandidate(Hit.GetActor()) && FVector::Dist(ViewLocation, Hit.ImpactPoint) <= SightLimit)
     {
         Target = Hit.GetActor();
     }
@@ -142,7 +159,7 @@ AActor* ULookHighlightComponent::RefreshFocus()
             for (const FHitResult& Candidate : Hits)
             {
                 const float DistSq = FVector::DistSquared(ViewLocation, Candidate.ImpactPoint);
-                if (IsHighlightable(Candidate.GetActor()) && DistSq < BestDistSq && DistSq <= FMath::Square(SightLimit))
+                if (IsFocusCandidate(Candidate.GetActor()) && DistSq < BestDistSq && DistSq <= FMath::Square(SightLimit))
                 {
                     BestDistSq = DistSq;
                     Target = Candidate.GetActor();

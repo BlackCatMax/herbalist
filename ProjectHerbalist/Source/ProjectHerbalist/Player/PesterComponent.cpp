@@ -270,7 +270,7 @@ APesterItemActor* UPesterComponent::FindItemUnderView(const FVector& Start, cons
             }
         }
     }
-    return Best;
+    return Best ? Best : HerbalistView::NearestToAim(LaidOut, Start, End);
 }
 
 void UPesterComponent::PlaceItems()

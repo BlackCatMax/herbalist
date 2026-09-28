@@ -38,7 +38,7 @@
   камень-жертвенник (`AOfferingStoneActor`), один-два тайника
   (`AOrderCacheActor`). Карта **сохранена**. (2026-09-27: на карте лавка,
   камень и два тайника.)
-- [ ] А2. Подсветка: настроено 2026-09-27 (`r.CustomDepth=3`,
+- [x] А2. Подсветка (подтверждено 2026-09-28): настроено 2026-09-27 (`r.CustomDepth=3`,
   `M_PP_LookHighlight` в `PPV_LookHighlight`) — **перезапустить редактор**
   (настройка стенсила читается при старте) и увидеть тёплую заливку на
   растении под прицелом. Запасной путь — `Buffer Visualization → Custom Stencil` (`herbalist_docs/Herbalist_Vault/03_Technical/Current/Level_Assembly.md`, «Настройки
