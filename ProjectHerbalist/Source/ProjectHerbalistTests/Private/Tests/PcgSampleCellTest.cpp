@@ -412,12 +412,15 @@ bool FHerbalistPcgSampleCell_GrassGeneratesAtRuntime::RunTest(const FString& Par
     for (USCS_Node* Node : Blueprint->SimpleConstructionScript->GetAllNodes())
     {
         const UPCGComponent* Template = Node ? Cast<UPCGComponent>(Node->ComponentTemplate) : nullptr;
-        if (!Template) continue;
+        // С 2026-09-28 в объёме ещё и PCG_Trees (запекается по запросу) --
+        // здесь только трава.
+        const UPCGGraph* TemplateGraph = Template ? Template->GetGraph() : nullptr;
+        if (!TemplateGraph || TemplateGraph->GetName() != TEXT("PCG_Grass")) continue;
         ++GrassTemplates;
         TestEqual(TEXT("Шаблон: генерация в рантайме"), Template->GenerationTrigger, EPCGComponentGenerationTrigger::GenerateAtRuntime);
         TestTrue(TEXT("Шаблон: разбиение на ячейки"), IsPartitioned(Template));
     }
-    TestEqual(TEXT("PCG-компонент в BP_BiomeVolume один"), GrassTemplates, 1);
+    TestEqual(TEXT("PCG-компонент травы в BP_BiomeVolume один"), GrassTemplates, 1);
 
     // Граф травы: иерархическая генерация, сетка 64 м -- объём строится
     // ячейками по мере подхода.

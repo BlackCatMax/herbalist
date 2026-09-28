@@ -185,6 +185,47 @@ PCG перестраивает точки редко, материал чита�
   сезона и порчи не будет; сменили сезон — новые клетки получат его при
   следующей генерации (уйти за радиус и вернуться).
 
+### Деревья PCG
+
+Решение пользователя (2026-09-28): отдельный граф на том же `BP_BiomeVolume` и
+сплайне, запекание в редакторе. Трава генерируется в игре по состоянию клеток,
+деревьям это не нужно: сезон у них — материал (`MF_LeafDrop`), а
+запечённые деревья получают HLOD, коллизию и свет.
+
+- Второй PCG-компонент `PCG_Trees` в `BP_BiomeVolume`, `GenerateOnDemand`,
+  без разбиения. Собирает `-run=PcgTreesSetup` (таблица, граф, компонент;
+  каждый шаг — только если не сделан).
+- Цепочка: сплайн региона (`Get Spline Data`, фильтр `Original`, тег
+  компонента `Biome`) → `Create Surface From Spline` → `Surface Sampler`
+  (4 точки на 100 м² мира; выборка по внутренности сплайна считала бы шаг в
+  локальных единицах, а объёмы растянуты ×8.5) → минус вода (сплайны с тегом
+  `Water`) → `Projection` на ландшафт (только позиция) → `Ground < 0.8`
+  (на покраске тропы деревьев нет) → **Herbalist Biome Trees** → `Self
+  Pruning` → `Static Mesh Spawner` (меш из атрибута `TreeMesh`).
+- **Herbalist Biome Trees** (`Core/PCG/PCGHerbalistBiomeTrees.h`): биом —
+  у объёма-владельца (`GetOriginalComponent`: при разбиении владелец раздела
+  — не объём), набор — строки `/Game/Data/DT_BiomeTrees`
+  (`FHerbalistBiomeTreeRow`: биом, меш, `TreesPer100SquareMeters`,
+  `ScaleMin/Max`, `SpacingMeters`). Точка остаётся с долей «плотность биома /
+  плотность сэмплера», умноженной на затухание к краю региона
+  (`DensityFalloffStrength` объёма, как у ресурсов); вид — по плотностям
+  строк; масштаб, поворот вокруг вертикали, границы точки радиусом
+  `SpacingMeters / 2` — по ним `Self Pruning` разводит стволы.
+- **Густота** — строки таблицы (`herbalist_docs/CSV_tabs/biome_trees.json`,
+  перезалить: `-run=PcgTreesSetup -refilltable`) или прямо в
+  `DT_BiomeTrees` в редакторе. Сумма плотностей биома не выше 4 на 100 м²
+  (плотности сэмплера); выше — предупреждение узла, лес реже задуманного.
+- **Запекание**: `MSYS_NO_PATHCONV=1 UnrealEditor-Cmd.exe <uproject>
+  -run=WorldPartitionBuilderCommandlet /Game/Maps/L_TestDev
+  -Builder=PCGWorldPartitionBuilder -IncludeGraphNames=PCG_Trees
+  -GenerateComponentEditingModeNormal -AllowCommandletRendering`. Сдвинул
+  объём или сплайн, сменил таблицу — перезапечь (или Generate на компоненте
+  в редакторе и сохранить карту).
+- Не сделано: трава под стволами (граф травы мог бы вычесть точки деревьев
+  через `Get PCG Component Data`); ресурсы о деревьях не знают и могут встать
+  в ствол; `Nanite` на деревьях включён, хотя для листопада маской план
+  советует его выключать (`DESIGN_Living_Vegetation_Research.md` §3.2).
+
 ### Слоты ресурсов у воды
 
 - Граф висит PCG-компонентом (`GenerateOnDemand`) в `BP_WaterVolume` и

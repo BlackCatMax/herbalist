@@ -1,0 +1,38 @@
+[
+  { "Name": "Tundra_PineSmall", "Biome": "Tundra", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_3.SM_Pine_Tree_3", "TreesPer100SquareMeters": 0.3, "ScaleMin": 0.8, "ScaleMax": 1.2, "SpacingMeters": 5.0 },
+  { "Name": "Tundra_PineSapling", "Biome": "Tundra", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_4.SM_Pine_Tree_4", "TreesPer100SquareMeters": 0.2, "ScaleMin": 0.8, "ScaleMax": 1.2, "SpacingMeters": 4.0 },
+  { "Name": "Tundra_Bush", "Biome": "Tundra", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Bush.SM_Bush", "TreesPer100SquareMeters": 0.4, "ScaleMin": 0.6, "ScaleMax": 1.0, "SpacingMeters": 2.0 },
+
+  { "Name": "Taiga_Pine1", "Biome": "Taiga", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_1.SM_Pine_Tree_1", "TreesPer100SquareMeters": 1.2, "ScaleMin": 1.0, "ScaleMax": 1.4, "SpacingMeters": 3.5 },
+  { "Name": "Taiga_Pine2", "Biome": "Taiga", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_2.SM_Pine_Tree_2", "TreesPer100SquareMeters": 1.2, "ScaleMin": 1.0, "ScaleMax": 1.5, "SpacingMeters": 3.5 },
+  { "Name": "Taiga_PineYoung", "Biome": "Taiga", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_3.SM_Pine_Tree_3", "TreesPer100SquareMeters": 0.4, "ScaleMin": 0.9, "ScaleMax": 1.3, "SpacingMeters": 2.5 },
+
+  { "Name": "Mixed_Pine1", "Biome": "MixedForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_1.SM_Pine_Tree_1", "TreesPer100SquareMeters": 0.7, "ScaleMin": 1.0, "ScaleMax": 1.4, "SpacingMeters": 3.5 },
+  { "Name": "Mixed_Pine2", "Biome": "MixedForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_2.SM_Pine_Tree_2", "TreesPer100SquareMeters": 0.5, "ScaleMin": 1.0, "ScaleMax": 1.5, "SpacingMeters": 3.5 },
+  { "Name": "Mixed_Common01", "Biome": "MixedForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_01.SM_Common_Tree_01", "TreesPer100SquareMeters": 0.5, "ScaleMin": 1.0, "ScaleMax": 1.4, "SpacingMeters": 5.0 },
+  { "Name": "Mixed_Common05", "Biome": "MixedForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_05.SM_Common_Tree_05", "TreesPer100SquareMeters": 0.4, "ScaleMin": 1.0, "ScaleMax": 1.3, "SpacingMeters": 5.0 },
+  { "Name": "Mixed_Common11", "Biome": "MixedForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_11.SM_Common_Tree_11", "TreesPer100SquareMeters": 0.4, "ScaleMin": 1.0, "ScaleMax": 1.3, "SpacingMeters": 5.0 },
+
+  { "Name": "Broad_Common02", "Biome": "BroadleafForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_02.SM_Common_Tree_02", "TreesPer100SquareMeters": 0.35, "ScaleMin": 1.1, "ScaleMax": 1.6, "SpacingMeters": 5.5 },
+  { "Name": "Broad_Common04", "Biome": "BroadleafForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_04.SM_Common_Tree_04", "TreesPer100SquareMeters": 0.35, "ScaleMin": 1.1, "ScaleMax": 1.6, "SpacingMeters": 5.5 },
+  { "Name": "Broad_Common06", "Biome": "BroadleafForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_06.SM_Common_Tree_06", "TreesPer100SquareMeters": 0.35, "ScaleMin": 1.1, "ScaleMax": 1.6, "SpacingMeters": 5.5 },
+  { "Name": "Broad_Common07", "Biome": "BroadleafForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_07.SM_Common_Tree_07", "TreesPer100SquareMeters": 0.35, "ScaleMin": 1.1, "ScaleMax": 1.6, "SpacingMeters": 5.5 },
+  { "Name": "Broad_Common09", "Biome": "BroadleafForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_09.SM_Common_Tree_09", "TreesPer100SquareMeters": 0.35, "ScaleMin": 1.1, "ScaleMax": 1.6, "SpacingMeters": 5.5 },
+  { "Name": "Broad_Common10", "Biome": "BroadleafForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_10.SM_Common_Tree_10", "TreesPer100SquareMeters": 0.35, "ScaleMin": 1.1, "ScaleMax": 1.6, "SpacingMeters": 5.5 },
+  { "Name": "Broad_Bush", "Biome": "BroadleafForest", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Bush.SM_Bush", "TreesPer100SquareMeters": 0.3, "ScaleMin": 0.8, "ScaleMax": 1.2, "SpacingMeters": 2.0 },
+
+  { "Name": "ForestSteppe_Common03", "Biome": "ForestSteppe", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_03.SM_Common_Tree_03", "TreesPer100SquareMeters": 0.25, "ScaleMin": 1.0, "ScaleMax": 1.4, "SpacingMeters": 6.0 },
+  { "Name": "ForestSteppe_Common08", "Biome": "ForestSteppe", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_08.SM_Common_Tree_08", "TreesPer100SquareMeters": 0.25, "ScaleMin": 1.0, "ScaleMax": 1.4, "SpacingMeters": 6.0 },
+  { "Name": "ForestSteppe_Bush", "Biome": "ForestSteppe", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Bush.SM_Bush", "TreesPer100SquareMeters": 0.4, "ScaleMin": 0.7, "ScaleMax": 1.1, "SpacingMeters": 2.0 },
+
+  { "Name": "Steppe_Bush", "Biome": "Steppe", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Bush.SM_Bush", "TreesPer100SquareMeters": 0.15, "ScaleMin": 0.6, "ScaleMax": 1.0, "SpacingMeters": 3.0 },
+  { "Name": "Steppe_LoneTree", "Biome": "Steppe", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_08.SM_Common_Tree_08", "TreesPer100SquareMeters": 0.05, "ScaleMin": 1.0, "ScaleMax": 1.3, "SpacingMeters": 12.0 },
+
+  { "Name": "Floodplain_Common03", "Biome": "Floodplain", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_03.SM_Common_Tree_03", "TreesPer100SquareMeters": 0.4, "ScaleMin": 1.0, "ScaleMax": 1.5, "SpacingMeters": 5.0 },
+  { "Name": "Floodplain_Common06", "Biome": "Floodplain", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Common_Tree_06.SM_Common_Tree_06", "TreesPer100SquareMeters": 0.3, "ScaleMin": 1.0, "ScaleMax": 1.5, "SpacingMeters": 5.0 },
+  { "Name": "Floodplain_Bush", "Biome": "Floodplain", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Bush.SM_Bush", "TreesPer100SquareMeters": 0.4, "ScaleMin": 0.8, "ScaleMax": 1.2, "SpacingMeters": 2.0 },
+
+  { "Name": "Bog_PineSmall", "Biome": "Bog", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_3.SM_Pine_Tree_3", "TreesPer100SquareMeters": 0.4, "ScaleMin": 0.6, "ScaleMax": 1.0, "SpacingMeters": 4.0 },
+  { "Name": "Bog_PineSapling", "Biome": "Bog", "Mesh": "/Game/Stylized_PBR_Nature/Foliage/Assets/SM_Pine_Tree_4.SM_Pine_Tree_4", "TreesPer100SquareMeters": 0.3, "ScaleMin": 0.7, "ScaleMax": 1.1, "SpacingMeters": 3.0 },
+  { "Name": "Bog_Stump", "Biome": "Bog", "Mesh": "/Game/Stylized_Forest/Meshes/trees/SM_stump_01.SM_stump_01", "TreesPer100SquareMeters": 0.15, "ScaleMin": 0.6, "ScaleMax": 0.9, "SpacingMeters": 3.0 }
+]
