@@ -50,3 +50,13 @@ DerivedDataCache/
 ProjectHerbalist/Windows/
 *.ucas
 *.pak
+
+# Карты-витрины купленных паков (2026-09-28): игре не нужны, а их BuiltData
+# больше лимита GitHub в 100 МБ (L_showcase_map_BuiltData -- 116 МБ). На
+# диске остаются, открываются в редакторе как раньше.
+ProjectHerbalist/Content/Crystal_cave/Maps/
+ProjectHerbalist/Content/DreamscapeSeries/DreamscapeTower/Maps/
+ProjectHerbalist/Content/DreamscapeSeries/SharedResources/Maps/
+ProjectHerbalist/Content/MagicPotion/Map/
+ProjectHerbalist/Content/Stylized_Rocks_Free/Levels/
+ProjectHerbalist/Content/StylizedlogCabin_A1/Levels/
